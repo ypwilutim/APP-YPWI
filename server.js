@@ -2232,47 +2232,26 @@ app.post('/api/admin/send-whatsapp-single/:teacherId', authenticateOperator, asy
 // Tambahkan route baru ini di server.js (TANPA middleware authenticateOperator)
 app.get('/api/public/teachers/:id', async (req, res) => {
   const { id } = req.params;
-
-  const idNum = Number(id);
-  if (!Number.isInteger(idNum) || idNum <= 0) {
-    return res.status(400).json({ success: false, message: 'ID guru tidak valid.' });
-  }
-
   try {
-    const teacherRows = await db.query(
-      `SELECT t.id, t.nama, t.nik, t.tempat_lahir, t.tanggal_lahir, t.jenis_kelamin,
-              t.alamat, t.no_wa, t.status_aktif, t.email, t.status_kepegawaian,
-              t.tmt, t.nip, t.scan_id, t.link_foto,
-              ta.tenant_id, ta.jabatan_di_unit
-       FROM teachers t
-       LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id
-       WHERE t.id = ? AND t.status_aktif = 1`,
-      [idNum]
-    );
+    // 1. Ambil data profil guru (Kode Anda yang sudah berhasil)
+    const teacherRows = await db.query('SELECT id, nama, nik, tempat_lahir, tanggal_lahir, jenis_kelamin, alamat, no_wa, email, status_kepegawaian, tmt, nip, status_aktif, scan_id, link_foto FROM teachers WHERE id = ? AND status_aktif = 1', [id]);
 
     if (teacherRows.length === 0) {
       return res.status(404).json({ success: false, message: 'Guru tidak ditemukan' });
     }
 
-    // Separate teacher fields from assignment join fields
-    const TEACHER_ONLY_FIELDS = [
-      'id', 'nama', 'nik', 'tempat_lahir', 'tanggal_lahir', 'jenis_kelamin',
-      'alamat', 'no_wa', 'status_aktif', 'email', 'status_kepegawaian',
-      'tmt', 'nip', 'scan_id', 'link_foto'
-    ];
-    const teacher = {};
-    for (const f of TEACHER_ONLY_FIELDS) {
-      teacher[f] = teacherRows[0]?.[f];
-    }
+    const teacher = teacherRows[0];
 
-    const assignments = teacherRows
-      .filter(r => r.tenant_id != null)
-      .map(r => ({
-        tenant_id: r.tenant_id,
-        jabatan_di_unit: r.jabatan_di_unit
-      }));
+    // 2. TAMBAHAN: Ambil data penugasan (assignments)
+    // Pastikan nama tabel 'assignments' dan kolom 'teacher_id' sesuai dengan database Anda
+    const assignmentRows = await db.query('SELECT tenant_id, jabatan_di_unit FROM teacher_assignments WHERE teacher_id = ?', [id]);
 
-    res.json({ success: true, data: teacher, assignments });
+    // 3. Masukkan hasil query assignments ke dalam objek teacher
+    teacher.assignments = assignmentRows;
+
+    // 4. Kirim data lengkap ke frontend
+    res.json({ success: true, data: teacher });
+
   } catch (error) {
     console.error('[SERVER ERROR]', error.message);
     res.status(500).json({ success: false, message: 'Error fetching teacher' });
@@ -2508,26 +2487,6 @@ app.put('/api/admin/teachers/:id', teacherUpload.single('foto'), async (req, res
   } catch (error) {
     console.error('[SERVER ERROR]', error.message);
     res.status(500).json({ success: false, message: 'Error updating teacher profile' });
-  }
-});
-
-app.get('/api/teacher/assignments', authenticateToken, async (req, res) => {
-  try {
-    const assignments = await db.query(
-      `SELECT ta.id, ta.tenant_id, ta.jabatan_di_unit, n.nama_sekolah 
-       FROM teacher_assignments ta 
-       JOIN tenants n ON ta.tenant_id = n.tenant_id 
-       WHERE ta.teacher_id = ?`,
-      [req.user.guru_id]
-    );
-
-    res.json({
-      success: true,
-      assignments: assignments
-    });
-  } catch (error) {
-    console.error('[SERVER ERROR]', error.message);
-    res.status(500).json({ success: false, message: 'Gagal mengambil data penugasan' });
   }
 });
 
