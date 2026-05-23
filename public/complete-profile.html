@@ -448,6 +448,12 @@
       }
 
       const tbody = document.getElementById('assignments-table-body');
+
+      if (localAssignments.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" class="px-4 py-4 text-center text-gray-500">Belum ada penugasan. Klik tombol <strong>Tambah Penempatan Unit</strong> untuk menambahkan unit sekolah.</td></tr>';
+        return;
+      }
+
       tbody.innerHTML = localAssignments.map((assignment, index) => `
         <tr>
           <td class="px-4 py-3">${assignment.tenant_id}</td>
@@ -502,11 +508,27 @@
         return;
       }
 
+      // Warn if assignments panel is empty to prevent accidental data deletion
+      if (localAssignments.length === 0) {
+        const confirmed = await Swal.fire({
+          title: 'Penempatan Unit Kosong',
+          text: 'Anda belum menambahkan penempatan di unit sekolah. Jika disimpan tanpa penempatan, data penempatan yang ada di database akan TERHAPUS. Tetap lanjutkan?',
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonText: 'Ya, tetap simpan',
+          cancelButtonText: 'Batal'
+        }).then(r => r.isConfirmed);
+        if (!confirmed) return;
+      }
+
       const submitBtn = form.querySelector('button[type="submit"]');
       submitBtn.disabled = true;
       submitBtn.innerHTML = '<div class="inline-block animate-spin rounded-full h-5 w-5 border-4 border-white border-t-transparent mr-2"></div>Menyimpan...';
 
-      try {
+      submitProfileForm(submitBtn);
+    });
+
+    async function submitProfileForm(submitBtn) {
         const formData = new FormData(form);
 
         // Add assignments from local storage as JSON string to form data

@@ -2232,16 +2232,47 @@ app.post('/api/admin/send-whatsapp-single/:teacherId', authenticateOperator, asy
 // Tambahkan route baru ini di server.js (TANPA middleware authenticateOperator)
 app.get('/api/public/teachers/:id', async (req, res) => {
   const { id } = req.params;
+
+  const idNum = Number(id);
+  if (!Number.isInteger(idNum) || idNum <= 0) {
+    return res.status(400).json({ success: false, message: 'ID guru tidak valid.' });
+  }
+
   try {
-    // Ambil data yang dibutuhkan untuk ditampilkan di form pengisian
-    const teacherRows = await db.query('SELECT id, nama, nik, tempat_lahir, tanggal_lahir, jenis_kelamin, alamat, no_wa, status_aktif, email, status_kepegawaian, tmt, nip, scan_id, link_foto FROM teachers WHERE id = ? AND status_aktif = 1', [id]);
+    const teacherRows = await db.query(
+      `SELECT t.id, t.nama, t.nik, t.tempat_lahir, t.tanggal_lahir, t.jenis_kelamin,
+              t.alamat, t.no_wa, t.status_aktif, t.email, t.status_kepegawaian,
+              t.tmt, t.nip, t.scan_id, t.link_foto,
+              ta.tenant_id, ta.jabatan_di_unit
+       FROM teachers t
+       LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id
+       WHERE t.id = ? AND t.status_aktif = 1`,
+      [idNum]
+    );
 
     if (teacherRows.length === 0) {
       return res.status(404).json({ success: false, message: 'Guru tidak ditemukan' });
     }
 
-    const teacher = teacherRows[0];
-    res.json({ success: true, data: teacher });
+    // Separate teacher fields from assignment join fields
+    const TEACHER_ONLY_FIELDS = [
+      'id', 'nama', 'nik', 'tempat_lahir', 'tanggal_lahir', 'jenis_kelamin',
+      'alamat', 'no_wa', 'status_aktif', 'email', 'status_kepegawaian',
+      'tmt', 'nip', 'scan_id', 'link_foto'
+    ];
+    const teacher = {};
+    for (const f of TEACHER_ONLY_FIELDS) {
+      teacher[f] = teacherRows[0]?.[f];
+    }
+
+    const assignments = teacherRows
+      .filter(r => r.tenant_id != null)
+      .map(r => ({
+        tenant_id: r.tenant_id,
+        jabatan_di_unit: r.jabatan_di_unit
+      }));
+
+    res.json({ success: true, data: teacher, assignments });
   } catch (error) {
     console.error('[SERVER ERROR]', error.message);
     res.status(500).json({ success: false, message: 'Error fetching teacher' });

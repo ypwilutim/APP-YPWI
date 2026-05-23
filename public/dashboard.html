@@ -716,6 +716,9 @@
           const schoolNames = assignments.map(a => a.nama_sekolah || a.tenant_id).join(', ');
           if (teacherDetailsEl) teacherDetailsEl.textContent = `Unit Sekolah: ${schoolNames || 'Tidak ada'}`;
 
+          // Always set userAssignments so geofencing works for all roles
+          window.userAssignments = assignments;
+
           // Set foto dengan pengecekan elemen
           if (userPhotoElement) {
             if (teacher.link_foto && teacher.link_foto.trim() !== '' && teacher.link_foto !== 'null') {
@@ -747,7 +750,6 @@
             // ... (sisipkan logika dropdown admin anda di sini dengan cara menambah ke variable htmlContent) ...
 
             adminSection.innerHTML = htmlContent;
-            window.userAssignments = assignments;
           }
         }
       } catch (error) {
