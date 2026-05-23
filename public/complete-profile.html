@@ -421,10 +421,11 @@
     function displayAssignments(assignments) {
       // 1. Update localAssignments secara langsung tanpa syarat if yang membatasi
       // Jika 'assignments' diberikan (bukan null/undefined), gunakan itu. Jika tidak, gunakan array kosong.
-      localAssignments = assignments || [];
+      if (assignments !== undefined) {
+        localAssignments = assignments;
+      }
 
       const tbody = document.getElementById('assignments-table-body');
-
       if (!tbody) return; // Keamanan agar tidak error jika ID salah
 
       // 2. Jika data kosong, tampilkan pesan agar user tidak bingung
@@ -435,15 +436,15 @@
 
       // 3. Render tabel dengan aman
       tbody.innerHTML = localAssignments.map((assignment, index) => `
-    <tr>
-      <td class="px-4 py-3">${assignment.tenant_id || '-'}</td>
-      <td class="px-4 py-3">${assignment.jabatan_di_unit || '-'}</td>
-      <td class="px-4 py-3 text-center">
-        <button type="button" data-index="${index}" data-action="remove-assignment" class="text-red-600 hover:text-red-800 remove-assignment-btn">
-          <i class="bi bi-trash"></i>
-        </button>
-      </td>
-    </tr>
+      <tr>
+        <td class="px-4 py-3">${assignment.tenant_id || '-'}</td>
+        <td class="px-4 py-3">${assignment.jabatan_di_unit || '-'}</td>
+        <td class="px-4 py-3 text-center">
+          <button type="button" data-index="${index}" data-action="remove-assignment" class="text-red-600 hover:text-red-800 remove-assignment-btn">
+            <i class="bi bi-trash"></i>
+          </button>
+        </td>
+      </tr>
   `).join('');
     }
     const form = document.getElementById('profileForm');
@@ -618,7 +619,7 @@
       });
 
       // Refresh display
-      displayAssignments();
+      displayAssignments(localAssignments);
 
       // Close modal
       closeAssignmentModal();
