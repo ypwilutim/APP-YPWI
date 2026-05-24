@@ -1,11 +1,12 @@
 const CACHE_NAME = 'ypwi-scanner-v5.0';
 const ASSETS_TO_CACHE = [
-    '/scanner.html',
-    '/css/tailwind.css',
-    '/js/jsQR.js',
-    '/assets/images/icon.png',
-    'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css'
-];
+     '/scanner.html',
+     '/dashboard.html',
+     '/css/tailwind.css',
+     '/js/jsQR.js',
+     '/assets/images/icon.png',
+     'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css'
+ ];
 
 // 1. Install Service Worker & Cache File Inti
 self.addEventListener('install', (event) => {

@@ -13,6 +13,6 @@
     "start_url": "/scanner.html",
     "background_color": "#1f2937",
     "theme_color": "#1f2937",
-    "display": "standalone",
-    "orientation": "any"
+    "display": "standalone"
+    // "orientation": "any"
 }
