@@ -93,6 +93,80 @@
       border-left: 5px solid #f59e0b !important;
     }
 
+    /* Modal Overlay */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.6);
+      backdrop-filter: blur(6px);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+
+    .modal-container {
+      max-width: 450px;
+      width: 100%;
+      background: #ffffff;
+      border-radius: 1.5rem;
+      overflow: hidden;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+      display: flex;
+      flex-direction: column;
+      max-height: 90vh;
+    }
+
+    /* Header */
+    .modal-header {
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      padding: 1.5rem;
+      color: white;
+    }
+
+    /* List container */
+    #adminUnitList {
+      padding: 1rem;
+      overflow-y: auto;
+      flex-grow: 1;
+    }
+
+    /* Tombol */
+.btn-primary {
+       background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+       color: white;
+       padding: 0.75rem 1rem;
+       border-radius: 0.75rem;
+       font-weight: 600;
+       border: none;
+       cursor: pointer;
+       transition: all 0.2s;
+       box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);
+     }
+
+     .btn-primary:hover:not(:disabled) {
+       transform: translateY(-1px);
+       box-shadow: 0 8px 15px -3px rgba(37, 99, 235, 0.3);
+     }
+
+     .btn-primary:disabled {
+       background: #cbd5e1;
+       cursor: not-allowed;
+       transform: none;
+       box-shadow: none;
+     }
+
+    .btn-secondary {
+      background: #f1f5f9;
+      color: #475569;
+      padding: 0.75rem 1rem;
+      border-radius: 0.75rem;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+    }
+
     /* Sub-Element: Meteran Jarak (Live Distance Meter) */
     .distance-meter {
       display: flex;
@@ -252,6 +326,19 @@
         opacity: 1;
       }
     }
+
+    /* Status tombol saat disabled */
+    .btn-disabled {
+      opacity: 0.5;
+      pointer-events: none;
+      cursor: not-allowed;
+    }
+
+    /* Tampilan saat radio button dipilih */
+    .unit-option-selected {
+      border-color: #2563eb !important;
+      background-color: #eff6ff !important;
+    }
   </style>
 </head>
 
@@ -360,6 +447,52 @@
     .spinner {
       animation: spin 1s linear infinite;
     }
+
+    /* Container untuk opsi unit */
+    .unit-option {
+      display: flex;
+      align-items: center;
+      padding: 1rem;
+      margin-bottom: 0.75rem;
+      border: 2px solid #e2e8f0;
+      border-radius: 1rem;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      background: #ffffff;
+    }
+
+    /* Efek saat di-hover */
+    .unit-option:hover {
+      border-color: #bfdbfe;
+      background-color: #f8fafc;
+    }
+
+    /* Efek saat dipilih (aktif) */
+    .unit-option-selected {
+      border-color: #2563eb !important;
+      background-color: #eff6ff !important;
+      box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.1);
+    }
+
+    /* Ikon container */
+    .unit-icon {
+      width: 44px;
+      height: 44px;
+      background: #dbeafe;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-right: 1rem;
+      flex-shrink: 0;
+    }
+
+    /* Radio button style */
+    .unit-radio {
+      width: 1.25rem;
+      height: 1.25rem;
+      cursor: pointer;
+      accent-color: #2563eb;
+    }
   </style>
 
   <div class="dashboard-container">
@@ -394,15 +527,16 @@
           </div>
         </div>
 
-<!-- Tombol Aksi Kanan (Hanya Muncul di Tampilan PC) -->
-         <div class="pc-action-header">
-           <div id="adminNavSection" class="hidden" style="margin:0;"></div>
-           <div id="desktopAdminBtn" style="display: none; margin-right: 0.5rem;">
-             <button onclick="showDesktopAdminModal()" style="display: inline-flex; align-items: center; gap: 0.5rem; background: #dbeafe; color: #1d4ed8; padding: 0.6rem 1.25rem; border-radius: 0.5rem; font-weight: 700; font-size: 0.85rem; border: 1px solid #93c5fd; cursor: pointer; transition: all 0.2s;">
-               <i class="fas fa-school"></i> Admin Unit
-             </button>
-           </div>
-           <a href="#" onclick="logout(); return false;"
+        <!-- Tombol Aksi Kanan (Hanya Muncul di Tampilan PC) -->
+        <div class="pc-action-header">
+          <div id="adminNavSection" class="hidden" style="margin:0;"></div>
+          <div id="desktopAdminBtn" style="display: none; margin-right: 0.5rem;">
+            <button onclick="showDesktopAdminModal()"
+              style="display: inline-flex; align-items: center; gap: 0.5rem; background: #dbeafe; color: #1d4ed8; padding: 0.6rem 1.25rem; border-radius: 0.5rem; font-weight: 700; font-size: 0.85rem; border: 1px solid #93c5fd; cursor: pointer; transition: all 0.2s;">
+              <i class="fas fa-school"></i> Admin Unit
+            </button>
+          </div>
+          <a href="#" onclick="logout(); return false;"
             style="display: inline-flex; align-items: center; gap: 0.5rem; background: #fee2e2; color: #dc2626; padding: 0.6rem 1.25rem; border-radius: 0.5rem; font-weight: 700; font-size: 0.85rem; text-decoration: none; border: 1px solid #fca5a5; transition: all 0.2s;">
             <i class="fas fa-sign-out-alt"></i> Keluar Sistem
           </a>
@@ -563,40 +697,39 @@
       style="text-align: center; color: #64748b; cursor: pointer; -webkit-tap-highlight-color: transparent;">
       <i class="fas fa-sign-out-alt" style="font-size: 1.3rem; display: block; margin-bottom: 2px;"></i>
       <span style="font-size: 0.65rem; font-weight: 600;">Keluar</span>
-</div>
-   </div>
+    </div>
+  </div>
 
-<!-- Admin Unit Selection Modal -->
-    <div id="adminUnitModal" class="modal" style="display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.6); backdrop-filter: blur(6px); z-index: 1000; align-items: center; justify-content: center; padding: 1rem;">
-      <div class="modal-content" style="max-width: 420px; width: 100%; background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%); border-radius: 1.25rem; padding: 0; box-sizing: border-box; max-height: 85vh; overflow: hidden; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); border: 1px solid #e2e8f0;">
-        <div style="background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); padding: 1.25rem 1.5rem; position: relative;">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-3">
-              <div style="width: 42px; height: 42px; background: rgba(255,255,255,0.2); border-radius: 12px; display: flex; align-items: center; justify-content: center;">
-                <i class="fas fa-school" style="color: white; font-size: 1.25rem;"></i>
-              </div>
-              <h3 class="text-lg font-bold text-white" style="margin: 0;">Pilih Unit Sekolah</h3>
-            </div>
-            <button onclick="closeAdminUnitModal()" style="background: rgba(255,255,255,0.2); border: none; width: 32px; height: 32px; border-radius: 8px; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center;">
-              <i class="fas fa-times"></i>
-            </button>
+  <div id="adminUnitModal" class="modal-overlay">
+    <div class="modal-container">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <i class="fas fa-school" style="font-size: 1.25rem;"></i>
+            <h3 style="margin: 0; font-size: 1.25rem;">Pilih Unit Sekolah</h3>
           </div>
-          <p style="color: rgba(255,255,255,0.8); font-size: 0.8rem; margin: 0.5rem 0 0 0;">Anda memiliki akses ke beberapa unit sekolah</p>
+          <button onclick="closeAdminUnitModal()"
+            style="background: none; border: none; color: white; cursor: pointer;">
+            <i class="fas fa-times"></i>
+          </button>
         </div>
-        <div id="adminUnitList" style="padding: 1rem; max-height: 320px; overflow-y: auto;"></div>
-        <div style="padding: 1rem 1.5rem; border-top: 1px solid #e2e8f0; background: #f8fafc;">
-          <div class="flex gap-2">
-            <button onclick="closeAdminUnitModal()" style="flex: 1; padding: 0.75rem; border-radius: 0.75rem; border: 1px solid #cbd5e1; background: white; color: #475569; font-weight: 600; font-size: 0.875rem; cursor: pointer;">Batal</button>
-            <button id="confirmAdminUnitBtn" onclick="confirmAdminUnit()" style="flex: 1; padding: 0.75rem; border-radius: 0.75rem; border: none; background: #2563eb; color: white; font-weight: 600; font-size: 0.875rem; cursor: pointer; opacity: 0.5; pointer-events: none;" disabled>Pilih Unit</button>
-          </div>
-        </div>
+        <p style="margin: 8px 0 0 0; opacity: 0.8; font-size: 0.875rem;">Pilih unit untuk melanjutkan akses</p>
+      </div>
+
+      <div id="adminUnitList">
+      </div>
+
+      <div style="padding: 1rem; border-top: 1px solid #e2e8f0; display: flex; gap: 8px;">
+        <button onclick="closeAdminUnitModal()" class="btn-secondary" style="flex: 1;">Batal</button>
+        <button id="confirmAdminUnitBtn" class="btn-primary" style="flex: 1;" disabled onclick="confirmAdminUnit()">Konfirmasi</button>
       </div>
     </div>
+  </div>
 
-   <!-- ==========================================
+  <!-- ==========================================
         MODAL POPUP SYSTEM (MODERN & TERISOLASI)
         ========================================== -->
-   <!-- Location Permission Modal -->
+  <!-- Location Permission Modal -->
   <div id="locationModal" class="modal"
     style="display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.5); backdrop-filter: blur(4px); z-index: 999; align-items: center; justify-content: center; padding: 1rem;">
     <div class="modal-content"
@@ -793,25 +926,25 @@
               return adminRoles.some(role => jabatan.includes(role));
             });
 
-            if (adminUnits.length > 0) {
-              if (adminUnits.length === 1) {
-                const unit = adminUnits[0];
-                htmlContent += `<a href="school-admin.html?tenant=${unit.tenant_id}" style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.3rem 0.75rem;background:#059669;color:white;border-radius:0.5rem;font-size:0.8rem;font-weight:600;text-decoration:none;margin-left:0.5rem;"><span class="fas fa-user-cog mr-1"></span> Admin ${unit.nama_sekolah}</a>`;
-              } else {
-                let dropdownOptions = '<option value="">Pilih Unit...</option>';
-                adminUnits.forEach(unit => {
-                  dropdownOptions += `<option value="${unit.tenant_id}">${unit.nama_sekolah}</option>`;
-                });
-                htmlContent += `
-                  <div style="display:inline-block;margin-left:0.5rem;">
-                    <select id="adminUnitSelect" onchange="goToAdminUnit(this)" style="padding:0.3rem 0.5rem;border-radius:0.25rem;border:1px solid #059669;background:white;color:#059669;font-size:0.8rem;font-weight:600;cursor:pointer;">
-                      <option value="">-- Pilih Unit --</option>
-                      ${dropdownOptions}
-                    </select>
-                  </div>
-                `;
-              }
-            }
+            // if (adminUnits.length > 0) {
+            //   if (adminUnits.length === 1) {
+            //     const unit = adminUnits[0];
+            //     htmlContent += `<a href="school-admin.html?tenant=${unit.tenant_id}" style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.3rem 0.75rem;background:#059669;color:white;border-radius:0.5rem;font-size:0.8rem;font-weight:600;text-decoration:none;margin-left:0.5rem;"><span class="fas fa-user-cog mr-1"></span> Admin ${unit.nama_sekolah}</a>`;
+            //   } else {
+            //     let dropdownOptions = '<option value="">Pilih Unit...</option>';
+            //     adminUnits.forEach(unit => {
+            //       dropdownOptions += `<option value="${unit.tenant_id}">${unit.nama_sekolah}</option>`;
+            //     });
+            //     htmlContent += `
+            //       <div style="display:inline-block;margin-left:0.5rem;">
+            //         <select id="adminUnitSelect" onchange="goToAdminUnit(this)" style="padding:0.3rem 0.5rem;border-radius:0.25rem;border:1px solid #059669;background:white;color:#059669;font-size:0.8rem;font-weight:600;cursor:pointer;">
+            //           <option value="">-- Pilih Unit --</option>
+            //           ${dropdownOptions}
+            //         </select>
+            //       </div>
+            //     `;
+            //   }
+            // }
 
             adminSection.innerHTML = htmlContent;
           }
@@ -1980,7 +2113,7 @@
       window.addEventListener('offline', showOfflineMessage);
     }
 
-// ========================================================
+    // ========================================================
     // JURUS PAMUNGKAS: PAKSA SINKRONISASI SETELAH HALAMAN SIAP
     // ========================================================
     window.addEventListener('DOMContentLoaded', () => {
@@ -2045,98 +2178,116 @@
     }
 
     // Navigate to admin unit
-    window.goToAdminUnit = function(select) {
+    window.goToAdminUnit = function (select) {
       if (select.value) {
         window.location.href = 'school-admin.html?tenant=' + select.value;
       }
     }
 
-// Setup mobile admin nav
-      function setupMobileAdminNav() {
-        const mobileNav = document.getElementById('mobileAdminNav');
-        const desktopBtn = document.getElementById('desktopAdminBtn');
-        if (!mobileNav && !desktopBtn) return;
-        
-        const adminUnits = (window.userAssignments || []).filter(a => {
-          const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
-          const adminRoles = ['admin', 'operator', 'media', 'tu', 'tatausaha'];
-          return adminRoles.some(role => jabatan.includes(role));
-        });
-        
-        if (adminUnits.length > 0) {
-          // Mobile nav
-          if (mobileNav) {
-            mobileNav.style.display = 'block';
-            mobileNav.onclick = function() {
-              showAdminUnitModal(adminUnits);
-            };
-          }
-          // Desktop button
-          if (desktopBtn) {
-            desktopBtn.style.display = 'block';
-            window.currentAdminUnits = adminUnits;
-          }
+    // Variabel scope lokal
+    let currentAdminUnits = [];
+    let selectedAdminUnitId = null;
+
+    // Setup mobile & desktop nav
+    function setupMobileAdminNav() {
+      const mobileNav = document.getElementById('mobileAdminNav');
+      const desktopBtn = document.getElementById('desktopAdminBtn');
+
+      // Filter unit dengan role admin
+      const adminUnits = (window.userAssignments || []).filter(a => {
+        const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
+        const adminRoles = ['admin', 'operator', 'media', 'tu', 'tatausaha'];
+        return adminRoles.some(role => jabatan.includes(role));
+      });
+
+      if (adminUnits.length > 0) {
+        if (mobileNav) {
+          mobileNav.style.display = 'block';
+          mobileNav.onclick = () => showAdminUnitModal(adminUnits);
+        }
+        if (desktopBtn) {
+          desktopBtn.style.display = 'block';
+          desktopBtn.onclick = () => showAdminUnitModal(adminUnits);
         }
       }
+    }
 
-      // Desktop admin button handler
-      function showDesktopAdminModal() {
-        showAdminUnitModal(window.currentAdminUnits || []);
-      }
+    // Menampilkan Modal
+    function showAdminUnitModal(units) {
+      const listEl = document.getElementById('adminUnitList');
+      const modal = document.getElementById('adminUnitModal');
+      const confirmBtn = document.getElementById('confirmAdminUnitBtn');
 
-// Show admin unit selection modal
-      window.adminSelectedUnit = null;
-      function showAdminUnitModal(units) {
-        const listEl = document.getElementById('adminUnitList');
-        if (!listEl) return;
+      if (!listEl || !modal) return;
+
+      currentAdminUnits = units;
+      selectedAdminUnitId = null;
+
+      // Gunakan template ini di dalam fungsi .map Anda
+      listEl.innerHTML = units.map((unit) => `
+    <label class="unit-option">
+        <div class="unit-icon">
+            <i class="fas fa-school text-blue-600 text-lg"></i>
+        </div>
         
-        window.currentAdminUnits = units;
-        window.adminSelectedUnit = null;
-        
-        listEl.innerHTML = units.map((unit, index) => `
-          <label class="block p-4 mb-2 border-2 border-gray-200 rounded-xl hover:border-blue-300 hover:bg-blue-50/50 cursor-pointer transition-all duration-200" style="margin-bottom: 0.5rem;">
-            <div class="flex items-center">
-              <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
-                <i class="fas fa-school text-blue-600"></i>
-              </div>
-              <div class="flex-1">
-                <div class="font-semibold text-gray-900 text-sm">${unit.nama_sekolah || unit.tenant_id}</div>
-                <div class="text-xs text-gray-500 mt-0.5">${unit.tenant_id} • ${unit.jabatan_di_unit || 'Admin'}</div>
-              </div>
-              <input type="radio" name="adminUnit" value="${unit.tenant_id}" onchange="selectAdminUnit('${unit.tenant_id}')" class="w-5 h-5 text-blue-600">
+        <div class="flex-1 min-w-0 mr-3">
+            <div class="font-bold text-slate-800 truncate text-[15px]">
+                ${unit.nama_sekolah || unit.tenant_id}
             </div>
-          </label>
-        `).join('');
-        
-        document.getElementById('adminUnitModal').style.display = 'flex';
-        document.getElementById('confirmAdminUnitBtn').disabled = true;
-        document.getElementById('confirmAdminUnitBtn').style.opacity = '0.5';
-        document.getElementById('confirmAdminUnitBtn').style.pointerEvents = 'none';
-      }
+            <div class="text-xs text-slate-500 font-medium mt-0.5 truncate flex items-center gap-1.5">
+                <span class="bg-slate-100 px-1.5 py-0.5 rounded text-[10px] uppercase font-bold">
+                    ${unit.tenant_id}
+                </span>
+                <span>•</span>
+                <span>${unit.jabatan_di_unit || 'Admin'}</span>
+            </div>
+        </div>
 
-      function selectAdminUnit(tenantId) {
-        window.adminSelectedUnit = tenantId;
-        document.getElementById('confirmAdminUnitBtn').disabled = false;
-        document.getElementById('confirmAdminUnitBtn').style.opacity = '1';
-        document.getElementById('confirmAdminUnitBtn').style.pointerEvents = 'auto';
-      }
+        <input type="radio" 
+               name="adminUnit" 
+               value="${unit.tenant_id}" 
+               onchange="handleUnitSelection('${unit.tenant_id}', this)" 
+               class="unit-radio">
+    </label>
+`).join('');
 
-      function closeAdminUnitModal() {
-        document.getElementById('adminUnitModal').style.display = 'none';
-      }
+      modal.style.display = 'flex';
+      confirmBtn.disabled = true;
+      confirmBtn.classList.add('btn-disabled');
+    }
 
-      function confirmAdminUnit() {
-        if (window.adminSelectedUnit) {
-          window.location.href = 'school-admin.html?tenant=' + window.adminSelectedUnit;
-        }
-      }
+    // Menangani pemilihan unit
+    function handleUnitSelection(tenantId, radioEl) {
+      selectedAdminUnitId = tenantId;
 
-    // Call after teacher info loaded
+      // Reset visual
+      document.querySelectorAll('.unit-option').forEach(el => el.classList.remove('unit-option-selected'));
+      radioEl.closest('.unit-option').classList.add('unit-option-selected');
+
+      // Aktifkan tombol
+      const confirmBtn = document.getElementById('confirmAdminUnitBtn');
+      confirmBtn.disabled = false;
+      confirmBtn.classList.remove('btn-disabled');
+    }
+
+    // Menutup modal
+    function closeAdminUnitModal() {
+      document.getElementById('adminUnitModal').style.display = 'none';
+    }
+
+    // Aksi konfirmasi
+    function confirmAdminUnit() {
+      if (selectedAdminUnitId) {
+        window.location.href = `school-admin.html?tenant=${selectedAdminUnitId}`;
+      }
+    }
+
+    // Inisialisasi
     document.addEventListener('DOMContentLoaded', () => {
       setTimeout(setupMobileAdminNav, 2000);
     });
 
-   </script>
- </body>
+  </script>
+</body>
 
 </html>
