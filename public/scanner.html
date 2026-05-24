@@ -597,14 +597,16 @@
         if (setupModal) setupModal.classList.remove("hidden");
       }
 
-      function toggleCamera() {
-        facingMode = facingMode === "environment" ? "user" : "environment";
-        // If currently scanning, we need to restart the camera
-        if (isScanningActive) {
-          stopCamera();
-          startCamera();
-        }
-      }
+function toggleCamera() {
+         facingMode = facingMode === "environment" ? "user" : "environment";
+         // If currently scanning, we need to restart the camera
+         if (isScanningActive) {
+           stopCamera();
+           setTimeout(() => {
+             startCamera();
+           }, 500);
+         }
+       }
 
       // === 3. Application Lifecycle Initialization ===
       function initApp() {
@@ -822,34 +824,60 @@
 
 
       // === 6. Camera Stream & jsQR Implementation ===
-      function startCamera() {
-        if (video.srcObject && isScanningActive) return;
+function startCamera() {
+         if (video.srcObject && isScanningActive) return;
 
-        scanningStatus.textContent = "Status: Mengaktifkan Kamera...";
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: facingMode } })
-          .then((stream) => {
-            video.srcObject = stream;
-            video.setAttribute("playsinline", true);
-            // Apply mirror effect for front camera
-            video.style.transform = facingMode === "user" ? "scaleX(-1)" : "scaleX(1)";
-            video.play();
-            isScanningActive = true;
-            requestAnimationFrame(tick);
-          })
-          .catch((err) => {
-            console.error("Kamera error:", err);
-            scanningStatus.textContent = "Status: Kamera Gagal Diakses";
-          });
-      }
+         scanningStatus.textContent = "Status: Mengaktifkan Kamera...";
+         navigator.mediaDevices.getUserMedia({
+           video: {
+             facingMode: facingMode,
+             width: { ideal: 1280 },
+             height: { ideal: 720 }
+           }
+         })
+           .then((stream) => {
+             video.srcObject = stream;
+             video.setAttribute("playsinline", true);
+             // Apply mirror effect for front camera
+             video.style.transform = facingMode === "user" ? "scaleX(-1)" : "scaleX(1)";
+             video.play();
+             isScanningActive = true;
+             requestAnimationFrame(tick);
+           })
+           .catch((err) => {
+             console.error("Kamera error:", err);
+             // Fallback: coba kamera lain jika gagal
+             if (err.name === 'OverconstrainedError' || err.name === 'ConstraintNotSatisfiedError') {
+               console.log("Trying fallback camera...");
+               navigator.mediaDevices.getUserMedia({ video: true })
+                 .then((stream) => {
+                   video.srcObject = stream;
+                   video.setAttribute("playsinline", true);
+                   video.play();
+                   isScanningActive = true;
+                   requestAnimationFrame(tick);
+                 })
+                 .catch((fallbackErr) => {
+                   console.error("Kamera fallback error:", fallbackErr);
+                   scanningStatus.textContent = "Status: Kamera Gagal Diakses";
+                 });
+             } else {
+               scanningStatus.textContent = "Status: Kamera Gagal Diakses";
+             }
+           });
+       }
 
-      function stopCamera() {
-        isScanningActive = false;
-        if (video.srcObject) {
-          const stream = video.srcObject;
-          stream.getTracks().forEach(track => track.stop());
-          video.srcObject = null;
-        }
-      }
+function stopCamera() {
+         isScanningActive = false;
+         if (video.srcObject) {
+           const stream = video.srcObject;
+           stream.getTracks().forEach(track => {
+             track.stop();
+           });
+           video.srcObject = null;
+         }
+         video.style.transform = "scaleX(1)";
+       }
 
       function tick() {
         if (video.readyState === video.HAVE_ENOUGH_DATA && isScanningActive) {
