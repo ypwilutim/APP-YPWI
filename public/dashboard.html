@@ -550,6 +550,10 @@
       <i class="fas fa-fingerprint" style="font-size: 1.3rem; display: block; margin-bottom: 2px;"></i>
       <span style="font-size: 0.65rem; font-weight: 700;">Presensi</span>
     </div>
+    <div id="mobileAdminNav" style="text-align: center; color: #64748b; cursor: pointer; display: none;">
+      <i class="fas fa-user-cog" style="font-size: 1.3rem; display: block; margin-bottom: 2px;"></i>
+      <span style="font-size: 0.65rem; font-weight: 600;">Admin</span>
+    </div>
     <div onclick="logout();"
       style="text-align: center; color: #64748b; cursor: pointer; -webkit-tap-highlight-color: transparent;">
       <i class="fas fa-sign-out-alt" style="font-size: 1.3rem; display: block; margin-bottom: 2px;"></i>
@@ -750,9 +754,32 @@
               htmlContent += '<a href="master-dashboard.html" style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.3rem 0.75rem;background:#7c3aed;color:white;border-radius:0.5rem;font-size:0.8rem;font-weight:600;text-decoration:none;"><span class="fas fa-crown mr-1"></span> Dashboard Yayasan</a>';
             }
 
-            // --- Logika Admin Sekolah ---
-            // (Gunakan array untuk mengumpulkan konten, lalu join di akhir agar tidak overwrite innerHTML berkali-kali)
-            // ... (sisipkan logika dropdown admin anda di sini dengan cara menambah ke variable htmlContent) ...
+            // --- Logika Admin Sekolah (admin/operator/media/tu/tata usaha) ---
+            const adminRoles = ['admin', 'operator', 'media', 'tu', 'tatausaha', 'tata usaha'];
+            const adminUnits = assignments.filter(a => {
+              const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
+              return adminRoles.some(role => jabatan.includes(role));
+            });
+
+            if (adminUnits.length > 0) {
+              if (adminUnits.length === 1) {
+                const unit = adminUnits[0];
+                htmlContent += `<a href="school-admin.html?tenant=${unit.tenant_id}" style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.3rem 0.75rem;background:#059669;color:white;border-radius:0.5rem;font-size:0.8rem;font-weight:600;text-decoration:none;margin-left:0.5rem;"><span class="fas fa-user-cog mr-1"></span> Admin ${unit.nama_sekolah}</a>`;
+              } else {
+                let dropdownOptions = '<option value="">Pilih Unit...</option>';
+                adminUnits.forEach(unit => {
+                  dropdownOptions += `<option value="${unit.tenant_id}">${unit.nama_sekolah}</option>`;
+                });
+                htmlContent += `
+                  <div style="display:inline-block;margin-left:0.5rem;">
+                    <select id="adminUnitSelect" onchange="goToAdminUnit(this)" style="padding:0.3rem 0.5rem;border-radius:0.25rem;border:1px solid #059669;background:white;color:#059669;font-size:0.8rem;font-weight:600;cursor:pointer;">
+                      <option value="">-- Pilih Unit --</option>
+                      ${dropdownOptions}
+                    </select>
+                  </div>
+                `;
+              }
+            }
 
             adminSection.innerHTML = htmlContent;
           }
@@ -1984,6 +2011,45 @@
         .then(reg => console.log('[SW] Dashboard registered:', reg.scope))
         .catch(err => console.log('[SW] Dashboard registration failed:', err));
     }
+
+    // Navigate to admin unit
+    window.goToAdminUnit = function(select) {
+      if (select.value) {
+        window.location.href = 'school-admin.html?tenant=' + select.value;
+      }
+    }
+
+    // Setup mobile admin nav
+    function setupMobileAdminNav() {
+      const mobileNav = document.getElementById('mobileAdminNav');
+      if (!mobileNav) return;
+      
+      const adminUnits = (window.userAssignments || []).filter(a => {
+        const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
+        const adminRoles = ['admin', 'operator', 'media', 'tu', 'tatausaha'];
+        return adminRoles.some(role => jabatan.includes(role));
+      });
+      
+      if (adminUnits.length > 0) {
+        mobileNav.style.display = 'block';
+        mobileNav.onclick = function() {
+          if (adminUnits.length === 1) {
+            window.location.href = 'school-admin.html?tenant=' + adminUnits[0].tenant_id;
+          } else {
+            const unitId = prompt('Masukkan nama unit:\n' + adminUnits.map(u => u.nama_sekolah).join('\n'));
+            if (unitId) {
+              const unit = adminUnits.find(u => u.nama_sekolah === unitId || u.tenant_id === unitId);
+              if (unit) window.location.href = 'school-admin.html?tenant=' + unit.tenant_id;
+            }
+          }
+        };
+      }
+    }
+
+    // Call after teacher info loaded
+    document.addEventListener('DOMContentLoaded', () => {
+      setTimeout(setupMobileAdminNav, 2000);
+    });
 
    </script>
  </body>
