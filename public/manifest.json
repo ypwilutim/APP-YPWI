@@ -1,7 +1,9 @@
 {
-  "name": "Absensi YPWI",
-  "short_name": "YPWI Scan",
-  "start_url": "scanner.html",
+  "name": "Absensi YPWI Admin",
+  "short_name": "YPWI Admin",
+  "id": "ypwi-admin",
+  "start_url": "master-dashboard.html",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#000000",

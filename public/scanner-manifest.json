@@ -1,6 +1,7 @@
 {
     "short_name": "YPWI Scanner",
     "name": "YPWI Scanner",
+    "id": "ypwi-scanner",
     "description": "Aplikasi Pemindai QR Code Absensi Yayasan Pesantren Wahdah Islamiyah",
     "icons": [
         {
@@ -11,8 +12,8 @@
         }
     ],
     "start_url": "/scanner.html",
+    "scope": "/",
     "background_color": "#1f2937",
     "theme_color": "#1f2937",
     "display": "standalone"
-    // "orientation": "any"
 }

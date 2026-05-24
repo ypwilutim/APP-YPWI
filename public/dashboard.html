@@ -558,13 +558,30 @@
       style="text-align: center; color: #64748b; cursor: pointer; -webkit-tap-highlight-color: transparent;">
       <i class="fas fa-sign-out-alt" style="font-size: 1.3rem; display: block; margin-bottom: 2px;"></i>
       <span style="font-size: 0.65rem; font-weight: 600;">Keluar</span>
-    </div>
-  </div>
+</div>
+   </div>
 
-  <!-- ==========================================
-       MODAL POPUP SYSTEM (MODERN & TERISOLASI)
-       ========================================== -->
-  <!-- Location Permission Modal -->
+   <!-- Admin Unit Selection Modal -->
+   <div id="adminUnitModal" class="modal" style="display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.5); backdrop-filter: blur(4px); z-index: 1000; align-items: center; justify-content: center; padding: 1rem;">
+     <div class="modal-content" style="max-width: 400px; width: 100%; background: white; border-radius: 1rem; padding: 1.5rem; box-sizing: border-box; max-height: 80vh; overflow-y: auto;">
+       <div class="flex items-center justify-between mb-4">
+         <h3 class="text-lg font-semibold text-gray-900">Pilih Unit Sekolah</h3>
+         <button onclick="closeAdminUnitModal()" class="text-gray-400 hover:text-gray-600">
+           <i class="fas fa-times text-xl"></i>
+         </button>
+       </div>
+       <div id="adminUnitList" class="space-y-2 mb-4"></div>
+       <div class="flex gap-2 pt-3 border-t border-gray-200">
+         <button onclick="closeAdminUnitModal()" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">Batal</button>
+         <button id="confirmAdminUnitBtn" onclick="confirmAdminUnit()" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700" disabled>Pilih</button>
+       </div>
+     </div>
+   </div>
+
+   <!-- ==========================================
+        MODAL POPUP SYSTEM (MODERN & TERISOLASI)
+        ========================================== -->
+   <!-- Location Permission Modal -->
   <div id="locationModal" class="modal"
     style="display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.5); backdrop-filter: blur(4px); z-index: 999; align-items: center; justify-content: center; padding: 1rem;">
     <div class="modal-content"
@@ -2019,32 +2036,59 @@
       }
     }
 
-    // Setup mobile admin nav
-    function setupMobileAdminNav() {
-      const mobileNav = document.getElementById('mobileAdminNav');
-      if (!mobileNav) return;
-      
-      const adminUnits = (window.userAssignments || []).filter(a => {
-        const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
-        const adminRoles = ['admin', 'operator', 'media', 'tu', 'tatausaha'];
-        return adminRoles.some(role => jabatan.includes(role));
-      });
-      
-      if (adminUnits.length > 0) {
-        mobileNav.style.display = 'block';
-        mobileNav.onclick = function() {
-          if (adminUnits.length === 1) {
-            window.location.href = 'school-admin.html?tenant=' + adminUnits[0].tenant_id;
-          } else {
-            const unitId = prompt('Masukkan nama unit:\n' + adminUnits.map(u => u.nama_sekolah).join('\n'));
-            if (unitId) {
-              const unit = adminUnits.find(u => u.nama_sekolah === unitId || u.tenant_id === unitId);
-              if (unit) window.location.href = 'school-admin.html?tenant=' + unit.tenant_id;
-            }
-          }
-        };
-      }
-    }
+// Setup mobile admin nav
+     function setupMobileAdminNav() {
+       const mobileNav = document.getElementById('mobileAdminNav');
+       if (!mobileNav) return;
+       
+       const adminUnits = (window.userAssignments || []).filter(a => {
+         const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
+         const adminRoles = ['admin', 'operator', 'media', 'tu', 'tatausaha'];
+         return adminRoles.some(role => jabatan.includes(role));
+       });
+       
+       if (adminUnits.length > 0) {
+         mobileNav.style.display = 'block';
+         mobileNav.onclick = function() {
+           showAdminUnitModal(adminUnits);
+         };
+       }
+     }
+
+     // Show admin unit selection modal
+     window.adminSelectedUnit = null;
+     function showAdminUnitModal(units) {
+       const listEl = document.getElementById('adminUnitList');
+       if (!listEl) return;
+       
+       window.currentAdminUnits = units;
+       window.adminSelectedUnit = null;
+       
+       listEl.innerHTML = units.map(unit => `
+         <label class="flex items-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+           <input type="radio" name="adminUnit" value="${unit.tenant_id}" onchange="selectAdminUnit('${unit.tenant_id}')" class="w-4 h-4 text-blue-600">
+           <span class="ml-3 text-sm font-medium text-gray-700">${unit.nama_sekolah || unit.tenant_id}</span>
+         </label>
+       `).join('');
+       
+       document.getElementById('adminUnitModal').style.display = 'flex';
+       document.getElementById('confirmAdminUnitBtn').disabled = true;
+     }
+
+     function selectAdminUnit(tenantId) {
+       window.adminSelectedUnit = tenantId;
+       document.getElementById('confirmAdminUnitBtn').disabled = false;
+     }
+
+     function closeAdminUnitModal() {
+       document.getElementById('adminUnitModal').style.display = 'none';
+     }
+
+     function confirmAdminUnit() {
+       if (window.adminSelectedUnit) {
+         window.location.href = 'school-admin.html?tenant=' + window.adminSelectedUnit;
+       }
+     }
 
     // Call after teacher info loaded
     document.addEventListener('DOMContentLoaded', () => {

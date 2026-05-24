@@ -608,22 +608,22 @@ router.get('/admin/attendance-logs', authenticateOperator, async (req, res) => {
       }
     }
 
-    // KODE PERBAIKAN AKURAT BERDASARKAN SQL DUMP:
-    // 1. Hubungkan tenants (ten) lewat al.tenant_id = ten.tenant_id
-    // 2. Ambil ten.nama_sekolah
-    // 3. Ambil ar.keterangan AS nama_aturan
+    // KODE PERBAIKAN: Filter berdasarkan tenant_id guru (teacher_assignments), bukan tempat absen
+    // Ini memastikan guru dinas luar tetap muncul di log unit asalnya
     let query = `
       SELECT al.id, al.teacher_id, al.waktu_scan, al.jenis, al.status, al.metode,
-             t.nama, t.nip, ten.nama_sekolah, ar.keterangan AS nama_aturan
+             t.nama, t.nip, ten.nama_sekolah, ar.keterangan AS nama_aturan,
+             al.tenant_id as scan_tenant_id
       FROM attendance_logs al
       JOIN teachers t ON al.teacher_id = t.id
+      JOIN teacher_assignments ta ON t.id = ta.teacher_id
       JOIN tenants ten ON al.tenant_id = ten.tenant_id
       LEFT JOIN attendance_rules ar ON al.rule_id = ar.id
     `;
     let params = [];
 
     if (tenantId) {
-      query += ' WHERE al.tenant_id = ?';
+      query += ' WHERE ta.tenant_id = ?';
       params.push(tenantId);
     }
 

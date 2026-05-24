@@ -426,22 +426,78 @@ router.get('/dashboarda', authenticateToken, async (req, res) => {
 // GET /api/admin/summary - Admin dashboard summary
 router.get('/admin/summary', authenticateOperator, async (req, res) => {
   try {
-    const totalTeachers = await db.query('SELECT COUNT(*) as count FROM teachers WHERE status_aktif = 1');
-    const activeToday = await db.query(
-      'SELECT COUNT(DISTINCT teacher_id) as count FROM attendance_logs WHERE DATE(waktu_scan) = CURDATE()'
-    );
-    const lateToday = await db.query(
-      'SELECT COUNT(*) as count FROM attendance_logs WHERE DATE(waktu_scan) = CURDATE() AND status = "terlambat"'
-    );
-    const totalLocations = await db.query('SELECT COUNT(*) as count FROM tenant_locations WHERE is_active = 1');
+    let tenantId = req.query.tenant_id;
+
+    // Operator: force tenant_id from assignment if not provided
+    if (req.user.role !== 'admin' && !tenantId) {
+      const adminAssignments = (req.user.assignments || []).filter(a => {
+        const roles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin'];
+        return roles.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''));
+      });
+      if (adminAssignments.length === 1) {
+        tenantId = adminAssignments[0].tenant_id;
+      } else if (adminAssignments.length > 1) {
+        tenantId = adminAssignments[0].tenant_id;
+      }
+    }
+
+    // Verify tenant access
+    if (tenantId && !verifyTenantAccess(req, tenantId)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+
+    let teacherQuery = 'SELECT COUNT(DISTINCT t.id) as count FROM teachers t';
+    let teacherParams = [];
+    if (tenantId) {
+      teacherQuery += ' JOIN teacher_assignments ta ON t.id = ta.teacher_id AND ta.tenant_id = ?';
+      teacherParams.push(tenantId);
+    }
+    teacherQuery += ' WHERE t.status_aktif = 1';
+    const [totalTeachers] = await db.query(teacherQuery, teacherParams);
+
+    let activeQuery = `
+      SELECT COUNT(DISTINCT a.teacher_id) as count
+      FROM attendance_logs a
+      LEFT JOIN teachers t ON a.teacher_id = t.id
+      LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id
+      WHERE DATE(a.waktu_scan) = CURDATE()
+    `;
+    let activeParams = [];
+    if (tenantId) {
+      activeQuery += ' AND ta.tenant_id = ?';
+      activeParams.push(tenantId);
+    }
+    const [activeToday] = await db.query(activeQuery, activeParams);
+
+    let lateQuery = `
+      SELECT COUNT(*) as count
+      FROM attendance_logs a
+      LEFT JOIN teachers t ON a.teacher_id = t.id
+      LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id
+      WHERE DATE(a.waktu_scan) = CURDATE() AND a.status = 'terlambat'
+    `;
+    let lateParams = [];
+    if (tenantId) {
+      lateQuery += ' AND ta.tenant_id = ?';
+      lateParams.push(tenantId);
+    }
+    const [lateToday] = await db.query(lateQuery, lateParams);
+
+    let locQuery = 'SELECT COUNT(*) as count FROM tenant_locations WHERE 1=1';
+    let locParams = [];
+    if (tenantId) {
+      locQuery += ' AND tenant_id = ?';
+      locParams = [tenantId];
+    }
+    const [totalLocations] = await db.query(locQuery, locParams);
 
     res.json({
       success: true,
       data: {
-        totalTeachers: totalTeachers[0].count,
-        activeToday: activeToday[0].count,
-        lateToday: lateToday[0].count,
-        totalLocations: totalLocations[0].count
+        totalTeachers: totalTeachers.count,
+        activeToday: activeToday.count,
+        lateToday: lateToday.count,
+        totalLocations: totalLocations.count
       }
     });
   } catch (error) {
