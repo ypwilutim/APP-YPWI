@@ -941,7 +941,7 @@
         // 4. Membangun Payload
         const attendancePayload = {
           scan_id: String(parsedData.scan_id),
-          timestamp: todayStr + ' ' + currentTimeStr,
+          timestamp: new Date().toISOString(),
           type: statusAbsenMatang,
           device_id: config ? config.device_id : "YPWI-SCANNER-LOCAL",
           tenant_id: config ? config.tenant_id : "YPWILUTIM",
