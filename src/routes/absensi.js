@@ -406,17 +406,17 @@ router.get('/api/admin/summary', authenticateOperator, async (req, res) => {
     const totalTeachers = totalTeachersResult.count;
 
     // Get active today (teachers who have attendance today)
+    // Include dinas luar records so they appear in all connected units
     let activeQuery = `
       SELECT COUNT(DISTINCT a.teacher_id) as count
       FROM attendance_logs a
-      LEFT JOIN teachers t ON a.teacher_id = t.id
-      LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id
-      WHERE DATE(a.waktu_scan) = CURDATE()
+      JOIN teachers t ON a.teacher_id = t.id
+      JOIN teacher_assignments ta ON t.id = ta.teacher_id
+      WHERE DATE(a.waktu_scan) = CURDATE() AND (a.tenant_id = ? OR a.dinas_luar = 1)
     `;
     let activeParams = [];
     if (tenantId) {
-      activeQuery += ' AND ta.tenant_id = ? ';
-      activeParams.push(tenantId);
+      activeParams.push(tenantId, tenantId);
     }
     const [activeTodayResult] = await db.query(activeQuery, activeParams);
     const activeToday = activeTodayResult.count;
@@ -425,14 +425,13 @@ router.get('/api/admin/summary', authenticateOperator, async (req, res) => {
     let lateQuery = `
       SELECT COUNT(*) as count
       FROM attendance_logs a
-      LEFT JOIN teachers t ON a.teacher_id = t.id
-      LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id
-      WHERE DATE(a.waktu_scan) = CURDATE() AND a.status = 'terlambat'
+      JOIN teachers t ON a.teacher_id = t.id
+      JOIN teacher_assignments ta ON t.id = ta.teacher_id
+      WHERE DATE(a.waktu_scan) = CURDATE() AND a.status = 'terlambat' AND (a.tenant_id = ? OR a.dinas_luar = 1)
     `;
     let lateParams = [];
     if (tenantId) {
-      lateQuery += ' AND ta.tenant_id = ? ';
-      lateParams.push(tenantId);
+      lateParams.push(tenantId, tenantId);
     }
     const [lateTodayResult] = await db.query(lateQuery, lateParams);
     const lateToday = lateTodayResult.count;
@@ -521,10 +520,10 @@ router.get('/api/admin/attendance-logs', authenticateOperator, async (req, res) 
           t.nama, t.nip
         FROM attendance_logs al
         JOIN teachers t ON al.teacher_id = t.id
-        LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id
-        WHERE ta.tenant_id = ?
+        JOIN teacher_assignments ta ON t.id = ta.teacher_id
+        WHERE ta.tenant_id = ? AND (al.tenant_id = ? OR al.dinas_luar = 1)
       `;
-      params.push(tenantId);
+      params.push(tenantId, tenantId);
     } else {
       query = `
         SELECT
@@ -608,12 +607,13 @@ router.get('/admin/attendance-logs', authenticateOperator, async (req, res) => {
       }
     }
 
-    // KODE PERBAIKAN: Filter berdasarkan tenant_id guru (teacher_assignments), bukan tempat absen
-    // Ini memastikan guru dinas luar tetap muncul di log unit asalnya
+    // KODE PERBAIKAN: Filter berdasarkan teacher_assignments dengan logika:
+    // - Absen di unit tempat scan (al.tenant_id = tenantId): hanya muncul di unit itu
+    // - Absen dinas luar (al.dinas_luar = 1): muncul di SEMUA unit guru
     let query = `
       SELECT al.id, al.teacher_id, al.waktu_scan, al.jenis, al.status, al.metode,
              t.nama, t.nip, ten.nama_sekolah, ar.keterangan AS nama_aturan,
-             al.tenant_id as scan_tenant_id
+             al.tenant_id as scan_tenant_id, al.dinas_luar
       FROM attendance_logs al
       JOIN teachers t ON al.teacher_id = t.id
       JOIN teacher_assignments ta ON t.id = ta.teacher_id
@@ -623,8 +623,9 @@ router.get('/admin/attendance-logs', authenticateOperator, async (req, res) => {
     let params = [];
 
     if (tenantId) {
-      query += ' WHERE ta.tenant_id = ?';
-      params.push(tenantId);
+      query += ` WHERE ta.tenant_id = ? 
+                 AND (al.tenant_id = ? OR al.dinas_luar = 1)`;
+      params.push(tenantId, tenantId);
     }
 
     if (dateFilter) {

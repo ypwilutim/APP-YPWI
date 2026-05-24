@@ -458,28 +458,26 @@ router.get('/admin/summary', authenticateOperator, async (req, res) => {
     let activeQuery = `
       SELECT COUNT(DISTINCT a.teacher_id) as count
       FROM attendance_logs a
-      LEFT JOIN teachers t ON a.teacher_id = t.id
-      LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id
-      WHERE DATE(a.waktu_scan) = CURDATE()
+      JOIN teachers t ON a.teacher_id = t.id
+      JOIN teacher_assignments ta ON t.id = ta.teacher_id
+      WHERE DATE(a.waktu_scan) = CURDATE() AND (a.tenant_id = ? OR a.dinas_luar = 1)
     `;
     let activeParams = [];
     if (tenantId) {
-      activeQuery += ' AND ta.tenant_id = ?';
-      activeParams.push(tenantId);
+      activeParams.push(tenantId, tenantId);
     }
     const [activeToday] = await db.query(activeQuery, activeParams);
 
     let lateQuery = `
       SELECT COUNT(*) as count
       FROM attendance_logs a
-      LEFT JOIN teachers t ON a.teacher_id = t.id
-      LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id
-      WHERE DATE(a.waktu_scan) = CURDATE() AND a.status = 'terlambat'
+      JOIN teachers t ON a.teacher_id = t.id
+      JOIN teacher_assignments ta ON t.id = ta.teacher_id
+      WHERE DATE(a.waktu_scan) = CURDATE() AND a.status = 'terlambat' AND (a.tenant_id = ? OR a.dinas_luar = 1)
     `;
     let lateParams = [];
     if (tenantId) {
-      lateQuery += ' AND ta.tenant_id = ?';
-      lateParams.push(tenantId);
+      lateParams.push(tenantId, tenantId);
     }
     const [lateToday] = await db.query(lateQuery, lateParams);
 
