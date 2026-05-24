@@ -614,35 +614,60 @@
       <!-- AREA KANAN: RINGKASAN & RIWAYAT DATA (Lebar di PC) -->
       <div class="col-right-stats" style="display: flex; flex-direction: column; gap: 1.5rem;">
 
-        <!-- Grid Ringkasan Kecil -->
-        <div class="summary-widgets-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem;">
-          <div
-            style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 0.75rem; padding: 1rem; text-align: center; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.01);">
-            <span
-              style="font-size: 0.7rem; color: #64748b; font-weight: 700; text-transform: uppercase; display: block;">Total
-              Hadir</span>
-            <div id="totalAttendance" style="font-size: 1.5rem; font-weight: 800; color: #0f172a; margin-top: 0.25rem;">
-              0</div>
-          </div>
-          <div
-            style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 0.75rem; padding: 1rem; text-align: center; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.01); display: flex; flex-direction: column; justify-content: center; align-items: center;">
-            <span
-              style="font-size: 0.7rem; color: #64748b; font-weight: 700; text-transform: uppercase; display: block; margin-bottom: 0.25rem;">Status
-              Akhir</span>
-            <div id="lastStatus"
-              style="font-size: 0.75rem; font-weight: 700; background: #fef3c7; color: #92400e; padding: 0.2rem 0.5rem; border-radius: 0.4rem; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis;">
-              Belum absen</div>
-          </div>
-          <div
-            style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 0.75rem; padding: 1rem; text-align: center; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.01);">
-            <span
-              style="font-size: 0.7rem; color: #64748b; font-weight: 700; text-transform: uppercase; display: block;">Jam
-              Terakhir</span>
-            <div id="lastTime"
-              style="font-size: 1.25rem; font-weight: 700; color: #0f172a; margin-top: 0.25rem; font-family: monospace;">
-              -</div>
-          </div>
-        </div>
+         <!-- Grid Ringkasan Kecil -->
+         <div class="summary-widgets-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem;">
+           <div
+             style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 0.75rem; padding: 1rem; text-align: center; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.01);">
+             <span
+               style="font-size: 0.7rem; color: #64748b; font-weight: 700; text-transform: uppercase; display: block;">Total
+               Hadir</span>
+             <div id="totalAttendance" style="font-size: 1.5rem; font-weight: 800; color: #0f172a; margin-top: 0.25rem;">
+               0</div>
+           </div>
+           <div
+             style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 0.75rem; padding: 1rem; text-align: center; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.01); display: flex; flex-direction: column; justify-content: center; align-items: center;">
+             <span
+               style="font-size: 0.7rem; color: #64748b; font-weight: 700; text-transform: uppercase; display: block; margin-bottom: 0.25rem;">Status
+               Akhir</span>
+             <div id="lastStatus"
+               style="font-size: 0.75rem; font-weight: 700; background: #fef3c7; color: #92400e; padding: 0.2rem 0.5rem; border-radius: 0.4rem; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis;">
+               Belum absen</div>
+           </div>
+           <div
+             style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 0.75rem; padding: 1rem; text-align: center; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.01);">
+             <span
+               style="font-size: 0.7rem; color: #64748b; font-weight: 700; text-transform: uppercase; display: block;">Jam
+               Terakhir</span>
+             <div id="lastTime"
+               style="font-size: 1.25rem; font-weight: 700; color: #0f172a; margin-top: 0.25rem; font-family: monospace;">
+               -</div>
+           </div>
+         </div>
+
+         <!-- Quran Progress Widget -->
+         <div
+           id="quranWidget"
+           style="background: #fdf6e3; border: 1px solid #e2e8f0; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.01);">
+           <div style="display: flex; align-items: center; gap: 1rem; mb-2">
+             <div style="background: #fef3c7; width: 40px; height: 40px; border-radius: 0.75rem; display: flex; align-items: center; justify-content: center;">
+               <i class="fas fa-quran" style="color: #166534; font-size: 1.25rem;"></i>
+             </div>
+             <div>
+               <p style="margin: 0; font-size: 0.875rem; font-weight: 600; color: #1f2937;">Al-Qur'an</p>
+               <p id="quranPageText" style="margin: 0.25rem 0 0; font-size: 0.875rem; color: #4b5563;">Halaman 1/604</p>
+             </div>
+           </div>
+           <div class="w-full bg-gray-200 rounded-full h-2 mt-2">
+             <div id="quranProgressBar" class="bg-green-500 h-2 rounded-full transition-width duration-500" style="width: 0%"></div>
+           </div>
+           <div style="display: flex; justify-content-between; margin-top: 0.5rem; font-size: 0.75rem; color: #6b7280;">
+             <span id="quranKhatamText">Khatam: 0</span>
+             <button id="quranReadBtn"
+                     style="background: #f3f4f6; color: #1f2937; border: none; padding: 0.25rem 0.5rem; border-radius: 0.375rem; font-size: 0.75rem; cursor: pointer;">
+               Baca
+             </button>
+           </div>
+         </div>
 
         <!-- Widget Riwayat dengan Pembatasan Fleksibel -->
         <div class="card"
@@ -807,66 +832,95 @@
     </div>
   </div>
 
-  <!-- Dinas Luar Modal -->
-  <div id="dinasLuarModal" class="modal"
-    style="display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.5); backdrop-filter: blur(4px); z-index: 999; align-items: center; justify-content: center; padding: 1rem;">
-    <div class="modal-content"
-      style="max-width: 440px; width: 100%; background: white; border-radius: 1rem; padding: 1.5rem; box-sizing: border-box;">
-      <h3 style="font-size: 1.1rem; font-weight: 700; margin: 0 0 0.25rem 0; text-align: center; color: #0f172a;">
-        Pelaporan Dinas Luar</h3>
-      <p style="font-size: 0.85rem; color: #64748b; text-align: center; margin: 0 0 1rem 0;">Terdeteksi di area luar:
-        <strong id="dinasUnitName" style="color:#2563eb;"></strong>
-      </p>
-      <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.25rem;">
-        <textarea id="kegiatanDinas"
-          style="width: 100%; padding: 0.65rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; min-height: 80px; box-sizing: border-box; resize: none;"
-          placeholder="Tuliskan detail agenda / penugasan kedinasan Anda secara lengkap..."></textarea>
-        <input type="file" id="selfieInput" accept="image/*" capture="user"
-          style="width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; box-sizing: border-box; background: #f8fafc;">
-      </div>
-      <div style="display: flex; gap: 0.5rem;">
-        <button class="btn btn-secondary" onclick="closeDinasLuarModal()"
-          style="flex: 1; padding: 0.65rem; border-radius: 0.5rem; border: none; background: #e2e8f0; font-weight: 600; color:#475569;">Batal</button>
-        <button class="btn btn-primary" onclick="submitDinasLuar()"
-          style="flex: 1; padding: 0.65rem; border-radius: 0.5rem; border: none; background: #d97706; color: white; font-weight: 600;">Kirim
-          Laporan</button>
-      </div>
-    </div>
-  </div>
+   <!-- Dinas Luar Modal -->
+   <div id="dinasLuarModal" class="modal"
+     style="display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.5); backdrop-filter: blur(4px); z-index: 999; align-items: center; justify-content: center; padding: 1rem;">
+     <div class="modal-content"
+       style="max-width: 440px; width: 100%; background: white; border-radius: 1rem; padding: 1.5rem; box-sizing: border-box;">
+       <h3 style="font-size: 1.1rem; font-weight: 700; margin: 0 0 0.25rem 0; text-align: center; color: #0f172a;">
+         Pelaporan Dinas Luar</h3>
+       <p style="font-size: 0.85rem; color: #64748b; text-align: center; margin: 0 0 1rem 0;">Terdeteksi di area luar:
+         <strong id="dinasUnitName" style="color:#2563eb;"></strong>
+       </p>
+       <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.25rem;">
+         <textarea id="kegiatanDinas"
+           style="width: 100%; padding: 0.65rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; min-height: 80px; box-sizing: border-box; resize: none;"
+           placeholder="Tuliskan detail agenda / penugasan kedinasan Anda secara lengkap..."></textarea>
+         <input type="file" id="selfieInput" accept="image/*" capture="user"
+           style="width: 100%; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; box-sizing: border-box; background: #f8fafc;">
+       </div>
+       <div style="display: flex; gap: 0.5rem;">
+         <button class="btn btn-secondary" onclick="closeDinasLuarModal()"
+           style="flex: 1; padding: 0.65rem; border-radius: 0.5rem; border: none; background: #e2e8f0; font-weight: 600; color:#475569;">Batal</button>
+         <button class="btn btn-primary" onclick="submitDinasLuar()"
+           style="flex: 1; padding: 0.65rem; border-radius: 0.5rem; border: none; background: #d97706; color: white; font-weight: 600;">Kirim
+           Laporan</button>
+       </div>
+     </div>
+   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
-  <!-- JAVASCRIPT UX CONTROLLER -->
-  <script>
-    // Fungsi ekspansi dinamis untuk pembatasan riwayat log jalani transisi smooth
-    function toggleHistoryLayout() {
-      const wrapper = document.getElementById('historyWrapper');
-      const fade = document.getElementById('historyFade');
-      const btnText = document.querySelector('#toggleHistoryBtn span');
-      const btnIcon = document.getElementById('toggleHistoryIcon');
+<!-- Quran Reader Integration -->
+    <script>
+      // Quran Reader Widget Functionality
+      const QURAN_STORAGE_KEY_PAGE = 'quranCurrentPage';
+      const QURAN_STORAGE_KEY_KHATAM = 'quranKhatam';
+      const TOTAL_PAGES = 604;
 
-      if (wrapper.style.maxHeight === '200px' || wrapper.style.maxHeight === '') {
-        wrapper.style.maxHeight = '1200px'; // Buka penuh daftar log
-        fade.style.opacity = '0'; // Hilangkan gradasi pudar bawah
-        setTimeout(() => { fade.style.display = 'none'; }, 300);
-        btnText.innerText = 'Sembunyikan Riwayat';
-        btnIcon.className = 'fas fa-chevron-up';
-      } else {
-        wrapper.style.maxHeight = '200px'; // Batasi kembali
-        fade.style.display = 'block';
-        setTimeout(() => { fade.style.opacity = '1'; }, 10);
-        btnText.innerText = 'Lihat Selengkapnya';
-        btnIcon.className = 'fas fa-chevron-down';
+      // Update Quran widget UI
+      function updateQuranWidget() {
+        const quranPageTextEl = document.getElementById('quranPageText');
+        const quranProgressBarEl = document.getElementById('quranProgressBar');
+        const quranKhatamTextEl = document.getElementById('quranKhatamText');
+        
+        if (!quranPageTextEl || !quranProgressBarEl || !quranKhatamTextEl) return;
+        
+        const currentPage = parseInt(localStorage.getItem(QURAN_STORAGE_KEY_PAGE)) || 1;
+        const totalKhatam = parseInt(localStorage.getItem(QURAN_STORAGE_KEY_KHATAM)) || 0;
+        
+        // Update page text
+        quranPageTextEl.textContent = `Halaman ${currentPage}/${TOTAL_PAGES}`;
+        
+        // Update progress bar
+        const progressPercent = ((currentPage - 1) / (TOTAL_PAGES - 1)) * 100;
+        quranProgressBarEl.style.width = `${progressPercent}%`;
+        
+        // Update khatam text
+        quranKhatamTextEl.textContent = `Khatam: ${totalKhatam}`;
       }
-    }
-  </script>
-  <script>
-    const token = localStorage.getItem('token');
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
 
-    if (!token) {
-      window.location.href = 'login.html';
-    }
+      // Handle read button click
+      function handleQuranRead() {
+        window.open('quran-reader.html', '_blank');
+      }
+
+      // Initialize Quran widget
+      function initQuranWidget() {
+        // Update widget on load
+        updateQuranWidget();
+
+        // Listen for storage changes (when quran-reader.html updates localStorage)
+        window.addEventListener('storage', function(e) {
+          if (e.key === QURAN_STORAGE_KEY_PAGE || e.key === QURAN_STORAGE_KEY_KHATAM) {
+            updateQuranWidget();
+          }
+        });
+
+        // Add click listener to read button
+        const quranReadBtnEl = document.getElementById('quranReadBtn');
+        if (quranReadBtnEl) {
+          quranReadBtnEl.addEventListener('click', handleQuranRead);
+        }
+      }
+
+     // JAVASCRIPT UX CONTROLLER
+     const token = localStorage.getItem('token');
+     const user = JSON.parse(localStorage.getItem('user') || '{}');
+
+     if (!token) {
+       window.location.href = 'login.html';
+     }
 
     async function setTeacherInfo() {
       try {
@@ -2094,24 +2148,25 @@
     // Initialize on load
     initializeDashboard();
 
-    function initializeDashboard() {
-      console.log('Initializing dashboard');
-      setTeacherInfo();
-      requestLocationPermission();
-      loadTodaySummary();
-      loadRecentAttendance();
-      updateConnectionStatus();
-      loadAttendanceRules();
+     function initializeDashboard() {
+       console.log('Initializing dashboard');
+       setTeacherInfo();
+       requestLocationPermission();
+       loadTodaySummary();
+       loadRecentAttendance();
+       updateConnectionStatus();
+       loadAttendanceRules();
+       initQuranWidget(); // Initialize Quran widget
 
-      window.attendanceInterval = setInterval(function () {
-        if (currentLocation) {
-          updateAttendanceButtonsState();
-        }
-      }, 1000);
+       window.attendanceInterval = setInterval(function () {
+         if (currentLocation) {
+           updateAttendanceButtonsState();
+         }
+       }, 1000);
 
-      window.addEventListener('online', syncOfflineAttendance);
-      window.addEventListener('offline', showOfflineMessage);
-    }
+       window.addEventListener('online', syncOfflineAttendance);
+       window.addEventListener('offline', showOfflineMessage);
+     }
 
     // ========================================================
     // JURUS PAMUNGKAS: PAKSA SINKRONISASI SETELAH HALAMAN SIAP
