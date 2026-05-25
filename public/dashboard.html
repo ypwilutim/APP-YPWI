@@ -1981,8 +1981,10 @@ if (data.success && data.data.length > 0) {
 
              // 3. SINKRONISASI KOTAK STATUS AKHIR
              const teksHtmlBaru = recentDiv.innerHTML.toLowerCase();
-             const logDatePart = logParts[0] || '';
-             const isLogToday = logDatePart && logDatePart === new Date().toISOString().split('T')[0];
+const logDatePart = logParts[0] || '';
+              const todayLocal = new Date();
+              const localDateStr = todayLocal.getFullYear() + '-' + String(todayLocal.getMonth() + 1).padStart(2, '0') + '-' + String(todayLocal.getDate()).padStart(2, '0');
+              const isLogToday = logDatePart && logDatePart === localDateStr;
 
             if (statusBox) {
               if (isLogToday && teksHtmlBaru.includes('masuk')) {
@@ -2002,20 +2004,20 @@ if (data.success && data.data.length > 0) {
             // 4. KONTROL TAMPILAN DUA TOMBOL (SHOW / HIDE)
             // ========================================================
 // KONTROL TAMPILAN DUA TOMBOL (SHOW / HIDE)
-             if (isLogToday && logTerbaru.jenis === 'masuk') {
-               // JIKA BARU ABSEN MASUK HARI INI -> Sembunyikan Tombol Masuk, Munculkan Tombol Pulang
-               if (checkInBtn) checkInBtn.style.display = 'none';
-               if (checkOutBtn) checkOutBtn.style.display = 'block';
+              if (isLogToday && logTerbaru.jenis === 'masuk') {
+                // JIKA BARU ABSEN MASUK HARI INI -> Sembunyikan Tombol Masuk, Munculkan Tombol Pulang
+                if (checkInBtn) checkInBtn.style.display = 'none';
+                if (checkOutBtn) checkOutBtn.style.display = 'inline-block';
 
 } else if (isLogToday && logTerbaru.jenis === 'pulang') {
-               // JIKA SUDAH ABSEN PULANG HARI INI -> Sembunyikan kedua tombol (Absensi beres)
-               if (checkInBtn) checkInBtn.style.display = 'none';
-               if (checkOutBtn) checkOutBtn.style.display = 'none';
-             } else {
-               // Log terbaru dari hari lain -> TAMPilkan tombol Masuk (belum absen hari ini)
-               if (checkInBtn) checkInBtn.style.display = 'block';
-               if (checkOutBtn) checkOutBtn.style.display = 'none';
-             }
+                // JIKA SUDAH ABSEN PULANG HARI INI -> Sembunyikan kedua tombol (Absensi beres)
+                if (checkInBtn) checkInBtn.style.display = 'none';
+                if (checkOutBtn) checkOutBtn.style.display = 'none';
+              } else {
+                // Log terbaru dari hari lain -> TAMPilkan tombol Masuk (belum absen hari ini)
+                if (checkInBtn) checkInBtn.style.display = 'inline-block';
+                if (checkOutBtn) checkOutBtn.style.display = 'none';
+              }
            } else {
             // KONDISI JIKA BELUM ADA LOG ABSENSI SAMA SEKALI (AWAL HARI)
             recentDiv.innerHTML = '<p class="text-center text-gray-500">Belum ada riwayat absensi</p>';
