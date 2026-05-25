@@ -68,21 +68,21 @@ router.post('/attendance', authenticateToken, selfieUpload.single('selfie'), asy
     // ===================================================================
     const currentDay = new Date().toLocaleDateString('id-ID', { weekday: 'long' }).toLowerCase();
     // Ganti bagian const now = new Date(); dengan ini:
+    // Ambil waktu sekarang dalam UTC
     const now = new Date();
-    // Konversi ke WITA (UTC+8)
-    const witaOffset = 8 * 60;
-    const witaTime = new Date(now.getTime() + (witaOffset * 60 * 1000));
-    const jamSekarangStr = witaTime.toISOString().slice(11, 16);
+    // Dapatkan jam dan menit dalam format UTC
+    const jamSekarangUTC = now.toISOString().slice(11, 16);
 
-    // 1. QUERY MULTI-BARIS: Mencari baris aturan yang rentang jamnya cocok dengan jam sekarang
+    // Saat query database, pastikan jam_mulai/selesai di DB 
+    // juga sudah dikonversi ke UTC atau gunakan fungsi konversi SQL
     const rulesResultRaw = await db.query(
       `SELECT id, tipe, jam_mulai, jam_selesai, status_log, hari 
-       FROM attendance_rules 
-       WHERE tenant_id = ? 
-         AND ? >= TIME_FORMAT(jam_mulai, '%H:%i') 
-         AND ? < TIME_FORMAT(jam_selesai, '%H:%i')
-       LIMIT 1`,
-      [tenant_id, jamSekarangStr, jamSekarangStr]
+   FROM attendance_rules 
+   WHERE tenant_id = ? 
+     AND ? >= TIME_FORMAT(CONVERT_TZ(jam_mulai, 'Asia/Makassar', 'UTC'), '%H:%i') 
+     AND ? < TIME_FORMAT(CONVERT_TZ(jam_selesai, 'Asia/Makassar', 'UTC'), '%H:%i')
+   LIMIT 1`,
+      [tenant_id, jamSekarangUTC, jamSekarangUTC]
     );
     const rulesResult = Array.isArray(rulesResultRaw[0]) ? rulesResultRaw[0] : (Array.isArray(rulesResultRaw) ? rulesResultRaw : []);
 
