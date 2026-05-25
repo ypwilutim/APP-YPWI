@@ -67,8 +67,12 @@ router.post('/attendance', authenticateToken, selfieUpload.single('selfie'), asy
     // VALIDASI 1: AMBIL ATURAN JAM KERJA KETAT (SINKRONISASI KOLOM DB)
     // ===================================================================
     const currentDay = new Date().toLocaleDateString('id-ID', { weekday: 'long' }).toLowerCase();
+    // Ganti bagian const now = new Date(); dengan ini:
     const now = new Date();
-    const jamSekarangStr = now.toTimeString().slice(0, 5); // Format "HH:MM" (Misal "07:57")
+    // Konversi ke WITA (UTC+8)
+    const witaOffset = 8 * 60;
+    const witaTime = new Date(now.getTime() + (witaOffset * 60 * 1000));
+    const jamSekarangStr = witaTime.toISOString().slice(11, 16);
 
     // 1. QUERY MULTI-BARIS: Mencari baris aturan yang rentang jamnya cocok dengan jam sekarang
     const rulesResultRaw = await db.query(
