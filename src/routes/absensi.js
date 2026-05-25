@@ -8,8 +8,7 @@ const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const db = require('../../db');
-const { authenticateToken, authenticateOperator, isDayMatch, calculateDistance } = require('../middleware/auth');
-const { route } = require('./absensi');
+const { authenticateToken, authenticateOperator, isDayMatch, calculateDistance, verifyTenantAccess } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -33,310 +32,108 @@ const selfieUpload = multer({ storage: selfieStorage });
 // ROUTES
 // ============================================================
 
-// POST /api/attendance - Record attendance with rule_id support
 router.post('/attendance', authenticateToken, selfieUpload.single('selfie'), async (req, res) => {
   try {
-    const { jenis, metode, latitude, longitude, dinas_luar, kegiatan_dinas } = req.body || {};
-    let selfie_url = null;
-
-    // 1. Amankan parsing data string dari FormData / Multipart-form
-    let is_dinas_luar = dinas_luar === 'true' || dinas_luar === true || dinas_luar === '1';
-    let tenant_id = req.user.tenant_id;
-    let rule_id = null;
-
-    if (req.file) {
-      selfie_url = req.file.path;
+    const { jenis, metode, latitude, longitude, waktu_absen, waktu_scan, rule_id, status, kegiatan_dinas } = req.body;
+    let selfie_url = req.file ? req.file.path : null;
+    
+    // Deteksi tenant_id dari lokasi GPS (jika guru multi-tenant)
+    let detected_tenant_id = req.body.tenant_id || req.user.tenant_id;
+    if (latitude && longitude && !req.body.tenant_id) {
+      const userLat = parseFloat(latitude);
+      const userLng = parseFloat(longitude);
+      
+      // Ambil semua tenant dengan lokasi
+      const tenants = await db.query(
+        `SELECT tenant_id, latitude, longitude, location_radius 
+         FROM tenants 
+         WHERE latitude IS NOT NULL AND longitude IS NOT NULL`
+      );
+      
+      // Cari tenant mana yang mencakup lokasi user
+      for (const t of tenants) {
+        const dist = Math.sqrt(
+          Math.pow((t.latitude - userLat), 2) + Math.pow((t.longitude - userLng), 2)
+        );
+        const radiusKm = (t.location_radius || 200) / 111000; // Convert meter to km approximation
+        if (dist <= radiusKm) {
+          detected_tenant_id = t.tenant_id;
+          break;
+        }
+      }
     }
 
-    // Fungsi Helper Normalisasi & Jarak (Geofencing)
-    const normalize = (str) => (str || "").toString().replace(/\s+/g, '').toUpperCase();
-
-    const calculateDistance = (lat1, lon1, lat2, lon2) => {
-      const R = 6371;
-      const dLat = (lat2 - lat1) * Math.PI / 180;
-      const dLon = (lon2 - lon1) * Math.PI / 180;
-      const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-        Math.sin(dLon / 2) * Math.sin(dLon / 2);
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-      return R * c;
-    };
-
-    // ===================================================================
-    // ===================================================================
-    // VALIDASI 1: AMBIL ATURAN JAM KERJA KETAT (SINKRONISASI KOLOM DB)
-    // ===================================================================
-    const currentDay = new Date().toLocaleDateString('id-ID', { weekday: 'long' }).toLowerCase();
-    // Ganti bagian const now = new Date(); dengan ini:
-    // Ambil waktu sekarang dalam UTC
-    const now = new Date();
-    // Dapatkan jam dan menit dalam format UTC
-    const jamSekarangUTC = now.toISOString().slice(11, 16);
-
-    // Saat query database, pastikan jam_mulai/selesai di DB 
-    // juga sudah dikonversi ke UTC atau gunakan fungsi konversi SQL
-    const rulesResultRaw = await db.query(
-      `SELECT id, tipe, jam_mulai, jam_selesai, status_log, hari 
-   FROM attendance_rules 
-   WHERE tenant_id = ? 
-     AND ? >= TIME_FORMAT(CONVERT_TZ(jam_mulai, 'Asia/Makassar', 'UTC'), '%H:%i') 
-     AND ? < TIME_FORMAT(CONVERT_TZ(jam_selesai, 'Asia/Makassar', 'UTC'), '%H:%i')
-   LIMIT 1`,
-      [tenant_id, jamSekarangUTC, jamSekarangUTC]
-    );
-    const rulesResult = Array.isArray(rulesResultRaw[0]) ? rulesResultRaw[0] : (Array.isArray(rulesResultRaw) ? rulesResultRaw : []);
-
-    // JIKA TIDAK ADA RENTANG JAM YANG COCOK INI (Diluar jadwal aturan)
-    if (rulesResult.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: `Absensi ditolak! Jam saat ini (${jamSekarangStr} ) berada di luar jendela waktu absensi resmi sekolah.`
-      });
+    if (!jenis || !waktu_scan) {
+      return res.status(400).json({ success: false, message: 'jenis dan waktu_scan wajib diisi' });
     }
 
-    const matchedRule = rulesResult[0];
-    rule_id = matchedRule.id;
-
-    // 2. VALIDASI JENIS PRESENSI: Mencegah guru salah klik tombol (Misal: Harusnya Datang tapi klik Pulang)
-    // Normalisasi pencocokan: 'Datang' dari DB disamakan dengan request 'masuk'
-    const jenisInputMurni = jenis === 'masuk' ? 'datang' : jenis; // 'masuk' -> 'datang', 'pulang' -> 'pulang'
-    const tipeAturanDB = matchedRule.tipe.toLowerCase();
-
-    if (jenisInputMurni !== tipeAturanDB) {
-      return res.status(400).json({
-        success: false,
-        message: `Aksi keliru! Berdasarkan jadwal, saat ini adalah waktu untuk Absen ${matchedRule.tipe.toUpperCase()}.`
-      });
-    }
-
-    // 3. CEK HARI KERJA
-    const workingDays = matchedRule.hari ? matchedRule.hari.split(',').map(d => d.trim().toLowerCase()) : ['senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
-    if (!workingDays.includes(currentDay)) {
-      return res.status(400).json({
-        success: false,
-        message: `Absensi gagal! Hari ini (${currentDay.toUpperCase()}) bukan hari kerja efektif untuk aturan ini.`
-      });
-    }
-
-    // 4. PENENTUAN STATUS LOG: Menyalin langsung dari status_log di database Anda
-    // Mengubah format string space menjadi underscore (Misal: "Tepat Waktu" -> "tepat_waktu")
-    let status = matchedRule.status_log.toLowerCase().replace(/\s+/g, '_');
-
-
-
-    // ===================================================================
-    // VALIDASI 2: PROTEKSI ANTI-DUPLIKASI (SATU HARI MAKS 1 MASUK & 1 PULANG)
-    // ===================================================================
-    const checkDuplicateRaw = await db.query(
-      'SELECT id, waktu_scan FROM attendance_logs WHERE teacher_id = ? AND jenis = ? AND DATE(waktu_scan) = CURRENT_DATE() LIMIT 1',
+    // Cek duplikat absen dalam 1 menit terakhir
+    const [existing] = await db.query(
+      'SELECT id FROM attendance_logs WHERE teacher_id = ? AND jenis = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 1 MINUTE)',
       [req.user.guru_id, jenis]
     );
-    const checkDuplicate = Array.isArray(checkDuplicateRaw[0]) ? checkDuplicateRaw[0] : (Array.isArray(checkDuplicateRaw) ? checkDuplicateRaw : []);
-
-    if (checkDuplicate.length > 0) {
-      const waktuScan = new Date(checkDuplicate[0].waktu_scan).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-      return res.status(400).json({
-        success: false,
-        message: `Anda sudah melakukan absensi ${jenis} hari ini pada jam ${waktuScan} WITA.`
-      });
+    if (existing && existing.length > 0) {
+      return res.status(400).json({ success: false, message: 'Absen sudah dilakukan beberapa detik lalu' });
     }
 
-    if (jenis === 'pulang') {
-      const checkMasukRaw = await db.query(
-        'SELECT id FROM attendance_logs WHERE teacher_id = ? AND jenis = "masuk" AND DATE(waktu_scan) = CURRENT_DATE() LIMIT 1',
-        [req.user.guru_id]
-      );
-      const checkMasuk = Array.isArray(checkMasukRaw[0]) ? checkMasukRaw[0] : (Array.isArray(checkMasukRaw) ? checkMasukRaw : []);
-
-      if (checkMasuk.length === 0) {
-        return res.status(400).json({
-          success: false,
-          message: 'Absensi gagal! Anda harus memiliki record absensi MASUK hari ini sebelum bisa absen pulang.'
-        });
-      }
+    // Cek absen masuk/pulang hari ini di unit yang sama
+    const today = new Date().toISOString().split('T')[0];
+    const [todayLog] = await db.query(
+      'SELECT jenis, tenant_id FROM attendance_logs WHERE teacher_id = ? AND DATE(created_at) = ? AND tenant_id = ? ORDER BY created_at DESC LIMIT 1',
+      [req.user.guru_id, today, detected_tenant_id]
+    );
+    if (todayLog && todayLog.jenis === jenis) {
+      return res.status(400).json({ success: false, message: `Anda sudah absen ${jenis} hari ini di unit ini` });
     }
 
-    // ===================================================================
-    // VALIDASI 3: GEOFENCING (RADAR LOKASI SEKOLAH YPWI)
-    // ===================================================================
-    // ===================================================================
-    // VALIDASI 3: GEOFENCING (RADAR LOKASI SEKOLAH YPWI) - VERSION FIXED
-    // ===================================================================
-    if (latitude && longitude) {
-      try {
-        const userLat = parseFloat(latitude);
-        const userLng = parseFloat(longitude);
-
-        if (isNaN(userLat) || isNaN(userLng)) {
-          return res.status(400).json({
-            success: false,
-            message: 'Absensi gagal! Format koordinat GPS dari perangkat Anda tidak valid.'
-          });
-        }
-
-        if (!is_dinas_luar) {
-          // 1. Ambil data lokasi utama tenants
-          const tenantsLocationsRaw = await db.query(
-            'SELECT tenant_id, nama_sekolah, latitude, longitude, location_radius, tipe_unit FROM tenants WHERE latitude IS NOT NULL AND longitude IS NOT NULL'
-          );
-          const tenantsLocations = Array.isArray(tenantsLocationsRaw[0]) ? tenantsLocationsRaw[0] : (Array.isArray(tenantsLocationsRaw) ? tenantsLocationsRaw : []);
-
-          // 2. Ambil data sub-lokasi cabang/titik lain
-          const tenantLocationsDataRaw = await db.query(
-            'SELECT tl.tenant_id, t.nama_sekolah, tl.latitude, tl.longitude, tl.location_radius, t.tipe_unit FROM tenant_locations tl JOIN tenants t ON tl.tenant_id = t.tenant_id WHERE tl.latitude IS NOT NULL AND tl.longitude IS NOT NULL AND tl.is_active = 1'
-          );
-          const tenantLocationsData = Array.isArray(tenantLocationsDataRaw[0]) ? tenantLocationsDataRaw[0] : (Array.isArray(tenantLocationsDataRaw) ? tenantLocationsDataRaw : []);
-
-          // Gabungkan semua data ke array flat tanpa menggunakan Map agar data dengan tenant_id yang sama tidak saling menimpa
-          const allLocations = [...tenantsLocations, ...tenantLocationsData];
-
-          let withinAssigned = false;
-          let withinOther = false;
-
-          const userHomeTenantNorm = normalize(req.user.tenant_id);
-
-          // Filter lokasi yang cocok dengan sekolah asal user
-          const homeLocations = allLocations.filter(loc => normalize(loc.tenant_id) === userHomeTenantNorm);
-
-          // LOOP 1: Cari kecocokan di area sekolah asal user terlebih dahulu
-          for (const location of homeLocations) {
-            // Pembersihan string koordinat dari spasi tersembunyi
-            const targetLat = parseFloat((location.latitude || "").toString().trim());
-            const targetLng = parseFloat((location.longitude || "").toString().trim());
-
-            if (isNaN(targetLat) || isNaN(targetLng)) continue;
-
-            const distance = calculateDistance(userLat, userLng, targetLat, targetLng);
-            const radius = parseInt(location.location_radius) || 100;
-
-            // Konversi jarak ke meter (distance * 1000). Ditambah toleransi akurasi GPS 50 meter
-            if ((distance * 1000) <= radius + 50) {
-              withinAssigned = true;
-              break;
-            }
-          }
-
-          // LOOP 2: Jika gagal di sekolah sendiri, sisir cadangan ke seluruh properti sekolah lain
-          if (!withinAssigned) {
-            for (const location of allLocations) {
-              const targetLat = parseFloat((location.latitude || "").toString().trim());
-              const targetLng = parseFloat((location.longitude || "").toString().trim());
-
-              if (isNaN(targetLat) || isNaN(targetLng)) continue;
-
-              const distance = calculateDistance(userLat, userLng, targetLat, targetLng);
-              const radius = parseInt(location.location_radius) || 100;
-
-              if ((distance * 1000) <= radius + 50) {
-                // FALLBACK: Jika ternyata titik koordinatnya lolos di sini dan itu adalah sekolah asalnya sendiri
-                if (normalize(location.tenant_id) === userHomeTenantNorm) {
-                  withinAssigned = true;
-                } else {
-                  withinOther = true;
-                  tenant_id = location.tenant_id;
-                  is_dinas_luar = true; // Ditandai dinas luar otomatis karena berada di cabang YPWI lain
-                }
-                break;
-              }
-            }
-          }
-
-          // Verifikasi Akhir Radar Geofencing
-          if (!withinAssigned && !withinOther) {
-            return res.status(403).json({
-              success: false,
-              message: 'Absensi gagal! Anda berada di luar radius lokasi seluruh unit sekolah YPWI.'
-            });
-          }
-        } else {
-          tenant_id = req.user.tenant_id || tenant_id;
-        }
-      } catch (locationError) {
-        console.error('[LOCATION VALIDATION ERROR]:', locationError);
-        return res.status(500).json({ success: false, message: 'Terjadi kegagalan sistem internal pada radar geofencing.' });
-      }
-    }
-
-    // ===================================================================
-    // 4. INJEKSI DATA KE DATABASE (REKAM LOG)
-    // ===================================================================
-    // Baris 229-239 - Ganti dari NOW() ke parameter waktu
+    // 1. Simpan ke Database
     const insertQuery = `
-  INSERT INTO attendance_logs 
-  (teacher_id, tenant_id, waktu_scan, jenis, metode, status, dinas_luar, kegiatan_dinas, selfie_url, latitude, longitude, rule_id) 
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`;
+      INSERT INTO attendance_logs 
+      (teacher_id, tenant_id, waktu_scan, created_at, jenis, metode, status, kegiatan_dinas, selfie_url, latitude, longitude, rule_id) 
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
 
     await db.query(insertQuery, [
-      req.user.guru_id,
-      tenant_id,
-      req.body.waktu_absen || new Date().toISOString(), // terima timestamp ISO dari frontend
-      jenis,
-      metode || 'dashboard',
-      status,
-      is_dinas_luar ? 1 : 0,
-      kegiatan_dinas || null,
-      selfie_url,
-      latitude ? parseFloat(latitude) : null,
-      longitude ? parseFloat(longitude) : null,
-      rule_id
+      req.user.guru_id, detected_tenant_id,
+      waktu_scan,    // Jam lokal (HH:mm:ss) dari Frontend
+      waktu_absen,   // ISO String (UTC) untuk audit
+      jenis, metode || 'dashboard', status, kegiatan_dinas || null,
+      selfie_url, latitude, longitude, rule_id
     ]);
 
-    // ===================================================================
-    // 5. AUTOMATED WHATSAPP NOTIFICATION
-    // ===================================================================
+    // 2. Notifikasi WhatsApp
     try {
-      const teacherInfoRaw = await db.query('SELECT nama, no_hp FROM teachers WHERE id = ? LIMIT 1', [req.user.guru_id]);
-      const teacherInfo = Array.isArray(teacherInfoRaw[0]) ? teacherInfoRaw[0] : (Array.isArray(teacherInfoRaw) ? teacherInfoRaw : []);
+      const [teacher] = await db.query('SELECT nama, no_hp FROM teachers WHERE id = ?', [req.user.guru_id]);
+      const [tenant] = await db.query('SELECT nama_sekolah FROM tenants WHERE tenant_id = ?', [detected_tenant_id]);
 
-      const tenantInfoRaw = await db.query('SELECT nama_sekolah FROM tenants WHERE tenant_id = ? LIMIT 1', [tenant_id]);
-      const tenantInfo = Array.isArray(tenantInfoRaw[0]) ? tenantInfoRaw[0] : (Array.isArray(tenantInfoRaw) ? tenantInfoRaw : []);
+      if (teacher && teacher.no_hp) {
+        const waktuAbsenObj = new Date(waktu_absen);
+        const tanggalSekarang = waktuAbsenObj.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
-      if (teacherInfo.length > 0 && teacherInfo[0].no_hp) {
-        const namaGuru = teacherInfo[0].nama;
-        const nomorHp = teacherInfo[0].no_hp;
-        const namaSekolah = tenantInfo.length > 0 ? tenantInfo[0].nama_sekolah : tenant_id;
+        const waMessage = `*NOTIFIKASI PRESENSI YPWI*
+Halo *${teacher.nama}*,
+Laporan absensi Anda berhasil direkam.
 
-        let statusText = status.toUpperCase().replace('_', ' ');
-        let statusEmoji = '✅ ' + statusText;
-        if (status === 'terlambat') statusEmoji = '⚠️ TERLAMBAT';
-        if (status === 'lembur') statusEmoji = '🔥 LEMBUR';
-        if (is_dinas_luar) statusEmoji = '💼 DINAS LUAR (Otomatis)';
-
-        const waktuAbsen = req.body.waktu_absen ? new Date(req.body.waktu_absen) : new Date();
-        const waktuSekarang = waktuAbsen.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WITA';
-        const tanggalSekarang = waktuAbsen.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-
-        const waMessage =
-          `*NOTIFIKASI PRESENSI YPWI*
-Halo *${namaGuru}*,
-
-Laporan absensi Anda telah berhasil direkam oleh sistem database terpadu.
-
-*Detail Presensi:*
+*Detail:*
 • Jenis: Absen ${jenis.toUpperCase()}
-• Status: ${statusEmoji}
-• Instansi: ${namaSekolah}
+• Instansi: ${tenant ? tenant.nama_sekolah : tenant_id}
 • Hari/Tgl: ${tanggalSekarang}
-• Jam Log: ${waktuSekarang}
-${kegiatan_dinas ? `• Kegiatan: ${kegiatan_dinas}\n` : ''}
-Terima kasih atas dedikasi Anda hari ini dalam mendidik siswa-siswi di unit sekolah YPWI.
+• Jam Log: ${waktu_scan} (Waktu Lokal)
 
-_Pesan ini dikirim otomatis oleh YPWI Integrated Database System v5.0_`;
+Terima kasih.`;
 
-        if (typeof sendWhatsApp === 'function') {
-          await sendWhatsApp(nomorHp, waMessage);
+        if (typeof global.sendWhatsAppMessage === 'function') {
+          await global.sendWhatsAppMessage(teacher.no_hp, waMessage);
         }
       }
     } catch (waError) {
-      console.error('[WHATSAPP NOTIFICATION ERROR]', waError.message);
+      console.error('WA Error:', waError.message);
     }
 
-    return res.json({ success: true, message: `Absensi ${jenis} berhasil dicatat dengan status [${status}]`, status });
-
+    return res.json({ success: true, message: 'Absensi berhasil' });
   } catch (error) {
-    console.error('[ATTENDANCE ERROR]', error.message);
-    return res.status(500).json({ success: false, message: 'Error recording attendance' });
+    console.error('Attendance error:', error);
+    return res.status(500).json({ success: false, message: 'Server Error', error: error.message });
   }
 });
 
@@ -520,7 +317,7 @@ router.get('/api/admin/attendance-logs', authenticateOperator, async (req, res) 
     if (tenantId) {
       query = `
         SELECT
-          al.id, al.teacher_id, al.waktu_scan, al.jenis, al.status, al.metode,
+          al.id, al.teacher_id, al.tenant_id, al.waktu_scan, al.jenis, al.status, al.metode,
           t.nama, t.nip
         FROM attendance_logs al
         JOIN teachers t ON al.teacher_id = t.id
@@ -531,7 +328,7 @@ router.get('/api/admin/attendance-logs', authenticateOperator, async (req, res) 
     } else {
       query = `
         SELECT
-          al.id, al.teacher_id, al.waktu_scan, al.jenis, al.status, al.metode,
+          al.id, al.teacher_id, al.tenant_id, al.waktu_scan, al.jenis, al.status, al.metode,
           t.nama, t.nip
         FROM attendance_logs al
         JOIN teachers t ON al.teacher_id = t.id
@@ -566,26 +363,15 @@ router.get('/api/admin/attendance-logs', authenticateOperator, async (req, res) 
 router.get('/attendance-history', authenticateToken, async (req, res) => {
   try {
     const attendance = await db.query(
-      'SELECT jenis, waktu_scan, status FROM attendance_logs WHERE teacher_id = ? ORDER BY waktu_scan DESC LIMIT 10',
+      `SELECT al.jenis, al.waktu_scan, al.status, al.tenant_id, t.nama_sekolah
+       FROM attendance_logs al
+       JOIN tenants t ON al.tenant_id = t.tenant_id
+       WHERE al.teacher_id = ? ORDER BY al.waktu_scan DESC LIMIT 10`,
       [req.user.guru_id]
     );
 
-    // --- SISIPKAN PROSES FORMATTING DI SINI ---
-    const formattedAttendance = attendance.map(item => {
-      // Pastikan waktu_scan tidak null/undefined
-      if (!item.waktu_scan) return item;
-
-      return {
-        ...item,
-        // Ini mengubah format database ("2026-05-21 01:13:53")
-        // menjadi ISO Standard ("2026-05-20T17:13:53.000Z")
-        waktu_scan: new Date(item.waktu_scan.replace(' ', 'T') + 'Z').toISOString()
-      };
-    });
-    // ------------------------------------------
-
-    // Gunakan formattedAttendance, bukan attendance asli
-    res.json({ success: true, data: formattedAttendance });
+    // Kirim waktu_scan yang disimpan sebagai UTC, frontend akan konversi ke local timezone
+    res.json({ success: true, data: attendance });
 
   } catch (error) {
     console.error('[SERVER ERROR]', error.message);

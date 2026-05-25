@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="theme-color" content="#2563eb">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <title>Dashboard Guru - YPWI Lutim</title>
   <link rel="manifest" href="/dashboard-manifest.json">
@@ -916,6 +917,33 @@
       }
     }
 
+    // Avatar utility functions - defined early so they can be used in HTML
+    function showAvatarFallback(show) {
+      const fallback = document.getElementById('avatarFallback');
+      const img = document.getElementById('userPhoto');
+
+      if (show) {
+        fallback.classList.add('show');
+        img.style.display = 'none';
+      } else {
+        fallback.classList.remove('show');
+        img.style.display = 'block';
+      }
+    }
+
+    function showFallbackAvatar(img) {
+      console.log('Image failed to load, showing fallback');
+      showAvatarFallback(true);
+    }
+
+    function showUserPhoto() {
+      console.log('Image loaded successfully, hiding fallback');
+      const fallback = document.getElementById('avatarFallback');
+      const img = document.getElementById('userPhoto');
+      fallback.classList.remove('show');
+      img.style.display = 'block';
+    }
+
     // JAVASCRIPT UX CONTROLLER
     const token = localStorage.getItem('token');
     const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -1303,7 +1331,8 @@
 
             if (eff <= rad) {
               console.log('[VALIDATE_RADIUS] OK within radius');
-              return { withinRadius: true, distance: dist, radius: rad, schoolName: data.tenant.nama_sekolah };
+              window.currentNearestTenantId = data.tenant.tenant_id;
+              return { withinRadius: true, distance: dist, radius: rad, schoolName: data.tenant.nama_sekolah, tenant_id: data.tenant.tenant_id };
             }
           }
         }
@@ -1344,10 +1373,12 @@
                 const detectedTenantNorm = normalizeTenantId(unit.tenant_id);
                 const isHomeUnit = detectedTenantNorm === userHomeTenantNorm;
 
-                console.log('[VALIDATE_RADIUS] DITEMUKAN lokasi:', unit.nama_sekolah,
-                  isHomeUnit ? '(sekolah asal)' : '(sekolah lain → dinas luar)');
+console.log('[VALIDATE_RADIUS] DITEMUKAN lokasi:', unit.nama_sekolah,
+              isHomeUnit ? '(sekolah asal)' : '(sekolah lain → dinas luar)');
 
-                return {
+              window.currentNearestTenantId = unit.tenant_id;
+
+              return {
                   withinRadius: true,
                   distance: dist,
                   radius: rad,
@@ -1563,109 +1594,160 @@
       );
     }
 
-    async function recordAttendance(jenis) {
-      if (!currentLocation) {
-        alert('Lokasi belum didapatkan. Silakan coba lagi.');
+async function recordAttendance(jenis) {
+      if (!currentLocation) { alert('Lokasi belum didapatkan.'); return; }
+
+      const checkInBtn = document.getElementById('checkInBtn');
+      const checkOutBtn = document.getElementById('checkOutBtn');
+      
+      // Disable buttons immediately to prevent double-click
+      if (checkInBtn) { checkInBtn.disabled = true; checkInBtn.style.opacity = '0.6'; }
+      if (checkOutBtn) { checkOutBtn.disabled = true; checkOutBtn.style.opacity = '0.6'; }
+
+      const radiusCheck = await validateLocationRadius(currentLocation.latitude, currentLocation.longitude);
+      if (!radiusCheck.withinRadius) { 
+        if (checkInBtn) { checkInBtn.disabled = false; checkInBtn.style.opacity = ''; }
+        if (checkOutBtn) { checkOutBtn.disabled = false; checkOutBtn.style.opacity = ''; }
+        alert(`Anda di luar radius: ${radiusCheck.schoolName}`); 
+        return; 
+      }
+      
+      // Update currentNearestTenantId from radius check result
+      if (radiusCheck.tenant_id) {
+        window.currentNearestTenantId = radiusCheck.tenant_id;
+      }
+
+      const now = new Date();
+      const currentMin = now.getHours() * 60 + now.getMinutes();
+
+      const matchedRule = window.currentAttendanceRules.find(r => {
+        const [h1, m1] = r.jam_mulai.split(':');
+        const [h2, m2] = r.jam_selesai.split(':');
+        return currentMin >= (h1 * 60 + +m1) && currentMin < (h2 * 60 + +m2) && r.tipe.toLowerCase() === (jenis === 'masuk' ? 'datang' : 'pulang');
+      });
+
+      if (!matchedRule) {
+        if (checkInBtn) { checkInBtn.disabled = false; checkInBtn.style.opacity = ''; }
+        if (checkOutBtn) { checkOutBtn.disabled = false; checkOutBtn.style.opacity = ''; }
+        alert("Saat ini bukan jam absen yang diizinkan.");
         return;
       }
 
-      // Validate radius before allowing attendance
-      try {
-        const radiusCheck = await validateLocationRadius(currentLocation.latitude, currentLocation.longitude);
+const formData = new FormData();
+       formData.append('jenis', jenis);
+       formData.append('metode', 'dashboard');
+       formData.append('latitude', currentLocation.latitude);
+formData.append('longitude', currentLocation.longitude);
+        formData.append('waktu_absen', now.toISOString());
+        const utcDateTime = now.toISOString().slice(0, 19).replace('T', ' ');
+        formData.append('waktu_scan', utcDateTime);
+      formData.append('rule_id', matchedRule.id);
+      formData.append('status', matchedRule.status_log.toLowerCase().replace(' ', '_'));
 
-        if (!radiusCheck.withinRadius) {
-          // Tidak ada sekolah manapun dalam radius → tolak
-          alert(`❌ Tidak dapat absen!\n\nAnda berada di luar radius lokasi semua sekolah YPWI.\n\nJarak terdekat: ${radiusCheck.schoolName}`);
-          return;
-        }
-
-        // Dalam radius sekolah manapun
-        if (radiusCheck.isDinasLuarCandidate) {
-          // Di sekolah lain → minta laporan dinas luar
-          showDinasLuarModal(jenis, { unit: radiusCheck, canDinasLuar: true });
-          return;
-        }
-        // Jika home unit → langsung lanjut absen biasa
-      } catch (error) {
-        console.error('Radius validation error:', error);
-        // Fallback aman: izinkan absen jika sistem error
+      // Handle offline mode - save to localStorage if no internet
+      if (!navigator.onLine) {
+const offlineData = {
+           id: Date.now(),
+           jenis,
+           metode: 'dashboard',
+           latitude: currentLocation.latitude,
+           longitude: currentLocation.longitude,
+           waktu_scan: now.toISOString().slice(0, 19).replace('T', ' '),
+           timestamp: now.toISOString(),
+           token: window.token || localStorage.getItem('token'),
+           rule_id: matchedRule.id,
+           status: matchedRule.status_log.toLowerCase().replace(' ', '_'),
+           tenant_id: window.currentNearestTenantId || window.userAssignments?.[0]?.tenant_id
+         };
+        const stored = JSON.parse(localStorage.getItem('offlineAttendance') || '[]');
+        stored.push(offlineData);
+        localStorage.setItem('offlineAttendance', JSON.stringify(stored));
+        Swal.fire({
+          title: 'Offline',
+          text: 'Absensi tersimpan offline. Akan dikirim otomatis saat online.',
+          icon: 'info',
+          confirmButtonColor: '#066e3a'
+        });
+        return;
       }
 
-      const metode = 'dashboard';
-      const checkInBtn = document.getElementById('checkInBtn');
-      const checkOutBtn = document.getElementById('checkOutBtn');
-
-      checkInBtn.disabled = true;
-      checkOutBtn.disabled = true;
-
-      const originalText = jenis === 'masuk' ? checkInBtn.innerHTML : checkOutBtn.innerHTML;
-      const processingBtn = jenis === 'masuk' ? checkInBtn : checkOutBtn;
-      processingBtn.innerHTML = '<i class="fas fa-spinner spinner" style="margin-right: 0.5rem;"></i>Menyimpan...';
-
       try {
-        if (!navigator.onLine) {
-          const offlineData = JSON.parse(localStorage.getItem('offlineAttendance') || '[]');
-          const attendanceRecord = {
-            id: Date.now(),
-            jenis: jenis,
-            metode: metode,
-            latitude: currentLocation.latitude,
-            longitude: currentLocation.longitude,
-            token: token,
-            timestamp: new Date().toISOString()
-          };
-          offlineData.push(attendanceRecord);
-          localStorage.setItem('offlineAttendance', JSON.stringify(offlineData));
-          showAttendanceResult(true, 'Absensi disimpan offline. Akan dikirim saat online.', { offline: true });
-          loadTodaySummary();
-          return;
-        }
-
         const response = await fetch('/api/attendance', {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
+            'Authorization': 'Bearer ' + (window.token || localStorage.getItem('token'))
           },
-          body: JSON.stringify({
-            jenis: jenis,
-            metode: metode,
-            latitude: currentLocation.latitude,
-            longitude: currentLocation.longitude,
-            waktu_absen: new Date().toISOString()
-          })
+          body: formData
         });
 
-        const result = await response.json();
-
-        if (result.success) {
-          showAttendanceResult(true, result.message, result.data);
-          loadTodaySummary();
-        } else {
-          showAttendanceResult(false, result.message);
-        }
+const result = await response.json();
+         
+         // Refresh UI
+         await new Promise(r => setTimeout(r, 500));
+         await loadRecentAttendance();
+         loadTodaySummary();
+         
+         // Update button disabled state based on time rules
+         updateAttendanceButtonsState();
+         
+         requestAnimationFrame(async () => {
+          if (result.success) {
+            // Small delay to ensure UI updates
+            await new Promise(r => setTimeout(r, 100));
+            
+            Swal.fire({
+              title: 'Berhasil',
+              text: result.message,
+              icon: 'success',
+              confirmButtonColor: '#066e3a'
+            });
+          } else {
+            // Re-enable buttons on failure
+            if (checkInBtn) { checkInBtn.disabled = false; checkInBtn.style.opacity = ''; }
+            if (checkOutBtn) { checkOutBtn.disabled = false; checkOutBtn.style.opacity = ''; }
+            
+            Swal.fire({
+              title: 'Gagal',
+              text: result.message,
+              icon: 'error',
+              confirmButtonColor: '#dc2626'
+            });
+          }
+        });
       } catch (error) {
-        console.error('Attendance error:', error);
-        showAttendanceResult(false, 'Terjadi kesalahan saat mengirim absensi');
-      } finally {
-        checkInBtn.disabled = false;
-        checkOutBtn.disabled = false;
-        processingBtn.innerHTML = originalText;
+        console.error('Submit error:', error);
+        // Re-enable buttons on error
+        if (checkInBtn) { checkInBtn.disabled = false; checkInBtn.style.opacity = ''; }
+        if (checkOutBtn) { checkOutBtn.disabled = false; checkOutBtn.style.opacity = ''; }
+        loadTodaySummary();
+        loadRecentAttendance();
+        requestAnimationFrame(() => {
+          Swal.fire({
+            title: 'Error',
+            text: 'Terjadi kesalahan jaringan',
+            icon: 'error',
+            confirmButtonColor: '#dc2626'
+          });
+        });
       }
     }
 
-    function showAttendanceResult(success, message, data = null) {
-      const icon = success ? 'check-circle' : 'exclamation-triangle';
-      const color = success ? 'green' : 'red';
-      const title = success ? 'Berhasil' : 'Gagal';
-
-      Swal.fire({
-        title: title,
-        text: message,
-        icon: success ? 'success' : 'error',
-        confirmButtonColor: '#066e3a'
-      });
-    }
+function showAttendanceResult(success, message, data = null) {
+       const title = success ? 'Berhasil' : 'Gagal';
+       const icon = success ? 'success' : 'error';
+       
+       Swal.fire({
+         title: title,
+         text: message,
+         icon: icon,
+         confirmButtonColor: success ? '#066e3a' : '#dc2626'
+       }).then(() => {
+         if (success) {
+           loadTodaySummary();
+           loadRecentAttendance();
+         }
+       });
+     }
 
     function updateConnectionStatus() {
       const statusEl = document.getElementById('connectionStatus');
@@ -1699,14 +1781,16 @@
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${data.token}`
               },
-              // Di dalam loop sync
-              body: JSON.stringify({
-                jenis: data.jenis,
-                metode: data.metode,
-                latitude: data.latitude,
-                longitude: data.longitude,
-                waktu_absen: data.timestamp // KIRIM TIMESTAP ASLI DARI LOKAL
-              })
+// Di dalam loop sync
+               body: JSON.stringify({
+                 jenis: data.jenis,
+                 metode: data.metode,
+                 latitude: data.latitude,
+                 longitude: data.longitude,
+                 waktu_absen: data.timestamp,
+                 waktu_scan: data.waktu_scan || new Date(data.timestamp).toLocaleTimeString('id-ID', { hour12: false }),
+                 tenant_id: data.tenant_id // Kirim tenant_id hasil deteksi lokasi
+               })
             });
 
             if (response.ok) {
@@ -1771,26 +1855,25 @@
       }
     }
 
-    async function loadTodaySummary() {
-      console.log('loadTodaySummary called');
-      try {
-        const response = await fetch('/api/dashboard', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        console.log('response status:', response.status);
+async function loadTodaySummary() {
+       console.log('loadTodaySummary called (numbers only)');
+       try {
+         const response = await fetch('/api/dashboard', {
+           headers: { 'Authorization': `Bearer ${token}` }
+         });
+         console.log('response status:', response.status);
 
-        let data = null;
-        if (response.ok) {
-          data = await response.json();
-          if (data.success) {
-            document.getElementById('totalAttendance').textContent = data.data.totalAbsensi;
-            document.getElementById('lastStatus').textContent = data.data.absensiToday;
-            document.getElementById('lastStatus').className = data.data.absensiToday === 'Belum absen' ? 'badge badge-warning' : 'badge badge-success';
+         let data = null;
+         if (response.ok) {
+           data = await response.json();
+           if (data.success) {
+             document.getElementById('totalAttendance').textContent = data.data.totalAbsensi;
+             document.getElementById('lastStatus').textContent = data.data.absensiToday;
+             document.getElementById('lastStatus').className = data.data.absensiToday === 'Belum absen' ? 'badge badge-warning' : 'badge badge-success';
 
-            // Update attendance buttons based on today's status
-            updateAttendanceButtons(data.data.hasMasuk, data.data.hasPulang);
-          }
-        }
+             // Button state is handled by loadRecentAttendance for tenant-aware logic
+           }
+         }
 
         console.log('Checking password modal:', { data_user: data?.data?.user, is_default_password: data?.data?.user?.is_default_password });
         if (data && data.data && data.data.user && data.data.user.is_default_password) {
@@ -1835,78 +1918,102 @@
         const checkInBtn = document.getElementById('checkInBtn');
         const checkOutBtn = document.getElementById('checkOutBtn');
 
-        if (response.ok) {
+if (response.ok) {
           const data = await response.json();
           console.log('Attendance history data:', data);
 
-          if (data.success && data.data.length > 0) {
-            // 1. Render data ke dalam HTML riwayat
-            recentDiv.innerHTML = data.data.map(attendance => `
-          <div class="recent-attendance-item">
-            <div class="recent-attendance-content">
-              <div class="recent-attendance-title">${attendance.jenis === 'masuk' ? 'Absen Masuk' : 'Absen Pulang'}</div>
-              <div class="recent-attendance-time">${new Date(attendance.waktu_scan).toLocaleString('id-ID')}</div>
-            </div>
-            <span class="badge ${attendance.status === 'tepat_waktu' ? 'badge-success' : 'badge-warning'}">
-              ${attendance.status === 'tepat_waktu' ? 'Tepat Waktu' : 'Terlambat'}
-            </span>
-          </div>
-        `).join('');
+if (data.success && data.data.length > 0) {
+             // Check if user is multi-tenant
+             const isMultiTenant = window.userAssignments && window.userAssignments.length > 1;
+             
+             // 1. Render data ke dalam HTML riwayat
+recentDiv.innerHTML = data.data.map((attendance, index) => {
+                // waktu_scan disimpan sebagai UTC, tampilkan sesuai timezone browser
+                const dateObj = new Date(attendance.waktu_scan.replace(' ', 'T'));
+                const shortDate = dateObj.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+                const timeStr = dateObj.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false });
+              const jenisText = attendance.jenis === 'masuk' ? 'Masuk' : 'Pulang';
+              const statusText = attendance.status === 'tepat_waktu' ? 'Tepat Waktu' : 'Terlambat';
+              
+              let schoolHtml = '';
+              if (isMultiTenant && attendance.nama_sekolah) {
+                schoolHtml = `<div class="text-xs text-gray-500 mt-0.5">${attendance.nama_sekolah}</div>`;
+              }
+              
+              const borderBottom = index < data.data.length - 1 ? 'border-bottom: 1px solid #f1f5f9;' : '';
+              
+              return `
+           <div class="recent-attendance-item" style="padding: 0.75rem; ${borderBottom} display: flex; justify-content: space-between; align-items: flex-start;">
+             <div class="recent-attendance-content" style="flex: 1;">
+               <div style="display: flex; align-items: center; gap: 0.5rem;">
+                 <span class="font-semibold text-gray-800">${shortDate}</span>
+                 <span class="text-gray-400">|</span>
+                 <span class="font-medium ${attendance.jenis === 'masuk' ? 'text-green-600' : 'text-red-600'}">${jenisText}</span>
+               </div>
+               <div class="text-xs text-gray-500 mt-0.5">${timeStr} • ${statusText}</div>
+               ${schoolHtml}
+             </div>
+             <span class="badge ${attendance.status === 'tepat_waktu' ? 'badge-success' : 'badge-warning'}" style="margin-left: 0.5rem;">
+               ${statusText}
+             </span>
+           </div>
+         `;
+            }).join('');
 
             // 2. SINKRONISASI TOTAL & JAM DARI DATA PALING BARU
             if (totalBox) totalBox.innerText = data.data.length;
 
             const logTerbaru = data.data[0]; // Ambil baris teratas/terbaru
 
-            if (timeBox && logTerbaru.waktu_scan) {
-              const tanggalAbsen = new Date(logTerbaru.waktu_scan);
+if (timeBox && logTerbaru.waktu_scan) {
+               const tanggalAbsen = new Date(logTerbaru.waktu_scan.replace(' ', 'T'));
 
-              // Gunakan toLocaleTimeString untuk format otomatis yang rapi
-              timeBox.innerText = tanggalAbsen.toLocaleTimeString('id-ID', {
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: false // Memastikan format 24 jam
-              }).replace(':', '.'); // Mengubah 07:05 menjadi 07.05
-            }
+               // Gunakan toLocaleTimeString untuk format otomatis yang rapi
+               timeBox.innerText = tanggalAbsen.toLocaleTimeString('id-ID', {
+                 hour: '2-digit',
+                 minute: '2-digit',
+                 hour12: false // Memastikan format 24 jam
+               }).replace(':', '.'); // Mengubah 07:05 menjadi 07.05
+             }
 
-            // 3. SINKRONISASI KOTAK STATUS AKHIR
-            const teksHtmlBaru = recentDiv.innerHTML.toLowerCase();
-            const isLogToday = logTerbaru.waktu_scan &&
-              new Date(logTerbaru.waktu_scan).toDateString() === new Date().toDateString();
+             // 3. SINKRONISASI KOTAK STATUS AKHIR
+             const teksHtmlBaru = recentDiv.innerHTML.toLowerCase();
+             const isLogToday = logTerbaru.waktu_scan &&
+               new Date(logTerbaru.waktu_scan.replace(' ', 'T')).toDateString() === new Date().toDateString();
 
             if (statusBox) {
-              if (isLogToday && teksHtmlBaru.includes('absen masuk')) {
+              if (isLogToday && teksHtmlBaru.includes('masuk')) {
                 statusBox.innerText = 'Sudah Masuk';
                 statusBox.style.setProperty('background', '#e2fbe8', 'important');
                 statusBox.style.setProperty('color', '#15803d', 'important');
               }
 
-              if (isLogToday && (logTerbaru.jenis === 'pulang' || teksHtmlBaru.includes('absen pulang'))) {
+              if (isLogToday && (logTerbaru.jenis === 'pulang' || teksHtmlBaru.includes('pulang'))) {
                 statusBox.innerText = 'Sudah Pulang';
                 statusBox.style.setProperty('background', '#eff6ff', 'important');
                 statusBox.style.setProperty('color', '#1e40af', 'important');
               }
             }
 
-            // ========================================================
+// ========================================================
             // 4. KONTROL TAMPILAN DUA TOMBOL (SHOW / HIDE)
             // ========================================================
-            if (isLogToday && logTerbaru.jenis === 'masuk') {
-              // JIKA BARU ABSEN MASUK HARI INI -> Sembunyikan Tombol Masuk, Munculkan Tombol Pulang
-              if (checkInBtn) checkInBtn.style.display = 'none';
-              if (checkOutBtn) checkOutBtn.style.display = 'block';
+// KONTROL TAMPILAN DUA TOMBOL (SHOW / HIDE)
+             if (isLogToday && logTerbaru.jenis === 'masuk') {
+               // JIKA BARU ABSEN MASUK HARI INI -> Sembunyikan Tombol Masuk, Munculkan Tombol Pulang
+               if (checkInBtn) checkInBtn.style.display = 'none';
+               if (checkOutBtn) checkOutBtn.style.display = 'block';
 
-            } else if (isLogToday && logTerbaru.jenis === 'pulang') {
-              // JIKA SUDAH ABSEN PULANG HARI INI -> Sembunyikan kedua tombol (Absensi beres)
-              if (checkInBtn) checkInBtn.style.display = 'none';
-              if (checkOutBtn) checkOutBtn.style.display = 'none';
-            } else {
-              // Log terbaru dari hari lain -> TAMPilkan tombol Masuk (belum absen hari ini)
-              if (checkInBtn) checkInBtn.style.display = 'block';
-              if (checkOutBtn) checkOutBtn.style.display = 'none';
-            }
-
-          } else {
+} else if (isLogToday && logTerbaru.jenis === 'pulang') {
+               // JIKA SUDAH ABSEN PULANG HARI INI -> Sembunyikan kedua tombol (Absensi beres)
+               if (checkInBtn) checkInBtn.style.display = 'none';
+               if (checkOutBtn) checkOutBtn.style.display = 'none';
+             } else {
+               // Log terbaru dari hari lain -> TAMPilkan tombol Masuk (belum absen hari ini)
+               if (checkInBtn) checkInBtn.style.display = 'block';
+               if (checkOutBtn) checkOutBtn.style.display = 'none';
+             }
+           } else {
             // KONDISI JIKA BELUM ADA LOG ABSENSI SAMA SEKALI (AWAL HARI)
             recentDiv.innerHTML = '<p class="text-center text-gray-500">Belum ada riwayat absensi</p>';
             if (statusBox) {
@@ -1928,6 +2035,22 @@
       } catch (error) {
         console.error('Recent attendance load error:', error);
         document.getElementById('recentAttendance').innerHTML = '<p class="text-center text-red-500">Error loading data</p>';
+      }
+    }
+
+    function toggleHistoryLayout() {
+      const wrapper = document.getElementById('historyWrapper');
+      const btn = document.getElementById('toggleHistoryBtn');
+      const icon = document.getElementById('toggleHistoryIcon');
+      
+      if (wrapper.style.maxHeight === 'none' || wrapper.style.maxHeight === '') {
+        wrapper.style.maxHeight = '200px';
+        btn.querySelector('span').textContent = 'Lihat Selengkapnya';
+        icon.className = 'fas fa-chevron-down';
+      } else {
+        wrapper.style.maxHeight = 'none';
+        btn.querySelector('span').textContent = 'Sembunyikan';
+        icon.className = 'fas fa-chevron-up';
       }
     }
 
@@ -2120,34 +2243,6 @@
         console.error('Upload error:', error);
         Swal.fire('Error', 'Gagal mengupload foto', 'error');
       }
-    }
-
-    function showAvatarFallback(show) {
-      const fallback = document.getElementById('avatarFallback');
-      const img = document.getElementById('userPhoto');
-
-      if (show) {
-        fallback.classList.add('show');
-        img.style.display = 'none';
-      } else {
-        fallback.classList.remove('show');
-        img.style.display = 'block';
-      }
-    }
-
-    function showFallbackAvatar(img) {
-      // Called when image fails to load
-      console.log('Image failed to load, showing fallback');
-      showAvatarFallback(true);
-    }
-
-    function showUserPhoto() {
-      // Called when image loads successfully
-      console.log('Image loaded successfully, hiding fallback');
-      const fallback = document.getElementById('avatarFallback');
-      const img = document.getElementById('userPhoto');
-      fallback.classList.remove('show');
-      img.style.display = 'block';
     }
 
     // Initialize on load
