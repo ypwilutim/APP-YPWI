@@ -1635,12 +1635,18 @@ async function recordAttendance(jenis) {
 
 const formData = new FormData();
        formData.append('jenis', jenis);
-       formData.append('metode', 'dashboard');
-       formData.append('latitude', currentLocation.latitude);
-formData.append('longitude', currentLocation.longitude);
+formData.append('metode', 'dashboard');
+        formData.append('latitude', currentLocation.latitude);
+        formData.append('longitude', currentLocation.longitude);
         formData.append('waktu_absen', now.toISOString());
-        const utcDateTime = now.toISOString().slice(0, 19).replace('T', ' ');
-        formData.append('waktu_scan', utcDateTime);
+        const y = now.getFullYear();
+        const m = String(now.getMonth() + 1).padStart(2, '0');
+        const d = String(now.getDate()).padStart(2, '0');
+        const h = String(now.getHours()).padStart(2, '0');
+        const min = String(now.getMinutes()).padStart(2, '0');
+        const s = String(now.getSeconds()).padStart(2, '0');
+        const localDateTime = `${y}-${m}-${d} ${h}:${min}:${s}`;
+        formData.append('waktu_scan', localDateTime);
       formData.append('rule_id', matchedRule.id);
       formData.append('status', matchedRule.status_log.toLowerCase().replace(' ', '_'));
 
@@ -1652,7 +1658,7 @@ const offlineData = {
            metode: 'dashboard',
            latitude: currentLocation.latitude,
            longitude: currentLocation.longitude,
-           waktu_scan: now.toISOString().slice(0, 19).replace('T', ' '),
+           waktu_scan: `${y}-${m}-${d} ${h}:${min}:${s}`,
            timestamp: now.toISOString(),
            token: window.token || localStorage.getItem('token'),
            rule_id: matchedRule.id,
@@ -1926,12 +1932,13 @@ if (data.success && data.data.length > 0) {
              // Check if user is multi-tenant
              const isMultiTenant = window.userAssignments && window.userAssignments.length > 1;
              
-             // 1. Render data ke dalam HTML riwayat
-recentDiv.innerHTML = data.data.map((attendance, index) => {
-                // waktu_scan disimpan sebagai UTC, tampilkan sesuai timezone browser
-                const dateObj = new Date(attendance.waktu_scan.replace(' ', 'T'));
-                const shortDate = dateObj.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
-                const timeStr = dateObj.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false });
+// 1. Render data ke dalam HTML riwayat
+             recentDiv.innerHTML = data.data.map((attendance, index) => {
+               // Tampilkan waktu langsung dari database (format: "YYYY-MM-DD HH:MM:SS")
+               const [datePart, timePart] = attendance.waktu_scan.split(' ');
+               const [day, month] = datePart.split('-');
+               const shortDate = `${parseInt(day)} ${['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agt', 'Sep', 'Okt', 'Nov', 'Des'][parseInt(month)-1]}`;
+               const timeStr = timePart ? timePart.slice(0, 5) : '';
               const jenisText = attendance.jenis === 'masuk' ? 'Masuk' : 'Pulang';
               const statusText = attendance.status === 'tepat_waktu' ? 'Tepat Waktu' : 'Terlambat';
               
@@ -1960,26 +1967,22 @@ recentDiv.innerHTML = data.data.map((attendance, index) => {
          `;
             }).join('');
 
-            // 2. SINKRONISASI TOTAL & JAM DARI DATA PALING BARU
-            if (totalBox) totalBox.innerText = data.data.length;
+// 2. SINKRONISASI TOTAL & JAM DARI DATA PALING BARU
+             if (totalBox) totalBox.innerText = data.data.length;
 
-            const logTerbaru = data.data[0]; // Ambil baris teratas/terbaru
+             const logTerbaru = data.data[0]; // Ambil baris teratas/terbaru
+             const logParts = logTerbaru.waktu_scan ? logTerbaru.waktu_scan.split(' ') : [];
 
-if (timeBox && logTerbaru.waktu_scan) {
-               const tanggalAbsen = new Date(logTerbaru.waktu_scan.replace(' ', 'T'));
-
-               // Gunakan toLocaleTimeString untuk format otomatis yang rapi
-               timeBox.innerText = tanggalAbsen.toLocaleTimeString('id-ID', {
-                 hour: '2-digit',
-                 minute: '2-digit',
-                 hour12: false // Memastikan format 24 jam
-               }).replace(':', '.'); // Mengubah 07:05 menjadi 07.05
+             // Set timeBox dari waktu lokal database
+             if (timeBox && logParts.length >= 2) {
+               const logTimePart = logParts[1];
+               timeBox.innerText = logTimePart ? logTimePart.slice(0, 5).replace(':', '.') : '';
              }
 
              // 3. SINKRONISASI KOTAK STATUS AKHIR
              const teksHtmlBaru = recentDiv.innerHTML.toLowerCase();
-             const isLogToday = logTerbaru.waktu_scan &&
-               new Date(logTerbaru.waktu_scan.replace(' ', 'T')).toDateString() === new Date().toDateString();
+             const logDatePart = logParts[0] || '';
+             const isLogToday = logDatePart && logDatePart === new Date().toISOString().split('T')[0];
 
             if (statusBox) {
               if (isLogToday && teksHtmlBaru.includes('masuk')) {
