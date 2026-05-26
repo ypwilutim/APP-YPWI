@@ -1937,39 +1937,66 @@ const todayLocal = new Date();
 
                // 1. Render data ke dalam HTML riwayat - SEMUA log tampil (termasuk unit lain)
                const activeTenantId = window.currentNearestTenantId || window.userAssignments?.[0]?.tenant_id;
-               recentDiv.innerHTML = data.data.map((attendance, index) => {
-                // Tampilkan waktu langsung dari database (format: "YYYY-MM-DD HH:MM:SS")
-                const [datePart, timePart] = attendance.waktu_scan.split(' ');
-                const [day, month] = datePart.split('-');
-                const shortDate = `${parseInt(day)} ${['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agt', 'Sep', 'Okt', 'Nov', 'Des'][parseInt(month)-1]}`;
-                const timeStr = timePart ? timePart.slice(0, 5) : '';
-               const jenisText = attendance.jenis === 'masuk' ? 'Masuk' : 'Pulang';
-               const statusText = attendance.status === 'tepat_waktu' ? 'Tepat Waktu' : 'Terlambat';
+               // Render semua log yang diterima, dikelompokkan per bulan. Tampilkan 3 item visible, sisanya bisa di-scroll
+              const groups = {};
+              const monthNames = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agt','Sep','Okt','Nov','Des'];
 
-               let schoolHtml = '';
-               if (isMultiTenant && attendance.nama_sekolah) {
-                 schoolHtml = `<div class="text-xs text-gray-500 mt-0.5">${attendance.nama_sekolah}</div>`;
-               }
+              data.data.forEach(attendance => {
+                const [datePart, timePart] = (attendance.waktu_scan || '').split(' ');
+                const [y, m, d] = (datePart || '').split('-');
+                const groupKey = y && m ? `${y}-${m}` : 'unknown';
+                if (!groups[groupKey]) groups[groupKey] = [];
+                groups[groupKey].push({ attendance, datePart, timePart });
+              });
 
-               const borderBottom = index < data.data.length - 1 ? 'border-bottom: 1px solid #f1f5f9;' : '';
+              let html = '';
+              Object.keys(groups).forEach(groupKey => {
+                if (groupKey === 'unknown') return; // skip malformed
+                const [y, m] = groupKey.split('-');
+                html += `<div class="attendance-month-group" style="margin-bottom:0.75rem;"><h4 style="font-size:0.9rem;font-weight:700;color:#0f172a;margin:0 0 0.5rem 0;">${monthNames[parseInt(m,10)-1] || m} ${y}</h4>`;
+                groups[groupKey].forEach((item, idx) => {
+                  const attendance = item.attendance;
+                  const datePart = item.datePart || '';
+                  const timePart = item.timePart || '';
+                  const [yy, mm, dd] = datePart.split('-');
+                  const shortDate = dd ? `${parseInt(dd,10)} ${monthNames[parseInt(mm,10)-1]}` : '';
+                  const timeStr = timePart ? timePart.slice(0,5) : '';
+                  const jenisText = attendance.jenis === 'masuk' ? 'Masuk' : 'Pulang';
+                  const statusText = attendance.status === 'tepat_waktu' ? 'Tepat Waktu' : 'Terlambat';
+                  const ruleDesc = attendance.rule_keterangan ? `<div class="text-xs text-gray-400 mt-1">${attendance.rule_keterangan}</div>` : '';
+                  const schoolHtml = (isMultiTenant && attendance.nama_sekolah) ? `<div class="text-xs text-gray-500 mt-0.5">${attendance.nama_sekolah}</div>` : '';
 
-               return `
-            <div class="recent-attendance-item" style="padding: 0.75rem; ${borderBottom} display: flex; justify-content: space-between; align-items: flex-start;">
-              <div class="recent-attendance-content" style="flex: 1;">
-                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                  <span class="font-semibold text-gray-800">${shortDate}</span>
-                  <span class="text-gray-400">|</span>
-                  <span class="font-medium ${attendance.jenis === 'masuk' ? 'text-green-600' : 'text-red-600'}">${jenisText}</span>
-                </div>
-                <div class="text-xs text-gray-500 mt-0.5">${timeStr} • ${statusText}</div>
-                ${schoolHtml}
-              </div>
-              <span class="badge ${attendance.status === 'tepat_waktu' ? 'badge-success' : 'badge-warning'}" style="margin-left: 0.5rem;">
-                ${statusText}
-              </span>
-            </div>
-          `;
-             }).join('');
+                  html += `<div class="recent-attendance-item" style="padding:0.6rem 0.5rem; border-bottom:1px solid #f1f5f9; display:flex; justify-content:space-between; align-items:flex-start; gap:0.5rem;">
+                    <div style="flex:1;">
+                      <div style="display:flex; align-items:center; gap:0.5rem;">
+                        <span style="font-weight:700;color:#0f172a">${shortDate}</span>
+                        <span style="color:#94a3b8">|</span>
+                        <span style="font-weight:600; color:${attendance.jenis==='masuk'? '#16a34a':'#dc2626'}">${jenisText}</span>
+                      </div>
+                      <div style="font-size:0.78rem;color:#6b7280;margin-top:0.25rem">${timeStr} • ${statusText}</div>
+                      ${ruleDesc}
+                      ${schoolHtml}
+                    </div>
+                    <div style="margin-left:0.5rem; font-size:0.8rem; font-weight:700; display:flex; align-items:center;">
+                      <span class="badge ${attendance.status === 'tepat_waktu' ? 'badge-success' : 'badge-warning'}">${statusText}</span>
+                    </div>
+                  </div>`;
+                });
+                html += `</div>`;
+              });
+
+              recentDiv.innerHTML = html;
+
+              // Atur wrapper supaya menampilkan 3 item saja dan sisanya scrollable
+              const wrapperEl = document.getElementById('historyWrapper');
+              if (wrapperEl) {
+                // tinggi kira-kira 3 item × 64px
+                wrapperEl.style.maxHeight = '210px';
+                wrapperEl.style.overflowY = 'auto';
+              }
+              // Hilangkan tombol 'Lihat Selengkapnya'
+              const toggleBtn = document.getElementById('toggleHistoryBtn'); if (toggleBtn) toggleBtn.style.display = 'none';
+              const fadeEl = document.getElementById('historyFade'); if (fadeEl) fadeEl.style.display = 'none';
 
               // 2. SINKRONISASI TOTAL & JAM DARI DATA PALING BARU
               if (totalBox) totalBox.innerText = data.data.length;

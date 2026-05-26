@@ -363,14 +363,15 @@ router.get('/api/admin/attendance-logs', authenticateOperator, async (req, res) 
 router.get('/attendance-history', authenticateToken, async (req, res) => {
   try {
     const attendance = await db.query(
-      `SELECT al.jenis, al.waktu_scan, al.status, al.tenant_id, t.nama_sekolah
+      `SELECT al.id, al.jenis, al.waktu_scan, al.status, al.tenant_id, t.nama_sekolah, al.rule_id, ar.keterangan as rule_keterangan
        FROM attendance_logs al
        JOIN tenants t ON al.tenant_id = t.tenant_id
-       WHERE al.teacher_id = ? ORDER BY al.waktu_scan DESC LIMIT 10`,
+       LEFT JOIN attendance_rules ar ON al.rule_id = ar.id
+       WHERE al.teacher_id = ? ORDER BY al.waktu_scan DESC LIMIT 50`,
       [req.user.guru_id]
     );
 
-    // Kirim waktu_scan yang disimpan sebagai UTC, frontend akan konversi ke local timezone
+    // Kirim waktu_scan yang disimpan (lokal string) bersama info rule/keterangan
     res.json({ success: true, data: attendance });
 
   } catch (error) {

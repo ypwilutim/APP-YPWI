@@ -195,6 +195,172 @@ router.get('/admin/rules', authenticateOperator, async (req, res) => {
   }
 });
 
+// GET /api/admin/rules/:id - Get single attendance rule by id
+router.get('/admin/rules/:id', authenticateOperator, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [rule] = await db.query('SELECT * FROM attendance_rules WHERE id = ?', [id]);
+    if (!rule) {
+      return res.status(404).json({ success: false, message: 'Rule not found' });
+    }
+
+    if (!verifyTenantAccess(req, rule.tenant_id)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+
+    res.json({ success: true, data: rule });
+  } catch (error) {
+    console.error('Get rule error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching rule' });
+  }
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // POST /api/admin/rules - Create rule
 router.post('/admin/rules', authenticateOperator, async (req, res) => {
   try {
