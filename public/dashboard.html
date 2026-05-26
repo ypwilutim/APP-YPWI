@@ -1932,46 +1932,58 @@ if (data.success && data.data.length > 0) {
              // Check if user is multi-tenant
              const isMultiTenant = window.userAssignments && window.userAssignments.length > 1;
              
-// 1. Render data ke dalam HTML riwayat
-             recentDiv.innerHTML = data.data.map((attendance, index) => {
-               // Tampilkan waktu langsung dari database (format: "YYYY-MM-DD HH:MM:SS")
-               const [datePart, timePart] = attendance.waktu_scan.split(' ');
-               const [day, month] = datePart.split('-');
-               const shortDate = `${parseInt(day)} ${['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agt', 'Sep', 'Okt', 'Nov', 'Des'][parseInt(month)-1]}`;
-               const timeStr = timePart ? timePart.slice(0, 5) : '';
-              const jenisText = attendance.jenis === 'masuk' ? 'Masuk' : 'Pulang';
-              const statusText = attendance.status === 'tepat_waktu' ? 'Tepat Waktu' : 'Terlambat';
-              
-              let schoolHtml = '';
-              if (isMultiTenant && attendance.nama_sekolah) {
-                schoolHtml = `<div class="text-xs text-gray-500 mt-0.5">${attendance.nama_sekolah}</div>`;
-              }
-              
-              const borderBottom = index < data.data.length - 1 ? 'border-bottom: 1px solid #f1f5f9;' : '';
-              
-              return `
-           <div class="recent-attendance-item" style="padding: 0.75rem; ${borderBottom} display: flex; justify-content: space-between; align-items: flex-start;">
-             <div class="recent-attendance-content" style="flex: 1;">
-               <div style="display: flex; align-items: center; gap: 0.5rem;">
-                 <span class="font-semibold text-gray-800">${shortDate}</span>
-                 <span class="text-gray-400">|</span>
-                 <span class="font-medium ${attendance.jenis === 'masuk' ? 'text-green-600' : 'text-red-600'}">${jenisText}</span>
-               </div>
-               <div class="text-xs text-gray-500 mt-0.5">${timeStr} • ${statusText}</div>
-               ${schoolHtml}
-             </div>
-             <span class="badge ${attendance.status === 'tepat_waktu' ? 'badge-success' : 'badge-warning'}" style="margin-left: 0.5rem;">
-               ${statusText}
-             </span>
-           </div>
-         `;
-            }).join('');
+const todayLocal = new Date();
+                const localDateStr = todayLocal.getFullYear() + '-' + String(todayLocal.getMonth() + 1).padStart(2, '0') + '-' + String(todayLocal.getDate()).padStart(2, '0');
 
-// 2. SINKRONISASI TOTAL & JAM DARI DATA PALING BARU
-             if (totalBox) totalBox.innerText = data.data.length;
+               // 1. Render data ke dalam HTML riwayat - SEMUA log tampil (termasuk unit lain)
+               const activeTenantId = window.currentNearestTenantId || window.userAssignments?.[0]?.tenant_id;
+               recentDiv.innerHTML = data.data.map((attendance, index) => {
+                // Tampilkan waktu langsung dari database (format: "YYYY-MM-DD HH:MM:SS")
+                const [datePart, timePart] = attendance.waktu_scan.split(' ');
+                const [day, month] = datePart.split('-');
+                const shortDate = `${parseInt(day)} ${['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agt', 'Sep', 'Okt', 'Nov', 'Des'][parseInt(month)-1]}`;
+                const timeStr = timePart ? timePart.slice(0, 5) : '';
+               const jenisText = attendance.jenis === 'masuk' ? 'Masuk' : 'Pulang';
+               const statusText = attendance.status === 'tepat_waktu' ? 'Tepat Waktu' : 'Terlambat';
 
-             const logTerbaru = data.data[0]; // Ambil baris teratas/terbaru
-             const logParts = logTerbaru.waktu_scan ? logTerbaru.waktu_scan.split(' ') : [];
+               let schoolHtml = '';
+               if (isMultiTenant && attendance.nama_sekolah) {
+                 schoolHtml = `<div class="text-xs text-gray-500 mt-0.5">${attendance.nama_sekolah}</div>`;
+               }
+
+               const borderBottom = index < data.data.length - 1 ? 'border-bottom: 1px solid #f1f5f9;' : '';
+
+               return `
+            <div class="recent-attendance-item" style="padding: 0.75rem; ${borderBottom} display: flex; justify-content: space-between; align-items: flex-start;">
+              <div class="recent-attendance-content" style="flex: 1;">
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                  <span class="font-semibold text-gray-800">${shortDate}</span>
+                  <span class="text-gray-400">|</span>
+                  <span class="font-medium ${attendance.jenis === 'masuk' ? 'text-green-600' : 'text-red-600'}">${jenisText}</span>
+                </div>
+                <div class="text-xs text-gray-500 mt-0.5">${timeStr} • ${statusText}</div>
+                ${schoolHtml}
+              </div>
+              <span class="badge ${attendance.status === 'tepat_waktu' ? 'badge-success' : 'badge-warning'}" style="margin-left: 0.5rem;">
+                ${statusText}
+              </span>
+            </div>
+          `;
+             }).join('');
+
+              // 2. SINKRONISASI TOTAL & JAM DARI DATA PALING BARU
+              if (totalBox) totalBox.innerText = data.data.length;
+
+// Filter log terbaru untuk unit yang aktif (multi-tenant support)
+               // Setiap unit harus absen terpisah - tidak boleh terpengaruh log unit lain
+               const todaysLogs = data.data.filter(log => {
+                 const logDate = log.waktu_scan ? log.waktu_scan.split(' ')[0] : '';
+                 return logDate === localDateStr && log.tenant_id === activeTenantId;
+               });
+               // Jika sudah absen di unit ini hari ini, gunakan log terbaru unit ini
+               // Jika belum absen di unit ini, jangan fallback ke unit lain (biarkan tombol muncul)
+               const logTerbaru = todaysLogs[0] || { jenis: null, tenant_id: activeTenantId };
+              const logParts = logTerbaru.waktu_scan ? logTerbaru.waktu_scan.split(' ') : [];
 
              // Set timeBox dari waktu lokal database
              if (timeBox && logParts.length >= 2) {
@@ -1979,11 +1991,9 @@ if (data.success && data.data.length > 0) {
                timeBox.innerText = logTimePart ? logTimePart.slice(0, 5).replace(':', '.') : '';
              }
 
-             // 3. SINKRONISASI KOTAK STATUS AKHIR
-             const teksHtmlBaru = recentDiv.innerHTML.toLowerCase();
-const logDatePart = logParts[0] || '';
-              const todayLocal = new Date();
-              const localDateStr = todayLocal.getFullYear() + '-' + String(todayLocal.getMonth() + 1).padStart(2, '0') + '-' + String(todayLocal.getDate()).padStart(2, '0');
+// 3. SINKRONISASI KOTAK STATUS AKHIR
+              const teksHtmlBaru = recentDiv.innerHTML.toLowerCase();
+              const logDatePart = logParts[0] || '';
               const isLogToday = logDatePart && logDatePart === localDateStr;
 
             if (statusBox) {
