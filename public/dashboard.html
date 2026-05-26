@@ -879,33 +879,48 @@
 
       if (!quranPageTextEl || !quranProgressBarEl || !quranKhatamTextEl) return;
 
-      const currentPage = parseInt(localStorage.getItem(QURAN_STORAGE_KEY_PAGE)) || 1;
-      const totalKhatam = parseInt(localStorage.getItem(QURAN_STORAGE_KEY_KHATAM)) || 0;
+      // Prefer legacy key 'quranPage' if present, otherwise use existing key
+      const pageFromLegacy = localStorage.getItem('quranPage');
+      const pageFromKey = localStorage.getItem(QURAN_STORAGE_KEY_PAGE);
+      const currentPage = parseInt(pageFromLegacy || pageFromKey) || 1;
+      // khatam can be stored under different keys. Prefer quranKhatam, fallback to khatamCount or any key starting with 'khatamCount'
+      let totalKhatam = parseInt(localStorage.getItem(QURAN_STORAGE_KEY_KHATAM));
+      if (isNaN(totalKhatam)) {
+        const fallback = localStorage.getItem('khatamCount');
+        totalKhatam = parseInt(fallback);
+      }
+      if (isNaN(totalKhatam)) {
+        // search for keys starting with khatamCount
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('khatamCount')) {
+            const v = parseInt(localStorage.getItem(k));
+            if (!isNaN(v)) { totalKhatam = v; break; }
+          }
+        }
+      }
+      totalKhatam = isNaN(totalKhatam) ? 0 : totalKhatam;
 
-      // Update page text
       quranPageTextEl.textContent = `Halaman ${currentPage}/${TOTAL_PAGES}`;
 
-      // Update progress bar
       const progressPercent = ((currentPage - 1) / (TOTAL_PAGES - 1)) * 100;
       quranProgressBarEl.style.width = `${progressPercent}%`;
 
-      // Update khatam text
       quranKhatamTextEl.textContent = `Khatam: ${totalKhatam}`;
     }
 
-    // Handle read button click
+    // Handle read button click / card click
     function handleQuranRead() {
       window.open('quran-reader.html', '_blank');
     }
 
     // Initialize Quran widget
     function initQuranWidget() {
-      // Update widget on load
       updateQuranWidget();
 
       // Listen for storage changes (when quran-reader.html updates localStorage)
       window.addEventListener('storage', function (e) {
-        if (e.key === QURAN_STORAGE_KEY_PAGE || e.key === QURAN_STORAGE_KEY_KHATAM) {
+        if (e.key === QURAN_STORAGE_KEY_PAGE || e.key === QURAN_STORAGE_KEY_KHATAM || e.key === 'quranPage') {
           updateQuranWidget();
         }
       });
@@ -914,6 +929,17 @@
       const quranReadBtnEl = document.getElementById('quranReadBtn');
       if (quranReadBtnEl) {
         quranReadBtnEl.addEventListener('click', handleQuranRead);
+      }
+
+      // Make the whole widget clickable to open reader
+      const quranWidgetEl = document.getElementById('quranWidget');
+      if (quranWidgetEl) {
+        quranWidgetEl.style.cursor = 'pointer';
+        quranWidgetEl.addEventListener('click', function (e) {
+          // Prevent double handling when clicking the read button itself
+          if (e.target && (e.target.id === 'quranReadBtn' || e.target.closest && e.target.closest('#quranReadBtn'))) return;
+          handleQuranRead();
+        });
       }
     }
 

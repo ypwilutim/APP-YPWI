@@ -4,242 +4,116 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mushaf Digital - Al-Qur'an</title>
-  <!-- Scheherazade New untuk tampilan Mushaf authentic -->
+  <title>Mushaf Digital</title>
   <link href="https://fonts.googleapis.com/css2?family=Scheherazade+New:wght@400;700&display=swap" rel="stylesheet">
-  <!-- Font Awesome untuk icon -->
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- SweetAlert2 -->
-  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <style>
-    :root {
-      --mushaf-bg: #f4ecd8;
-      --ayah-number: #4b5563;
-      --text-color: #1f2937;
-    }
-
     body {
-      background: linear-gradient(90deg, #e8dcc0 0%, var(--mushaf-bg) 50%, #e8dcc0 100%);
-      min-height: 100vh;
-      margin: 0;
-      padding: 2rem 0;
-      font-family: 'Scheherazade New', 'Amiri', serif;
-      color: var(--text-color);
+      background-color: #e5d3b3;
+      font-family: 'Scheherazade New', serif;
     }
 
     .mushaf-container {
-      max-width: 800px;
-      margin: 0 auto;
-      background: var(--mushaf-bg);
+      max-width: 500px;
+      margin: 10px auto;
+      background: #fdf6e3;
+      min-height: 95vh;
+      padding: 20px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
       border-radius: 8px;
-      box-shadow:
-        inset 8px 0 15px rgba(0, 0, 0, 0.05),
-        inset -8px 0 15px rgba(0, 0, 0, 0.05),
-        0 4px 20px rgba(0, 0, 0, 0.08);
-      padding: 2.5rem 3rem;
-    }
-
-    @media (max-width: 768px) {
-      .mushaf-container {
-        padding: 1.5rem 1rem;
-        margin: 0 0.5rem;
-      }
     }
 
     .quran-text {
-      font-family: 'Scheherazade New', 'Amiri', serif;
-      font-size: 1.6rem;
-      line-height: 3;
+      font-size: 1.8rem;
+      line-height: 2.8;
       text-align: justify;
       direction: rtl;
-      letter-spacing: 0.5px;
-    }
-
-    @media (max-width: 768px) {
-      .quran-text {
-        font-size: 1.3rem;
-        line-height: 2.8;
-      }
+      color: #2c1e0f;
     }
 
     .ayah-number {
+      font-family: sans-serif;
       display: inline-block;
-      width: 24px;
-      height: 24px;
-      line-height: 24px;
-      background: var(--ayah-number);
-      color: white;
-      border-radius: 50%;
-      font-size: 0.7rem;
-      text-align: center;
-      margin-left: 4px;
-      vertical-align: middle;
+      padding: 0 5px;
+      color: #856404;
+      font-size: 1rem;
     }
 
-    .bismillah {
-      font-size: 1.8rem;
-      text-align: center;
-      margin: 1.5rem 0;
-      color: #059669;
-      font-weight: 700;
-    }
-
-    .nav-container {
-      display: flex;
-      justify-content: space-between;
-      margin-top: 2rem;
-      padding-top: 1rem;
-      border-top: 1px solid #e5e7eb;
-    }
-
-    .nav-button {
-      padding: 0.75rem 1.5rem;
-      border-radius: 0.5rem;
-      border: none;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .btn-prev {
-      background: #f3f4f6;
-      color: #374151;
-    }
-
-    .btn-prev:hover {
-      background: #e5e7eb;
-    }
-
-    .btn-finish {
-      background: #10b981;
-      color: white;
-    }
-
-    .btn-finish:hover {
-      background: #059669;
-    }
-
-    .page-indicator {
-      text-align: center;
+    .nav-btn {
+      background: #856404;
+      color: #fff;
+      padding: 10px 15px;
+      border-radius: 5px;
       font-size: 0.9rem;
-      color: #6b7280;
-      margin-bottom: 1rem;
     }
 
-    .loading {
-      text-align: center;
-      padding: 3rem;
-      color: #6b7280;
+    .nav-btn:disabled {
+      background: #ccc;
     }
   </style>
 </head>
 
 <body>
+
   <div class="mushaf-container">
-    <div class="page-indicator">
-      Halaman <span id="currentPage">1</span> / 604
+    <div class="flex justify-between text-xs text-stone-600 mb-4 border-b pb-2">
+      <span>Halaman: <span id="currentPage">1</span>/604</span>
+      <span>Khatam: <span id="khatamCount">0</span>x</span>
     </div>
 
     <div id="quranText" class="quran-text">
-      <div class="loading">Memuat teks Al-Qur'an...</div>
+      <div class="text-center py-20">Memuat mushaf...</div>
     </div>
 
-    <div class="nav-container">
-      <button id="prevBtn" class="nav-button btn-prev">
-        <i class="fas fa-chevron-right"></i> Halaman Sebelumnya
-      </button>
-      <button id="finishBtn" class="nav-button btn-finish">
-        <i class="fas fa-check"></i> Selesai Baca
-      </button>
+    <div class="flex justify-between mt-8 pt-4 border-t">
+      <button id="nextBtn" class="nav-btn"><i class="fas fa-arrow-left mr-2"></i>Selanjutnya</button>
+      <button id="prevBtn" class="nav-btn"><i class="fas fa-arrow-right ml-2"></i>Sebelumnya</button>
     </div>
   </div>
 
   <script>
-    const TOTAL_PAGES = 604;
-    const STORAGE_KEY_PAGE = 'quranCurrentPage';
-    const STORAGE_KEY_KHATAM = 'quranKhatam';
+    let currentPage = parseInt(localStorage.getItem('quranPage') || '1');
+    let khatamCount = parseInt(localStorage.getItem('khatamCount') || '0');
 
     const quranTextEl = document.getElementById('quranText');
-    const currentPageEl = document.getElementById('currentPage');
-    const prevBtn = document.getElementById('prevBtn');
-    const finishBtn = document.getElementById('finishBtn');
+    const pageEl = document.getElementById('currentPage');
+    const khatamEl = document.getElementById('khatamCount');
 
-    function updateProgress(page) {
-      localStorage.setItem(STORAGE_KEY_PAGE, page);
-    }
+    async function loadPage(page) {
+      quranTextEl.innerHTML = '<div class="text-center py-20">Memuat...</div>';
+      const res = await fetch(`https://api.alquran.cloud/v1/page/${page}/quran-uthmani`);
+      const data = await res.json();
 
-    async function loadQuranPage(pageNumber) {
-      try {
-        quranTextEl.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> Memuat...</div>';
-
-        const response = await fetch(`https://api.alquran.cloud/v1/page/${pageNumber}/quran-uthmani`);
-        if (!response.ok) throw new Error('Gagal mengambil data');
-
-        const data = await response.json();
-        if (data.code !== 200 || !data.data) throw new Error('Data tidak valid');
-
-        const pageData = data.data;
-        let html = '';
-
-        // Cek bismillah_pre jika ada
-        if (pageData.bismillah_pre) {
-          html += '<div class="bismillah">' + pageData.bismillah_pre + '</div>';
-        }
-
-        // Render ayat dengan nomor
-        if (pageData.ayahs && Array.isArray(pageData.ayahs)) {
-          html += pageData.ayahs.map(ayah =>
-            '<span class="ayah-text">' + ayah.text + '</span><span class="ayah-number">' + ayah.numberInSurah + '</span> '
-          ).join('');
-        }
-
-        quranTextEl.innerHTML = html;
-        currentPageEl.textContent = pageNumber;
-        updateProgress(pageNumber);
-      } catch (error) {
-        console.error('Error:', error);
-        quranTextEl.innerHTML = '<div class="loading">Gagal memuat. <button onclick="loadQuranPage(' + pageNumber + ')" style="margin-top:1rem;padding:0.5rem 1rem;background:#2563eb;color:white;border:none;border-radius:0.25rem;cursor:pointer;">Coba Lagi</button></div>';
-      }
-    }
-
-    prevBtn.addEventListener('click', () => {
-      let page = parseInt(localStorage.getItem(STORAGE_KEY_PAGE) || '1');
-      if (page > 1) loadQuranPage(page - 1);
-    });
-
-    finishBtn.addEventListener('click', () => {
-      Swal.fire({
-        title: 'Selesai Membaca?',
-        text: 'Progres akan disimpan.',
-        icon: 'question',
-        showCancelButton: true,
-        confirmButtonColor: '#10b981',
-        cancelButtonColor: '#6b7280',
-        confirmButtonText: 'Ya, Selesai',
-        cancelButtonText: 'Batal'
-      }).then(result => {
-        if (result.isConfirmed) {
-          let khatam = parseInt(localStorage.getItem(STORAGE_KEY_KHATAM) || '0');
-          localStorage.setItem(STORAGE_KEY_KHATAM, ++khatam);
-          localStorage.setItem(STORAGE_KEY_PAGE, '1');
-          loadQuranPage(1);
-          Swal.fire({
-            title: 'Berhasil!',
-            text: 'Total khatam: ' + khatam,
-            icon: 'success',
-            timer: 1500,
-            showConfirmButton: false
-          });
-        }
+      let html = '';
+      data.data.ayahs.forEach(a => {
+        html += `${a.text} <span class="ayah-number">(${a.numberInSurah})</span> `;
       });
+      quranTextEl.innerHTML = html;
+      pageEl.textContent = page;
+      khatamEl.textContent = khatamCount;
+      localStorage.setItem('quranPage', page);
+      localStorage.setItem('khatamCount', khatamCount);
+    }
+
+    document.getElementById('nextBtn').addEventListener('click', () => {
+      if (currentPage < 604) {
+        currentPage++;
+      } else {
+        currentPage = 1;
+        khatamCount++;
+      }
+      loadPage(currentPage);
     });
 
-    document.addEventListener('DOMContentLoaded', () => {
-      const savedPage = parseInt(localStorage.getItem(STORAGE_KEY_PAGE) || '1');
-      loadQuranPage(Math.min(savedPage, TOTAL_PAGES));
+    document.getElementById('prevBtn').addEventListener('click', () => {
+      if (currentPage > 1) {
+        currentPage--;
+        loadPage(currentPage);
+      }
     });
+
+    loadPage(currentPage);
   </script>
 </body>
 
