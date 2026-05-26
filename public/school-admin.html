@@ -179,6 +179,7 @@
             </div>
             <span class="text-xs font-medium text-gray-600" id="adminRole">Operator</span>
           </div>
+          <a href="dashboard.html" class="ml-3 inline-flex items-center px-3 py-1.5 bg-red-50 text-red-600 rounded-md text-sm font-medium hover:bg-red-100">Keluar</a>
         </div>
       </div>
 
@@ -193,6 +194,9 @@
             </button>
             <button class="mobile-tab-btn flex-1 py-1 px-1 text-center text-gray-600 rounded-lg" data-tab="attendance">
               <i class="fas fa-clipboard-list" style="font-size: 1.3rem; display: block; margin-bottom: 2px; color: #93c3d2;"></i><span style="font-size: 0.65rem; font-weight: 600;">Absen</span>
+            </button>
+            <button class="mobile-tab-btn flex-1 py-1 px-1 text-center text-gray-600 rounded-lg" data-tab="rules">
+              <i class="fas fa-clock" style="font-size: 1.3rem; display: block; margin-bottom: 2px; color: #f59e0b;"></i><span style="font-size: 0.65rem; font-weight: 600;">Aturan</span>
             </button>
             <button class="mobile-tab-btn flex-1 py-1 px-1 text-center text-gray-600 rounded-lg" data-tab="locations">
               <i class="fas fa-map-marker-alt" style="font-size: 1.3rem; display: block; margin-bottom: 2px; color: #dc2626;"></i><span style="font-size: 0.65rem; font-weight: 600;">Lokasi</span>
@@ -356,10 +360,15 @@
 <!-- Rules Tab -->
        <div id="rulesTab" class="tab-content hidden">
          <div class="main-card p-6">
-           <div class="flex justify-between items-center mb-6">
-             <h3 class="text-lg font-semibold text-gray-900">Aturan Absensi</h3>
-             <button onclick="showAddRuleModal()" class="btn-primary text-white px-4 py-2 rounded-lg text-sm flex items-center"><i class="fas fa-plus mr-2"></i>Tambah Aturan</button>
-           </div>
+<div class="flex justify-between items-center mb-6">
+              <h3 class="text-lg font-semibold text-gray-900">Aturan Absensi</h3>
+              <div class="flex items-center gap-3">
+                <label class="flex items-center text-sm text-gray-600">Gunakan Aturan Pusat
+                  <input type="checkbox" id="rulesCentralToggle" class="ml-2" />
+                </label>
+                <button onclick="showAddRuleModal()" class="btn-primary text-white px-4 py-2 rounded-lg text-sm flex items-center"><i class="fas fa-plus mr-2"></i>Tambah Aturan</button>
+              </div>
+            </div>
            <div class="bg-blue-50 rounded-lg p-4 mb-6"><div class="flex items-start space-x-3"><i class="fas fa-info-circle text-blue-500 mt-0.5"></i><div><h5 class="font-medium text-blue-900">Informasi Aturan</h5><p class="text-sm text-blue-700 mt-1">Ketika <strong>"Gunakan Aturan Pusat"</strong> aktif pada sekolah ini, maka <strong>aturan pusat (sistem)</strong> dan <strong>aturan sekolah</strong> keduanya berlaku. Aturan sekolah tetap dapat menimpa aturan pusat jika terjadi konflik pada jadwal yang sama.</p></div></div></div>
            <div id="attendanceRules" class="space-y-4"><div class="text-center py-12"><i class="fas fa-clock text-4xl text-gray-400 mb-4"></i><p class="text-gray-600">Memuat aturan absensi...</p></div></div>
          </div>
@@ -1098,19 +1107,62 @@ async function editTeacher(id) {
     // ===== RULES =====
     async function fetchRules() {
       try {
+        const c = document.getElementById('attendanceRules');
+        // 1. Fetch tenant info to read use_central_rules
+        const tr = await fetch(apiUrl('/admin/tenants'), { headers: { 'Authorization': `Bearer ${authToken}` } });
+        if (checkAuth401403(tr)) return;
+        const td = await tr.json();
+        const tenant = (td.success && td.data && td.data[0]) ? td.data[0] : null;
+        const useCentral = tenant ? !!tenant.use_central_rules : false;
+
+        // Set toggle state
+        const centralToggle = document.getElementById('rulesCentralToggle');
+        if (centralToggle) {
+          centralToggle.checked = useCentral;
+        }
+
+        // 2. Fetch local rules for this tenant
         const r = await fetch(apiUrl('/admin/rules'), { headers: { 'Authorization': `Bearer ${authToken}` } });
         if (checkAuth401403(r)) return;
         const d = await r.json();
-        const c = document.getElementById('attendanceRules');
-        if (d.success) {
-          const items = d.data || [];
-          if (items.length === 0) { c.innerHTML = '<div class="text-center py-8 text-gray-500"><i class="fas fa-clock text-4xl text-gray-400 mb-4"></i><p>Belum ada aturan</p><button onclick="showAddRuleModal()" class="mt-2 inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"><i class="fas fa-plus mr-2"></i>Tambah Aturan Pertama</button></div>'; }
-          else { c.innerHTML = items.map(rule => `<div class="bg-white border border-gray-200 rounded-lg p-4"><div class="flex items-center justify-between"><div><h5 class="font-medium text-gray-900">${rule.tipe} - ${rule.jam_mulai} s/d ${rule.jam_selesai}</h5><p class="text-sm text-gray-600 mt-1">${rule.status_log==='tepat_waktu'?'Tepat Waktu':'Terlambat'} ${rule.keterangan?'| '+rule.keterangan:''} ${rule.hari?'| Hari: '+rule.hari:''}</p></div><div class="flex space-x-2"><button onclick="editRule(${rule.id})" class="text-blue-600 hover:text-blue-800 text-sm"><i class="fas fa-edit"></i></button><button onclick="deleteRule(${rule.id})" class="text-red-600 hover:text-red-800 text-sm"><i class="fas fa-trash"></i></button></div></div></div>`).join(''); }
+        const localItems = (d.success && d.data) ? d.data : [];
+
+        // 3. If tenant uses central rules, fetch central rules (YPWILUTIM)
+        let centralItems = [];
+        if (useCentral) {
+          const rc = await fetch('/api/admin/rules?tenant_id=YPWILUTIM', { headers: { 'Authorization': `Bearer ${authToken}` } });
+          if (rc.ok) {
+            const rcj = await rc.json();
+            if (rcj.success && rcj.data) centralItems = rcj.data.map(it => ({ ...it, __central: true }));
+          }
         }
-      } catch (e) { console.error('[RULES]', e); }
+
+        // 4. Render: central rules (read-only) first, then local rules (editable)
+        const allItems = [...centralItems, ...localItems.map(it => ({ ...it, __central: false }))];
+
+        if (allItems.length === 0) {
+          c.innerHTML = '<div class="text-center py-8 text-gray-500"><i class="fas fa-clock text-4xl text-gray-400 mb-4"></i><p>Belum ada aturan</p><button onclick="showAddRuleModal()" class="mt-2 inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"><i class="fas fa-plus mr-2"></i>Tambah Aturan Pertama</button></div>';
+          return;
+        }
+
+        c.innerHTML = allItems.map(rule => {
+          const readOnly = rule.__central === true;
+          const badge = readOnly ? '<span style="font-size:0.75rem;color:#92400e;margin-left:0.5rem">(Pusat - Read-only)</span>' : '';
+          const actions = readOnly ? '' : `<div class="flex space-x-2"><button onclick="editRule(${rule.id})" class="text-blue-600 hover:text-blue-800 text-sm"><i class="fas fa-edit"></i></button><button onclick="deleteRule(${rule.id})" class="text-red-600 hover:text-red-800 text-sm"><i class="fas fa-trash"></i></button></div>`;
+          return `<div class="bg-white border border-gray-200 rounded-lg p-4"><div class="flex items-center justify-between"><div><h5 class="font-medium text-gray-900">${rule.tipe} - ${rule.jam_mulai} s/d ${rule.jam_selesai} ${badge}</h5><p class="text-sm text-gray-600 mt-1">${rule.status_log==='tepat_waktu'?'Tepat Waktu':'Terlambat'} ${rule.keterangan?'| '+rule.keterangan:''} ${rule.hari?'| Hari: '+rule.hari:''}</p></div>${actions}</div></div>`;
+        }).join('');
+
+      } catch (e) { console.error('[RULES]', e); showToast('Gagal memuat aturan', 'error'); }
     }
 
-    function showAddRuleModal() { document.getElementById('ruleModalTitle').textContent = 'Tambah Aturan'; document.getElementById('ruleForm').reset(); document.getElementById('ruleTenantId').value = tenantId; delete document.getElementById('ruleForm').dataset.editId; document.getElementById('ruleModal').classList.add('show'); }
+    function showAddRuleModal() { 
+      // Check if central rules toggle is on and prevent adding local rules if needed? We allow adding local rules even if central active.
+      document.getElementById('ruleModalTitle').textContent = 'Tambah Aturan';
+      document.getElementById('ruleForm').reset();
+      document.getElementById('ruleTenantId').value = tenantId;
+      delete document.getElementById('ruleForm').dataset.editId;
+      document.getElementById('ruleModal').classList.add('show');
+    }
     function hideRuleModal() { document.getElementById('ruleModal').classList.remove('show'); }
 
     async function editRule(id) {
@@ -1353,11 +1405,31 @@ document.addEventListener('DOMContentLoaded', () => {
        const now = new Date();
        setEl('currentDate', now.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }));
        document.querySelectorAll('.nav-item').forEach(btn => btn.addEventListener('click', function() { switchTab(this.getAttribute('data-tab')); }));
+       document.querySelectorAll('.mobile-tab-btn').forEach(btn => btn.addEventListener('click', function() { switchTab(this.getAttribute('data-tab')); }));
        loadDashboard();
        initSchoolRecapView();
        // Set initial active state for mobile nav
        const initialMobileBtn = document.querySelector('.mobile-tab-btn[data-tab="dashboard"]');
        if (initialMobileBtn) initialMobileBtn.classList.add('active');
+
+       // Wire central rules toggle
+       const centralToggle = document.getElementById('rulesCentralToggle');
+       if (centralToggle) {
+         centralToggle.addEventListener('change', async function() {
+           try {
+             const isChecked = this.checked;
+             const r = await fetch(apiUrl('/admin/tenants/' + tenantId), {
+               method: 'PUT',
+               headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+               body: JSON.stringify({ use_central_rules: isChecked })
+             });
+             if (checkAuth401403(r)) return;
+             const d = await r.json();
+             if (d.success) { showToast('Pengaturan aturan pusat diperbarui', 'success'); fetchRules(); loadDashboard(); }
+             else { showToast(d.message || 'Gagal memperbarui', 'error'); }
+           } catch (err) { console.error('[CENTRAL TOGGLE]', err); showToast('Terjadi kesalahan', 'error'); }
+         });
+       }
      });
   </script>
 

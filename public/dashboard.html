@@ -952,6 +952,29 @@
       window.location.href = 'login.html';
     }
 
+    // Global fetch wrapper: auto-logout on 401/403
+    (function() {
+      const _fetch = window.fetch.bind(window);
+      window.fetch = async function(input, init) {
+        try {
+          const res = await _fetch(input, init);
+          if (res && (res.status === 401 || res.status === 403)) {
+            // Clear sensitive local data and redirect to login immediately
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            try { await new Promise(r => setTimeout(r, 200)); } catch(e){}
+            // Optionally show terse alert then redirect
+            try { /* eslint-disable no-undef */ Swal.fire({ title: 'Sesi berakhir', text: 'Silakan login kembali', icon: 'warning', confirmButtonColor: '#2563eb' }); } catch(e) {}
+            window.location.replace('login.html');
+          }
+          return res;
+        } catch (err) {
+          throw err;
+        }
+      };
+    })();
+
+
     async function setTeacherInfo() {
       try {
         const response = await fetch('/api/teacher/info', {
