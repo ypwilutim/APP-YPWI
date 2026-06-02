@@ -218,6 +218,11 @@ const teacherUpload = multer({
 app.use(cors());
 app.use(express.static('public'));
 
+// Redirect root to login page
+app.get('/', (req, res) => {
+  res.redirect('/login.html');
+});
+
 // Import modular routes
 const absensiRoutes = require('./src/routes/absensi');
 const authRoutes = require('./src/routes/auth');
