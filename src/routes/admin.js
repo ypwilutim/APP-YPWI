@@ -1558,4 +1558,81 @@ router.post('/admin/mutasi/students/:id/adopt', authenticateOperator, async (req
   }
 });
 
+// ============================================================
+// LEAVE REQUEST ADMIN ROUTES (for Ketua Yayasan / Kepala Sekolah)
+// ============================================================
+
+// GET /api/admin/leave-requests - List all leave requests with filtering
+router.get('/admin/leave-requests', authenticateOperator, async (req, res) => {
+  try {
+    let tenantId = req.query.tenant_id;
+    let statusFilter = req.query.status;
+    
+    // Operator: restrict to their tenant
+    if (req.user.role !== 'admin' && !tenantId) {
+      const adminAssignments = (req.user.assignments || []).filter(a => {
+        const roles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin', 'kepala_sekolah'];
+        return roles.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''));
+      });
+      if (adminAssignments.length === 1) {
+        tenantId = adminAssignments[0].tenant_id;
+      }
+    }
+    
+    let query = `
+      SELECT lr.*, t.nama as teacher_name, ta.tenant_id, tn.nama_sekolah
+      FROM leave_requests lr
+      JOIN teachers t ON lr.teacher_id = t.id
+      JOIN teacher_assignments ta ON t.id = ta.teacher_id
+      JOIN tenants tn ON ta.tenant_id = tn.tenant_id
+      WHERE 1=1
+    `;
+    let params = [];
+    
+    if (tenantId) {
+      query += ' AND ta.tenant_id = ?';
+      params.push(tenantId);
+    }
+    
+    if (statusFilter && statusFilter !== 'all') {
+      query += ' AND lr.status = ?';
+      params.push(statusFilter);
+    }
+    
+    query += ' ORDER BY lr.created_at DESC LIMIT 200';
+    
+    const requests = await db.query(query, params);
+    res.json({ success: true, data: requests });
+  } catch (error) {
+    console.error('Admin leave requests error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching leave requests' });
+  }
+});
+
+// PUT /api/admin/leave-requests/:id/status - Approve or reject leave request
+router.put('/admin/leave-requests/:id/status', authenticateOperator, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, catatan } = req.body;
+    
+    if (!['approved', 'rejected'].includes(status)) {
+      return res.status(400).json({ success: false, message: 'Status tidak valid' });
+    }
+    
+    const result = await db.query(
+      'UPDATE leave_requests SET status = ?, catatan = ?, updated_at = NOW() WHERE id = ?',
+      [status, catatan || null, id]
+    );
+    
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: 'Permohonan izin tidak ditemukan' });
+    }
+    
+    res.json({ success: true, message: `Permohonan izin berhasil ${status === 'approved' ? 'disetujui' : 'ditolak'}` });
+  } catch (error) {
+    console.error('Update leave request status error:', error);
+    res.status(500).json({ success: false, message: 'Error updating leave request status' });
+  }
+});
+
 module.exports = router;

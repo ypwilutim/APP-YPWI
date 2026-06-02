@@ -111,20 +111,50 @@ if (!token) {
     window.location.href = 'login.html';
 }
 
-// Global fetch wrapper: auto-logout on 401/403
+// Decode JWT token and extract payload
+function parseJwt(token) {
+    try {
+        const base64Url = token.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => {
+            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
+        return JSON.parse(jsonPayload);
+    } catch (e) {
+        return null;
+    }
+}
+
+// Check if JWT token is expired (proactive check)
+function isTokenExpired(token) {
+    if (!token) return true;
+    const payload = parseJwt(token);
+    if (!payload || !payload.exp) return true;
+    const now = Math.floor(Date.now() / 1000);
+    return payload.exp < now;
+}
+
+// Proactive logout helper
+function forceLogout() {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    window.location.replace('login.html');
+}
+
+// Global fetch wrapper: proactive token expiry check + auto-logout on 401/403
 (function () {
     const _fetch = window.fetch.bind(window);
     window.fetch = async function (input, init) {
+        const currentToken = localStorage.getItem('token');
+        if (!currentToken || isTokenExpired(currentToken)) {
+            forceLogout();
+            return new Response(null, { status: 401, statusText: 'Token expired' });
+        }
         try {
             const res = await _fetch(input, init);
             if (res && (res.status === 401 || res.status === 403)) {
                 // Clear sensitive local data and redirect to login immediately
-                localStorage.removeItem('token');
-                localStorage.removeItem('user');
-                try { await new Promise(r => setTimeout(r, 200)); } catch (e) { }
-                // Optionally show terse alert then redirect
-                try { /* eslint-disable no-undef */ Swal.fire({ title: 'Sesi berakhir', text: 'Silakan login kembali', icon: 'warning', confirmButtonColor: '#2563eb' }); } catch (e) { }
-                window.location.replace('login.html');
+                forceLogout();
             }
             return res;
         } catch (err) {
@@ -1038,6 +1068,49 @@ async function syncOfflineAttendance() {
 
 // TAMBAHKAN FUNGSI INI DI DALAM TAG <SCRIPT> DASHBOARD.HTML
 
+async function checkActiveLeave() {
+    try {
+        const today = new Date().toISOString().split('T')[0];
+        const now = new Date();
+        const currentHour = now.getHours();
+        
+        const response = await fetch('/api/leave-requests?status=approved', {
+            headers: { 'Authorization': 'Bearer ' + (window.token || localStorage.getItem('token')) }
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            if (result.success && result.data.length > 0) {
+                const activeLeave = result.data.find(leave => {
+                    return leave.tanggal_mulai <= today && leave.tanggal_selesai >= today;
+                });
+                
+                const permissionBtn = document.getElementById('permissionBtn');
+                if (permissionBtn) {
+                    if (activeLeave) {
+                        // Cek apakah hari terakhir dan jam >= 18:00
+                        const isLastDay = activeLeave.tanggal_selesai === today;
+                        if (isLastDay && currentHour >= 18) {
+                            permissionBtn.style.display = 'inline-block';
+                            permissionBtn.disabled = false;
+                            permissionBtn.innerHTML = '<i class="fas fa-file-medical" style="margin-right: 0.4rem;"></i>Ajukan Izin Lagi';
+                        } else {
+                            permissionBtn.style.display = 'none';
+                            permissionBtn.disabled = true;
+                        }
+                    } else {
+                        permissionBtn.style.display = 'inline-block';
+                        permissionBtn.disabled = false;
+                        permissionBtn.innerHTML = '<i class="fas fa-file-medical" style="margin-right: 0.4rem;"></i>Ajukan Izin';
+                    }
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Leave check error:', error);
+    }
+}
+
 async function loadLeaveStatus() {
     try {
         const response = await fetch('/api/leave-requests?status=pending', {
@@ -1557,6 +1630,7 @@ function initializeDashboard() {
     loadTodaySummary();
     loadRecentAttendance();
     loadLeaveStatus();
+    checkActiveLeave();
     updateConnectionStatus();
     // loadAttendanceRules() dipanggil dari requestLocationPermission setelah lokasi didapatkan
     initQuranWidget(); // Initialize Quran widget
@@ -1565,6 +1639,7 @@ function initializeDashboard() {
         if (currentLocation) {
             updateAttendanceButtonsState();
         }
+        checkActiveLeave(); // Cek izin setiap detik
     }, 1000);
 
     window.addEventListener('online', syncOfflineAttendance);

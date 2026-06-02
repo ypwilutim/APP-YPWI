@@ -6,11 +6,54 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const validator = require('validator');
+const nodemailer = require('nodemailer');
 const db = require('../../db');
 const { authenticateToken, SECRET_KEY } = require('../middleware/auth');
 const { logToFile } = require('../middlewares/logger');
 
 const router = express.Router();
+
+// Email function (standalone, not relying on global)
+async function sendEmail(to, subject, htmlContent, textContent = '') {
+  if (!process.env.EMAIL_ENABLED || process.env.EMAIL_ENABLED !== 'true') {
+    console.log('📧 Email disabled, skipping email to:', to);
+    return { success: true, message: 'Email disabled' };
+  }
+
+  if (!process.env.EMAIL_HOST) {
+    return { success: false, message: 'Email host not configured' };
+  }
+
+  try {
+    const transporter = nodemailer.createTransport({
+      host: process.env.EMAIL_HOST,
+      port: parseInt(process.env.EMAIL_PORT) || 465,
+      secure: parseInt(process.env.EMAIL_PORT) === 465,
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+      }
+    });
+
+    const info = await transporter.sendMail({
+      from: `"YPWI Lutim" <${process.env.EMAIL_USER}>`,
+      to: to,
+      subject: subject,
+      html: htmlContent,
+      text: textContent
+    });
+
+    console.log('✅ Email sent: %s', info.messageId);
+    return { success: true, message: 'Email sent successfully', messageId: info.messageId };
+  } catch (error) {
+    console.error('❌ Email error:', error.message);
+    return { success: false, message: `Email error: ${error.message}` };
+  }
+}
+
+// Also expose to global for compatibility
+global.sendEmail = sendEmail;
 
 // ============================================================
 // LOGIN
@@ -59,7 +102,7 @@ router.post('/auth/login', async (req, res) => {
       timestamp: new Date().toISOString()
     };
 
-// Cari assignments untuk semua user (needed for admin dashboard access check)
+    // Cari assignments untuk semua user (needed for admin dashboard access check)
     if (user.guru_id) {
       try {
         tokenPayload.assignments = await db.query(
@@ -108,7 +151,7 @@ router.post('/auth/login', async (req, res) => {
         is_profile_complete: user.is_profile_complete,
         is_default_password: user.is_default_password,
         assignments: tokenPayload.assignments
-}
+      }
     });
   } catch (error) {
     console.error('[LOGIN ERROR]', error.message);
@@ -144,12 +187,56 @@ router.put('/profile-complete/:teacherId', async (req, res) => {
   const { teacherId } = req.params;
 
   try {
-    const userRows = await db.query('SELECT id FROM users WHERE guru_id = ?', [teacherId]);
+    const userRows = await db.query('SELECT id, username FROM users WHERE guru_id = ?', [teacherId]);
     if (userRows.length === 0) {
       return res.status(404).json({ success: false, message: 'User tidak ditemukan' });
     }
 
     const result = await db.query('UPDATE users SET is_profile_complete = 1 WHERE guru_id = ?', [teacherId]);
+    
+    // Send email notification for profile completion
+    try {
+      const [teacherData] = await db.query('SELECT nama, email FROM teachers WHERE id = ?', [teacherId]);
+      if (teacherData && teacherData.email) {
+        const htmlMessage = `<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Profil Selesai - YPWI Lutim</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5;">
+  <div style="max-width: 600px; margin: 20px auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+    <div style="background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); padding: 30px; text-align: center;">
+      <h1 style="margin: 0; color: white; font-size: 24px;">YPWI LUTIM</h1>
+      <p style="margin: 5px 0 0 0; color: rgba(255,255,255,0.9); font-size: 14px;">Notifikasi Profil</p>
+    </div>
+    <div style="padding: 30px;">
+      <h2 style="margin: 0 0 20px 0; color: #333; font-size: 20px;">✅ Profil Akun Selesai Diisi</h2>
+      <p style="margin: 0 0 15px 0; color: #555; font-size: 16px; line-height: 1.6;">
+        Assalamu'alaikum <strong>${teacherData.nama}</strong>,
+      </p>
+      <p style="margin: 0 0 20px 0; color: #555; font-size: 16px; line-height: 1.6;">
+        Profil akun YPWI Lutim Anda telah berhasil dilengkapi.
+      </p>
+      <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+        <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee; color: #666;">Tanggal:</td><td style="padding: 8px 0; border-bottom: 1px solid #eee; font-weight: 600;">${new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</td></tr>
+        <tr><td style="padding: 8px 0; color: #666;">Status:</td><td style="padding: 8px 0; font-weight: 600; color: #066e3a;">Aktif - Siap Absensi</td></tr>
+      </table>
+      <p style="margin: 20px 0 0 0; color: #888; font-size: 14px;">Email ini dikirim otomatis oleh sistem.</p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+        if (typeof global.sendEmail === 'function') {
+          await global.sendEmail(teacherData.email, 'Profil Akun Selesai - YPWI Lutim', htmlMessage);
+        }
+      }
+    } catch (emailError) {
+      console.error('[PROFILE COMPLETE EMAIL ERROR]', emailError.message);
+    }
+
     if (result.affectedRows === 0) {
       return res.status(404).json({ success: false, message: 'User tidak ditemukan' });
     }
@@ -165,71 +252,135 @@ router.put('/profile-complete/:teacherId', async (req, res) => {
 });
 
 // ============================================================
-// FORGOT PASSWORD - OTP
+// FORGOT PASSWORD - EMAIL OTP ONLY
 // ============================================================
 
 router.post('/forgot-password/send-otp', async (req, res) => {
   try {
-    const { phoneNumber } = req.body;
+    const { email } = req.body;
 
-    if (!phoneNumber) {
-      return res.status(400).json({ success: false, message: 'Nomor WhatsApp wajib diisi' });
+    if (!email) {
+      return res.status(400).json({ success: false, message: 'Email wajib diisi' });
     }
 
-    let cleanNumber = phoneNumber.replace(/\D/g, '');
-    if (!cleanNumber.startsWith('62')) {
-      if (cleanNumber.startsWith('0')) {
-        cleanNumber = '62' + cleanNumber.substring(1);
-      } else {
-        cleanNumber = '62' + cleanNumber;
-      }
+    if (!validator.isEmail(email)) {
+      return res.status(400).json({ success: false, message: 'Format email tidak valid' });
     }
 
-    const [teacher] = await db.query('SELECT id, nama FROM teachers WHERE no_wa = ? AND status_aktif = 1', [cleanNumber]);
+    const [teacher] = await db.query('SELECT id, nama FROM teachers WHERE email = ? AND status_aktif = 1', [email]);
 
     if (!teacher) {
-      return res.status(404).json({ success: false, message: 'Nomor WhatsApp tidak terdaftar' });
+      return res.status(404).json({ success: false, message: 'Email tidak terdaftar' });
     }
 
     const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
 
     global.tempOtps = global.tempOtps || {};
-    global.tempOtps[cleanNumber] = {
+    global.tempOtps[email] = {
       code: verificationCode,
       expires: Date.now() + 5 * 60 * 1000,
       teacherId: teacher.id
     };
 
-    const message = `🔐 *KODE VERIFIKASI - LUPA PASSWORD*
+    const htmlMessage = `<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kode Verifikasi - YPWI Lutim</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5;">
+  <div style="max-width: 600px; margin: 20px auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+    <!-- Header -->
+    <div style="background: linear-gradient(135deg, #066e3a 0%, #0a8a4a 100%); padding: 30px; text-align: center;">
+      <img src="https://app.ypwilutim.com/assets/images/icon.png" alt="YPWI Lutim" style="height: 60px; margin-bottom: 15px;">
+      <h1 style="margin: 0; color: white; font-size: 28px; font-weight: bold;">YPWI LUTIM</h1>
+      <p style="margin: 5px 0 0 0; color: rgba(255,255,255,0.9); font-size: 14px;">Sistem Informasi Kehadiran Guru</p>
+    </div>
+    
+    <!-- Content -->
+    <div style="padding: 40px 30px;">
+      <h2 style="margin: 0 0 20px 0; color: #333; font-size: 24px;">🔐 KODE VERIFIKASI</h2>
+      <p style="margin: 0 0 15px 0; color: #555; font-size: 16px; line-height: 1.6;">
+        Assalamu'alaikum <strong>${teacher.nama}</strong>,
+      </p>
+      <p style="margin: 0 0 20px 0; color: #555; font-size: 16px; line-height: 1.6;">
+        Anda mengirimkan permintaan reset password untuk akun YPWI Lutim.
+      </p>
+      
+      <!-- OTP Code Box -->
+      <div style="background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%); border: 2px dashed #066e3a; border-radius: 10px; padding: 25px; text-align: center; margin: 25px 0;">
+        <p style="margin: 0 0 10px 0; color: #666; font-size: 14px;">Kode Verifikasi Anda:</p>
+        <div style="font-size: 36px; font-weight: bold; color: #066e3a; letter-spacing: 8px; font-family: 'Courier New', monospace;">
+          ${verificationCode}
+        </div>
+      </div>
+      
+      <p style="margin: 0 0 15px 0; color: #555; font-size: 15px; line-height: 1.6;">
+        <strong>Kode ini berlaku selama 5 menit</strong> sejak email ini dikirim.
+      </p>
+      <p style="margin: 0 0 20px 0; color: #888; font-size: 14px; line-height: 1.6;">
+        Jika Anda tidak meminta reset password, abaikan email ini. Keamanan akun Anda tetap terjamin.
+      </p>
+      
+      <!-- Button -->
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="https://ypwilutim.com/login.html" style="display: inline-block; background: #066e3a; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 15px;">
+          Kembali ke Login
+        </a>
+      </div>
+    </div>
+    
+    <!-- Footer -->
+    <div style="background: #f8f9fa; padding: 20px 30px; text-align: center; border-top: 1px solid #eee;">
+      <p style="margin: 0; color: #888; font-size: 13px;">
+        © 2025 YPWI Lutim. Semua hak dilindungi.
+      </p>
+      <p style="margin: 8px 0 0 0; color: #aaa; font-size: 12px;">
+        Email ini dikirim otomatis oleh sistem. Tidak perlu dijawab.
+      </p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+    const textMessage = `🔐 KODE VERIFIKASI - LUPA PASSWORD
 
 Assalamu'alaikum ${teacher.nama}
 
-Kode verifikasi untuk reset password Anda: *${verificationCode}*
+Kode verifikasi untuk reset password Anda: ${verificationCode}
 
 Kode ini berlaku selama 5 menit.
 
-Jika Anda tidak meminta reset password, abaikan pesan ini.
+Jika Anda tidak meminta reset password, abaikan email ini.
 
 *YPWI Lutim*`;
 
-    // For now, just return success (WhatsApp integration optional)
-    res.json({
-      success: true,
-      message: 'Kode verifikasi telah dikirim ke WhatsApp Anda',
-      verificationCode: verificationCode
-    });
+    const emailResult = await sendEmail(email, '🔐 Kode Verifikasi Reset Password - YPWI Lutim', htmlMessage, textMessage);
+
+    if (emailResult && emailResult.success) {
+      res.json({
+        success: true,
+        message: 'Kode verifikasi telah dikirim ke email Anda',
+        verificationCode: verificationCode
+      });
+    } else {
+      const errMsg = emailResult?.message || 'Tidak dapat mengirim email';
+      res.status(500).json({ success: false, message: 'Gagal mengirim email: ' + errMsg });
+    }
 
   } catch (error) {
-    console.error('[SEND OTP ERROR]', error.message);
+    console.error('[SEND EMAIL OTP ERROR]', error.message);
     res.status(500).json({ success: false, message: 'Terjadi kesalahan sistem' });
   }
 });
 
+// Reset password via Email OTP (accepts email as identifier)
 router.post('/forgot-password/reset', async (req, res) => {
   try {
-    const { phoneNumber, otpCode, newPassword } = req.body;
+    const { email, otpCode, newPassword } = req.body;
 
-    if (!phoneNumber || !otpCode || !newPassword) {
+    if (!email || !otpCode || !newPassword) {
       return res.status(400).json({ success: false, message: 'Semua field wajib diisi' });
     }
 
@@ -237,16 +388,7 @@ router.post('/forgot-password/reset', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Password baru minimal 8 karakter' });
     }
 
-    let cleanNumber = phoneNumber.replace(/\D/g, '');
-    if (!cleanNumber.startsWith('62')) {
-      if (cleanNumber.startsWith('0')) {
-        cleanNumber = '62' + cleanNumber.substring(1);
-      } else {
-        cleanNumber = '62' + cleanNumber;
-      }
-    }
-
-    const tempOtp = global.tempOtps?.[cleanNumber];
+    const tempOtp = global.tempOtps?.[email];
     if (!tempOtp || tempOtp.code !== otpCode || Date.now() > tempOtp.expires) {
       return res.status(400).json({ success: false, message: 'Kode verifikasi tidak valid atau sudah kadaluarsa' });
     }
@@ -254,7 +396,7 @@ router.post('/forgot-password/reset', async (req, res) => {
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
     const updateResult = await db.query(
-      'UPDATE users SET password = ?, is_default_password = 0 WHERE guru_id = ?',
+      'UPDATE users SET password = ?, is_default_password = 0, updated_at = NOW() WHERE guru_id = ?',
       [hashedPassword, tempOtp.teacherId]
     );
 
@@ -262,7 +404,7 @@ router.post('/forgot-password/reset', async (req, res) => {
       return res.status(404).json({ success: false, message: 'User tidak ditemukan' });
     }
 
-    delete global.tempOtps[cleanNumber];
+    delete global.tempOtps[email];
 
     res.json({
       success: true,

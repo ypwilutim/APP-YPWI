@@ -390,7 +390,7 @@ router.post('/scanner/attendance', async (req, res) => {
       `INSERT INTO attendance_logs
         (teacher_id, tenant_id, waktu_scan, jenis, metode, status, dinas_luar, kegiatan_dinas, selfie_url, latitude, longitude)
         VALUES (?, ?, ?, ?, 'scanner', ?, ?, ?, NULL, NULL, NULL)`,
-      [teacher_id, tenant_id, timestamp, type, status, is_dinas_luar ? 1 : 0, is_dinas_luar ? 1 : null] // 👈 Ganti scanTime menjadi timestamp
+      [teacher_id, tenant_id, timestamp, type, status, is_dinas_luar ? 1 : 0, is_dinas_luar ? 1 : null]
     );
 
     const attendance_id = result.insertId;
@@ -399,10 +399,82 @@ router.post('/scanner/attendance', async (req, res) => {
       `INSERT INTO qr_attendance_logs 
         (scan_id, teacher_id, device_id, tenant_id, waktu_scan, jenis, signature, sync_status, offline_validated) 
         VALUES (?, ?, ?, ?, ?, ?, ?, 'synced', ?)`,
-      [scan_id, teacher_id, device_id, tenant_id, timestamp, type, signature, offline_validated || false] // 👈 Ganti scanTime menjadi timestamp
+      [scan_id, teacher_id, device_id, tenant_id, timestamp, type, signature, offline_validated || false]
     );
 
     await db.query('UPDATE scanner_devices SET last_sync = NOW() WHERE device_id = ?', [device_id]);
+
+    // WhatsApp notification for scanner attendance
+    try {
+      const [teacher] = await db.query('SELECT nama, no_wa, email FROM teachers WHERE id = ?', [teacher_id]);
+      const [tenant] = await db.query('SELECT nama_sekolah FROM tenants WHERE tenant_id = ?', [tenant_id]);
+      
+      if (teacher && teacher.no_wa) {
+        const waktuAbsenObj = new Date(timestamp);
+        const tanggalSekarang = waktuAbsenObj.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+        
+        const waMessage = `*NOTIFIKASI PRESENSI SCANNER YPWI*
+Hai *${teacher.nama}*, 
+Laporan absensi scanner Anda berhasil direkam.
+
+*Detail:*
+• Jenis: Absen ${type.toUpperCase()}
+• Instansi: ${tenant ? tenant.nama_sekolah : tenant_id}
+• Hari/Tgl: ${tanggalSekarang}
+• Jam Log: ${waktuAbsenObj.toLocaleTimeString('id-ID', { hour12: false }).slice(0, 5)} (Waktu Lokal)
+
+Terima kasih.`;
+        
+        if (typeof global.sendWhatsAppMessage === 'function') {
+          await global.sendWhatsAppMessage(teacher.no_wa, waMessage);
+        }
+      }
+
+      // Send email notification for scanner attendance
+      if (teacher && teacher.email) {
+        const waktuAbsenObj = new Date(timestamp);
+        const tanggalSekarang = waktuAbsenObj.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+        const jamWIB = waktuAbsenObj.toLocaleTimeString('id-ID', { hour12: false }).slice(0, 5);
+
+        const htmlMessage = `<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Absensi Scanner - YPWI Lutim</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5;">
+  <div style="max-width: 600px; margin: 20px auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+    <div style="background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); padding: 30px; text-align: center;">
+      <h1 style="margin: 0; color: white; font-size: 24px;">YPWI LUTIM</h1>
+      <p style="margin: 5px 0 0 0; color: rgba(255,255,255,0.9); font-size: 14px;">Notifikasi Absensi Scanner</p>
+    </div>
+    <div style="padding: 30px;">
+      <h2 style="margin: 0 0 20px 0; color: #333; font-size: 20px;">📱 Absensi ${type.toUpperCase()} via Scanner</h2>
+      <p style="margin: 0 0 15px 0; color: #555; font-size: 16px; line-height: 1.6;">
+        Assalamu'alaikum <strong>${teacher.nama}</strong>,
+      </p>
+      <p style="margin: 0 0 20px 0; color: #555; font-size: 16px; line-height: 1.6;">
+        Presensi ${type} Anda via scanner telah berhasil direkam.
+      </p>
+      <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+        <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee; color: #666;">Instansi:</td><td style="padding: 8px 0; border-bottom: 1px solid #eee; font-weight: 600;">${tenant ? tenant.nama_sekolah : tenant_id}</td></tr>
+        <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee; color: #666;">Tanggal:</td><td style="padding: 8px 0; border-bottom: 1px solid #eee; font-weight: 600;">${tanggalSekarang}</td></tr>
+        <tr><td style="padding: 8px 0; color: #666;">Waktu:</td><td style="padding: 8px 0; font-weight: 600;">${jamWIB} WIB</td></tr>
+      </table>
+      <p style="margin: 20px 0 0 0; color: #888; font-size: 14px;">Email ini dikirim otomatis oleh sistem.</p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+        if (typeof global.sendEmail === 'function') {
+          await global.sendEmail(teacher.email, `Absensi ${type.toUpperCase()} Scanner - YPWI Lutim`, htmlMessage);
+        }
+      }
+    } catch (waError) {
+      console.error('Scanner WA Error:', waError.message);
+    }
 
     console.log(`[SCANNER] Attendance recorded: ${teacherRecord.nama} (${scan_id}) - ${type} at ${timestamp}`);
 
