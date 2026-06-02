@@ -8,6 +8,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('../../db');
 const { authenticateToken, SECRET_KEY } = require('../middleware/auth');
+const { logToFile } = require('../middlewares/logger');
 
 const router = express.Router();
 
@@ -58,20 +59,30 @@ router.post('/auth/login', async (req, res) => {
       timestamp: new Date().toISOString()
     };
 
-    // Cari assignments guru untuk akses admin sekolah
-    if (user.role !== 'admin' && user.guru_id) {
+// Cari assignments untuk semua user (needed for admin dashboard access check)
+    if (user.guru_id) {
       try {
-        const tokenAssignments = await db.query(
+        tokenPayload.assignments = await db.query(
           'SELECT ta.tenant_id, ta.jabatan_di_unit, t.nama_sekolah FROM teacher_assignments ta JOIN tenants t ON ta.tenant_id = t.tenant_id WHERE ta.teacher_id = ?',
           [user.guru_id]
         );
-        tokenPayload.assignments = tokenAssignments;
+        console.log('[LOGIN_DEBUG] User assignments loaded:', tokenPayload.assignments);
+        logToFile(`AUTH_ASSIGNMENTS_LOADED: count=${tokenPayload.assignments?.length || 0}`);
       } catch (e) {
         tokenPayload.assignments = [];
+        console.log('[LOGIN_DEBUG] Error loading assignments:', e.message);
+        logToFile(`AUTH_ASSIGNMENTS_ERROR: ${e.message}`);
       }
+    } else {
+      tokenPayload.assignments = [];
     }
 
     const token = jwt.sign(tokenPayload, SECRET_KEY, { expiresIn: '8h' });
+
+    // Debug: Log what we're sending to client
+    const hasAdminAccess = user.role === 'admin' || (user.role === 'guru' && tokenPayload.assignments && tokenPayload.assignments.some(a => ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha'].includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''))));
+    console.log('[LOGIN_DEBUG] Login result:', { role: user.role, hasAdminAccess, assignmentsCount: tokenPayload.assignments?.length || 0 });
+    logToFile(`AUTH_LOGIN: user=${username}, role=${user.role}, hasAdminAccess=${hasAdminAccess}, assignmentsCount=${tokenPayload.assignments?.length || 0}`);
 
     if (!isProfileComplete) {
       return res.json({
@@ -86,7 +97,7 @@ router.post('/auth/login', async (req, res) => {
 
     return res.json({
       success: true,
-      redirect: (user.role === 'admin' ? 'admin-dashboard.html' : 'dashboard.html'),
+      redirect: hasAdminAccess ? 'admin-dashboard.html' : 'dashboard.html',
       token: token,
       user: {
         id: user.id,
@@ -95,10 +106,10 @@ router.post('/auth/login', async (req, res) => {
         tenant_id: user.tenant_id,
         guru_id: user.guru_id,
         is_profile_complete: user.is_profile_complete,
-        is_default_password: user.is_default_password
-      }
+        is_default_password: user.is_default_password,
+        assignments: tokenPayload.assignments
+}
     });
-
   } catch (error) {
     console.error('[LOGIN ERROR]', error.message);
     res.status(500).json({

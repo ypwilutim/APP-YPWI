@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Waktu pembuatan: 17 Bulan Mei 2026 pada 09.13
+-- Waktu pembuatan: 28 Bulan Mei 2026 pada 14.41
 -- Versi server: 10.4.32-MariaDB
 -- Versi PHP: 8.2.12
 
@@ -67,6 +67,18 @@ CREATE TABLE `attendance_rules` (
 -- --------------------------------------------------------
 
 --
+-- Struktur dari tabel `classes`
+--
+
+CREATE TABLE `classes` (
+  `id` int(11) NOT NULL,
+  `tenant_id` varchar(50) DEFAULT NULL,
+  `nama_kelas` varchar(50) DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Struktur dari tabel `evaluations`
 --
 
@@ -80,6 +92,18 @@ CREATE TABLE `evaluations` (
   `notes` text DEFAULT NULL,
   `evaluation_date` date DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `parents`
+--
+
+CREATE TABLE `parents` (
+  `id` int(11) NOT NULL,
+  `nama_orang_tua` varchar(255) DEFAULT NULL,
+  `no_wa` varchar(30) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
@@ -114,12 +138,31 @@ CREATE TABLE `scanner_devices` (
   `id` int(11) NOT NULL,
   `device_id` varchar(100) NOT NULL,
   `tenant_id` varchar(20) NOT NULL,
+  `registration_token` varchar(255) DEFAULT NULL,
   `school_name` varchar(100) NOT NULL,
   `secret_key` varchar(255) NOT NULL,
-  `status` enum('active','inactive','maintenance') DEFAULT 'active',
+  `status` enum('active','inactive','maintenance') DEFAULT 'inactive',
   `last_sync` datetime DEFAULT NULL,
   `device_name` varchar(100) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `students`
+--
+
+CREATE TABLE `students` (
+  `id` int(11) NOT NULL,
+  `tenant_id` varchar(50) DEFAULT NULL,
+  `parent_id` int(11) DEFAULT NULL,
+  `class_id` int(11) DEFAULT NULL,
+  `nama_siswa` varchar(255) DEFAULT NULL,
+  `nisn` varchar(50) DEFAULT NULL,
+  `jenis_kelamin` enum('L','P') DEFAULT NULL,
+  `iuran_bulanan` decimal(10,2) DEFAULT NULL,
+  `nis` varchar(50) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
@@ -251,7 +294,8 @@ CREATE TABLE `tenants` (
   `longitude` decimal(11,8) DEFAULT NULL,
   `location_radius` int(11) DEFAULT 100,
   `location_name` varchar(255) DEFAULT NULL,
-  `use_central_rules` tinyint(1) DEFAULT 0
+  `use_central_rules` tinyint(1) DEFAULT 0,
+  `registration_token` varchar(255) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
@@ -291,6 +335,27 @@ CREATE TABLE `users` (
   `is_default_password` tinyint(1) DEFAULT 0
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `ypwi_database___database_siswa`
+--
+
+CREATE TABLE `ypwi_database___database_siswa` (
+  `nama_siswa` varchar(255) DEFAULT NULL,
+  `jenis_kelamin` varchar(20) DEFAULT NULL,
+  `tenant_id` varchar(100) DEFAULT NULL,
+  `password` varchar(255) DEFAULT NULL,
+  `jenjang` varchar(50) DEFAULT NULL,
+  `nama_sheet` varchar(100) DEFAULT NULL,
+  `nisn` varchar(50) DEFAULT NULL,
+  `kelas` varchar(50) DEFAULT NULL,
+  `iuran_bulanan` varchar(50) DEFAULT NULL,
+  `nama_orang_tua` varchar(255) DEFAULT NULL,
+  `no_wa` varchar(30) DEFAULT NULL,
+  `keterangan` text DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;
+
 --
 -- Indexes for dumped tables
 --
@@ -314,12 +379,25 @@ ALTER TABLE `attendance_rules`
   ADD KEY `idx_tenant_id` (`tenant_id`);
 
 --
+-- Indeks untuk tabel `classes`
+--
+ALTER TABLE `classes`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `fk_classes_tenant` (`tenant_id`);
+
+--
 -- Indeks untuk tabel `evaluations`
 --
 ALTER TABLE `evaluations`
   ADD PRIMARY KEY (`id`),
   ADD KEY `teacher_id` (`teacher_id`),
   ADD KEY `evaluator_id` (`evaluator_id`);
+
+--
+-- Indeks untuk tabel `parents`
+--
+ALTER TABLE `parents`
+  ADD PRIMARY KEY (`id`);
 
 --
 -- Indeks untuk tabel `qr_attendance_logs`
@@ -342,6 +420,16 @@ ALTER TABLE `scanner_devices`
   ADD KEY `idx_tenant_id` (`tenant_id`),
   ADD KEY `idx_device_id` (`device_id`),
   ADD KEY `idx_status` (`status`);
+
+--
+-- Indeks untuk tabel `students`
+--
+ALTER TABLE `students`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `nis` (`nis`),
+  ADD KEY `parent_id` (`parent_id`),
+  ADD KEY `class_id` (`class_id`),
+  ADD KEY `fk_students_tenant` (`tenant_id`);
 
 --
 -- Indeks untuk tabel `teachers`
@@ -413,9 +501,21 @@ ALTER TABLE `attendance_rules`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
+-- AUTO_INCREMENT untuk tabel `classes`
+--
+ALTER TABLE `classes`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT untuk tabel `evaluations`
 --
 ALTER TABLE `evaluations`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `parents`
+--
+ALTER TABLE `parents`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
@@ -428,6 +528,12 @@ ALTER TABLE `qr_attendance_logs`
 -- AUTO_INCREMENT untuk tabel `scanner_devices`
 --
 ALTER TABLE `scanner_devices`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `students`
+--
+ALTER TABLE `students`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
@@ -473,6 +579,12 @@ ALTER TABLE `attendance_logs`
   ADD CONSTRAINT `attendance_logs_ibfk_3` FOREIGN KEY (`rule_id`) REFERENCES `attendance_rules` (`id`) ON DELETE SET NULL;
 
 --
+-- Ketidakleluasaan untuk tabel `classes`
+--
+ALTER TABLE `classes`
+  ADD CONSTRAINT `fk_classes_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`tenant_id`);
+
+--
 -- Ketidakleluasaan untuk tabel `evaluations`
 --
 ALTER TABLE `evaluations`
@@ -485,6 +597,14 @@ ALTER TABLE `evaluations`
 ALTER TABLE `qr_attendance_logs`
   ADD CONSTRAINT `qr_attendance_logs_ibfk_device` FOREIGN KEY (`device_id`) REFERENCES `scanner_devices` (`device_id`) ON DELETE CASCADE,
   ADD CONSTRAINT `qr_attendance_logs_ibfk_teacher` FOREIGN KEY (`teacher_id`) REFERENCES `teachers` (`id`) ON DELETE SET NULL;
+
+--
+-- Ketidakleluasaan untuk tabel `students`
+--
+ALTER TABLE `students`
+  ADD CONSTRAINT `fk_students_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`tenant_id`),
+  ADD CONSTRAINT `students_ibfk_1` FOREIGN KEY (`parent_id`) REFERENCES `parents` (`id`),
+  ADD CONSTRAINT `students_ibfk_2` FOREIGN KEY (`class_id`) REFERENCES `classes` (`id`);
 
 --
 -- Ketidakleluasaan untuk tabel `teacher_assignments`

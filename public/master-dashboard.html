@@ -442,6 +442,38 @@
     const token = localStorage.getItem('token');
     if (!token) { window.location.href = 'login.html'; }
 
+    // Check user role and filter access
+    let currentUserTenantId = null;
+    let currentUserIsMaster = false;
+
+    async function initUserRole() {
+        try {
+            const me = await api('/api/teacher/info');
+            if (me.success) {
+                const assignments = me.assignments || [];
+                
+                // Check if user is Ketua Yayasan (works at YPWILUTIM with relevant role)
+                const isKetuaYayasan = assignments.some(a => {
+                    const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
+                    return a.tenant_id === 'YPWILUTIM' && (jabatan.includes('ketua') || jabatan.includes('yayasan'));
+                });
+                
+                currentUserIsMaster = isKetuaYayasan;
+                
+                // If not Ketua Yayasan, get primary tenant assignment
+                if (!isKetuaYayasan && assignments.length > 0) {
+                    currentUserTenantId = assignments[0].tenant_id;
+                }
+                
+                // Apply role-based restrictions
+                if (!isKetuaYayasan) {
+                    document.getElementById('sekolahTab').style.display = 'none';
+                    document.getElementById('kepalaTab').style.display = 'none';
+                }
+            }
+        } catch (e) { console.error('Role check error:', e); }
+    }
+
     document.getElementById('currentDate').textContent = new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
     // ===== NAVIGATION =====
@@ -460,6 +492,7 @@
 
     document.addEventListener('DOMContentLoaded', () => {
       document.querySelectorAll('button[data-tab]').forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
+      initUserRole();
       loadOverview();
       loadSekolahListForDropdowns();
     });
@@ -571,18 +604,24 @@
         // We need assignments — fetch them
         const assignmentsD = await api('/api/teachers/assignments/bulk');
         const assignments = assignmentsD.success ? assignmentsD.data : {};
-        const filtered = Object.values(assignments).filter(a => kepalaRoles.includes((a.jabatan_di_unit||'').toLowerCase().replace(/\s/g,'')));
+        let filtered = Object.values(assignments).filter(a => kepalaRoles.includes((a.jabatan_di_unit||'').toLowerCase().replace(/\s/g,'')));
+        
+        // If not master, filter to only show kepala from user's tenant
+        if (!currentUserIsMaster && currentUserTenantId) {
+            filtered = filtered.filter(a => a.tenant_id === currentUserTenantId);
+        }
 
         const list = document.getElementById('kepalaTableBody');
         if (!filtered.length) { list.innerHTML = '<tr><td colspan="5" class="text-center py-8 text-gray-500">Belum ada kepala sekolah/pimpinan pondok yang diassign</td></tr>'; return; }
         list.innerHTML = filtered.map(a => {
           const t = tenants.data ? tenants.data.find(t2 => t2.tenant_id === a.tenant_id) : null;
+          const canEdit = currentUserIsMaster; // Only master can edit assignments
           return `<tr>
             <td class="px-4 py-3 font-medium">${a.nama_guru || 'Guru'}</td>
             <td class="px-4 py-3 text-sm text-gray-500">${a.username || '-'}</td>
             <td class="px-4 py-3"><span class="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs capitalize">${a.jabatan_di_unit}</span></td>
             <td class="px-4 py-3 text-sm">${t ? t.nama_sekolah : a.tenant_id}</td>
-            <td class="px-4 py-3 text-sm"><button onclick="removeAssignment(${a.id})" class="text-red-600 text-xs hover:underline">Hapus</button></td>
+            <td class="px-4 py-3 text-sm">${canEdit ? `<button onclick="removeAssignment(${a.id})" class="text-red-600 text-xs hover:underline">Hapus</button>` : '-'}</td>
           </tr>`;
         }).join('');
       } catch(e) { console.error('Load kepala:', e); }
@@ -593,9 +632,16 @@
       try {
         const d = await api('/api/teachers');
         if (!d.success) return;
+        let teachers = d.data || [];
+        
+        // If not master, filter teachers to only user's tenant
+        if (!currentUserIsMaster && currentUserTenantId) {
+            teachers = teachers.filter(t => t.tenant_id === currentUserTenantId);
+        }
+        
         const list = document.getElementById('guruTableBody');
-        if (!d.data || !d.data.length) { list.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-gray-500">Belum ada data guru</td></tr>'; return; }
-        list.innerHTML = d.data.map(t => `
+        if (!teachers.length) { list.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-gray-500">Belum ada data guru</td></tr>'; return; }
+        list.innerHTML = teachers.map(t => `
           <tr>
             <td class="px-4 py-3 font-medium">${t.nama}</td>
             <td class="px-4 py-3 text-sm text-gray-500">${t.nik || '-'}</td>
@@ -603,7 +649,7 @@
             <td class="px-4 py-3 text-sm">${t.no_wa || '-'}</td>
             <td class="px-4 py-3"><span class="px-2 py-1 ${t.status_aktif ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'} rounded text-xs">${t.status_aktif ? 'Aktif' : 'Nonaktif'}</span></td>
             <td class="px-4 py-3 text-sm space-x-2">
-              <button onclick="editGuru(${t.id})" class="text-blue-600 text-xs hover:underline">Edit</button>
+              ${currentUserIsMaster ? `<button onclick="editGuru(${t.id})" class="text-blue-600 text-xs hover:underline">Edit</button>` : '-'}
             </td>
           </tr>
         `).join('');

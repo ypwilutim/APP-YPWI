@@ -272,7 +272,8 @@
                   tenant_id: data.user.tenant_id,
                   guru_id: data.user.guru_id,
                   is_profile_complete: data.user.is_profile_complete,
-                  is_default_password: data.user.is_default_password
+                  is_default_password: data.user.is_default_password,
+                  assignments: data.user.assignments || []
                 };
 
                 localStorage.setItem('token', data.token);

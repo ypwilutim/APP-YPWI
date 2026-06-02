@@ -14,7 +14,6 @@ const dbConfig = {
   timezone: 'Z',
   dateStrings: true,
   connectTimeout: 30000,
-  acquireTimeout: 30000,
   charset: 'utf8mb4'
 };
 

@@ -5,6 +5,7 @@
 
 const jwt = require('jsonwebtoken');
 const db = require('../../db');
+const { logToFile } = require('../middlewares/logger');
 
 const SECRET_KEY = process.env.JWT_SECRET || 'ypwi-secret-key-2026';
 
@@ -53,16 +54,52 @@ const authenticateToken = (req, res, next) => {
 const authenticateAdmin = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
+
+  logToFile(`AUTH_ADMIN: Endpoint called, authHeader=${!!authHeader}, token=${!!token}`);
+
   if (!token) {
+    logToFile('AUTH_ADMIN: No token found - returning 401');
     return res.status(401).json({ success: false, message: 'Access denied. Token not found.' });
   }
-  jwt.verify(token, SECRET_KEY, (err, user) => {
+  jwt.verify(token, SECRET_KEY, async (err, user) => {
+    logToFile(`AUTH_ADMIN: JWT verify - error=${!!err}, user=${!!user}`);
     if (err) {
+      logToFile('AUTH_ADMIN: JWT invalid - returning 403');
       return res.status(403).json({ success: false, message: 'Access denied. Token not valid.' });
     }
-    if (user.role !== 'admin') {
-      return res.status(403).json({ success: false, message: 'Access denied. Admin role required.' });
+
+    // Load assignments if not present in JWT (backward compatible)
+    if (!user.assignments || user.assignments.length === 0) {
+      if (user.guru_id) {
+        try {
+          const assignments = await db.query(
+            'SELECT ta.tenant_id, ta.jabatan_di_unit, t.nama_sekolah FROM teacher_assignments ta JOIN tenants t ON ta.tenant_id = t.tenant_id WHERE ta.teacher_id = ? AND ta.status_aktif = 1',
+            [user.guru_id]
+          );
+          user.assignments = assignments;
+          logToFile(`AUTH_ADMIN: Loaded assignments count=${assignments.length}`);
+        } catch (error) {
+          user.assignments = [];
+          logToFile(`AUTH_ADMIN: Error loading assignments - ${error.message}`);
+        }
+      } else {
+        user.assignments = [];
+      }
     }
+
+    // Allow admin OR guru with operator assignments
+    const adminRoles = ['admin', 'tu', 'tatausaha', 'operator', 'ta', 'tata_usaha'];
+    const hasAdminAccess = user.role === 'admin' ||
+      (user.role === 'guru' && user.assignments &&
+        user.assignments.some(a => adminRoles.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''))));
+
+    logToFile(`AUTH_ADMIN: User role=${user.role}, hasAdminAccess=${hasAdminAccess}`);
+
+    if (!hasAdminAccess) {
+      logToFile('AUTH_ADMIN: Access denied - not admin/operator');
+      return res.status(403).json({ success: false, message: 'Access denied. Admin/Operator role required.' });
+    }
+    logToFile('AUTH_ADMIN: Access granted');
     req.user = user;
     next();
   });
@@ -71,7 +108,9 @@ const authenticateAdmin = (req, res, next) => {
 const authenticateOperator = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
+  logToFile(`AUTH_OPERATOR: Endpoint called, hasToken=${!!token}`);
   if (!token) {
+    logToFile('AUTH_OPERATOR: No token found - returning 401');
     return res.status(401).json({ success: false, message: 'Access denied. Token not found.' });
   }
   jwt.verify(token, SECRET_KEY, async (err, user) => {
@@ -101,6 +140,7 @@ const authenticateOperator = (req, res, next) => {
 
     // Admin boleh semua
     if (user.role === 'admin') {
+      logToFile(`AUTH_OPERATOR: Admin access granted`);
       return next();
     }
     // Guru dengan assignment admin/TU/operator: boleh akses
@@ -110,9 +150,11 @@ const authenticateOperator = (req, res, next) => {
         adminRoles.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''))
       );
       if (hasAdminRole) {
+        logToFile(`AUTH_OPERATOR: Guru with admin role access granted`);
         return next();
       }
     }
+    logToFile(`AUTH_OPERATOR: Access denied - role=${user.role}`);
     return res.status(403).json({ success: false, message: 'Akses ditolak. Peran admin/operator diperlukan.' });
   });
 };

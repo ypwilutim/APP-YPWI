@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -15,30 +16,45 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<style>
-    body { 
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <style>
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 25%, #f0fdf4 50%, #fefce8 75%, #fff7ed 100%);
       min-height: 100vh;
     }
-    .nav-active { 
-      background: linear-gradient(135deg, #2563eb, #1d4ed8); 
-      color: white; 
+
+    .nav-active {
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      color: white;
       box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.1);
     }
-    .modal { display: none; }
-    .modal.show { display: flex; }
+
+    .modal {
+      display: none;
+    }
+
+    .modal.show {
+      display: flex;
+    }
+
     .skeleton-loader {
       background: linear-gradient(90deg, #e0e7ff 25%, #c7d2fe 50%, #e0e7ff 75%);
       background-size: 200% 100%;
       animation: loading 1.5s infinite;
       border-radius: 0.5rem;
     }
+
     @keyframes loading {
-      0% { background-position: 200% 0; }
-      100% { background-position: -200% 0; }
+      0% {
+        background-position: 200% 0;
+      }
+
+      100% {
+        background-position: -200% 0;
+      }
     }
-    
+
     /* Modern Card Styles */
     .stats-card {
       background: linear-gradient(145deg, #ffffff, #f8fafc);
@@ -47,11 +63,12 @@
       box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.03), 0 2px 4px -2px rgba(0, 0, 0, 0.03);
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
+
     .stats-card:hover {
       transform: translateY(-2px);
       box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.03);
     }
-    
+
     .main-card {
       background: rgba(255, 255, 255, 0.9);
       backdrop-filter: blur(10px);
@@ -59,70 +76,108 @@
       border-radius: 1.25rem;
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.06);
     }
-    
+
     /* Table Styles */
     .modern-table th {
       background: linear-gradient(135deg, #f8fafc, #f1f5f9);
       font-weight: 600;
       letter-spacing: 0.025em;
     }
+
     .modern-table tr:hover {
       background: linear-gradient(90deg, rgba(59, 130, 246, 0.03), transparent);
     }
-    
+
     /* Button Animations */
     .btn-primary {
       background: linear-gradient(135deg, #3b82f6, #2563eb);
       transition: all 0.2s ease;
     }
+
     .btn-primary:hover:not(:disabled) {
       background: linear-gradient(135deg, #2563eb, #1d4ed8);
       transform: translateY(-1px);
       box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
     }
-    
+
     /* Mobile Bottom Nav */
     .mobile-nav-btn {
       transition: all 0.2s ease;
     }
+
     .mobile-nav-btn.active {
       background: linear-gradient(135deg, #3b82f6, #2563eb);
       color: white;
     }
-    
+
     /* Mobile Tab Active State */
     .mobile-tab-btn.active {
       background: linear-gradient(135deg, #3b82f6, #2563eb);
       color: white;
       border-radius: 0.5rem;
     }
+
     .mobile-tab-btn.active i {
       color: white !important;
     }
-    
+
+    /* Toggle switch styling */
+    .toggle-track.bg-blue-600 {
+      background-color: #3b82f6 !important;
+    }
+
+    .toggle-thumb.translate-x-5 {
+      transform: translateX(1.25rem) !important;
+    }
+
     /* Mobile Responsive */
     @media (max-width: 991px) {
-      .sidebar { display: none !important; }
-      .main-content { padding: 0.75rem !important; padding-bottom: 4.5rem !important; }
-      .mobile-nav { display: flex !important; }
-      .stats-card { margin-bottom: 0.75rem; }
-      .mobile-nav-btn { min-width: 0; }
-      .mobile-nav-btn span { font-size: 9px; line-height: 1.2; }
+      .sidebar {
+        display: none !important;
+      }
+
+      .main-content {
+        padding: 0.75rem !important;
+        padding-bottom: 4.5rem !important;
+      }
+
+      .mobile-nav {
+        display: flex !important;
+      }
+
+      .stats-card {
+        margin-bottom: 0.75rem;
+      }
+
+      .mobile-nav-btn {
+        min-width: 0;
+      }
+
+      .mobile-nav-btn span {
+        font-size: 9px;
+        line-height: 1.2;
+      }
     }
+
     @media (min-width: 992px) {
-      .mobile-nav { display: none !important; }
+      .mobile-nav {
+        display: none !important;
+      }
     }
   </style>
 </head>
+
 <body class="bg-gray-50 min-h-screen">
   <div class="flex min-h-screen">
     <!-- Sidebar -->
-    <aside class="w-64 bg-white/80 backdrop-blur-xl shadow-xl border-r sidebar" style="background: linear-gradient(170deg, rgba(255,255,255,0.95) 0%, rgba(240,249,255,0.9) 100%);">
+    <aside class="w-64 bg-white/80 backdrop-blur-xl shadow-xl border-r sidebar"
+      style="background: linear-gradient(170deg, rgba(255,255,255,0.95) 0%, rgba(240,249,255,0.9) 100%);">
       <!-- Operator Header -->
       <div class="p-4 border-b bg-gradient-to-r from-blue-50 to-indigo-50">
         <div class="flex items-center justify-between mb-2">
           <div class="flex items-center space-x-2">
-            <div class="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
+            <div
+              class="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
               <i class="fas fa-school text-white"></i>
             </div>
             <div>
@@ -130,38 +185,60 @@
               <p class="text-xs text-blue-600" id="schoolIdHeader">ID: -</p>
             </div>
           </div>
-          <a href="dashboard.html" class="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 text-gray-500 hover:bg-gray-200 transition-colors" title="Kembali ke Dashboard">
+          <a href="dashboard.html"
+            class="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 text-gray-500 hover:bg-gray-200 transition-colors"
+            title="Kembali ke Dashboard">
             <i class="fas fa-times"></i>
           </a>
         </div>
-        <div class="bg-gradient-to-r from-yellow-100 to-amber-100 text-yellow-800 text-xs px-3 py-1.5 rounded-lg text-center font-medium inline-flex items-center justify-center w-full">
+        <div
+          class="bg-gradient-to-r from-yellow-100 to-amber-100 text-yellow-800 text-xs px-3 py-1.5 rounded-lg text-center font-medium inline-flex items-center justify-center w-full">
           <i class="fas fa-user-cog mr-1"></i>Mode Operator Sekolah
         </div>
       </div>
 
       <nav class="p-4 space-y-2">
-        <button class="nav-item nav-active w-full text-left flex items-center space-x-3 px-4 py-3 rounded-xl hover:bg-white/50 text-sm font-medium transition-all" data-tab="dashboard">
+        <button
+          class="nav-item nav-active w-full text-left flex items-center space-x-3 px-4 py-3 rounded-xl hover:bg-white/50 text-sm font-medium transition-all"
+          data-tab="dashboard">
           <i class="fas fa-chart-line w-5"></i><span>Dashboard</span>
         </button>
-        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-white/50 hover:text-gray-900 text-sm font-medium transition-all" data-tab="teachers">
+        <button
+          class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-white/50 hover:text-gray-900 text-sm font-medium transition-all"
+          data-tab="teachers">
           <i class="fas fa-users w-5"></i><span>Data Guru</span>
         </button>
-        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-white/50 hover:text-gray-900 text-sm font-medium transition-all" data-tab="attendance">
+        <button
+          class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-white/50 hover:text-gray-900 text-sm font-medium transition-all"
+          data-tab="students">
+          <i class="fas fa-user-graduate w-5"></i><span>Data Siswa</span>
+        </button>
+        <button
+          class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-white/50 hover:text-gray-900 text-sm font-medium transition-all"
+          data-tab="qr-scanner">
+          <i class="fas fa-qrcode w-5"></i><span>QR Scanner</span>
+        </button>
+        <button
+          class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-white/50 hover:text-gray-900 text-sm font-medium transition-all"
+          data-tab="attendance">
           <i class="fas fa-clipboard-list w-5"></i><span>Kehadiran</span>
         </button>
-        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-white/50 hover:text-gray-900 text-sm font-medium transition-all" data-tab="locations">
+        <button
+          class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-white/50 hover:text-gray-900 text-sm font-medium transition-all"
+          data-tab="locations">
           <i class="fas fa-map-marker-alt w-5"></i><span>Lokasi</span>
         </button>
-        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-white/50 hover:text-gray-900 text-sm font-medium transition-all" data-tab="rules">
+        <button
+          class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-white/50 hover:text-gray-900 text-sm font-medium transition-all"
+          data-tab="rules">
           <i class="fas fa-clock w-5"></i><span>Aturan Absensi</span>
         </button>
-        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-white/50 hover:text-gray-900 text-sm font-medium transition-all" data-tab="whatsapp">
+        <button
+          class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-white/50 hover:text-gray-900 text-sm font-medium transition-all"
+          data-tab="whatsapp">
           <i class="fab fa-whatsapp w-5 text-green-600"></i><span>WhatsApp</span>
         </button>
-        <a href="evaluation-dashboard.html" class="w-full text-left flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-white/50 hover:text-gray-900 text-sm font-medium transition-all" id="evaluationLink" style="display:none;">
-          <i class="fas fa-clipboard-check w-5 text-purple-600"></i><span>Penilaian Guru</span>
-        </a>
-       </nav>
+      </nav>
     </aside>
 
     <!-- Main Content -->
@@ -169,7 +246,8 @@
       <div class="flex justify-between items-center mb-6">
         <div>
           <h2 id="pageTitle" class="text-2xl font-bold text-gray-900">Dashboard</h2>
-          <p class="text-gray-500 text-sm mt-1">Mengelola data untuk: <strong id="schoolTitleInline" class="text-blue-600">-</strong></p>
+          <p class="text-gray-500 text-sm mt-1">Mengelola data untuk: <strong id="schoolTitleInline"
+              class="text-blue-600">-</strong></p>
         </div>
         <div class="flex items-center space-x-3">
           <span class="text-xs text-gray-500" id="currentDate"></span>
@@ -179,80 +257,130 @@
             </div>
             <span class="text-xs font-medium text-gray-600" id="adminRole">Operator</span>
           </div>
-          <a href="dashboard.html" class="ml-3 inline-flex items-center px-3 py-1.5 bg-red-50 text-red-600 rounded-md text-sm font-medium hover:bg-red-100">Keluar</a>
+          <a href="dashboard.html"
+            class="ml-3 inline-flex items-center px-3 py-1.5 bg-red-50 text-red-600 rounded-md text-sm font-medium hover:bg-red-100">Keluar</a>
         </div>
       </div>
 
-<!-- Mobile Tab Navigation (visible on mobile) -->
-        <div class="mobile-nav hidden fixed bottom-0 left-0 right-0 h-16 bg-white/95 backdrop-blur border-t border-gray-200 z-50" style="display: none; padding-bottom: env(safe-area-inset-bottom);">
-          <div class="flex justify-between items-center h-full px-2 w-full">
-            <button class="mobile-tab-btn flex-1 py-1 px-1 text-center text-gray-600 rounded-lg" data-tab="dashboard">
-              <i class="fas fa-chart-line" style="font-size: 1.3rem; display: block; margin-bottom: 2px; color: #2563eb;"></i><span style="font-size: 0.65rem; font-weight: 600;">Dashboard</span>
-            </button>
-            <button class="mobile-tab-btn flex-1 py-1 px-1 text-center text-gray-600 rounded-lg" data-tab="teachers">
-              <i class="fas fa-users" style="font-size: 1.3rem; display: block; margin-bottom: 2px; color: #16a34a;"></i><span style="font-size: 0.65rem; font-weight: 600;">Guru</span>
-            </button>
-            <button class="mobile-tab-btn flex-1 py-1 px-1 text-center text-gray-600 rounded-lg" data-tab="attendance">
-              <i class="fas fa-clipboard-list" style="font-size: 1.3rem; display: block; margin-bottom: 2px; color: #93c3d2;"></i><span style="font-size: 0.65rem; font-weight: 600;">Absen</span>
-            </button>
-            <button class="mobile-tab-btn flex-1 py-1 px-1 text-center text-gray-600 rounded-lg" data-tab="rules">
-              <i class="fas fa-clock" style="font-size: 1.3rem; display: block; margin-bottom: 2px; color: #f59e0b;"></i><span style="font-size: 0.65rem; font-weight: 600;">Aturan</span>
-            </button>
-            <button class="mobile-tab-btn flex-1 py-1 px-1 text-center text-gray-600 rounded-lg" data-tab="locations">
-              <i class="fas fa-map-marker-alt" style="font-size: 1.3rem; display: block; margin-bottom: 2px; color: #dc2626;"></i><span style="font-size: 0.65rem; font-weight: 600;">Lokasi</span>
-            </button>
-            <button class="mobile-tab-btn flex-1 py-1 px-1 text-center text-gray-600 rounded-lg" data-tab="whatsapp">
-              <i class="fab fa-whatsapp" style="font-size: 1.3rem; display: block; margin-bottom: 2px; color: #25d366;"></i><span style="font-size: 0.65rem; font-weight: 600;">WA</span>
-            </button>
-          </div>
+      <!-- Mobile Tab Navigation (visible on mobile) -->
+      <div
+        class="mobile-nav hidden fixed bottom-0 left-0 right-0 h-16 bg-white/95 backdrop-blur border-t border-gray-200 z-50"
+        style="display: none; padding-bottom: env(safe-area-inset-bottom);">
+        <div class="flex justify-between items-center h-full px-2 w-full">
+          <button class="mobile-tab-btn flex-1 py-1 px-1 text-center text-gray-600 rounded-lg" data-tab="dashboard">
+            <i class="fas fa-chart-line"
+              style="font-size: 1.3rem; display: block; margin-bottom: 2px; color: #2563eb;"></i><span
+              style="font-size: 0.65rem; font-weight: 600;">Dashboard</span>
+          </button>
+          <button class="mobile-tab-btn flex-1 py-1 px-1 text-center text-gray-600 rounded-lg" data-tab="teachers">
+            <i class="fas fa-users"
+              style="font-size: 1.3rem; display: block; margin-bottom: 2px; color: #16a34a;"></i><span
+              style="font-size: 0.65rem; font-weight: 600;">Guru</span>
+          </button>
+          <button class="mobile-tab-btn flex-1 py-1 px-1 text-center text-gray-600 rounded-lg" data-tab="students">
+            <i class="fas fa-user-graduate"
+              style="font-size: 1.3rem; display: block; margin-bottom: 2px; color: #7c3aed;"></i><span
+              style="font-size: 0.65rem; font-weight: 600;">Siswa</span>
+          </button>
+          <button class="mobile-tab-btn flex-1 py-1 px-1 text-center text-gray-600 rounded-lg" data-tab="attendance">
+            <i class="fas fa-clipboard-list"
+              style="font-size: 1.3rem; display: block; margin-bottom: 2px; color: #93c3d2;"></i><span
+              style="font-size: 0.65rem; font-weight: 600;">Absen</span>
+          </button>
+          <button class="mobile-tab-btn flex-1 py-1 px-1 text-center text-gray-600 rounded-lg" data-tab="rules">
+            <i class="fas fa-clock"
+              style="font-size: 1.3rem; display: block; margin-bottom: 2px; color: #f59e0b;"></i><span
+              style="font-size: 0.65rem; font-weight: 600;">Aturan</span>
+          </button>
+          <button class="mobile-tab-btn flex-1 py-1 px-1 text-center text-gray-600 rounded-lg" data-tab="locations">
+            <i class="fas fa-map-marker-alt"
+              style="font-size: 1.3rem; display: block; margin-bottom: 2px; color: #dc2626;"></i><span
+              style="font-size: 0.65rem; font-weight: 600;">Lokasi</span>
+          </button>
+          <button class="mobile-tab-btn flex-1 py-1 px-1 text-center text-gray-600 rounded-lg" data-tab="whatsapp">
+            <i class="fab fa-whatsapp"
+              style="font-size: 1.3rem; display: block; margin-bottom: 2px; color: #25d366;"></i><span
+              style="font-size: 0.65rem; font-weight: 600;">WA</span>
+          </button>
         </div>
+      </div>
 
       <!-- Dashboard Tab -->
       <div id="dashboardTab" class="tab-content">
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <div class="stats-card p-5">
             <div class="flex items-center justify-between">
-              <div><p class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Total Guru</p>
-                <p class="text-2xl font-bold text-gray-900 mt-1 skeleton-loader skeleton-text-lg" id="totalTeachers">0</p></div>
-              <div class="w-12 h-12 bg-gradient-to-br from-blue-100 to-blue-200 rounded-xl flex items-center justify-center"><i class="fas fa-users text-blue-600 text-lg"></i></div>
+              <div>
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Total Guru</p>
+                <p class="text-2xl font-bold text-gray-900 mt-1 skeleton-loader skeleton-text-lg" id="totalTeachers">0
+                </p>
+              </div>
+              <div
+                class="w-12 h-12 bg-gradient-to-br from-blue-100 to-blue-200 rounded-xl flex items-center justify-center">
+                <i class="fas fa-users text-blue-600 text-lg"></i>
+              </div>
             </div>
           </div>
           <div class="stats-card p-5">
             <div class="flex items-center justify-between">
-              <div><p class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Hadir Hari Ini</p>
-                <p class="text-2xl font-bold text-gray-900 mt-1 skeleton-loader skeleton-text-lg" id="todayAttendance">0</p></div>
-              <div class="w-12 h-12 bg-gradient-to-br from-green-100 to-green-200 rounded-xl flex items-center justify-center"><i class="fas fa-check-circle text-green-600 text-lg"></i></div>
+              <div>
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Hadir Hari Ini</p>
+                <p class="text-2xl font-bold text-gray-900 mt-1 skeleton-loader skeleton-text-lg" id="todayAttendance">0
+                </p>
+              </div>
+              <div
+                class="w-12 h-12 bg-gradient-to-br from-green-100 to-green-200 rounded-xl flex items-center justify-center">
+                <i class="fas fa-check-circle text-green-600 text-lg"></i>
+              </div>
             </div>
           </div>
           <div class="stats-card p-5">
             <div class="flex items-center justify-between">
-              <div><p class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Terlambat</p>
-                <p class="text-2xl font-bold text-gray-900 mt-1 skeleton-loader skeleton-text-lg" id="lateCount">0</p></div>
-              <div class="w-12 h-12 bg-gradient-to-br from-red-100 to-red-200 rounded-xl flex items-center justify-center"><i class="fas fa-clock text-red-600 text-lg"></i></div>
+              <div>
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Terlambat</p>
+                <p class="text-2xl font-bold text-gray-900 mt-1 skeleton-loader skeleton-text-lg" id="lateCount">0</p>
+              </div>
+              <div
+                class="w-12 h-12 bg-gradient-to-br from-red-100 to-red-200 rounded-xl flex items-center justify-center">
+                <i class="fas fa-clock text-red-600 text-lg"></i>
+              </div>
             </div>
           </div>
           <div class="stats-card p-5">
             <div class="flex items-center justify-between">
-              <div><p class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Aturan Pusat</p>
-                <p class="text-lg font-semibold mt-1" id="centralRulesStatus" style="color:#6b7280;">-</p></div>
-<div class="w-12 h-12 bg-gradient-to-br from-purple-100 to-purple-200 rounded-xl flex items-center justify-center"><i class="fas fa-balance-scale text-purple-600 text-lg"></i></div>
+              <div>
+                <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Aturan Pusat</p>
+                <p class="text-lg font-semibold mt-1" id="centralRulesStatus" style="color:#6b7280;">-</p>
+              </div>
+              <div
+                class="w-12 h-12 bg-gradient-to-br from-purple-100 to-purple-200 rounded-xl flex items-center justify-center">
+                <i class="fas fa-balance-scale text-purple-600 text-lg"></i>
+              </div>
             </div>
           </div>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           <div class="main-card p-6">
-            <h3 class="text-lg font-semibold text-gray-900 mb-5 flex items-center"><i class="fas fa-school mr-2 text-blue-600"></i>Info Sekolah</h3>
+            <h3 class="text-lg font-semibold text-gray-900 mb-5 flex items-center"><i
+                class="fas fa-school mr-2 text-blue-600"></i>Info Sekolah</h3>
             <div class="space-y-4 text-sm">
-              <div class="flex justify-between py-2 border-b border-gray-100"><span class="text-gray-500">Nama Sekolah</span><span class="font-medium text-gray-900" id="schoolInfoName">-</span></div>
-              <div class="flex justify-between py-2 border-b border-gray-100"><span class="text-gray-500">Tenant ID</span><span class="font-medium text-gray-900" id="schoolInfoId">-</span></div>
-              <div class="flex justify-between py-2 border-b border-gray-100"><span class="text-gray-500">Metode Absensi</span><span class="font-medium text-gray-900" id="schoolInfoMethod">-</span></div>
-              <div class="flex justify-between py-2 border-b border-gray-100"><span class="text-gray-500">Aturan Pusat</span><span class="font-medium" id="schoolInfoCentral">-</span></div>
-              <div class="flex justify-between py-2" style="padding-bottom:0"><span class="text-gray-500">Lokasi</span><span class="font-medium text-gray-900" id="schoolInfoLocation">Belum diatur</span></div>
+              <div class="flex justify-between py-2 border-b border-gray-100"><span class="text-gray-500">Nama
+                  Sekolah</span><span class="font-medium text-gray-900" id="schoolInfoName">-</span></div>
+              <div class="flex justify-between py-2 border-b border-gray-100"><span class="text-gray-500">Tenant
+                  ID</span><span class="font-medium text-gray-900" id="schoolInfoId">-</span></div>
+              <div class="flex justify-between py-2 border-b border-gray-100"><span class="text-gray-500">Metode
+                  Absensi</span><span class="font-medium text-gray-900" id="schoolInfoMethod">-</span></div>
+              <div class="flex justify-between py-2 border-b border-gray-100"><span class="text-gray-500">Aturan
+                  Pusat</span><span class="font-medium" id="schoolInfoCentral">-</span></div>
+              <div class="flex justify-between py-2" style="padding-bottom:0"><span
+                  class="text-gray-500">Lokasi</span><span class="font-medium text-gray-900"
+                  id="schoolInfoLocation">Belum diatur</span></div>
             </div>
           </div>
           <div class="main-card p-5" style="min-height:300px; position:relative;">
-            <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center"><i class="fas fa-chart-bar mr-2 text-green-600"></i>Statistik Kehadiran</h3>
+            <h3 class="text-lg font-semibold text-gray-900 mb-4 flex items-center"><i
+                class="fas fa-chart-bar mr-2 text-green-600"></i>Statistik Kehadiran</h3>
             <div style="position:relative; height:250px;">
               <canvas id="attendanceChart"></canvas>
             </div>
@@ -260,264 +388,578 @@
         </div>
       </div>
 
-<!-- Teachers Tab -->
-       <div id="teachersTab" class="tab-content hidden">
-         <div class="main-card p-6">
-           <div class="flex justify-between items-center mb-6">
-             <h3 class="text-lg font-semibold text-gray-900">Data Guru</h3>
-             <button onclick="showAddTeacherModal()" class="btn-primary text-white px-4 py-2 rounded-lg text-sm flex items-center"><i class="fas fa-plus mr-2"></i>Tambah Guru</button>
-           </div>
-           <div class="overflow-x-auto">
-             <table class="w-full modern-table">
-               <thead class="border-b border-gray-200">
-                 <tr>
-                   <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Nama</th>
-                   <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">NIK</th>
-                   <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">NIP</th>
-                   <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
-                   <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Aksi</th>
-                 </tr>
-               </thead>
-               <tbody id="teachersTable" class="divide-y divide-gray-100">
-                 <tr><td colspan="5" class="px-4 py-12 text-center text-gray-500"><i class="fas fa-spinner fa-spin text-xl mb-2"></i><p>Memuat data...</p></td></tr>
-               </tbody>
-             </table>
-           </div>
-           <div class="mt-4 flex items-center justify-between">
-             <div class="flex items-center text-sm text-gray-700"><span id="paginationInfo">Menampilkan 0 dari 0 data</span></div>
-             <div class="flex items-center space-x-2">
-               <button id="prevPageBtn" class="px-3 py-1.5 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed" disabled><i class="fas fa-chevron-left mr-1"></i>Sebelumnya</button>
-               <div class="flex items-center space-x-1"><span id="pageNumbers" class="flex items-center space-x-1"></span></div>
-               <button id="nextPageBtn" class="px-3 py-1.5 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed" disabled>Selanjutnya<i class="fas fa-chevron-right ml-1"></i></button>
-             </div>
-           </div>
-         </div>
-       </div>
-
-<!-- Attendance Tab -->
-        <div id="attendanceTab" class="tab-content hidden">
-          <div class="main-card p-6">
-            <div class="flex justify-between items-center mb-4">
-              <div class="flex space-x-2">
-                <button id="schoolLogViewBtn" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium">Log Harian</button>
-                <button id="schoolMonthlyViewBtn" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300">Rekap Bulanan</button>
-              </div>
-              <div class="flex items-center space-x-2">
-                <select id="schoolRecapMonthSelect" class="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500">
-                  <option value="1">Januari</option><option value="2">Februari</option><option value="3">Maret</option>
-                  <option value="4">April</option><option value="5">Mei</option><option value="6">Juni</option>
-                  <option value="7">Juli</option><option value="8">Agustus</option><option value="9">September</option>
-                  <option value="10">Oktober</option><option value="11">November</option><option value="12">Desember</option>
-                </select>
-                <select id="schoolRecapYearSelect" class="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"></select>
-              </div>
-            </div>
-
-            <!-- Log Harian View -->
-            <div id="schoolLogViewSection">
-              <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-semibold text-gray-900">Log Kehadiran</h3>
-                <div class="flex space-x-2">
-                  <input type="date" id="attendanceDateFilter" class="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500">
-                  <select id="attendanceStatusFilter" class="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"><option value="">Semua Status</option><option value="tepat_waktu">Tepat Waktu</option><option value="terlambat">Terlambat</option></select>
-                  <button onclick="loadAttendanceLogs()" class="px-3 py-1.5 btn-primary text-white rounded-md text-sm"><i class="fas fa-sync-alt mr-1"></i>Refresh</button>
-                </div>
-              </div>
-              <div class="overflow-x-auto">
-                <table class="w-full modern-table">
-                  <thead class="border-b border-gray-200"><tr><th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Nama Guru</th><th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Jenis</th><th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Waktu</th><th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Status</th><th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Metode</th></tr></thead>
-                  <tbody id="attendanceTable" class="divide-y divide-gray-100"><tr><td colspan="5" class="px-4 py-12 text-center text-gray-500"><i class="fas fa-spinner fa-spin text-xl mb-2"></i><p>Memuat data...</p></td></tr></tbody>
-                </table>
-              </div>
-            </div>
-
-            <!-- Monthly Recap View -->
-            <div id="schoolMonthlyRecapSection" class="hidden">
-              <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-semibold text-gray-900">Rekap Absensi Bulanan</h3>
-                <button onclick="exportMonthlyPdfFromRecap()" class="btn-primary text-white px-4 py-1.5 rounded-lg text-sm flex items-center">
-                  <i class="fas fa-file-pdf mr-2"></i>Export PDF
-                </button>
-              </div>
-              <div id="schoolMonthlyRecapContent" class="overflow-x-auto max-h-[500px]">
-                <p class="text-center text-gray-500 py-8">Pilih bulan dan tahun untuk menampilkan rekap</p>
-              </div>
-            </div>
+      <!-- Teachers Tab -->
+      <div id="teachersTab" class="tab-content hidden">
+        <div class="main-card p-6">
+          <div class="flex justify-between items-center mb-6">
+            <h3 class="text-lg font-semibold text-gray-900">Data Guru</h3>
+            <button onclick="showAddTeacherModal()"
+              class="btn-primary text-white px-4 py-2 rounded-lg text-sm flex items-center"><i
+                class="fas fa-plus mr-2"></i>Tambah Guru</button>
           </div>
-        </div>
-
-<!-- Locations Tab -->
-       <div id="locationsTab" class="tab-content hidden">
-         <div class="main-card p-6">
-           <div class="flex justify-between items-center mb-6">
-             <h3 class="text-lg font-semibold text-gray-900">Lokasi Sekolah</h3>
-             <button onclick="showAddLocationModal()" class="btn-primary text-white px-4 py-2 rounded-lg text-sm flex items-center"><i class="fas fa-plus mr-2"></i>Tambah Lokasi</button>
-           </div>
-           <div id="schoolLocations" class="space-y-4"><div class="text-center py-12"><div class="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mx-auto mb-4"></div><p class="text-gray-600">Memuat data lokasi...</p></div></div>
-         </div>
-       </div>
-
-<!-- Rules Tab -->
-       <div id="rulesTab" class="tab-content hidden">
-         <div class="main-card p-6">
-<div class="flex justify-between items-center mb-6">
-              <h3 class="text-lg font-semibold text-gray-900">Aturan Absensi</h3>
-              <div class="flex items-center gap-3">
-                <label class="flex items-center text-sm text-gray-600">Gunakan Aturan Pusat
-                  <input type="checkbox" id="rulesCentralToggle" class="ml-2" />
-                </label>
-                <button onclick="showAddRuleModal()" class="btn-primary text-white px-4 py-2 rounded-lg text-sm flex items-center"><i class="fas fa-plus mr-2"></i>Tambah Aturan</button>
-              </div>
-            </div>
-           <div class="bg-blue-50 rounded-lg p-4 mb-6"><div class="flex items-start space-x-3"><i class="fas fa-info-circle text-blue-500 mt-0.5"></i><div><h5 class="font-medium text-blue-900">Informasi Aturan</h5><p class="text-sm text-blue-700 mt-1">Ketika <strong>"Gunakan Aturan Pusat"</strong> aktif pada sekolah ini, maka <strong>aturan pusat (sistem)</strong> dan <strong>aturan sekolah</strong> keduanya berlaku. Aturan sekolah tetap dapat menimpa aturan pusat jika terjadi konflik pada jadwal yang sama.</p></div></div></div>
-           <div id="attendanceRules" class="space-y-4"><div class="text-center py-12"><i class="fas fa-clock text-4xl text-gray-400 mb-4"></i><p class="text-gray-600">Memuat aturan absensi...</p></div></div>
-         </div>
-       </div>
-
-<!-- WhatsApp Tab -->
-       <div id="whatsappTab" class="tab-content hidden">
-         <div class="main-card p-6">
-           <div class="flex justify-between items-center mb-6"><h3 class="text-lg font-semibold text-gray-900 flex items-center"><i class="fab fa-whatsapp text-green-600 mr-2"></i>Pesan WhatsApp</h3></div>
-           <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-             <div class="bg-blue-50 border border-blue-200 rounded-lg p-6">
-               <h4 class="text-base font-semibold text-blue-800 mb-4 flex items-center"><i class="fas fa-user mr-2"></i>Kirim Pesan Individual</h4>
-               <form id="singleWhatsAppForm" class="space-y-4">
-                 <div class="relative"><label class="block text-sm font-medium text-gray-700 mb-2">Pilih Guru</label><div class="relative"><input type="text" id="singleTeacherInput" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500" placeholder="Ketik nama guru..." required autocomplete="off"><input type="hidden" id="singleTeacherSelect" name="teacherId"><div id="teacherSearchResults" class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto hidden"></div></div><div id="teacherSelectedInfo" class="mt-1 text-xs text-gray-500"></div></div>
-                 <div><label class="block text-sm font-medium text-gray-700 mb-2">Pesan WhatsApp</label><select id="singleMessageTemplate" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 mb-2"><option value="">Pilih template...</option><option value="pribadi">💬 Pesan Pribadi</option><option value="peringatan">⚠️ Peringatan</option><option value="pujian">🌟 Pujian</option><option value="permintaan">📝 Permintaan</option></select><textarea id="singleMessage" rows="4" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500" placeholder="Ketik pesan..." required></textarea></div>
-<button type="submit" class="w-full btn-primary text-white py-2 px-4 rounded-md text-sm flex items-center justify-center"><i class="fab fa-whatsapp mr-2"></i>Kirim Pesan</button>
-                </form>
-              </div>
-              <div><h4 class="text-base font-semibold text-gray-900 mb-4 flex items-center"><i class="fas fa-history text-gray-600 mr-2"></i>Status Pengiriman</h4><div id="whatsappStatus" class="bg-gray-50 border border-gray-200 rounded-lg p-4"><p class="text-gray-600 text-sm">Belum ada pesan yang dikirim.</p></div></div>
+          <div class="overflow-x-auto">
+            <table class="w-full modern-table">
+              <thead class="border-b border-gray-200">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Nama</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">NIK</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">NIP</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Status
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="teachersTable" class="divide-y divide-gray-100">
+                <tr>
+                  <td colspan="5" class="px-4 py-12 text-center text-gray-500"><i
+                      class="fas fa-spinner fa-spin text-xl mb-2"></i>
+                    <p>Memuat data...</p>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="mt-4 flex items-center justify-between">
+            <div class="flex items-center text-sm text-gray-700"><span id="paginationInfo">Menampilkan 0 dari 0
+                data</span></div>
+            <div class="flex items-center space-x-2">
+              <button id="prevPageBtn"
+                class="px-3 py-1.5 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled><i class="fas fa-chevron-left mr-1"></i>Sebelumnya</button>
+              <div class="flex items-center space-x-1"><span id="pageNumbers"
+                  class="flex items-center space-x-1"></span></div>
+              <button id="nextPageBtn"
+                class="px-3 py-1.5 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled>Selanjutnya<i class="fas fa-chevron-right ml-1"></i></button>
             </div>
           </div>
         </div>
       </div>
-    </main>
-  </div>
 
-<!-- Teacher Modal -->
-   <div id="teacherModal" class="modal fixed inset-0 bg-black bg-opacity-50 z-50 justify-center items-center">
-     <div class="main-card max-w-md w-full mx-4 bg-white">
-       <div class="p-6"><div class="flex items-center justify-between mb-4"><h3 class="text-lg font-semibold" id="teacherModalTitle">Tambah Guru</h3><button onclick="hideTeacherModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button></div>
-         <form id="teacherForm">
-           <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">Nama</label><input type="text" name="nama" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500" required></div>
-           <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">NIK</label><input type="text" name="nik" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500" required></div>
-           <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">NIP</label><input type="text" name="nip" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"></div>
-           <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">Status Kepegawaian</label><input type="text" name="status_kepegawaian" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500" placeholder="Guru Tetap, Guru Honorer"></div>
-           <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">Email</label><input type="email" name="email" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"></div>
-           <div class="flex justify-end space-x-3"><button type="button" onclick="hideTeacherModal()" class="px-4 py-2 text-gray-600 hover:text-gray-800 text-sm">Batal</button><button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm">Simpan</button></div>
-         </form>
-       </div>
-     </div>
-   </div>
+      <!-- Students Tab -->
+      <div id="studentsTab" class="tab-content hidden">
+        <div class="main-card p-6">
+          <div class="flex justify-between items-center mb-6">
+            <h3 class="text-lg font-semibold text-gray-900">Data Siswa</h3>
+            <button onclick="showAddStudentModal()"
+              class="btn-primary text-white px-4 py-2 rounded-lg text-sm flex items-center"><i
+                class="fas fa-plus mr-2"></i>Tambah Siswa</button>
+          </div>
 
-<!-- Rule Modal -->
-   <div id="ruleModal" class="modal fixed inset-0 bg-black bg-opacity-50 z-50 justify-center items-center">
-     <div class="main-card max-w-md w-full mx-4 bg-white">
-       <div class="p-6"><div class="flex items-center justify-between mb-4"><h3 class="text-lg font-semibold" id="ruleModalTitle">Tambah Aturan</h3><button onclick="hideRuleModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button></div>
-         <form id="ruleForm"><input type="hidden" name="tenant_id" id="ruleTenantId">
-           <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">Tipe</label><select name="tipe" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500" required><option value="Datang">Datang</option><option value="Pulang">Pulang</option></select></div>
-           <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">Jam Mulai</label><input type="time" name="jam_mulai" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500" required></div>
-           <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">Jam Selesai</label><input type="time" name="jam_selesai" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500" required></div>
-           <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">Hari (opsional)</label><input type="text" name="hari" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500" placeholder="Contoh: senin-jumat"></div>
-           <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">Keterangan</label><input type="text" name="keterangan" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"></div>
-           <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">Status Log</label><select name="status_log" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500" required><option value="tepat_waktu">Tepat Waktu</option><option value="terlambat">Terlambat</option></select></div>
-           <div class="flex justify-end space-x-3"><button type="button" onclick="hideRuleModal()" class="px-4 py-2 text-gray-600 hover:text-gray-800 text-sm">Batal</button><button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm">Simpan</button></div>
-         </form>
-       </div>
-     </div>
-   </div>
+          <!-- Search -->
+          <div class="mb-4 flex space-x-2">
+            <select id="studentClassFilter" onchange="loadStudents()"
+              class="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 text-sm">
+              <option value="">Semua Kelas</option>
+            </select>
+            <input type="text" id="studentSearch" placeholder="Cari nama/NIS/NISN..."
+              class="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 flex-1"
+              onkeyup="handleStudentSearch(event)">
+            <button onclick="loadStudents()" class="px-4 py-2 btn-primary text-white rounded-md text-sm"><i
+                class="fas fa-search"></i></button>
+          </div>
 
-<!-- Location Modal (sama seperti admin-dashboard.html) -->
-   <div id="locationModal" class="modal fixed inset-0 bg-black bg-opacity-50 z-50 justify-center items-center">
-     <div class="main-card max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto bg-white">
-       <div class="p-6">
-         <div class="flex items-center justify-between mb-6">
-           <div class="flex items-center">
-             <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
-               <i class="fas fa-map-marker-alt text-blue-600"></i>
-             </div>
-             <div>
-               <h3 id="locationModalTitle" class="text-lg font-semibold text-gray-900">Konfigurasi Lokasi Sekolah</h3>
-               <p class="text-gray-600 text-sm">Atur koordinat GPS untuk validasi absensi</p>
-             </div>
-           </div>
-           <button onclick="hideLocationModal()" class="text-gray-400 hover:text-gray-600">
-             <i class="fas fa-times text-xl"></i>
-           </button>
-         </div>
+          <div class="overflow-x-auto">
+            <table class="w-full modern-table">
+              <thead class="border-b border-gray-200">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Nama</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">NISN</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">NIS</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Kelas</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Orang Tua</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Iuran/Bulan</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="studentsTable" class="divide-y divide-gray-100">
+                <tr>
+                  <td colspan="7" class="px-4 py-12 text-center text-gray-500"><i
+                      class="fas fa-spinner fa-spin text-xl mb-2"></i>
+                    <p>Memuat data...</p>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
 
-         <form id="locationForm">
-           <input type="hidden" name="tenant_id" id="locationTenantIdHidden">
+          <div class="mt-4 flex items-center justify-between">
+            <div class="flex items-center text-sm text-gray-700"><span id="studentPaginationInfo">Menampilkan 0 dari 0
+                data</span></div>
+            <div class="flex items-center space-x-2">
+              <select id="studentLimitSelect" onchange="changeStudentLimit(this.value)"
+                class="px-2 py-1 border border-gray-300 rounded text-sm">
+                <option value="25">25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+              </select>
+              <button id="studentPrevPageBtn" onclick="changeStudentPage(currentStudentPage - 1)"
+                class="px-3 py-1.5 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+                disabled><i class="fas fa-chevron-left mr-1"></i>Sebelumnya</button>
+              <span id="studentPageNumbers" class="flex items-center space-x-1"></span>
+              <button id="studentNextPageBtn" onclick="changeStudentPage(currentStudentPage + 1)"
+                class="px-3 py-1.5 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+                disabled>Selanjutnya<i class="fas fa-chevron-right ml-1"></i></button>
+            </div>
+          </div>
+        </div>
+      </div>
 
-           <div class="mb-4">
-             <label class="block text-sm font-medium text-gray-700 mb-2">Nama Sekolah</label>
-             <input type="text" name="nama_sekolah" id="locationNamaSekolah" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50" readonly>
-           </div>
+      <!-- Attendance Tab -->
+      <div id="attendanceTab" class="tab-content hidden">
+        <div class="main-card p-6">
+          <div class="flex justify-between items-center mb-4">
+            <div class="flex space-x-2">
+              <button id="schoolLogViewBtn" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium">Log
+                Harian</button>
+              <button id="schoolMonthlyViewBtn"
+                class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300">Rekap
+                Bulanan</button>
+            </div>
+            <div class="flex items-center space-x-2">
+              <select id="schoolRecapMonthSelect"
+                class="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500">
+                <option value="1">Januari</option>
+                <option value="2">Februari</option>
+                <option value="3">Maret</option>
+                <option value="4">April</option>
+                <option value="5">Mei</option>
+                <option value="6">Juni</option>
+                <option value="7">Juli</option>
+                <option value="8">Agustus</option>
+                <option value="9">September</option>
+                <option value="10">Oktober</option>
+                <option value="11">November</option>
+                <option value="12">Desember</option>
+              </select>
+              <select id="schoolRecapYearSelect"
+                class="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"></select>
+            </div>
+          </div>
 
-           <!-- Auto Detect -->
-           <div class="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
-             <div class="flex items-center justify-between mb-3">
-               <h4 class="font-medium text-blue-900">Auto Detect Lokasi</h4>
-               <button type="button" id="modalAutoDetectBtn" class="inline-flex items-center px-3 py-2 bg-blue-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-blue-700">
-                 <i class="fas fa-crosshairs mr-2"></i>Detect Location
-               </button>
-             </div>
-             <div id="modalLocationStatus" class="text-sm text-blue-700">
-               <i class="fas fa-info-circle mr-1"></i>Klik tombol di atas untuk mendapatkan koordinat GPS
-             </div>
-           </div>
-
-           <div class="grid grid-cols-2 gap-4 mb-4">
-             <div>
-               <label class="block text-sm font-medium text-gray-700 mb-2"><i class="fas fa-globe-asia mr-1"></i>Latitude</label>
-               <input type="number" step="0.000001" name="latitude" id="modalLatitudeInput" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500" placeholder="-6.208763" required>
-             </div>
-             <div>
-               <label class="block text-sm font-medium text-gray-700 mb-2"><i class="fas fa-globe-asia mr-1"></i>Longitude</label>
-               <input type="number" step="0.000001" name="longitude" id="modalLongitudeInput" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500" placeholder="106.845599" required>
-             </div>
-           </div>
-
-           <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-2"><i class="fas fa-ruler-combined mr-1"></i>Radius Lokasi (meter)</label><input type="number" name="location_radius" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500" min="10" max="1000" value="100"></div>
-
-<div class="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-              <div class="flex items-center justify-between">
-                <div>
-                  <label class="flex items-center cursor-pointer">
-                    <span class="text-sm font-medium text-gray-700">Gunakan Aturan Pusat</span>
-                    <div class="relative ml-3">
-                      <input type="checkbox" name="use_central_rules" id="schoolAdminCentralToggle" class="sr-only toggle-checkbox" onchange="updateToggleVisual(this)">
-                      <div class="w-11 h-6 bg-gray-200 rounded-full toggle-track transition-colors duration-200 pointer-events-none"></div>
-                      <div class="absolute left-0.5 top-0.5 w-5 h-5 bg-white border border-gray-300 rounded-full toggle-thumb transition-transform duration-200 pointer-events-none"></div>
-                    </div>
-                  </label>
-                  <p class="text-xs text-blue-600 mt-1">Aktifkan agar aturan pusat juga berlaku.</p>
-                </div>
-                <div id="schoolAdminCoordPreview" class="text-right text-sm cursor-pointer hover:opacity-75 transition-opacity" onclick="copySchoolAdminCoords()" title="Klik untuk salin koordinat">
-                  <span class="text-gray-500">Belum ada koordinat</span>
-                </div>
+          <!-- Log Harian View -->
+          <div id="schoolLogViewSection">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="text-lg font-semibold text-gray-900">Log Kehadiran</h3>
+              <div class="flex space-x-2">
+                <input type="date" id="attendanceDateFilter"
+                  class="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500">
+                <select id="attendanceStatusFilter"
+                  class="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500">
+                  <option value="">Semua Status</option>
+                  <option value="tepat_waktu">Tepat Waktu</option>
+                  <option value="terlambat">Terlambat</option>
+                </select>
+                <button onclick="loadAttendanceLogs()" class="px-3 py-1.5 btn-primary text-white rounded-md text-sm"><i
+                    class="fas fa-sync-alt mr-1"></i>Refresh</button>
               </div>
             </div>
-
-            <!-- Mini Map -->
-            <div class="mb-4">
-              <div id="schoolAdminMiniMap" class="w-full h-48 bg-gray-100 rounded-lg border border-gray-200" style="min-height: 180px;"></div>
-              <p class="text-xs text-gray-500 mt-1 text-center"><i class="fas fa-info-circle"></i> Klik pada peta atau seret marker untuk mengatur lokasi</p>
+            <div class="overflow-x-auto">
+              <table class="w-full modern-table">
+                <thead class="border-b border-gray-200">
+                  <tr>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Nama Guru</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Jenis</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Waktu</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Metode</th>
+                  </tr>
+                </thead>
+                <tbody id="attendanceTable" class="divide-y divide-gray-100">
+                  <tr>
+                    <td colspan="5" class="px-4 py-12 text-center text-gray-500"><i
+                        class="fas fa-spinner fa-spin text-xl mb-2"></i>
+                      <p>Memuat data...</p>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
+          </div>
 
-           <div class="flex space-x-3 pt-4 border-t border-gray-200">
-             <button type="button" onclick="hideLocationModal()" class="flex-1 inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
-               <i class="fas fa-times mr-2"></i>Batal
-             </button>
-             <button type="submit" id="locationFormSubmitBtn" class="flex-1 inline-flex items-center justify-center px-4 py-2 bg-blue-600 border border-transparent rounded-lg text-sm font-medium text-white hover:bg-blue-700">
-               <i class="fas fa-save mr-2"></i>Simpan Lokasi
-             </button>
-           </div>
-         </form>
-       </div>
-     </div>
-   </div>
+          <!-- Monthly Recap View -->
+          <div id="schoolMonthlyRecapSection" class="hidden">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="text-lg font-semibold text-gray-900">Rekap Absensi Bulanan</h3>
+              <button onclick="exportMonthlyPdfFromRecap()"
+                class="btn-primary text-white px-4 py-1.5 rounded-lg text-sm flex items-center">
+                <i class="fas fa-file-pdf mr-2"></i>Export PDF
+              </button>
+            </div>
+            <div id="schoolMonthlyRecapContent" class="overflow-x-auto max-h-[500px]">
+              <p class="text-center text-gray-500 py-8">Pilih bulan dan tahun untuk menampilkan rekap</p>
+            </div>
+          </div>
+</div>
+        </div>
+
+        <!-- QR Scanner Tab -->
+        <div id="qr-scannerTab" class="tab-content hidden">
+          <div class="main-card p-6">
+            <div class="flex justify-between items-center mb-6">
+              <div>
+                <h3 class="text-lg font-semibold text-gray-900">QR Scanner Device</h3>
+                <p class="text-gray-600 text-sm">Pantau dan kelola device scanner untuk absensi</p>
+              </div>
+              <div class="flex space-x-2">
+                <button onclick="loadScannerDevices()" class="btn-primary text-white px-4 py-2 rounded-lg text-sm flex items-center">
+                  <i class="fas fa-sync-alt mr-2"></i>Refresh
+                </button>
+                <button onclick="showAddScannerDeviceModal()" class="btn-primary text-white px-4 py-2 rounded-lg text-sm flex items-center">
+                  <i class="fas fa-plus mr-2"></i>Tambah Device
+                </button>
+              </div>
+            </div>
+            <div id="scannerDevices" class="space-y-4">
+              <div class="text-center py-12">
+                <div class="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mx-auto mb-4"></div>
+                <p class="text-gray-600">Memuat data device...</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Locations Tab -->
+      <div id="locationsTab" class="tab-content hidden">
+        <div class="main-card p-6">
+          <div class="flex justify-between items-center mb-6">
+            <h3 class="text-lg font-semibold text-gray-900">Lokasi Sekolah</h3>
+            <button onclick="showAddLocationModal()"
+              class="btn-primary text-white px-4 py-2 rounded-lg text-sm flex items-center"><i
+                class="fas fa-plus mr-2"></i>Tambah Lokasi</button>
+          </div>
+          <div id="schoolLocations" class="space-y-4">
+            <div class="text-center py-12">
+              <div
+                class="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mx-auto mb-4">
+              </div>
+              <p class="text-gray-600">Memuat data lokasi...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Rules Tab -->
+      <div id="rulesTab" class="tab-content hidden">
+        <div class="main-card p-6">
+          <div class="flex justify-between items-center mb-6">
+            <h3 class="text-lg font-semibold text-gray-900">Aturan Absensi</h3>
+            <div class="flex items-center gap-3">
+              <label class="flex items-center text-sm text-gray-600">Gunakan Aturan Pusat
+                <input type="checkbox" id="rulesCentralToggle" class="ml-2" />
+              </label>
+              <button onclick="showAddRuleModal()"
+                class="btn-primary text-white px-4 py-2 rounded-lg text-sm flex items-center"><i
+                  class="fas fa-plus mr-2"></i>Tambah Aturan</button>
+            </div>
+          </div>
+          <div class="bg-blue-50 rounded-lg p-4 mb-6">
+            <div class="flex items-start space-x-3"><i class="fas fa-info-circle text-blue-500 mt-0.5"></i>
+              <div>
+                <h5 class="font-medium text-blue-900">Informasi Aturan</h5>
+                <p class="text-sm text-blue-700 mt-1">Ketika <strong>"Gunakan Aturan Pusat"</strong> aktif pada sekolah
+                  ini, maka <strong>aturan pusat (sistem)</strong> dan <strong>aturan sekolah</strong> keduanya berlaku.
+                  Aturan sekolah tetap dapat menimpa aturan pusat jika terjadi konflik pada jadwal yang sama.</p>
+              </div>
+            </div>
+          </div>
+          <div id="attendanceRules" class="space-y-4">
+            <div class="text-center py-12"><i class="fas fa-clock text-4xl text-gray-400 mb-4"></i>
+              <p class="text-gray-600">Memuat aturan absensi...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- WhatsApp Tab -->
+      <div id="whatsappTab" class="tab-content hidden">
+        <div class="main-card p-6">
+          <div class="flex justify-between items-center mb-6">
+            <h3 class="text-lg font-semibold text-gray-900 flex items-center"><i
+                class="fab fa-whatsapp text-green-600 mr-2"></i>Pesan WhatsApp</h3>
+          </div>
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-6">
+              <h4 class="text-base font-semibold text-blue-800 mb-4 flex items-center"><i
+                  class="fas fa-user mr-2"></i>Kirim Pesan Individual</h4>
+              <form id="singleWhatsAppForm" class="space-y-4">
+                <div class="relative"><label class="block text-sm font-medium text-gray-700 mb-2">Pilih Guru</label>
+                  <div class="relative"><input type="text" id="singleTeacherInput"
+                      class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
+                      placeholder="Ketik nama guru..." required autocomplete="off"><input type="hidden"
+                      id="singleTeacherSelect" name="teacherId">
+                    <div id="teacherSearchResults"
+                      class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto hidden">
+                    </div>
+                  </div>
+                  <div id="teacherSelectedInfo" class="mt-1 text-xs text-gray-500"></div>
+                </div>
+                <div><label class="block text-sm font-medium text-gray-700 mb-2">Pesan WhatsApp</label><select
+                    id="singleMessageTemplate"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 mb-2">
+                    <option value="">Pilih template...</option>
+                    <option value="pribadi">💬 Pesan Pribadi</option>
+                    <option value="peringatan">⚠️ Peringatan</option>
+                    <option value="pujian">🌟 Pujian</option>
+                    <option value="permintaan">📝 Permintaan</option>
+                  </select><textarea id="singleMessage" rows="4"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
+                    placeholder="Ketik pesan..." required></textarea></div>
+                <button type="submit"
+                  class="w-full btn-primary text-white py-2 px-4 rounded-md text-sm flex items-center justify-center"><i
+                    class="fab fa-whatsapp mr-2"></i>Kirim Pesan</button>
+              </form>
+            </div>
+            <div>
+              <h4 class="text-base font-semibold text-gray-900 mb-4 flex items-center"><i
+                  class="fas fa-history text-gray-600 mr-2"></i>Status Pengiriman</h4>
+              <div id="whatsappStatus" class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <p class="text-gray-600 text-sm">Belum ada pesan yang dikirim.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+  </div>
+  </main>
+  </div>
+
+  <!-- Teacher Modal -->
+  <div id="teacherModal" class="modal fixed inset-0 bg-black bg-opacity-50 z-50 justify-center items-center">
+    <div class="main-card max-w-md w-full mx-4 bg-white">
+      <div class="p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-semibold" id="teacherModalTitle">Tambah Guru</h3><button onclick="hideTeacherModal()"
+            class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
+        </div>
+        <form id="teacherForm">
+          <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">Nama</label><input type="text"
+              name="nama"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
+              required></div>
+          <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">NIK</label><input type="text"
+              name="nik"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
+              required></div>
+          <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">NIP</label><input type="text"
+              name="nip"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"></div>
+          <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">Status Kepegawaian</label><input
+              type="text" name="status_kepegawaian"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
+              placeholder="Guru Tetap, Guru Honorer"></div>
+          <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">Email</label><input type="email"
+              name="email"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"></div>
+          <div class="flex justify-end space-x-3"><button type="button" onclick="hideTeacherModal()"
+              class="px-4 py-2 text-gray-600 hover:text-gray-800 text-sm">Batal</button><button type="submit"
+              class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm">Simpan</button></div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Student Modal -->
+  <div id="studentModal" class="modal fixed inset-0 bg-black bg-opacity-50 z-50 justify-center items-center">
+    <div class="main-card max-w-md w-full mx-4 bg-white">
+      <div class="p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-semibold" id="studentModalTitle">Tambah Siswa</h3>
+          <button onclick="hideStudentModal()" class="text-gray-400 hover:text-gray-600"><i
+              class="fas fa-times text-xl"></i></button>
+        </div>
+        <form id="studentForm">
+          <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">Nama Siswa</label><input
+              type="text" name="nama_siswa"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
+              required></div>
+          <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">NISN</label><input type="text"
+              name="nisn"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"></div>
+          <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">NIS</label><input type="text"
+              name="nis"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
+              required></div>
+          <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">Kelas</label>
+            <select name="class_id" id="studentClassSelect"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
+              required>
+              <option value="">Pilih Kelas</option>
+            </select>
+          </div>
+          <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">Orang Tua</label><input
+              type="text" name="nama_orang_tua"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"></div>
+          <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">No WA Orang Tua</label><input
+              type="text" name="no_wa_ortu"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"></div>
+          <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">Iuran/Bulan</label><input
+              type="number" name="iuran_bulanan"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
+              min="0"></div>
+          <div class="flex justify-end space-x-3"><button type="button" onclick="hideStudentModal()"
+              class="px-4 py-2 text-gray-600 hover:text-gray-800 text-sm">Batal</button><button type="submit"
+              class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm">Simpan</button></div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rule Modal -->
+  <div id="ruleModal" class="modal fixed inset-0 bg-black bg-opacity-50 z-50 justify-center items-center">
+    <div class="main-card max-w-md w-full mx-4 bg-white">
+      <div class="p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-semibold" id="ruleModalTitle">Tambah Aturan</h3><button onclick="hideRuleModal()"
+            class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
+        </div>
+        <form id="ruleForm"><input type="hidden" name="tenant_id" id="ruleTenantId">
+          <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">Tipe</label><select name="tipe"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
+              required>
+              <option value="Datang">Datang</option>
+              <option value="Pulang">Pulang</option>
+            </select></div>
+          <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">Jam Mulai</label><input
+              type="time" name="jam_mulai"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
+              required></div>
+          <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">Jam Selesai</label><input
+              type="time" name="jam_selesai"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
+              required></div>
+          <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">Hari (opsional)</label><input
+              type="text" name="hari"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
+              placeholder="Contoh: senin-jumat"></div>
+          <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">Keterangan</label><input
+              type="text" name="keterangan"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"></div>
+          <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">Status Log</label><select
+              name="status_log"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
+              required>
+              <option value="tepat_waktu">Tepat Waktu</option>
+              <option value="terlambat">Terlambat</option>
+            </select></div>
+          <div class="flex justify-end space-x-3"><button type="button" onclick="hideRuleModal()"
+              class="px-4 py-2 text-gray-600 hover:text-gray-800 text-sm">Batal</button><button type="submit"
+              class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm">Simpan</button></div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Location Modal (sama seperti admin-dashboard.html) -->
+  <div id="locationModal" class="modal fixed inset-0 bg-black bg-opacity-50 z-50 justify-center items-center">
+    <div class="main-card max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto bg-white">
+      <div class="p-6">
+        <div class="flex items-center justify-between mb-6">
+          <div class="flex items-center">
+            <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+              <i class="fas fa-map-marker-alt text-blue-600"></i>
+            </div>
+            <div>
+              <h3 id="locationModalTitle" class="text-lg font-semibold text-gray-900">Konfigurasi Lokasi Sekolah</h3>
+              <p class="text-gray-600 text-sm">Atur koordinat GPS untuk validasi absensi</p>
+            </div>
+          </div>
+          <button onclick="hideLocationModal()" class="text-gray-400 hover:text-gray-600">
+            <i class="fas fa-times text-xl"></i>
+          </button>
+        </div>
+
+        <form id="locationForm">
+          <input type="hidden" name="tenant_id" id="locationTenantIdHidden">
+
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-2">Nama Sekolah</label>
+            <input type="text" name="nama_sekolah" id="locationNamaSekolah"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50"
+              readonly>
+          </div>
+
+          <!-- Auto Detect -->
+          <div class="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+            <div class="flex items-center justify-between mb-3">
+              <h4 class="font-medium text-blue-900">Auto Detect Lokasi</h4>
+              <button type="button" id="modalAutoDetectBtn"
+                class="inline-flex items-center px-3 py-2 bg-blue-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-blue-700">
+                <i class="fas fa-crosshairs mr-2"></i>Detect Location
+              </button>
+            </div>
+            <div id="modalLocationStatus" class="text-sm text-blue-700">
+              <i class="fas fa-info-circle mr-1"></i>Klik tombol di atas untuk mendapatkan koordinat GPS
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-4 mb-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2"><i
+                  class="fas fa-globe-asia mr-1"></i>Latitude</label>
+              <input type="number" step="0.000001" name="latitude" id="modalLatitudeInput"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                placeholder="-6.208763" required>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2"><i
+                  class="fas fa-globe-asia mr-1"></i>Longitude</label>
+              <input type="number" step="0.000001" name="longitude" id="modalLongitudeInput"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                placeholder="106.845599" required>
+            </div>
+          </div>
+
+          <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-2"><i
+                class="fas fa-ruler-combined mr-1"></i>Radius Lokasi (meter)</label><input type="number"
+              name="location_radius"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
+              min="10" max="1000" value="100"></div>
+
+          <div class="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <div class="flex items-center justify-between">
+              <label class="flex items-center cursor-pointer">
+                <span class="text-sm font-medium text-gray-700 mr-3">Gunakan Aturan Pusat</span>
+                <div class="relative">
+                  <input type="checkbox" name="use_central_rules" id="schoolAdminCentralToggle"
+                    class="sr-only toggle-checkbox" onchange="updateToggleVisual(this)">
+                  <div class="w-11 h-6 bg-gray-200 rounded-full toggle-track transition-colors duration-200"></div>
+                  <div
+                    class="absolute left-0.5 top-0.5 w-5 h-5 bg-white border border-gray-300 rounded-full toggle-thumb transition-transform duration-200">
+                  </div>
+                </div>
+              </label>
+              <div id="schoolAdminCoordPreview"
+                class="text-right text-sm cursor-pointer hover:opacity-75 transition-opacity"
+                onclick="copySchoolAdminCoords()" title="Klik untuk salin koordinat">
+                <span class="text-gray-500">Belum ada koordinat</span>
+              </div>
+            </div>
+            <p class="text-xs text-blue-600 mt-1">Aktifkan agar aturan pusat juga berlaku.</p>
+          </div>
+
+          <!-- Mini Map -->
+          <div class="mb-4">
+            <div id="schoolAdminMiniMap" class="w-full h-48 bg-gray-100 rounded-lg border border-gray-200"
+              style="min-height: 180px;"></div>
+            <p class="text-xs text-gray-500 mt-1 text-center"><i class="fas fa-info-circle"></i> Klik pada peta atau
+              seret marker untuk mengatur lokasi</p>
+          </div>
+
+          <div class="flex space-x-3 pt-4 border-t border-gray-200">
+            <button type="button" onclick="hideLocationModal()"
+              class="flex-1 inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+              <i class="fas fa-times mr-2"></i>Batal
+            </button>
+            <button type="submit" id="locationFormSubmitBtn"
+              class="flex-1 inline-flex items-center justify-center px-4 py-2 bg-blue-600 border border-transparent rounded-lg text-sm font-medium text-white hover:bg-blue-700">
+              <i class="fas fa-save mr-2"></i>Simpan Lokasi
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
 
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script>
@@ -528,38 +970,67 @@
     }
     const user = JSON.parse(localStorage.getItem('user') || '{}');
 
+    // Allowed roles for school admin access
+    const allowedRoles = ['admin', 'operator', 'tu', 'media'];
+    const userAssignments = (user.assignments || []).filter(a => {
+      const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
+      return allowedRoles.some(role => jabatan.includes(role));
+    });
+
+    if (userAssignments.length === 0) {
+      console.error('[SCHOOL-ADMIN] User tidak memiliki akses sebagai admin/operator/TU/media');
+      alert('Anda tidak memiliki akses ke halaman ini');
+      window.location.href = 'dashboard.html';
+    }
+
     const urlParams = new URLSearchParams(window.location.search);
-    window.tenantId = urlParams.get('tenant');
+    const requestedTenantId = urlParams.get('tenant');
+
+    // Cek apakah user memiliki akses ke tenant yang diminta
+    let userTenantIds = userAssignments.map(a => a.tenant_id);
+    window.tenantId = requestedTenantId && userTenantIds.includes(requestedTenantId)
+      ? requestedTenantId
+      : userTenantIds[0];
+
+    // Jika tenant yang diminta tidak ada di assignments user
+    if (requestedTenantId && !userTenantIds.includes(requestedTenantId)) {
+      console.error('[SCHOOL-ADMIN] Akses ditolak untuk tenant:', requestedTenantId);
+      alert('Anda tidak memiliki akses ke tenant ini');
+      window.location.href = 'dashboard.html';
+    }
+
     const tenantId = window.tenantId;
-    const schoolName = urlParams.get('school');
+    const schoolName = urlParams.get('school') || userAssignments[0]?.nama_sekolah;
     if (!tenantId) { alert('Parameter tenant tidak ditemukan.'); window.location.href = 'dashboard.html'; }
 
-document.getElementById('schoolNameHeader').textContent = schoolName || tenantId;
-     document.getElementById('schoolIdHeader').textContent = 'ID: ' + tenantId;
-     document.getElementById('schoolTitleInline').textContent = schoolName || tenantId;
+    document.getElementById('schoolNameHeader').textContent = schoolName || tenantId;
+    document.getElementById('schoolIdHeader').textContent = 'ID: ' + tenantId;
+    document.getElementById('schoolTitleInline').textContent = schoolName || tenantId;
 
-     // Show evaluation link for kepala sekolah/pimpinan pondok
-     const assignments = user.assignments || [];
-     const isEvaluator = assignments.some(a => 
-       ['kepala_sekolah', 'pimpinan_pondok'].includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''))
-     );
-     if (isEvaluator) {
-       const evalLink = document.getElementById('evaluationLink');
-       if (evalLink) {
-         evalLink.href = 'evaluation-dashboard.html?tenant=' + encodeURIComponent(tenantId) + '&school=' + encodeURIComponent(schoolName || '');
-         evalLink.style.display = 'flex';
-       }
-     }
+    // Show evaluation link for kepala sekolah/pimpinan pondok
+    const assignments = user.assignments || [];
+    const isEvaluator = assignments.some(a =>
+      ['kepala_sekolah', 'pimpinan_pondok'].includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''))
+    );
+    if (isEvaluator) {
+      const evalLink = document.getElementById('evaluationLink');
+      if (evalLink) {
+        evalLink.href = 'evaluation-dashboard.html?tenant=' + encodeURIComponent(tenantId) + '&school=' + encodeURIComponent(schoolName || '');
+        evalLink.style.display = 'flex';
+      }
+    }
 
-function apiUrl(path) {
-       const sep = path.includes('?') ? '&' : '?';
-       return '/api' + path + sep + 'tenant_id=' + encodeURIComponent(tenantId);
-     }
+    function apiUrl(path) {
+      const sep = path.includes('?') ? '&' : '?';
+      return '/api' + path + sep + 'tenant_id=' + encodeURIComponent(tenantId);
+    }
 
     let authToken = token;
     let currentPage = 1, totalPages = 1, pageLimit = 10;
     let currentMapContext = 'add';
     let schoolAdminMap = null, schoolAdminMarker = null;
+    let currentStudentPage = 1, studentLimit = 25, totalStudents = 0, totalStudentPages = 0;
+    let studentClassList = [];
 
     function setEl(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
 
@@ -577,30 +1048,32 @@ function apiUrl(path) {
       return false;
     }
 
-function switchTab(tabName) {
-       document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
-       document.querySelectorAll('.nav-item').forEach(n => { n.classList.remove('nav-active','bg-blue-600','text-white'); n.classList.add('text-gray-600'); });
-       document.querySelectorAll('.mobile-tab-btn').forEach(btn => btn.classList.remove('active'));
-       const tab = document.getElementById(tabName + 'Tab');
-       if (tab) tab.classList.remove('hidden');
-       const btn = document.querySelector(`button[data-tab="${tabName}"]`);
-       if (btn) { btn.classList.add('nav-active','bg-blue-600','text-white'); btn.classList.remove('text-gray-600'); }
-       const mobileBtn = document.querySelector(`.mobile-tab-btn[data-tab="${tabName}"]`);
-       if (mobileBtn) mobileBtn.classList.add('active');
-       const titles = { dashboard:'Dashboard', teachers:'Data Guru', attendance:'Log Kehadiran', locations:'Lokasi Sekolah', rules:'Aturan Absensi', whatsapp:'WhatsApp' };
+    function switchTab(tabName) {
+      document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
+      document.querySelectorAll('.nav-item').forEach(n => { n.classList.remove('nav-active', 'bg-blue-600', 'text-white'); n.classList.add('text-gray-600'); });
+      document.querySelectorAll('.mobile-tab-btn').forEach(btn => btn.classList.remove('active'));
+      const tab = document.getElementById(tabName + 'Tab');
+      if (tab) tab.classList.remove('hidden');
+      const btn = document.querySelector(`button[data-tab="${tabName}"]`);
+      if (btn) { btn.classList.add('nav-active', 'bg-blue-600', 'text-white'); btn.classList.remove('text-gray-600'); }
+      const mobileBtn = document.querySelector(`.mobile-tab-btn[data-tab="${tabName}"]`);
+      if (mobileBtn) mobileBtn.classList.add('active');
+const titles = { dashboard: 'Dashboard', teachers: 'Data Guru', students: 'Data Siswa', qr_scanner: 'QR Scanner Device', attendance: 'Log Kehadiran', locations: 'Lokasi Sekolah', rules: 'Aturan Absensi', whatsapp: 'WhatsApp' };
        setEl('pageTitle', titles[tabName] || 'Dashboard');
        document.getElementById('schoolTitleInline').textContent = schoolName || tenantId;
        if (tabName === 'dashboard') loadDashboard();
        else if (tabName === 'teachers') fetchTeachers(currentPage);
+       else if (tabName === 'students') { loadStudentClasses(); loadStudents(); }
+       else if (tabName === 'qr-scanner') loadScannerDevices();
        else if (tabName === 'attendance') loadAttendanceLogs();
        else if (tabName === 'locations') loadSchoolLocations();
        else if (tabName === 'rules') fetchRules();
        else if (tabName === 'whatsapp') loadTeachersForWhatsApp();
-     }
+    }
 
     // Mobile tab handlers
     document.querySelectorAll('.mobile-tab-btn').forEach(btn => {
-      btn.addEventListener('click', function() {
+      btn.addEventListener('click', function () {
         const tab = this.dataset.tab;
         switchTab(tab);
       });
@@ -627,7 +1100,7 @@ function switchTab(tabName) {
           cs.style.color = t.use_central_rules ? '#059669' : '#6b7280';
         }
         const sr = await fetch(apiUrl('/admin/summary'), { headers: { 'Authorization': `Bearer ${authToken}` } });
-        if (sr.ok) { const s = await sr.json(); if (s.success) { setEl('totalTeachers', s.data.totalTeachers||0); setEl('todayAttendance', s.data.activeToday||0); setEl('lateCount', s.data.lateToday||0); } }
+        if (sr.ok) { const s = await sr.json(); if (s.success) { setEl('totalTeachers', s.data.totalTeachers || 0); setEl('todayAttendance', s.data.activeToday || 0); setEl('lateCount', s.data.lateToday || 0); } }
         loadAttendanceChart();
       } catch (e) { console.error('[DASHBOARD]', e); }
     }
@@ -638,7 +1111,7 @@ function switchTab(tabName) {
         if (!r.ok) return;
         const d = await r.json();
         if (!d.success) return;
-        const days = ['Sen','Sel','Rab','Kam','Jum','Sab','Min'];
+        const days = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
         const now = new Date();
         const dow = now.getDay();
         const labels = [];
@@ -657,10 +1130,12 @@ function switchTab(tabName) {
         const rl = [...labels].reverse();
         chartInstance = new Chart(ctx, {
           type: 'bar',
-          data: { labels: rl, datasets: [
-            { label: 'Masuk', data: rl.map(l => counts[l]?.masuk || 0), backgroundColor: '#10b981', borderRadius: 4 },
-            { label: 'Pulang', data: rl.map(l => counts[l]?.pulang || 0), backgroundColor: '#3b82f6', borderRadius: 4 }
-          ]},
+          data: {
+            labels: rl, datasets: [
+              { label: 'Masuk', data: rl.map(l => counts[l]?.masuk || 0), backgroundColor: '#10b981', borderRadius: 4 },
+              { label: 'Pulang', data: rl.map(l => counts[l]?.pulang || 0), backgroundColor: '#3b82f6', borderRadius: 4 }
+            ]
+          },
           options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true, suggestedMax: 10, ticks: { stepSize: 1 } }, x: { ticks: { font: { size: 11 } } } } }
         });
       } catch (e) { console.error('[CHART]', e); }
@@ -677,7 +1152,7 @@ function switchTab(tabName) {
           currentPage = d.pagination ? d.pagination.page : page;
           totalPages = d.pagination ? d.pagination.totalPages : 1;
           const tb = document.getElementById('teachersTable');
-          tb.innerHTML = items.length === 0 ? '<tr><td colspan="5" class="px-4 py-12 text-center text-gray-500">Belum ada data guru</td></tr>' : items.map(t => `<tr class="hover:bg-gray-50"><td class="px-4 py-3 text-sm text-gray-900 font-medium">${t.nama||'-'}</td><td class="px-4 py-3 text-sm text-gray-500">${t.nik||'-'}</td><td class="px-4 py-3 text-sm text-gray-500">${t.nip||'-'}</td><td class="px-4 py-3 text-sm"><span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${t.status_aktif?'bg-green-100 text-green-800':'bg-red-100 text-red-800'}">${t.status_aktif?'Aktif':'Nonaktif'}</span></td><td class="px-4 py-3 text-sm space-x-1"><button onclick="editTeacher(${t.id})" class="inline-flex items-center p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md" title="Edit"><i class="fas fa-edit text-xs"></i></button><button onclick="deleteTeacher(${t.id})" class="inline-flex items-center p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md" title="Hapus"><i class="fas fa-trash text-xs"></i></button></td></tr>`).join('');
+          tb.innerHTML = items.length === 0 ? '<tr><td colspan="5" class="px-4 py-12 text-center text-gray-500">Belum ada data guru</td></tr>' : items.map(t => `<tr class="hover:bg-gray-50"><td class="px-4 py-3 text-sm text-gray-900 font-medium">${t.nama || '-'}</td><td class="px-4 py-3 text-sm text-gray-500">${t.nik || '-'}</td><td class="px-4 py-3 text-sm text-gray-500">${t.nip || '-'}</td><td class="px-4 py-3 text-sm"><span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${t.status_aktif ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">${t.status_aktif ? 'Aktif' : 'Nonaktif'}</span></td><td class="px-4 py-3 text-sm space-x-1"><button onclick="editTeacher(${t.id})" class="inline-flex items-center p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md" title="Edit"><i class="fas fa-edit text-xs"></i></button><button onclick="deleteTeacher(${t.id})" class="inline-flex items-center p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md" title="Hapus"><i class="fas fa-trash text-xs"></i></button></td></tr>`).join('');
           updatePaginationControls(d.pagination);
         }
       } catch (e) { console.error('[TEACHERS]', e); }
@@ -685,13 +1160,13 @@ function switchTab(tabName) {
 
     function updatePaginationControls(p = {}) {
       const { page = 1, totalPages: tp = 1, total = 0, limit = 10 } = p;
-      setEl('paginationInfo', `Menampilkan ${(page-1)*limit+1}-${Math.min(page*limit, total)} dari ${total} data`);
+      setEl('paginationInfo', `Menampilkan ${(page - 1) * limit + 1}-${Math.min(page * limit, total)} dari ${total} data`);
       const pb = document.getElementById('prevPageBtn'), nb = document.getElementById('nextPageBtn');
       pb.disabled = page <= 1; nb.disabled = page >= tp;
       pb.onclick = page > 1 ? () => fetchTeachers(page - 1) : null;
       nb.onclick = page < tp ? () => fetchTeachers(page + 1) : null;
       const pc = document.getElementById('pageNumbers'); pc.innerHTML = '';
-      const mx = 5; let s = Math.max(1, page - Math.floor(mx/2)), e = Math.min(tp, s + mx - 1);
+      const mx = 5; let s = Math.max(1, page - Math.floor(mx / 2)), e = Math.min(tp, s + mx - 1);
       if (e - s + 1 < mx) s = Math.max(1, e - mx + 1);
       if (s > 1) { pc.appendChild(createPageBtn(1, page)); if (s > 2) { const sp = document.createElement('span'); sp.className = 'px-2 py-1 text-sm text-gray-500'; sp.textContent = '...'; pc.appendChild(sp); } }
       for (let i = s; i <= e; i++) pc.appendChild(createPageBtn(i, page));
@@ -700,15 +1175,231 @@ function switchTab(tabName) {
 
     function createPageBtn(n, cp) {
       const b = document.createElement('button');
-      b.className = `px-2.5 py-1 text-xs font-medium rounded-md ${n===cp?'bg-blue-600 text-white':'text-gray-500 bg-white border border-gray-300 hover:bg-gray-50'}`;
+      b.className = `px-2.5 py-1 text-xs font-medium rounded-md ${n === cp ? 'bg-blue-600 text-white' : 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-50'}`;
       b.textContent = n;
       if (n !== cp) b.onclick = () => fetchTeachers(n);
       return b;
     }
 
-async function editTeacher(id) {
-       try {
-         const r = await fetch(apiUrl('/admin/teachers/' + id), { headers: { 'Authorization': `Bearer ${authToken}` } });
+async function loadStudentClasses() {
+      console.log('[DEBUG] Memulai loadStudentClasses...');
+      try {
+        const r = await fetch(apiUrl('/admin/classes'), { headers: { 'Authorization': `Bearer ${authToken}` } });
+        if (checkAuth401403(r)) return;
+        const d = await r.json();
+        console.log('[DEBUG] Data diterima:', d);
+        if (d.success) {
+          studentClassList = d.data || [];
+          const select = document.getElementById('studentClassFilter');
+          const sorted = studentClassList.slice().sort((a, b) => {
+            const parseKelas = (kelas) => {
+              const m = (kelas || '').match(/(\d+)([A-Za-z]?)/);
+              if (m) return { num: parseInt(m[1]), huruf: (m[2] || '').toUpperCase() };
+              return { num: 999, huruf: '' };
+            };
+            const ka = parseKelas(a.nama_kelas);
+            const kb = parseKelas(b.nama_kelas);
+            if (ka.num !== kb.num) return ka.num - kb.num;
+            return ka.huruf.localeCompare(kb.huruf);
+          });
+          select.innerHTML = '<option value="">Semua Kelas</option>';
+          sorted.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.id;
+            opt.textContent = c.nama_kelas;
+            select.appendChild(opt);
+          });
+        } else {
+          console.warn('[DEBUG] d.success false atau d.data kosong');
+        }
+      } catch (e) {
+        console.error('[CLASSES]', e);
+      }
+    }
+
+    window.loadStudents = async function (page = 1) {
+      currentStudentPage = page;
+      const tbody = document.getElementById('studentsTable');
+      const classFilter = document.getElementById('studentClassFilter')?.value || '';
+      const search = document.getElementById('studentSearch')?.value.trim() || '';
+
+      tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-12 text-center text-gray-500"><i class="fas fa-spinner fa-spin"></i> Memuat...</td></tr>';
+      try {
+        let url = apiUrl(`/admin/students?page=${page}&limit=${studentLimit}&sortBy=nama_kelas&sortDir=ASC`);
+        // Tambahkan secondary sort nama (akan di-sort di frontend)
+        if (classFilter) url += `&class_id=${encodeURIComponent(classFilter)}`;
+        if (search) url += `&search=${encodeURIComponent(search)}`;
+
+        const response = await fetch(url, {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        if (checkAuth401403(response)) return;
+        const data = await response.json();
+        if (data.success) {
+          totalStudents = data.pagination?.total || 0;
+          totalStudentPages = data.pagination?.totalPages || 1;
+          // Sort data di frontend: kelas 1A,1B,2A,2B,... lalu nama A-Z
+          let sortedData = [...data.data];
+          sortedData.sort((a, b) => {
+            // Parse kelas: "1A" -> {num: 1, huruf: "A"}, "1B" -> {num: 1, huruf: "B"}
+            const parseKelas = (kelas) => {
+              const m = (kelas || '').match(/(\d+)([A-Za-z])/);
+              if (m) return { num: parseInt(m[1]), huruf: m[2].toUpperCase() };
+              const m2 = (kelas || '').match(/(\d+)/);
+              return m2 ? { num: parseInt(m2[1]), huruf: '' } : { num: 999, huruf: '' };
+            };
+            const ka = parseKelas(a.nama_kelas);
+            const kb = parseKelas(b.nama_kelas);
+            // Urut nomor kelas dulu
+            if (ka.num !== kb.num) return ka.num - kb.num;
+            // Baru urut huruf kelas (A, B, C...)
+            if (ka.huruf !== kb.huruf) return ka.huruf.localeCompare(kb.huruf);
+            // Terakhir urut nama siswa A-Z
+            return (a.nama_siswa || '').localeCompare(b.nama_siswa || '');
+          });
+          tbody.innerHTML = sortedData.map(s => `
+            <tr class="hover:bg-gray-50">
+              <td class="px-4 py-3 text-sm text-gray-900 font-medium">${s.nama_siswa || '-'}</td>
+              <td class="px-4 py-3 text-sm text-gray-500">${s.nisn || '-'}</td>
+              <td class="px-4 py-3 text-sm text-gray-500">${s.nis || '-'}</td>
+              <td class="px-4 py-3 text-sm text-gray-500">${s.nama_kelas || '-'}</td>
+              <td class="px-4 py-3 text-sm text-gray-500">${s.nama_orang_tua || '-'}<br><small>${s.no_wa_ortu || ''}</small></td>
+              <td class="px-4 py-3 text-sm text-gray-500">Rp ${(s.iuran_bulanan || 0).toLocaleString('id-ID')}</td>
+              <td class="px-4 py-3 text-sm space-x-1">
+                <button onclick="editStudent(${s.id})" class="inline-flex items-center p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md" title="Edit"><i class="fas fa-edit text-xs"></i></button>
+                <button onclick="updateStudentPayment(${s.id}, ${s.iuran_bulanan || 0})" class="inline-flex items-center p-1.5 text-green-600 hover:text-green-800 hover:bg-green-50 rounded-md" title="Update Iuran"><i class="fas fa-wallet text-xs"></i></button>
+                <button onclick="deleteStudent(${s.id})" class="inline-flex items-center p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md" title="Hapus"><i class="fas fa-trash text-xs"></i></button>
+              </td>
+            </tr>
+          `).join('') || '<tr><td colspan="7" class="px-4 py-12 text-center text-gray-500">Belum ada data siswa</td></tr>';
+          renderStudentPagination();
+        } else {
+          tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-12 text-center text-red-500">Gagal memuat data</td></tr>';
+        }
+      } catch (error) {
+        tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-12 text-center text-red-500">Error: ' + error.message + '</td></tr>';
+      }
+    };
+
+    function renderStudentPagination() {
+      const paginationInfo = document.getElementById('studentPaginationInfo');
+      if (paginationInfo) {
+        paginationInfo.textContent = 'Menampilkan ' + ((currentStudentPage - 1) * studentLimit + 1) + ' - ' + Math.min(currentStudentPage * studentLimit, totalStudents) + ' dari ' + totalStudents + ' data';
+      }
+      const pageNumbers = document.getElementById('studentPageNumbers');
+      if (pageNumbers) {
+        let html = '';
+        const maxVisible = 5;
+        let start = Math.max(1, currentStudentPage - Math.floor(maxVisible / 2));
+        let end = Math.min(totalStudentPages, start + maxVisible - 1);
+        if (end - start < maxVisible - 1) start = Math.max(1, end - maxVisible + 1);
+        for (let i = start; i <= end; i++) {
+          html += '<button onclick="changeStudentPage(' + i + ')" class="px-2.5 py-1 text-xs font-medium rounded-md ' + (i === currentStudentPage ? 'bg-blue-600 text-white' : 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-50') + '">' + i + '</button>';
+        }
+        pageNumbers.innerHTML = html;
+      }
+      const prevBtn = document.getElementById('studentPrevPageBtn');
+      const nextBtn = document.getElementById('studentNextPageBtn');
+      if (prevBtn) prevBtn.disabled = currentStudentPage <= 1;
+      if (nextBtn) nextBtn.disabled = currentStudentPage >= totalStudentPages;
+    }
+
+    window.changeStudentPage = function (newPage) {
+      if (newPage < 1 || newPage > totalStudentPages) return;
+      loadStudents(newPage);
+    };
+
+    window.changeStudentLimit = function (newLimit) {
+      studentLimit = parseInt(newLimit);
+      loadStudents(1);
+    };
+
+    window.handleStudentSearch = function (event) {
+      if (event.key === 'Enter' || event.type === 'change') {
+        loadStudents(1);
+      }
+    };
+
+    async function editStudent(id) {
+      const { value: newIuran } = await Swal.fire({
+        title: 'Update Iuran Bulanan',
+        input: 'number',
+        inputLabel: 'Iuran Bulanan Baru',
+        inputValue: 0,
+        inputAttributes: { min: 0, step: 1000 },
+        showCancelButton: true,
+        confirmButtonText: 'Update',
+        cancelButtonText: 'Batal'
+      });
+      if (newIuran !== undefined) {
+        updateStudentPayment(id, newIuran);
+      }
+    }
+
+    window.updateStudentPayment = async function (studentId, newIuran) {
+      try {
+        const response = await fetch(apiUrl('/admin/students/' + studentId + '/payment'), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+          body: JSON.stringify({ iuran_bulanan: newIuran })
+        });
+        if (checkAuth401403(response)) return;
+        const data = await response.json();
+        if (data.success) {
+          Swal.fire('Berhasil', 'Iuran berhasil diupdate', 'success');
+          loadStudents(currentStudentPage);
+        } else {
+          Swal.fire('Error', data.message, 'error');
+        }
+      } catch (error) {
+        showToast('Terjadi kesalahan', 'error');
+      }
+    };
+
+    async function deleteStudent(id) {
+      if (!confirm('Yakin hapus siswa ini?')) return;
+      try {
+        const r = await fetch(apiUrl('/admin/students/' + id), { method: 'DELETE', headers: { 'Authorization': `Bearer ${authToken}` } });
+        if (checkAuth401403(r)) return;
+        const d = await r.json();
+        if (d.success) { loadStudents(currentStudentPage); showToast('Siswa dihapus', 'success'); }
+        else showToast(d.message || 'Gagal', 'error');
+      } catch (e) { console.error('[DEL STUDENT]', e); showToast('Terjadi kesalahan', 'error'); }
+    }
+
+    window.showAddStudentModal = function () {
+      const form = document.getElementById('studentForm');
+      form.reset();
+      delete form.dataset.editId;
+      document.getElementById('studentModalTitle').textContent = 'Tambah Siswa Baru';
+      document.getElementById('studentModal').classList.add('show');
+      loadStudentClasses();
+    };
+
+    function hideStudentModal() {
+      document.getElementById('studentModal').classList.remove('show');
+    }
+
+    document.getElementById('studentForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const data = Object.fromEntries(new FormData(e.target));
+      data.tenant_id = tenantId;
+      try {
+        const r = await fetch(apiUrl('/admin/students'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+          body: JSON.stringify(data)
+        });
+        if (checkAuth401403(r)) return;
+        const d = await r.json();
+        if (d.success) { hideStudentModal(); loadStudents(currentStudentPage); showToast('Siswa ditambahkan', 'success'); }
+        else showToast(d.message || 'Gagal', 'error');
+      } catch (err) { console.error('[STUDENT FORM]', err); showToast('Terjadi kesalahan', 'error'); }
+    });
+
+    async function editTeacher(id) {
+      try {
+        const r = await fetch(apiUrl('/admin/teachers/' + id), { headers: { 'Authorization': `Bearer ${authToken}` } });
         if (checkAuth401403(r)) return;
         const d = await r.json();
         if (d.success) {
@@ -763,7 +1454,7 @@ async function editTeacher(id) {
         const d = await r.json();
         const tb = document.getElementById('attendanceTable');
         if (d.success && d.data.length > 0) {
-          tb.innerHTML = d.data.map(a => `<tr class="hover:bg-gray-50"><td class="px-4 py-3 text-sm text-gray-900">${a.nama||'-'}</td><td class="px-4 py-3 text-sm text-gray-500">${a.jenis==='masuk'?'Masuk':'Pulang'}</td><td class="px-4 py-3 text-sm text-gray-500">${new Date(a.waktu_scan).toLocaleString('id-ID')}</td><td class="px-4 py-3 text-sm"><span class="px-2 py-1 rounded-full text-xs font-semibold ${a.status==='tepat_waktu'?'bg-green-100 text-green-800':'bg-red-100 text-red-800'}">${a.status==='tepat_waktu'?'Tepat Waktu':'Terlambat'}</span></td><td class="px-4 py-3 text-sm text-gray-500">${a.metode||'-'}</td></tr>`).join('');
+          tb.innerHTML = d.data.map(a => `<tr class="hover:bg-gray-50"><td class="px-4 py-3 text-sm text-gray-900">${a.nama || '-'}</td><td class="px-4 py-3 text-sm text-gray-500">${a.jenis === 'masuk' ? 'Masuk' : 'Pulang'}</td><td class="px-4 py-3 text-sm text-gray-500">${new Date(a.waktu_scan).toLocaleString('id-ID')}</td><td class="px-4 py-3 text-sm"><span class="px-2 py-1 rounded-full text-xs font-semibold ${a.status === 'tepat_waktu' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">${a.status === 'tepat_waktu' ? 'Tepat Waktu' : 'Terlambat'}</span></td><td class="px-4 py-3 text-sm text-gray-500">${a.metode || '-'}</td></tr>`).join('');
         } else tb.innerHTML = '<tr><td colspan="5" class="px-4 py-12 text-center text-gray-500">Belum ada data kehadiran</td></tr>';
       } catch (e) { console.error('[ATTENDANCE LOGS]', e); }
     }
@@ -790,7 +1481,7 @@ async function editTeacher(id) {
 
         // Tampilkan lokasi utama dari tenants terlebih dahulu
         if (tenant && tenant.latitude && tenant.longitude) {
-          html += `<div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-3"><div class="flex items-start justify-between mb-3"><div class="flex-1"><h5 class="font-semibold text-blue-900">Lokasi Utama (Tabel Tenants)</h5><p class="text-xs text-blue-600 mt-1">Radius: ${tenant.location_radius||100}m | Nama: ${tenant.location_name || '-'}</p></div><span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-200 text-blue-800">Utama</span></div><div class="grid grid-cols-2 gap-2 mb-3"><div class="text-xs text-blue-600">Lat: <span class="font-mono text-blue-900">${parseFloat(tenant.latitude).toFixed(6)}</span></div><div class="text-xs text-blue-600">Lng: <span class="font-mono text-blue-900">${parseFloat(tenant.longitude).toFixed(6)}</span></div></div><div class="pt-2 border-t border-blue-200"><button onclick="editMainLocation()" class="inline-flex items-center px-3 py-1 border border-blue-300 rounded-md text-xs font-medium text-blue-700 bg-white hover:bg-blue-100"><i class="fas fa-edit mr-1"></i>Lengkapi / Edit Lokasi Utama</button></div></div>`;
+          html += `<div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-3"><div class="flex items-start justify-between mb-3"><div class="flex-1"><h5 class="font-semibold text-blue-900">Lokasi Utama (Tabel Tenants)</h5><p class="text-xs text-blue-600 mt-1">Radius: ${tenant.location_radius || 100}m | Nama: ${tenant.location_name || '-'}</p></div><span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-200 text-blue-800">Utama</span></div><div class="grid grid-cols-2 gap-2 mb-3"><div class="text-xs text-blue-600">Lat: <span class="font-mono text-blue-900">${parseFloat(tenant.latitude).toFixed(6)}</span></div><div class="text-xs text-blue-600">Lng: <span class="font-mono text-blue-900">${parseFloat(tenant.longitude).toFixed(6)}</span></div></div><div class="pt-2 border-t border-blue-200"><button onclick="editMainLocation()" class="inline-flex items-center px-3 py-1 border border-blue-300 rounded-md text-xs font-medium text-blue-700 bg-white hover:bg-blue-100"><i class="fas fa-edit mr-1"></i>Lengkapi / Edit Lokasi Utama</button></div></div>`;
         } else {
           html += `<div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-3"><div class="flex items-center justify-between"><div><h5 class="font-medium text-yellow-900">Lokasi Utama Belum Diatur</h5><p class="text-xs text-yellow-600">Lengkapi lokasi utama di tabel tenants</p></div><button onclick="editMainLocation()" class="px-3 py-1 bg-yellow-600 text-white text-xs rounded-md">Atur Sekarang</button></div></div>`;
           // Auto popup jika lokasi utama kosong
@@ -799,7 +1490,7 @@ async function editTeacher(id) {
 
         // Lokasi pecahan dari tenant_locations
         if (items.length > 0) {
-          html += items.map(l => `<div class="bg-white border border-gray-200 rounded-lg p-4 mb-2"><div class="flex items-start justify-between mb-3"><div class="flex-1"><h5 class="font-medium text-gray-900">${l.location_name || 'Lokasi Pecahan'}</h5><p class="text-xs text-gray-500 mt-1">ID: ${l.id} | Radius: ${l.location_radius||100}m</p></div><span class="px-2 py-1 text-xs font-semibold rounded-full ${l.is_active?'bg-green-100 text-green-800':'bg-red-100 text-red-800'}">${l.is_active?'Aktif':'Nonaktif'}</span></div><div class="grid grid-cols-2 gap-2 mb-3"><div class="text-xs text-gray-500">Lat: <span class="font-mono text-gray-700">${l.latitude?parseFloat(l.latitude).toFixed(6):'-'}</span></div><div class="text-xs text-gray-500">Lng: <span class="font-mono text-gray-700">${l.longitude?parseFloat(l.longitude).toFixed(6):'-'}</span></div></div><div class="flex space-x-2 pt-2 border-t border-gray-100"><button onclick="editSchoolLocation(${l.id})" class="inline-flex items-center px-2 py-1 border border-blue-300 rounded-md text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100"><i class="fas fa-edit mr-1"></i>Edit</button><button onclick="toggleLocStatus(${l.id},${l.is_active})" class="inline-flex items-center px-2 py-1 border ${l.is_active?'border-orange-300 text-orange-700 bg-orange-50 hover:bg-orange-100':'border-green-300 text-green-700 bg-green-50 hover:bg-green-100'} rounded-md text-xs font-medium"><i class="fas fa-${l.is_active?'pause':'play'} mr-1"></i>${l.is_active?'Nonaktifkan':'Aktifkan'}</button><button onclick="deleteSchoolLocation(${l.id})" class="inline-flex items-center px-2 py-1 border border-red-300 rounded-md text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100"><i class="fas fa-trash mr-1"></i>Hapus</button></div></div>`).join('');
+          html += items.map(l => `<div class="bg-white border border-gray-200 rounded-lg p-4 mb-2"><div class="flex items-start justify-between mb-3"><div class="flex-1"><h5 class="font-medium text-gray-900">${l.location_name || 'Lokasi Pecahan'}</h5><p class="text-xs text-gray-500 mt-1">ID: ${l.id} | Radius: ${l.location_radius || 100}m</p></div><span class="px-2 py-1 text-xs font-semibold rounded-full ${l.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">${l.is_active ? 'Aktif' : 'Nonaktif'}</span></div><div class="grid grid-cols-2 gap-2 mb-3"><div class="text-xs text-gray-500">Lat: <span class="font-mono text-gray-700">${l.latitude ? parseFloat(l.latitude).toFixed(6) : '-'}</span></div><div class="text-xs text-gray-500">Lng: <span class="font-mono text-gray-700">${l.longitude ? parseFloat(l.longitude).toFixed(6) : '-'}</span></div></div><div class="flex space-x-2 pt-2 border-t border-gray-100"><button onclick="editSchoolLocation(${l.id})" class="inline-flex items-center px-2 py-1 border border-blue-300 rounded-md text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100"><i class="fas fa-edit mr-1"></i>Edit</button><button onclick="toggleLocStatus(${l.id},${l.is_active})" class="inline-flex items-center px-2 py-1 border ${l.is_active ? 'border-orange-300 text-orange-700 bg-orange-50 hover:bg-orange-100' : 'border-green-300 text-green-700 bg-green-50 hover:bg-green-100'} rounded-md text-xs font-medium"><i class="fas fa-${l.is_active ? 'pause' : 'play'} mr-1"></i>${l.is_active ? 'Nonaktifkan' : 'Aktifkan'}</button><button onclick="deleteSchoolLocation(${l.id})" class="inline-flex items-center px-2 py-1 border border-red-300 rounded-md text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100"><i class="fas fa-trash mr-1"></i>Hapus</button></div></div>`).join('');
         } else {
           html += '<div class="text-center py-4 text-gray-500 text-sm">Belum ada lokasi pecahan.</div>';
         }
@@ -809,12 +1500,12 @@ async function editTeacher(id) {
     }
 
     async function toggleLocStatus(id, cur) {
-      if (!confirm(`Yakin ${!cur?'mengaktifkan':'menonaktifkan'} lokasi ini?`)) return;
+      if (!confirm(`Yakin ${!cur ? 'mengaktifkan' : 'menonaktifkan'} lokasi ini?`)) return;
       try {
         const r = await fetch(apiUrl('/admin/tenant-locations/' + id), { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` }, body: JSON.stringify({ is_active: !cur }) });
         if (checkAuth401403(r)) return;
         const d = await r.json();
-        if (d.success) { loadSchoolLocations(); showToast(`Lokasi berhasil ${!cur?'diaktifkan':'dinonaktifkan'}`, 'success'); }
+        if (d.success) { loadSchoolLocations(); showToast(`Lokasi berhasil ${!cur ? 'diaktifkan' : 'dinonaktifkan'}`, 'success'); }
         else showToast(d.message || 'Gagal', 'error');
       } catch (e) { console.error('[TOGGLE LOC]', e); showToast('Terjadi kesalahan', 'error'); }
     }
@@ -842,33 +1533,33 @@ async function editTeacher(id) {
       // Attach submit handler setiap kali modal dibuka (karena modal ditambahkan setelah script)
       const form = document.getElementById('tenantLocationForm');
       if (form && !form.dataset.listenerAdded) {
-          form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            if (!tenantId) {
-              alert('Parameter tenant tidak ditemukan.');
-              return;
-            }
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          if (!tenantId) {
+            alert('Parameter tenant tidak ditemukan.');
+            return;
+          }
 
-            const latVal = parseFloat(document.getElementById('locationLat').value);
-            const lngVal = parseFloat(document.getElementById('locationLng').value);
+          const latVal = parseFloat(document.getElementById('locationLat').value);
+          const lngVal = parseFloat(document.getElementById('locationLng').value);
 
-            if (!document.getElementById('locationName').value) {
-              showToast('Nama lokasi wajib diisi', 'error');
-              return;
-            }
-            if (isNaN(latVal) || isNaN(lngVal)) {
-              showToast('Latitude dan Longitude wajib diisi', 'error');
-              return;
-            }
+          if (!document.getElementById('locationName').value) {
+            showToast('Nama lokasi wajib diisi', 'error');
+            return;
+          }
+          if (isNaN(latVal) || isNaN(lngVal)) {
+            showToast('Latitude dan Longitude wajib diisi', 'error');
+            return;
+          }
 
-            const formData = {
-              tenant_id: tenantId,
-              location_name: document.getElementById('locationName').value,
-              latitude: Number(latVal),
-              longitude: Number(lngVal),
-              location_radius: parseInt(document.getElementById('locationRadius').value) || 100,
-              use_central_rules: document.getElementById('tenantLocationUseCentralRules').checked
-            };
+          const formData = {
+            tenant_id: tenantId,
+            location_name: document.getElementById('locationName').value,
+            latitude: Number(latVal),
+            longitude: Number(lngVal),
+            location_radius: parseInt(document.getElementById('locationRadius').value) || 100,
+            use_central_rules: document.getElementById('tenantLocationUseCentralRules').checked
+          };
           try {
             const r = await fetch(apiUrl('/admin/tenant-locations'), {
               method: 'POST',
@@ -894,17 +1585,17 @@ async function editTeacher(id) {
       // Attach detect button listener
       const detectBtn = document.getElementById('detectLocationBtn');
       if (detectBtn && !detectBtn.dataset.listenerAdded) {
-        detectBtn.addEventListener('click', function() {
+        detectBtn.addEventListener('click', function () {
           if (!navigator.geolocation) { alert('Browser tidak mendukung geolokasi'); return; }
           const btn = this, ot = btn.innerHTML;
           btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Detecting...';
           btn.disabled = true;
 
-          navigator.geolocation.getCurrentPosition(function(pos) {
+          navigator.geolocation.getCurrentPosition(function (pos) {
             document.getElementById('locationLat').value = pos.coords.latitude.toFixed(6);
             document.getElementById('locationLng').value = pos.coords.longitude.toFixed(6);
             btn.innerHTML = ot; btn.disabled = false;
-          }, function() {
+          }, function () {
             btn.innerHTML = ot; btn.disabled = false;
           }, { enableHighAccuracy: true });
         });
@@ -1062,12 +1753,12 @@ async function editTeacher(id) {
       }
     }
 
-    document.getElementById('modalAutoDetectBtn')?.addEventListener('click', function() {
+    document.getElementById('modalAutoDetectBtn')?.addEventListener('click', function () {
       if (!navigator.geolocation) { alert('Browser tidak mendukung geolokasi'); return; }
       const btn = this, ot = btn.innerHTML;
       btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Detecting...'; btn.disabled = true;
       document.getElementById('modalLocationStatus').innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Mendapatkan koordinat GPS...';
-      navigator.geolocation.getCurrentPosition(function(pos) {
+      navigator.geolocation.getCurrentPosition(function (pos) {
         const lat = pos.coords.latitude.toFixed(6), lng = pos.coords.longitude.toFixed(6), acc = Math.round(pos.coords.accuracy);
         document.getElementById('modalLatitudeInput').value = lat;
         document.getElementById('modalLongitudeInput').value = lng;
@@ -1076,7 +1767,7 @@ async function editTeacher(id) {
         if (schoolAdminMap) { schoolAdminMap.setView([lat, lng], 16); if (schoolAdminMarker) schoolAdminMarker.setLatLng([lat, lng]); }
         else initMiniMap(lat, lng);
         btn.innerHTML = ot; btn.disabled = false;
-      }, function(err) {
+      }, function (err) {
         let msg = 'Gagal mendapatkan lokasi';
         if (err.code === 1) msg = 'Akses lokasi ditolak';
         else if (err.code === 3) msg = 'Timeout';
@@ -1102,6 +1793,109 @@ async function editTeacher(id) {
         else showToast(d.message || 'Gagal', 'error');
       } catch (err) { console.error('[LOC FORM]', err); showToast('Terjadi kesalahan', 'error'); }
       finally { sb.disabled = false; sb.innerHTML = ot; }
+    });
+
+    // ===== QR SCANNER =====
+    async function loadScannerDevices() {
+      const container = document.getElementById('scannerDevices');
+      if (!container) return;
+      container.innerHTML = '<div class="text-center py-12"><i class="fas fa-spinner fa-spin text-xl mb-2"></i><p>Memuat device scanner...</p></div>';
+      try {
+        const response = await fetch(apiUrl('/admin/scanner-devices'), { headers: { 'Authorization': `Bearer ${authToken}` } });
+        if (checkAuth401403(response)) return;
+        const data = await response.json();
+        if (data.success) {
+          container.innerHTML = data.data.map(d => `
+            <div class="bg-white border border-gray-200 rounded-lg p-4 flex justify-between items-center">
+              <div>
+                <h5 class="font-medium">${d.school_name || '-'} - ${d.device_name || d.device_id}</h5>
+                <p class="text-sm text-gray-600">Status: ${d.status || 'Aktif'} | Total Scan: ${d.total_scans || 0}</p>
+                ${d.last_scan ? `<p class="text-xs text-gray-500 mt-1">Scan Terakhir: ${new Date(d.last_scan).toLocaleString('id-ID')}</p>` : ''}
+              </div>
+            </div>
+          `).join('') || '<p class="text-center text-gray-500 py-8">Belum ada device terdaftar</p>';
+        } else {
+          container.innerHTML = '<p class="text-center text-gray-500 py-8">Gagal memuat device</p>';
+        }
+      } catch (error) {
+        console.error('[SCANNER DEVICES]', error);
+        container.innerHTML = '<p class="text-red-500 py-8">Error memuat device</p>';
+      }
+    }
+
+    // ===== SCANNER DEVICE MODAL =====
+    function showAddScannerDeviceModal() {
+      const tokenInput = document.getElementById('scannerDeviceToken');
+
+      // Generate random token (6 digit)
+      if (tokenInput) tokenInput.value = window.generateScannerToken();
+
+      document.getElementById('scannerDeviceModal').classList.add('show');
+    }
+
+    function hideScannerDeviceModal() {
+      const modal = document.getElementById('scannerDeviceModal');
+      if (modal) modal.classList.remove('show');
+    }
+
+    async function submitScannerDeviceForm() {
+      const token = document.getElementById('scannerDeviceToken').value;
+
+      const submitBtn = document.getElementById('addScannerDeviceSubmitBtn');
+      const originalText = submitBtn.innerHTML;
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Menyimpan...';
+
+      try {
+        const response = await fetch(apiUrl('/admin/scanner-devices'), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({
+            tenant_id: window.tenantId,
+            registration_token: token
+          })
+        });
+        const data = await response.json();
+        if (data.success) {
+          hideScannerDeviceModal();
+          loadScannerDevices();
+          showToast('Device scanner berhasil ditambahkan', 'success');
+        } else {
+          showToast(data.message || 'Gagal menambah device', 'error');
+        }
+      } catch (error) {
+        console.error('[ADD SCANNER DEVICE]', error);
+        showToast('Terjadi kesalahan', 'error');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalText;
+      }
+    }
+
+    // Generate random token for scanner
+    function generateScannerToken() {
+      return Math.floor(100000 + Math.random() * 900000).toString();
+    }
+
+    // Regenerate token button
+    document.getElementById('btnRegenerateScannerToken')?.addEventListener('click', function() {
+      const tokenInput = document.getElementById('scannerDeviceToken');
+      if (tokenInput) tokenInput.value = generateScannerToken();
+    });
+
+    // Copy token button
+    document.getElementById('btnCopyScannerToken')?.addEventListener('click', function() {
+      const tokenInput = document.getElementById('scannerDeviceToken');
+      if (tokenInput && tokenInput.value) {
+        navigator.clipboard.writeText(tokenInput.value).then(() => {
+          showToast('Token disalin!', 'success');
+        }).catch(() => {
+          showToast('Gagal menyalin token', 'error');
+        });
+      }
     });
 
     // ===== RULES =====
@@ -1149,13 +1943,13 @@ async function editTeacher(id) {
           const readOnly = rule.__central === true;
           const badge = readOnly ? '<span style="font-size:0.75rem;color:#92400e;margin-left:0.5rem">(Pusat - Read-only)</span>' : '';
           const actions = readOnly ? '' : `<div class="flex space-x-2"><button onclick="editRule(${rule.id})" class="text-blue-600 hover:text-blue-800 text-sm"><i class="fas fa-edit"></i></button><button onclick="deleteRule(${rule.id})" class="text-red-600 hover:text-red-800 text-sm"><i class="fas fa-trash"></i></button></div>`;
-          return `<div class="bg-white border border-gray-200 rounded-lg p-4"><div class="flex items-center justify-between"><div><h5 class="font-medium text-gray-900">${rule.tipe} - ${rule.jam_mulai} s/d ${rule.jam_selesai} ${badge}</h5><p class="text-sm text-gray-600 mt-1">${rule.status_log==='tepat_waktu'?'Tepat Waktu':'Terlambat'} ${rule.keterangan?'| '+rule.keterangan:''} ${rule.hari?'| Hari: '+rule.hari:''}</p></div>${actions}</div></div>`;
+          return `<div class="bg-white border border-gray-200 rounded-lg p-4"><div class="flex items-center justify-between"><div><h5 class="font-medium text-gray-900">${rule.tipe} - ${rule.jam_mulai} s/d ${rule.jam_selesai} ${badge}</h5><p class="text-sm text-gray-600 mt-1">${rule.status_log === 'tepat_waktu' ? 'Tepat Waktu' : 'Terlambat'} ${rule.keterangan ? '| ' + rule.keterangan : ''} ${rule.hari ? '| Hari: ' + rule.hari : ''}</p></div>${actions}</div></div>`;
         }).join('');
 
       } catch (e) { console.error('[RULES]', e); showToast('Gagal memuat aturan', 'error'); }
     }
 
-    function showAddRuleModal() { 
+    function showAddRuleModal() {
       // Check if central rules toggle is on and prevent adding local rules if needed? We allow adding local rules even if central active.
       document.getElementById('ruleModalTitle').textContent = 'Tambah Aturan';
       document.getElementById('ruleForm').reset();
@@ -1230,7 +2024,7 @@ async function editTeacher(id) {
       const selInfo = document.getElementById('teacherSelectedInfo');
       let timer = null;
 
-      input.addEventListener('input', function() {
+      input.addEventListener('input', function () {
         clearTimeout(timer);
         const q = this.value.trim().toLowerCase();
         if (q.length < 1) { resultsDiv.classList.add('hidden'); resultsDiv.innerHTML = ''; hiddenInput.value = ''; selInfo.innerHTML = ''; return; }
@@ -1245,10 +2039,10 @@ async function editTeacher(id) {
           };
           if (filtered.length === 0) { resultsDiv.innerHTML = '<div class="px-4 py-3 text-sm text-gray-500 text-center">Tidak ditemukan</div>'; resultsDiv.classList.remove('hidden'); hiddenInput.value = ''; }
           else {
-            resultsDiv.innerHTML = filtered.map(mk).map(t => `<div class="px-4 py-3 hover:bg-blue-50 cursor-pointer text-sm border-b border-gray-100 last:border-b-0" data-id="${t.id}" data-nama="${t.nama.replace(/"/g,'&quot;')}" data-wa="${t.wa}" data-jabatan="${t.jabatan.replace(/"/g,'&quot;')}" data-sekolah="${t.sekolah.replace(/"/g,'&quot;')}"><div class="font-medium text-gray-900">${t.nama}</div><div class="text-xs text-gray-500">\u{1F4F7} ${t.wa} &middot; ${t.jabatan} &middot; ${t.sekolah}</div></div>`).join('');
+            resultsDiv.innerHTML = filtered.map(mk).map(t => `<div class="px-4 py-3 hover:bg-blue-50 cursor-pointer text-sm border-b border-gray-100 last:border-b-0" data-id="${t.id}" data-nama="${t.nama.replace(/"/g, '&quot;')}" data-wa="${t.wa}" data-jabatan="${t.jabatan.replace(/"/g, '&quot;')}" data-sekolah="${t.sekolah.replace(/"/g, '&quot;')}"><div class="font-medium text-gray-900">${t.nama}</div><div class="text-xs text-gray-500">\u{1F4F7} ${t.wa} &middot; ${t.jabatan} &middot; ${t.sekolah}</div></div>`).join('');
             resultsDiv.classList.remove('hidden');
             resultsDiv.querySelectorAll('[data-id]').forEach(item => {
-              item.addEventListener('click', function() {
+              item.addEventListener('click', function () {
                 hiddenInput.value = this.dataset.id;
                 input.value = `${this.dataset.nama} (${this.dataset.wa}) - ${this.dataset.jabatan}`;
                 selInfo.innerHTML = `<span class="text-green-600">✅ Dipilih: ${this.dataset.nama}</span>`;
@@ -1259,7 +2053,7 @@ async function editTeacher(id) {
         }, 200);
       });
 
-      document.addEventListener('click', function(ev) { if (!resultsDiv.contains(ev.target) && ev.target !== input) resultsDiv.classList.add('hidden'); });
+      document.addEventListener('click', function (ev) { if (!resultsDiv.contains(ev.target) && ev.target !== input) resultsDiv.classList.add('hidden'); });
     }
 
     document.getElementById('singleWhatsAppForm').addEventListener('submit', async (e) => {
@@ -1303,8 +2097,8 @@ async function editTeacher(id) {
 
     function showToast(message, type = 'info') {
       const t = document.createElement('div');
-      t.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm text-sm ${type==='success'?'bg-green-500 text-white':type==='error'?'bg-red-500 text-white':'bg-blue-500 text-white'}`;
-      t.innerHTML = `<div class="flex items-center"><i class="fas ${type==='success'?'fa-check-circle':type==='error'?'fa-exclamation-circle':'fa-info-circle'} mr-2"></i><span>${message}</span></div>`;
+      t.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm text-sm ${type === 'success' ? 'bg-green-500 text-white' : type === 'error' ? 'bg-red-500 text-white' : 'bg-blue-500 text-white'}`;
+      t.innerHTML = `<div class="flex items-center"><i class="fas ${type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle'} mr-2"></i><span>${message}</span></div>`;
       document.body.appendChild(t);
       setTimeout(() => t.remove(), 3000);
     }
@@ -1326,6 +2120,11 @@ async function editTeacher(id) {
       const currentMonth = new Date().getMonth() + 1;
       const monthSelects = document.querySelectorAll('#schoolRecapMonthSelect');
       monthSelects.forEach(select => select.value = currentMonth);
+
+      // Fungsi untuk generate token (window scope agar bisa dipanggil dari HTML)
+      window.generateScannerToken = function() {
+        return Math.floor(100000 + Math.random() * 900000).toString();
+      };
 
       document.getElementById('schoolLogViewBtn')?.addEventListener('click', () => {
         document.getElementById('schoolLogViewSection').classList.remove('hidden');
@@ -1380,17 +2179,17 @@ async function editTeacher(id) {
       const month = document.getElementById('schoolRecapMonthSelect').value;
       const year = document.getElementById('schoolRecapYearSelect').value;
       const pdfUrl = `/api/admin/monthly-report/pdf?tenant_id=${encodeURIComponent(tenantId)}&month=${month}&year=${year}`;
-      
+
       try {
         const response = await fetch(pdfUrl, {
           headers: { 'Authorization': `Bearer ${authToken}` }
         });
-        
+
         if (!response.ok) {
           const error = await response.json().catch(() => ({ message: 'Failed to generate PDF' }));
           throw new Error(error.message || 'Failed to generate PDF');
         }
-        
+
         const blob = await response.blob();
         const url = window.URL.createObjectURL(blob);
         window.open(url, '_blank');
@@ -1401,108 +2200,177 @@ async function editTeacher(id) {
       }
     }
 
-document.addEventListener('DOMContentLoaded', () => {
-       const now = new Date();
-       setEl('currentDate', now.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }));
-       document.querySelectorAll('.nav-item').forEach(btn => btn.addEventListener('click', function() { switchTab(this.getAttribute('data-tab')); }));
-       document.querySelectorAll('.mobile-tab-btn').forEach(btn => btn.addEventListener('click', function() { switchTab(this.getAttribute('data-tab')); }));
-       loadDashboard();
-       initSchoolRecapView();
-       // Set initial active state for mobile nav
-       const initialMobileBtn = document.querySelector('.mobile-tab-btn[data-tab="dashboard"]');
-       if (initialMobileBtn) initialMobileBtn.classList.add('active');
+    document.addEventListener('DOMContentLoaded', () => {
+      const now = new Date();
+      setEl('currentDate', now.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }));
+      document.querySelectorAll('.nav-item').forEach(btn => btn.addEventListener('click', function () { switchTab(this.getAttribute('data-tab')); }));
+      document.querySelectorAll('.mobile-tab-btn').forEach(btn => btn.addEventListener('click', function () { switchTab(this.getAttribute('data-tab')); }));
+      loadDashboard();
+      initSchoolRecapView();
+      loadStudentClasses();
+      // Set initial active state for mobile nav
+      const initialMobileBtn = document.querySelector('.mobile-tab-btn[data-tab="dashboard"]');
+      if (initialMobileBtn) initialMobileBtn.classList.add('active');
 
-       // Wire central rules toggle
-       const centralToggle = document.getElementById('rulesCentralToggle');
-       if (centralToggle) {
-         centralToggle.addEventListener('change', async function() {
-           try {
-             const isChecked = this.checked;
-             const r = await fetch(apiUrl('/admin/tenants/' + tenantId), {
-               method: 'PUT',
-               headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
-               body: JSON.stringify({ use_central_rules: isChecked })
-             });
-             if (checkAuth401403(r)) return;
-             const d = await r.json();
-             if (d.success) { showToast('Pengaturan aturan pusat diperbarui', 'success'); fetchRules(); loadDashboard(); }
-             else { showToast(d.message || 'Gagal memperbarui', 'error'); }
-           } catch (err) { console.error('[CENTRAL TOGGLE]', err); showToast('Terjadi kesalahan', 'error'); }
-         });
-       }
-     });
+      // Wire central rules toggle
+      const centralToggle = document.getElementById('rulesCentralToggle');
+      if (centralToggle) {
+        centralToggle.addEventListener('change', async function () {
+          try {
+            const isChecked = this.checked;
+            const r = await fetch(apiUrl('/admin/tenants/' + tenantId), {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+              body: JSON.stringify({ use_central_rules: isChecked })
+            });
+            if (checkAuth401403(r)) return;
+            const d = await r.json();
+            if (d.success) { showToast('Pengaturan aturan pusat diperbarui', 'success'); fetchRules(); loadDashboard(); }
+            else { showToast(d.message || 'Gagal memperbarui', 'error'); }
+          } catch (err) { console.error('[CENTRAL TOGGLE]', err); showToast('Terjadi kesalahan', 'error'); }
+        });
+      }
+    });
   </script>
 
-<!-- Tenant Location Modal (disalin dari admin-dashboard.html) -->
-   <div id="tenantLocationModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center hidden">
-     <div class="main-card max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto bg-white">
-       <div class="p-6">
-         <div class="flex items-center justify-between mb-4">
-           <div class="flex items-center">
-             <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
-               <i class="fas fa-map-marker-alt text-blue-600"></i>
-             </div>
-             <h3 id="tenantLocationModalTitle" class="text-lg font-semibold text-gray-900">Tambah Lokasi</h3>
-           </div>
-           <button onclick="hideTenantLocationModal()" class="text-gray-400 hover:text-gray-600">
-             <i class="fas fa-times text-xl"></i>
-           </button>
-         </div>
+  <!-- Tenant Location Modal (disalin dari admin-dashboard.html) -->
+  <div id="tenantLocationModal"
+    class="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center hidden">
+    <div class="main-card max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto bg-white">
+      <div class="p-6">
+        <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center">
+            <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+              <i class="fas fa-map-marker-alt text-blue-600"></i>
+            </div>
+            <h3 id="tenantLocationModalTitle" class="text-lg font-semibold text-gray-900">Tambah Lokasi</h3>
+          </div>
+          <button onclick="hideTenantLocationModal()" class="text-gray-400 hover:text-gray-600">
+            <i class="fas fa-times text-xl"></i>
+          </button>
+        </div>
 
-         <form id="tenantLocationForm">
-           <input type="hidden" id="locationId">
+        <form id="tenantLocationForm">
+          <input type="hidden" id="locationId">
 
-           <div class="mb-4">
-             <label class="block text-sm font-medium text-gray-700 mb-2">Nama Lokasi</label>
-             <input type="text" id="locationName" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Contoh: Kampus Utama / Lab Komputer" required>
-           </div>
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-2">Nama Lokasi</label>
+            <input type="text" id="locationName"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="Contoh: Kampus Utama / Lab Komputer" required>
+          </div>
 
-           <div class="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
-             <div class="flex items-center justify-between mb-3">
-               <h4 class="font-medium text-blue-900">Deteksi Lokasi Otomatis</h4>
-               <button type="button" id="detectLocationBtn" class="inline-flex items-center px-3 py-2 bg-blue-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-blue-700">
-                 <i class="fas fa-crosshairs mr-2"></i>Detect Location
-               </button>
-             </div>
-             <div id="tenantLocationStatus" class="text-sm text-blue-700 mb-3">
-               <i class="fas fa-info-circle mr-1"></i>Klik tombol di atas untuk mendapatkan koordinat GPS
-             </div>
-           </div>
+          <div class="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+            <div class="flex items-center justify-between mb-3">
+              <h4 class="font-medium text-blue-900">Deteksi Lokasi Otomatis</h4>
+              <button type="button" id="detectLocationBtn"
+                class="inline-flex items-center px-3 py-2 bg-blue-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-blue-700">
+                <i class="fas fa-crosshairs mr-2"></i>Detect Location
+              </button>
+            </div>
+            <div id="tenantLocationStatus" class="text-sm text-blue-700 mb-3">
+              <i class="fas fa-info-circle mr-1"></i>Klik tombol di atas untuk mendapatkan koordinat GPS
+            </div>
+          </div>
 
-           <div class="grid grid-cols-2 gap-4 mb-4">
-             <div>
-               <label class="block text-sm font-medium text-gray-700 mb-2">Latitude</label>
-               <input type="number" step="0.000001" id="locationLat" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500" placeholder="-6.208763" required>
-             </div>
-             <div>
-               <label class="block text-sm font-medium text-gray-700 mb-2">Longitude</label>
-               <input type="number" step="0.000001" id="locationLng" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500" placeholder="106.845599" required>
-             </div>
-           </div>
+          <div class="grid grid-cols-2 gap-4 mb-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Latitude</label>
+              <input type="number" step="0.000001" id="locationLat"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                placeholder="-6.208763" required>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Longitude</label>
+              <input type="number" step="0.000001" id="locationLng"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                placeholder="106.845599" required>
+            </div>
+          </div>
 
-           <div class="mb-4">
-             <label class="block text-sm font-medium text-gray-700 mb-2">Radius (meter)</label>
-             <input type="number" id="locationRadius" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500" min="10" max="1000" value="100">
-           </div>
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-2">Radius (meter)</label>
+            <input type="number" id="locationRadius"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500" min="10"
+              max="1000" value="100">
+          </div>
 
-           <div class="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-             <label class="flex items-center cursor-pointer">
-               <span class="text-sm font-medium text-gray-700">Gunakan Aturan Pusat</span>
-               <div class="relative ml-3">
-                 <input type="checkbox" id="tenantLocationUseCentralRules" class="sr-only toggle-checkbox" onchange="updateToggleVisual(this)">
-                 <div class="w-11 h-6 bg-gray-200 rounded-full toggle-track transition-colors duration-200 pointer-events-none"></div>
-                 <div class="absolute left-0.5 top-0.5 w-5 h-5 bg-white border border-gray-300 rounded-full toggle-thumb transition-transform duration-200 pointer-events-none"></div>
-               </div>
-             </label>
-           </div>
+          <div class="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <label class="flex items-center cursor-pointer">
+              <span class="text-sm font-medium text-gray-700">Gunakan Aturan Pusat</span>
+              <div class="relative ml-3">
+                <input type="checkbox" id="tenantLocationUseCentralRules" class="sr-only toggle-checkbox"
+                  onchange="updateToggleVisual(this)">
+                <div class="w-11 h-6 bg-gray-200 rounded-full toggle-track transition-colors duration-200"></div>
+                <div
+                  class="absolute left-0.5 top-0.5 w-5 h-5 bg-white border border-gray-300 rounded-full toggle-thumb transition-transform duration-200">
+                </div>
+              </div>
+            </label>
+          </div>
 
-           <div class="flex space-x-3 pt-4 border-t border-gray-200">
-             <button type="button" onclick="hideTenantLocationModal()" class="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">Batal</button>
-             <button type="button" onclick="submitTenantLocation()" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">Simpan Lokasi</button>
-           </div>
-         </form>
-       </div>
-     </div>
-   </div>
-</body>
+          <div class="flex space-x-3 pt-4 border-t border-gray-200">
+            <button type="button" onclick="hideTenantLocationModal()"
+              class="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">Batal</button>
+            <button type="button" onclick="submitTenantLocation()"
+              class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">Simpan
+              Lokasi</button>
+          </div>
+</form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add Scanner Device Modal -->
+    <div id="scannerDeviceModal" class="modal fixed inset-0 bg-black bg-opacity-50 z-50 justify-center items-center">
+      <div class="main-card max-w-md w-full mx-4 overflow-hidden shadow-xl">
+        <div class="p-6">
+          <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center">
+              <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center mr-3">
+                <i class="fas fa-tablet-alt text-green-600"></i>
+              </div>
+              <h3 class="text-lg font-semibold text-gray-900">Tambah Scanner Device</h3>
+            </div>
+            <button type="button" onclick="hideScannerDeviceModal()" class="text-gray-400 hover:text-gray-600">
+              <i class="fas fa-times text-xl"></i>
+            </button>
+          </div>
+
+          <form id="addScannerDeviceForm">
+            <!-- Token Registrasi -->
+            <div class="mb-6 bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-200 rounded-xl p-4 shadow-sm">
+              <div class="flex justify-between items-center mb-1">
+                <label class="block text-xs font-bold text-orange-800 uppercase tracking-wider">Token Otentikasi Registrasi</label>
+                <button type="button" id="btnRegenerateScannerToken"
+                  class="text-xs text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1">
+                  <i class="fas fa-sync-alt"></i> Acak Ulang
+                </button>
+              </div>
+              <div class="flex items-center space-x-2 mt-2">
+                <input type="text" id="scannerDeviceToken"
+                  class="w-full px-3 py-2.5 border border-orange-300 bg-white rounded-lg font-mono text-center text-base font-bold text-orange-700 tracking-widest shadow-inner focus:outline-none"
+                  readonly placeholder="Token akan digenerate otomatis">
+                <button type="button" id="btnCopyScannerToken"
+                  class="px-3 py-2.5 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition active:scale-95 text-sm"
+                  title="Salin Kunci">
+                  <i class="fas fa-copy"></i>
+                </button>
+              </div>
+              <p class="text-[11px] text-orange-600/80 mt-1.5"><i class="fas fa-info-circle mr-1"></i>Simpan token ini untuk aktivasi device scanner.</p>
+            </div>
+
+            <div class="flex space-x-3 pt-4 border-t border-gray-200">
+              <button type="button" onclick="hideScannerDeviceModal()"
+                class="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">Batal</button>
+              <button type="button" onclick="submitScannerDeviceForm()"
+                id="addScannerDeviceSubmitBtn"
+                class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">Rilis Otorisasi</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </body>
+
 </html>

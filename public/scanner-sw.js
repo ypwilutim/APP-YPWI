@@ -1,12 +1,18 @@
-const CACHE_NAME = 'ypwi-scanner-v5.0';
+const CACHE_NAME = 'ypwi-scanner-v5.1';
 const ASSETS_TO_CACHE = [
-     '/scanner.html',
-     '/dashboard.html',
-     '/css/tailwind.css',
-     '/js/jsQR.js',
-     '/assets/images/icon.png',
-     'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css'
- ];
+    '/scanner.html',
+    '/dashboard.html',
+    '/css/tailwind.css',
+    '/js/jsQR.js',
+    '/assets/images/icon.png',
+    'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css'
+];
+
+// Skip caching for admin-dashboard files (prevents logout issues)
+function shouldSkipCache(request) {
+    const url = new URL(request.url);
+    return url.pathname.includes('admin-dashboard') || url.pathname.includes('admin-dashboard.js') || url.pathname.includes('admin-dashboard1.js');
+}
 
 // 1. Install Service Worker & Cache File Inti
 self.addEventListener('install', (event) => {
@@ -39,11 +45,16 @@ self.addEventListener('fetch', (event) => {
     // Abaikan request API (misal: POST ke /api/...)
     if (event.request.method !== 'GET') return;
 
+    // Skip cache for admin dashboard to prevent logout issues
+    if (shouldSkipCache(event.request)) {
+        return;
+    }
+
     event.respondWith(
         fetch(event.request)
             .then((response) => {
                 // Cek apakah response valid dan bukan chrome-extension
-                if (response && response.status === 200 && response.type === 'basic' && 
+                if (response && response.status === 200 && response.type === 'basic' &&
                     event.request.url.startsWith('http')) {
                     const responseClone = response.clone();
                     caches.open(CACHE_NAME).then((cache) => {

@@ -7,19 +7,22 @@
         {
             "src": "/assets/images/icon.png",
             "type": "image/png",
-            "sizes": "192x192",
-            "purpose": "any maskable"
+            "sizes": "192x192"
         },
         {
             "src": "/assets/images/icon.png",
             "type": "image/png",
-            "sizes": "512x512",
-            "purpose": "any maskable"
+            "sizes": "512x512"
         }
     ],
     "start_url": "/dashboard.html",
     "background_color": "#f8fafc",
     "theme_color": "#2563eb",
-    "display": "standalone",
-    "orientation": "any"
+    "display": "minimal-ui",
+    "orientation": "any",
+    "privacy_policy_url": "https://app.ypwilutim.com/privacy-policy.html",
+    "launch_handler": {
+        "client_mode": "navigate-existing"
+    },
+    "prefer_related_applications": false
 }

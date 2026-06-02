@@ -1,0 +1,80 @@
+body {
+  font-family: 'Inter', sans-serif;
+}
+
+.nav-active {
+  background-color: #3b82f6;
+  color: white;
+}
+
+.modal {
+  display: none;
+}
+
+.modal.show {
+  display: flex;
+}
+
+.chart-placeholder {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 24px;
+  font-weight: bold;
+}
+
+.skeleton-loader {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: loading 1.5s infinite;
+}
+
+@keyframes loading {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.skeleton-text {
+  height: 1.25rem;
+  border-radius: 4px;
+  margin-bottom: 0.5rem;
+}
+
+.skeleton-text-lg {
+  height: 2rem;
+  width: 60%;
+}
+
+.skeleton-text-md {
+  height: 1.5rem;
+  width: 40%;
+}
+
+.skeleton-avatar {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  margin-bottom: 0.5rem;
+}
+
+/* Toggle switch styling */
+.toggle-track {
+  cursor: pointer;
+}
+
+.toggle-track.bg-blue-600,
+.toggle-track.bg-blue-600:hover {
+  background-color: #3b82f6 !important;
+}
+
+.toggle-thumb.translate-x-5 {
+  transform: translateX(1.25rem) !important;
+}
