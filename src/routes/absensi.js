@@ -101,16 +101,16 @@ router.post('/attendance', authenticateToken, selfieUpload.single('selfie'), asy
       selfie_url, latitude, longitude, rule_id
     ]);
 
-// WhatsApp notification for scanner attendance
-     try {
-       const [teacher] = await db.query('SELECT nama, no_wa, email FROM teachers WHERE id = ?', [req.user.guru_id]);
-       const [tenant] = await db.query('SELECT nama_sekolah FROM tenants WHERE tenant_id = ?', [detected_tenant_id]);
-       
-       if (teacher && teacher.no_wa) {
-         const waktuAbsenObj = new Date(waktu_absen);
-         const tanggalSekarang = waktuAbsenObj.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-         
-         const waMessage = `*PRESENSI BERHASIL ✅*
+// Email notification for scanner attendance
+    try {
+      const [teacher] = await db.query('SELECT nama, no_wa, email FROM teachers WHERE id = ?', [req.user.guru_id]);
+      const [tenant] = await db.query('SELECT nama_sekolah FROM tenants WHERE tenant_id = ?', [detected_tenant_id]);
+      
+      if (teacher && teacher.no_wa) {
+        const waktuAbsenObj = new Date(waktu_absen);
+        const tanggalSekarang = waktuAbsenObj.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+        
+        const waMessage = `*PRESENSI BERHASIL ✅*
 
 السَّلاَمُ عَلَيْكُمْ وَرَحْمَةُ اللهِ وَبَرَكَاتُهُ
 (Assalamu'alaikum Warahmatullahi Wabarakatuh)
@@ -124,20 +124,20 @@ Alhamdulillah, data presensi *${jenis.toUpperCase()}* Anda telah tersimpan denga
 • Jam : ${waktu_scan}
 
 Terima kasih atas dedikasi dan kedisiplinan Anda. Semoga Allah SWT memberkahi setiap langkah dan tugas yang Anda kerjakan hari ini. Barakallahu fiikum. 🤲`;
-         
-         if (typeof global.sendWhatsAppMessage === 'function') {
-           await global.sendWhatsAppMessage(teacher.no_wa, waMessage);
-         }
-       }
+        
+        if (typeof global.sendWhatsAppMessage === 'function') {
+          await global.sendWhatsAppMessage(teacher.no_wa, waMessage);
+        }
+      }
 
-       // Send email notification for attendance
-       if (teacher && teacher.email) {
-         const waktuAbsenObj = new Date(waktu_absen);
-         const tanggalSekarang = waktuAbsenObj.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-         const tanggalISO = waktuAbsenObj.toISOString().split('T')[0];
-         const jamWIB = waktuAbsenObj.toLocaleTimeString('id-ID', { hour12: false }).slice(0, 5);
+      // Send email notification for attendance
+      if (teacher && teacher.email) {
+        const waktuAbsenObj = new Date(waktu_absen);
+        const tanggalSekarang = waktuAbsenObj.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+        const tanggalISO = waktuAbsenObj.toISOString().split('T')[0];
+        const jamWIB = waktuAbsenObj.toLocaleTimeString('id-ID', { hour12: false }).slice(0, 5);
 
-         const htmlMessage = `<!DOCTYPE html>
+        const htmlMessage = `<!DOCTYPE html>
 <html lang="id">
 <head>
   <meta charset="UTF-8">
@@ -169,16 +169,12 @@ Terima kasih atas dedikasi dan kedisiplinan Anda. Semoga Allah SWT memberkahi se
 </body>
 </html>`;
 
-         if (typeof global.sendEmail === 'function') {
-           await global.sendEmail(teacher.email, `Presensi ${jenis.toUpperCase()} Berhasil - YPWI Lutim`, htmlMessage);
-         }
-       }
-     } catch (waError) {
-       console.error('WA Error:', waError.message);
-     }
+        if (typeof global.sendEmail === 'function') {
+          await global.sendEmail(teacher.email, `Presensi ${jenis.toUpperCase()} Berhasil - YPWI Lutim`, htmlMessage);
+        }
       }
     } catch (waError) {
-      console.error('WA Error:', waError.message);
+      console.error('WA/Email Error:', waError.message);
     }
 
     return res.json({ success: true, message: 'Absensi berhasil' });
