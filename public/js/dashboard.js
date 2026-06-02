@@ -186,31 +186,30 @@ async function setTeacherInfo() {
                 }
 
                 // --- Logika Admin Sekolah (admin/operator/media/tu/tata usaha) ---
-                const adminRoles = ['admin', 'operator', 'media', 'tu', 'tatausaha', 'tata usaha'];
+                const adminRoles = ['admin', 'operator', 'media', 'tu', 'tatausaha', 'tatausaha'];
                 const adminUnits = assignments.filter(a => {
                     const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
                     return adminRoles.some(role => jabatan.includes(role));
                 });
 
-                // if (adminUnits.length > 0) {
-                //   if (adminUnits.length === 1) {
-                //     const unit = adminUnits[0];
-                //     htmlContent += `<a href="school-admin.html?tenant=${unit.tenant_id}" style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.3rem 0.75rem;background:#059669;color:white;border-radius:0.5rem;font-size:0.8rem;font-weight:600;text-decoration:none;margin-left:0.5rem;"><span class="fas fa-user-cog mr-1"></span> Admin ${unit.nama_sekolah}</a>`;
-                //   } else {
-                //     let dropdownOptions = '<option value="">Pilih Unit...</option>';
-                //     adminUnits.forEach(unit => {
-                //       dropdownOptions += `<option value="${unit.tenant_id}">${unit.nama_sekolah}</option>`;
-                //     });
-                //     htmlContent += `
-                //       <div style="display:inline-block;margin-left:0.5rem;">
-                //         <select id="adminUnitSelect" onchange="goToAdminUnit(this)" style="padding:0.3rem 0.5rem;border-radius:0.25rem;border:1px solid #059669;background:white;color:#059669;font-size:0.8rem;font-weight:600;cursor:pointer;">
-                //           <option value="">-- Pilih Unit --</option>
-                //           ${dropdownOptions}
-                //         </select>
-                //       </div>
-                //     `;
-                //   }
-                // }
+                if (adminUnits.length > 0) {
+                    if (adminUnits.length === 1) {
+                        const unit = adminUnits[0];
+                        htmlContent += `<a href="school-admin.html?tenant=${unit.tenant_id}" style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.3rem 0.75rem;background:#059669;color:white;border-radius:0.5rem;font-size:0.8rem;font-weight:600;text-decoration:none;margin-left:0.5rem;"><span class="fas fa-user-cog mr-1"></span> Admin ${unit.nama_sekolah || unit.tenant_id}</a>`;
+                    } else {
+                        let dropdownOptions = '<option value="">-- Pilih Unit --</option>';
+                        adminUnits.forEach(unit => {
+                            dropdownOptions += `<option value="${unit.tenant_id}">${unit.nama_sekolah || unit.tenant_id}</option>`;
+                        });
+                        htmlContent += `
+                          <div style="display:inline-block;margin-left:0.5rem;">
+                            <select id="adminUnitSelect" onchange="goToAdminUnit(this)" style="padding:0.3rem 0.5rem;border-radius:0.25rem;border:1px solid #059669;background:white;color:#059669;font-size:0.8rem;font-weight:600;cursor:pointer;">
+                              ${dropdownOptions}
+                            </select>
+                          </div>
+                        `;
+                    }
+                }
 
                 adminSection.innerHTML = htmlContent;
             }
@@ -392,11 +391,12 @@ function updateAttendanceButtonsState() {
 }
 
 function applyTimeRulesToButtons(isInsideValidZone, statusClass, statusHtml, checkInBtn, checkOutBtn, locationInfo) {
+    const permissionBtn = document.getElementById('permissionBtn');
+    if (permissionBtn) permissionBtn.style.display = 'inline-block'; // Always show permission button
+    
     if (!isInsideValidZone) {
         checkInBtn.disabled = true;
         checkOutBtn.disabled = true;
-        const permissionBtn = document.getElementById('permissionBtn');
-        if (permissionBtn) permissionBtn.style.display = 'inline-block';
         locationInfo.className = statusClass;
         locationInfo.innerHTML = '<span>❌ Di luar radius semua unit sekolah YPWI.</span>';
         return;
