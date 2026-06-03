@@ -528,9 +528,13 @@
           </div>
         </div>
 
-        <!-- Tombol Aksi Kanan (Hanya Muncul di Tampilan PC) -->
-        <div class="pc-action-header">
-          <div id="adminNavSection" class="hidden" style="margin:0;"></div>
+<!-- Tombol Aksi Kanan (Hanya Muncul di Tampilan PC) -->
+         <div class="pc-action-header">
+           <button onclick="hardRefresh()" title="Muat Ulang Halaman"
+             style="display: inline-flex; align-items: center; gap: 0.5rem; background: #f1f5f9; color: #475569; padding: 0.6rem 1rem; border-radius: 0.5rem; font-weight: 600; font-size: 0.85rem; border: 1px solid #e2e8f0; cursor: pointer; transition: all 0.2s;">
+             <i class="fas fa-sync-alt"></i> Refresh
+           </button>
+           <div id="adminNavSection" class="hidden" style="margin:0;"></div>
           <div id="desktopAdminBtn" style="display: none; margin-right: 0.5rem;">
             <button onclick="showDesktopAdminModal()"
               style="display: inline-flex; align-items: center; gap: 0.5rem; background: #dbeafe; color: #1d4ed8; padding: 0.6rem 1.25rem; border-radius: 0.5rem; font-weight: 700; font-size: 0.85rem; border: 1px solid #93c5fd; cursor: pointer; transition: all 0.2s;">
@@ -734,6 +738,10 @@
     <div style="text-align: center; color: #2563eb; cursor: pointer;">
       <i class="fas fa-fingerprint" style="font-size: 1.3rem; display: block; margin-bottom: 2px;"></i>
       <span style="font-size: 0.65rem; font-weight: 700;">Presensi</span>
+    </div>
+    <div onclick="hardRefresh();" style="text-align: center; color: #64748b; cursor: pointer; -webkit-tap-highlight-color: transparent;">
+      <i class="fas fa-sync-alt" style="font-size: 1.3rem; display: block; margin-bottom: 2px;"></i>
+      <span style="font-size: 0.65rem; font-weight: 600;">Refresh</span>
     </div>
     <div id="mobileAdminNav" style="text-align: center; color: #64748b; cursor: pointer; display: none;">
       <i class="fas fa-user-cog" style="font-size: 1.3rem; display: block; margin-bottom: 2px;"></i>

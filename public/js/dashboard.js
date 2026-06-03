@@ -1438,6 +1438,11 @@ function logout() {
     }
 }
 
+function hardRefresh() {
+    console.log('Hard refresh triggered');
+    window.location.reload(true);
+}
+
 function closeChangePasswordModal() {
     document.getElementById('changePasswordModal').classList.remove('show');
     // Clear fields
