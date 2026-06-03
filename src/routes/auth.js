@@ -133,7 +133,17 @@ router.post('/auth/login', async (req, res) => {
         teacherId: user.guru_id,
         role: user.role,
         tenant_id: user.tenant_id,
-        message: 'Profil belum lengkap. Silakan lengkapi profil Anda.'
+        message: 'Profil belum lengkap. Silakan lengkapi profil Anda.',
+        user: {
+          id: user.id,
+          username: user.username,
+          role: user.role,
+          tenant_id: user.tenant_id,
+          guru_id: user.guru_id,
+          is_profile_complete: user.is_profile_complete,
+          is_default_password: user.is_default_password,
+          assignments: tokenPayload.assignments
+        }
       });
     }
 
