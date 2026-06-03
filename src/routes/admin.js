@@ -1635,4 +1635,35 @@ router.put('/admin/leave-requests/:id/status', authenticateOperator, async (req,
   }
 });
 
+// GET /api/teacher/info - Get current teacher info (nama, foto, assignments)
+router.get('/teacher/info', authenticateToken, async (req, res) => {
+  try {
+    const [teacher] = await db.query(
+      'SELECT t.id, t.nama, t.link_foto FROM teachers t WHERE t.id = ?',
+      [req.user.guru_id]
+    );
+
+    if (!teacher) {
+      return res.status(404).json({ success: false, message: 'Guru tidak ditemukan' });
+    }
+
+    const assignments = await db.query(
+      'SELECT ta.tenant_id, ta.jabatan_di_unit, tn.nama_sekolah FROM teacher_assignments ta JOIN tenants tn ON ta.tenant_id = tn.tenant_id WHERE ta.teacher_id = ?',
+      [req.user.guru_id]
+    );
+
+    res.json({
+      success: true,
+      teacher: {
+        ...teacher,
+        assignments: assignments || []
+      },
+      assignments: assignments || []
+    });
+  } catch (error) {
+    console.error('Teacher info error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching teacher info' });
+  }
+});
+
 module.exports = router;
