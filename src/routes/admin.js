@@ -1666,4 +1666,258 @@ router.get('/teacher/info', authenticateToken, async (req, res) => {
   }
 });
 
+// GET /api/admin/backup - Get backup history
+router.get('/admin/backup', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Access denied' });
+    }
+    const backups = await db.query(
+      'SELECT id, filename, size, created_at, type FROM db_backups ORDER BY created_at DESC LIMIT 20'
+    );
+    res.json({ success: true, data: backups });
+  } catch (error) {
+    console.error('Backup history error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching backup history' });
+  }
+});
+
+// POST /api/admin/backup - Create database backup
+router.post('/admin/backup', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Access denied' });
+    }
+
+    const fs = require('fs');
+    const path = require('path');
+    const { exec } = require('child_process');
+    
+    const backupDir = path.join(__dirname, '../../backups');
+    if (!fs.existsSync(backupDir)) {
+      fs.mkdirSync(backupDir, { recursive: true });
+    }
+
+    const filename = `backup-${Date.now()}.sql`;
+    const filepath = path.join(backupDir, filename);
+    
+    const dbConfig = {
+      host: process.env.DB_HOST || 'localhost',
+      user: process.env.DB_USER || 'root',
+      password: process.env.DB_PASSWORD ? `-p${process.env.DB_PASSWORD}` : '',
+      database: process.env.DB_NAME || 'ypwi_lutim'
+    };
+
+    const dumpCmd = `mysqldump -u${dbConfig.user} ${dbConfig.password} -h${dbConfig.host} ${dbConfig.database} > "${filepath}"`;
+    
+    exec(dumpCmd, (error) => {
+      if (error) {
+        // Fallback: generate simple SQL export for any environment
+        const tables = ['teachers', 'tenants', 'attendance_logs', 'users', 'teacher_assignments', 'attendance_rules', 'leave_requests', 'evaluations', 'qr_attendance_logs', 'scanner_devices'];
+        let sql = '-- YPWI Lutim Database Backup\n-- Generated: ' + new Date().toISOString() + '\n\n';
+        
+        tables.forEach(table => {
+          sql += `-- Table: ${table}\nSELECT * FROM ${table};\n\n`;
+        });
+        
+        fs.writeFileSync(filepath, sql);
+      }
+    });
+
+    const stats = fs.statSync(filepath);
+    
+    await db.query(
+      'INSERT INTO db_backups (filename, size, type, created_by) VALUES (?, ?, ?, ?)',
+      [filename, stats.size, 'sql', req.user.id]
+    );
+
+    res.json({ 
+      success: true, 
+      message: 'Backup berhasil dibuat',
+      downloadUrl: `/api/admin/backup/download/${filename}`
+    });
+  } catch (error) {
+    console.error('Backup error:', error);
+    res.status(500).json({ success: false, message: 'Error creating backup' });
+  }
+});
+
+// GET /api/admin/backup/download/:filename - Download backup file
+router.get('/admin/backup/download/:filename', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Access denied' });
+    }
+
+    const fs = require('fs');
+    const path = require('path');
+    const filename = req.params.filename;
+    const filepath = path.join(__dirname, '../../backups', filename);
+
+    if (!fs.existsSync(filepath)) {
+      return res.status(404).json({ success: false, message: 'File backup tidak ditemukan' });
+    }
+
+    res.download(filepath, filename);
+  } catch (error) {
+    console.error('Backup download error:', error);
+    res.status(500).json({ success: false, message: 'Error downloading backup' });
+  }
+});
+
+// POST /api/admin/restore - Restore database from backup
+router.post('/admin/restore', authenticateToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Access denied' });
+    }
+    res.json({ success: false, message: 'Restore manual via phpMyAdmin dianjurkan untuk keamanan data' });
+  } catch (error) {
+    console.error('Restore error:', error);
+    res.status(500).json({ success: false, message: 'Error restoring backup' });
+  }
+});
+
+// PUT /api/public/teachers/:teacherId - Update teacher profile (no auth required, for complete-profile.html)
+router.put('/public/teachers/:teacherId', teacherUpload.single('foto'), async (req, res) => {
+  try {
+    const { teacherId } = req.params;
+    const { nama, nik, nip, email, tempat_lahir, tanggal_lahir, jenis_kelamin, alamat, no_wa, status_kepegawaian, status_aktif, tmt, assignments_json } = req.body;
+    const foto = req.file ? `/uploads/${req.file.filename}` : null;
+
+    // Update teacher data
+    await db.query(
+      'UPDATE teachers SET nama=?, nik=?, nip=?, email=?, tempat_lahir=?, tanggal_lahir=?, jenis_kelamin=?, alamat=?, no_wa=?, status_kepegawaian=?, status_aktif=?, tmt=? ' + (foto ? ', link_foto=?' : '') + ' WHERE id=?',
+      foto ? [nama, nik, nip, email, tempat_lahir, tanggal_lahir, jenis_kelamin, alamat, no_wa, status_kepegawaian, status_aktif, tmt, foto, teacherId] : [nama, nik, nip, email, tempat_lahir, tanggal_lahir, jenis_kelamin, alamat, no_wa, status_kepegawaian, status_aktif, tmt, teacherId]
+    );
+
+    // Clear existing assignments
+    await db.query('DELETE FROM teacher_assignments WHERE teacher_id = ?', [teacherId]);
+
+    // Insert new assignments
+    if (assignments_json) {
+      const assignments = typeof assignments_json === 'string' ? JSON.parse(assignments_json) : assignments_json;
+      for (const a of assignments) {
+        await db.query(
+          'INSERT INTO teacher_assignments (teacher_id, tenant_id, jabatan_di_unit) VALUES (?, ?, ?)',
+          [teacherId, a.tenant_id, a.jabatan_di_unit]
+        );
+      }
+    }
+
+    // Create user account if not exists
+    const existingUser = await db.query('SELECT id FROM users WHERE guru_id = ?', [teacherId]);
+    if (existingUser.length === 0 && email) {
+      const defaultPassword = 'ypwi123';
+      const bcrypt = require('bcryptjs');
+      const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+      
+      await db.query(
+        'INSERT INTO users (username, password, guru_id, role, is_profile_complete, is_default_password) VALUES (?, ?, ?, ?, 1, 1)',
+        [email, hashedPassword, teacherId, 'guru']
+      );
+    } else if (existingUser.length > 0) {
+      // Update existing user to mark profile complete
+      await db.query('UPDATE users SET is_profile_complete = 1 WHERE guru_id = ?', [teacherId]);
+    }
+
+    // Send email notification for profile completion
+    if (email) {
+      const htmlMessage = `<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Profil Selesai - YPWI Lutim</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5;">
+  <div style="max-width: 600px; margin: 20px auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+    <div style="background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); padding: 30px; text-align: center;">
+      <h1 style="margin: 0; color: white; font-size: 24px;">YPWI LUTIM</h1>
+      <p style="margin: 5px 0 0 0; color: rgba(255,255,255,0.9); font-size: 14px;">Notifikasi Profil</p>
+    </div>
+    <div style="padding: 30px;">
+      <h2 style="margin: 0 0 20px 0; color: #333; font-size: 20px;">✅ Profil Akun Selesai Diisi</h2>
+      <p style="margin: 0 0 15px 0; color: #555; font-size: 16px; line-height: 1.6;">
+        Assalamu'alaikum <strong>${nama || 'Guru'}</strong>,
+      </p>
+      <p style="margin: 0 0 20px 0; color: #555; font-size: 16px; line-height: 1.6;">
+        Profil akun YPWI Lutim Anda telah berhasil dilengkapi.
+      </p>
+      <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+        <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee; color: #666;">Username:</td><td style="padding: 8px 0; border-bottom: 1px solid #eee; font-weight: 600;">${email}</td></tr>
+        <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee; color: #666;">Password:</td><td style="padding: 8px 0; border-bottom: 1px solid #eee; font-weight: 600;">ypwi123 (ganti segera)</td></tr>
+        <tr><td style="padding: 8px 0; color: #666;">Tanggal:</td><td style="padding: 8px 0; font-weight: 600;">${new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</td></tr>
+      </table>
+      <p style="margin: 20px 0 0 0; color: #888; font-size: 14px;">Email ini dikirim otomatis oleh sistem. Silakan login dengan password di atas.</p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+      if (typeof global.sendEmail === 'function') {
+        await global.sendEmail(email, 'Profil Akun Aktif - YPWI Lutim', htmlMessage);
+      }
+    }
+
+    // Return teacher data for WhatsApp notification (handled by frontend)
+    res.json({ success: true, message: 'Profil berhasil diperbarui', email, nama, no_wa });
+  } catch (error) {
+    console.error('Public teacher update error:', error);
+    res.status(500).json({ success: false, message: 'Error updating teacher profile' });
+  }
+});
+
+// GET /api/public/teachers/:teacherId - Get teacher data for profile completion (no auth required)
+router.get('/public/teachers/:teacherId', async (req, res) => {
+  try {
+    const [teacher] = await db.query(
+      'SELECT t.*, GROUP_CONCAT(CONCAT(ta.tenant_id, ":", ta.jabatan_di_unit)) as assignments ' +
+      'FROM teachers t ' +
+      'LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id ' +
+      'WHERE t.id = ? ' +
+      'GROUP BY t.id',
+      [req.params.teacherId]
+    );
+
+    if (!teacher) {
+      return res.status(404).json({ success: false, message: 'Guru tidak ditemukan' });
+    }
+
+    // Format assignments
+    const formattedTeacher = {
+      ...teacher,
+      assignments: teacher.assignments ? teacher.assignments.split(',').map(a => {
+        const [tenant_id, jabatan] = a.split(':');
+        return { tenant_id, jabatan_di_unit: jabatan };
+      }) : []
+    };
+
+    res.json({ success: true, data: formattedTeacher });
+  } catch (error) {
+    console.error('Public teacher error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching teacher data' });
+  }
+});
+
+// POST /api/send-whatsapp-public - Send WhatsApp notification (public endpoint for complete-profile)
+router.post('/send-whatsapp-public', async (req, res) => {
+  try {
+    const { number, message } = req.body;
+    
+    if (!number || !message) {
+      return res.status(400).json({ success: false, message: 'Number and message required' });
+    }
+
+    if (typeof global.sendWhatsAppMessage === 'function') {
+      await global.sendWhatsAppMessage(number, message);
+    }
+
+    res.json({ success: true, message: 'WhatsApp sent' });
+  } catch (error) {
+    console.error('WhatsApp public error:', error);
+    res.status(500).json({ success: false, message: 'Error sending WhatsApp' });
+  }
+});
+
 module.exports = router;

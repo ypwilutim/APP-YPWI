@@ -50,22 +50,21 @@
           </div>
           <h1 class="text-4xl font-extrabold text-gray-950">Masuk ke Akun</h1>
           <p class="text-gray-600 mt-2 text-lg">Sistem Digital YPWI Lutim</p>
-          <p class="text-sm text-gray-500 mt-1" id="tenantText">Memuat...</p>
         </div>
 
         <div class="max-w-md mx-auto">
           <form id="loginForm" method="POST" novalidate>
             <div class="mb-5">
-              <label for="username" class="block text-sm font-semibold text-gray-700 mb-2">Username</label>
+              <label for="username" class="block text-sm font-semibold text-gray-700 mb-2">Email</label>
               <div class="relative">
                 <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <i class="fas fa-user text-gray-400"></i>
                 </div>
                 <input type="text" id="username" name="username"
                   class="w-full pl-10 pr-4 py-3 rounded-xl border-2 border-gray-200 bg-white focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition font-medium"
-                  placeholder="Masukkan username" required autocomplete="username">
+                  placeholder="Masukkan Email" required autocomplete="username">
               </div>
-              <p class="text-red-500 text-sm mt-1 hidden" id="usernameError">Username harus diisi</p>
+              <p class="text-red-500 text-sm mt-1 hidden" id="usernameError">Email harus diisi</p>
             </div>
             <div class="mb-6">
               <label for="password" class="block text-sm font-semibold text-gray-700 mb-2">Password</label>
@@ -195,18 +194,6 @@
         });
       }
 
-      // Tenant detection
-      const hostname = window.location.hostname;
-      let tenant = 'SDIT';
-      if (hostname.includes('sdit')) tenant = 'SDIT';
-      else if (hostname.includes('smpit')) tenant = 'SMPIT';
-      else if (hostname.includes('smait')) tenant = 'SMAIT';
-
-      const tenantTextElement = document.getElementById('tenantText');
-      if (tenantTextElement) {
-        tenantTextElement.textContent = `Tenant: ${tenant}`;
-      }
-
       // Login form handling
       const loginForm = document.getElementById('loginForm');
       const loginBtn = document.getElementById('loginBtn');
@@ -323,7 +310,7 @@
               e.stopPropagation();
               Swal.fire({
                 title: 'Kesalahan Sistem',
-                text: 'Terjadi kesalahan dalam memproses form. Silakan coba lagi.',
+                text: 'Periksa Email dan Kata Sandi anda dengan benar!',
                 icon: 'error',
                 confirmButtonText: 'OK',
                 confirmButtonColor: '#667eea'

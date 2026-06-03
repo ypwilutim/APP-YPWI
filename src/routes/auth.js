@@ -123,9 +123,8 @@ router.post('/auth/login', async (req, res) => {
     const token = jwt.sign(tokenPayload, SECRET_KEY, { expiresIn: '8h' });
 
     // Debug: Log what we're sending to client
-    const hasAdminAccess = user.role === 'admin' || (user.role === 'guru' && tokenPayload.assignments && tokenPayload.assignments.some(a => ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha'].includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''))));
-    console.log('[LOGIN_DEBUG] Login result:', { role: user.role, hasAdminAccess, assignmentsCount: tokenPayload.assignments?.length || 0 });
-    logToFile(`AUTH_LOGIN: user=${username}, role=${user.role}, hasAdminAccess=${hasAdminAccess}, assignmentsCount=${tokenPayload.assignments?.length || 0}`);
+    console.log('[LOGIN_DEBUG] Login result:', { role: user.role });
+    logToFile(`AUTH_LOGIN: user=${username}, role=${user.role}`);
 
     if (!isProfileComplete) {
       return res.json({
@@ -138,9 +137,12 @@ router.post('/auth/login', async (req, res) => {
       });
     }
 
+    // Simple role-based redirect: admin -> admin-dashboard, guru -> dashboard
+    const redirectPage = user.role === 'admin' ? 'admin-dashboard.html' : 'dashboard.html';
+
     return res.json({
       success: true,
-      redirect: hasAdminAccess ? 'admin-dashboard.html' : 'dashboard.html',
+      redirect: redirectPage,
       token: token,
       user: {
         id: user.id,
@@ -186,68 +188,17 @@ router.put('/profile', authenticateToken, async (req, res) => {
 router.put('/profile-complete/:teacherId', async (req, res) => {
   const { teacherId } = req.params;
 
-  try {
-    const userRows = await db.query('SELECT id, username FROM users WHERE guru_id = ?', [teacherId]);
-    if (userRows.length === 0) {
-      return res.status(404).json({ success: false, message: 'User tidak ditemukan' });
-    }
-
-    const result = await db.query('UPDATE users SET is_profile_complete = 1 WHERE guru_id = ?', [teacherId]);
+try {
+    // Endpoint ini hanya update status, email sudah dikirim di /api/public/teachers
+    await db.query('UPDATE users SET is_profile_complete = 1 WHERE guru_id = ?', [teacherId]);
     
-    // Send email notification for profile completion
-    try {
-      const [teacherData] = await db.query('SELECT nama, email FROM teachers WHERE id = ?', [teacherId]);
-      if (teacherData && teacherData.email) {
-        const htmlMessage = `<!DOCTYPE html>
-<html lang="id">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Profil Selesai - YPWI Lutim</title>
-</head>
-<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5;">
-  <div style="max-width: 600px; margin: 20px auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-    <div style="background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); padding: 30px; text-align: center;">
-      <h1 style="margin: 0; color: white; font-size: 24px;">YPWI LUTIM</h1>
-      <p style="margin: 5px 0 0 0; color: rgba(255,255,255,0.9); font-size: 14px;">Notifikasi Profil</p>
-    </div>
-    <div style="padding: 30px;">
-      <h2 style="margin: 0 0 20px 0; color: #333; font-size: 20px;">✅ Profil Akun Selesai Diisi</h2>
-      <p style="margin: 0 0 15px 0; color: #555; font-size: 16px; line-height: 1.6;">
-        Assalamu'alaikum <strong>${teacherData.nama}</strong>,
-      </p>
-      <p style="margin: 0 0 20px 0; color: #555; font-size: 16px; line-height: 1.6;">
-        Profil akun YPWI Lutim Anda telah berhasil dilengkapi.
-      </p>
-      <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-        <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee; color: #666;">Tanggal:</td><td style="padding: 8px 0; border-bottom: 1px solid #eee; font-weight: 600;">${new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</td></tr>
-        <tr><td style="padding: 8px 0; color: #666;">Status:</td><td style="padding: 8px 0; font-weight: 600; color: #066e3a;">Aktif - Siap Absensi</td></tr>
-      </table>
-      <p style="margin: 20px 0 0 0; color: #888; font-size: 14px;">Email ini dikirim otomatis oleh sistem.</p>
-    </div>
-  </div>
-</body>
-</html>`;
-
-        if (typeof global.sendEmail === 'function') {
-          await global.sendEmail(teacherData.email, 'Profil Akun Selesai - YPWI Lutim', htmlMessage);
-        }
-      }
-    } catch (emailError) {
-      console.error('[PROFILE COMPLETE EMAIL ERROR]', emailError.message);
-    }
-
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ success: false, message: 'User tidak ditemukan' });
-    }
-
     res.json({
       success: true,
-      message: 'Profil berhasil diperbarui!'
+      message: 'Status profil diperbarui'
     });
   } catch (error) {
     console.error('[PROFILE COMPLETE ERROR]', error.message);
-    res.status(500).json({ success: false, message: 'Error updating profile' });
+    res.status(500).json({ success: false, message: 'Error updating profile status' });
   }
 });
 

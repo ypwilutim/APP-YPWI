@@ -197,7 +197,8 @@
               </div>
 
               <div>
-                <label class="block text-sm font-semibold text-gray-700 mb-2">Upload Pas Foto</label>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Upload Pas Foto <span
+                    class="text-red-500">*</span></label>
                 <div class="flex items-center gap-4 bg-gray-50 border border-gray-200 p-4 rounded-2xl">
                   <div
                     class="border-2 border-dashed border-gray-300 rounded-xl p-3 text-center flex-1 hover:border-primary transition cursor-pointer"
@@ -489,6 +490,22 @@
         return;
       }
 
+      // Validate assignments
+      if (localAssignments.length === 0) {
+        Swal.fire('Error', 'Minimal satu penempatan unit sekolah harus dipilih.', 'error');
+        return;
+      }
+
+      // Validate photo - skip if existing photo exists
+      const link_foto = document.getElementById('link_foto').value;
+      const fotoInput = document.getElementById('foto');
+      const hasExistingPhoto = link_foto && document.getElementById('existing-photo-info') && !document.getElementById('existing-photo-info').classList.contains('hidden');
+
+      if (!hasExistingPhoto && (!fotoInput.files || fotoInput.files.length === 0)) {
+        Swal.fire('Error', 'Pas foto wajib diupload.', 'error');
+        return;
+      }
+
       const submitBtn = form.querySelector('button[type="submit"]');
       submitBtn.disabled = true;
       submitBtn.innerHTML = '<div class="inline-block animate-spin rounded-full h-5 w-5 border-4 border-white border-t-transparent mr-2"></div>Menyimpan...';
@@ -500,7 +517,7 @@
         formData.append('assignments_json', JSON.stringify(localAssignments));
 
         const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
-        const response = await fetch(`/api/admin/teachers/${formData.get('teacherId')}`, {
+        const response = await fetch(`/api/public/teachers/${formData.get('teacherId')}`, {
           method: 'PUT',
           headers: headers,
           body: formData
@@ -525,11 +542,11 @@
             if (noWa && nama && email) {
               const content = `Selamat! Profil Anda di Sistem YPWI Lutim telah berhasil dilengkapi.
 
-                Anda sekarang dapat login menggunakan:
-                📧 Email: ${email}
-                🔑 Password: ypwi123 (segera ganti setelah login pertama)
+Anda sekarang dapat login menggunakan:
+📧 Email: ${email}
+🔑 Password: ypwi123 (segera ganti setelah login pertama)
 
-                Silakan login dan ubah password default Anda untuk keamanan.`;
+Silakan login dan ubah password default Anda untuk keamanan.`;
 
               // Send WhatsApp in background (don't wait for response)
               fetch('/api/send-whatsapp-public', {

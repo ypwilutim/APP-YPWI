@@ -44,25 +44,171 @@ window.autoDetectLocation = autoDetectLocation;
 window.editTenantLocation = editTenantLocation;
 window.autoDetectLocationModal = autoDetectLocationModal;
 
-// Map functions (stubs for incomplete location modal feature)
+let locationMap = null;
+let locationMarker = null;
+
 window.toggleMap = function () {
   const mapContainer = document.getElementById('mapContainer');
-  if (mapContainer) {
+  const mapDiv = document.getElementById('locationMap');
+  
+  if (mapContainer && mapDiv) {
+    const isHidden = mapContainer.classList.contains('hidden');
     mapContainer.classList.toggle('hidden');
+    mapContainer.style.display = mapContainer.classList.contains('hidden') ? 'none' : 'block';
+    
+    if (isHidden && !locationMap) {
+      initLocationMap();
+    }
+    if (!mapContainer.classList.contains('hidden') && locationMap) {
+      setTimeout(() => locationMap.invalidateSize(), 100);
+    }
   }
 };
-window.centerMapOnCurrent = function () { };
-window.clearMapMarker = function () { };
-window.updateMiniMap = function (lat, lng) { };
-window.updateLocationMap = function (lat, lng) { };
+
+function initLocationMap() {
+  const mapDiv = document.getElementById('locationMap');
+  if (!mapDiv || locationMap) return;
+  
+  locationMap = L.map('locationMap').setView([-2.2166, 113.9209], 5);
+  
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap'
+  }).addTo(locationMap);
+  
+  const latInput = document.getElementById('latitudeInput');
+  const lngInput = document.getElementById('longitudeInput');
+  
+  locationMap.on('click', function(e) {
+    const lat = e.latlng.lat.toFixed(6);
+    const lng = e.latlng.lng.toFixed(6);
+    
+    if (latInput) latInput.value = lat;
+    if (lngInput) lngInput.value = lng;
+    
+    if (locationMarker) locationMap.removeLayer(locationMarker);
+    locationMarker = L.marker([lat, lng], { draggable: true }).addTo(locationMap);
+    
+    locationMarker.on('dragend', function(e) {
+      const newLat = e.target.getLatLng().lat.toFixed(6);
+      const newLng = e.target.getLatLng().lng.toFixed(6);
+      if (latInput) latInput.value = newLat;
+      if (lngInput) lngInput.value = newLng;
+      updateCoordinatePreview();
+    });
+    
+    updateCoordinatePreview();
+  });
+  
+  if (latInput && lngInput && latInput.value && lngInput.value) {
+    const lat = parseFloat(latInput.value);
+    const lng = parseFloat(lngInput.value);
+    if (!isNaN(lat) && !isNaN(lng)) {
+      locationMap.setView([lat, lng], 15);
+      locationMarker = L.marker([lat, lng], { draggable: true }).addTo(locationMap);
+      locationMarker.on('dragend', function(e) {
+        const newLat = e.target.getLatLng().lat.toFixed(6);
+        const newLng = e.target.getLatLng().lng.toFixed(6);
+        latInput.value = newLat;
+        lngInput.value = newLng;
+        updateCoordinatePreview();
+      });
+    }
+  }
+}
+
+window.centerMapOnCurrent = function () {
+  if (!locationMap) return;
+  const latInput = document.getElementById('latitudeInput');
+  const lngInput = document.getElementById('longitudeInput');
+  if (latInput && lngInput && latInput.value && lngInput.value) {
+    const lat = parseFloat(latInput.value);
+    const lng = parseFloat(lngInput.value);
+    if (!isNaN(lat) && !isNaN(lng)) {
+      locationMap.setView([lat, lng], 15);
+      if (locationMarker) locationMap.removeLayer(locationMarker);
+      locationMarker = L.marker([lat, lng], { draggable: true }).addTo(locationMap);
+    }
+  }
+};
+
+window.clearMapMarker = function () {
+  if (locationMarker && locationMap) {
+    locationMap.removeLayer(locationMarker);
+    locationMarker = null;
+  }
+  document.getElementById('latitudeInput').value = '';
+  document.getElementById('longitudeInput').value = '';
+  updateCoordinatePreview();
+};
+
+window.updateMiniMap = function (lat, lng) {
+  const miniMapDiv = document.getElementById('locationMiniMap');
+  if (!miniMapDiv || !lat || !lng) return;
+  
+  miniMapDiv.innerHTML = '';
+  
+  const miniMap = L.map('locationMiniMap', {
+    center: [lat, lng],
+    zoom: 15,
+    zoomControl: false
+  });
+  
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: ''
+  }).addTo(miniMap);
+  
+  L.marker([lat, lng]).addTo(miniMap);
+};
+
+window.updateLocationMap = function (lat, lng) {
+  if (!lat || !lng) return;
+  
+  const mapContainer = document.getElementById('mapContainer');
+  if (mapContainer) mapContainer.classList.remove('hidden');
+  
+  if (!locationMap) initLocationMap();
+  
+  const parsedLat = parseFloat(lat);
+  const parsedLng = parseFloat(lng);
+  
+  if (!isNaN(parsedLat) && !isNaN(parsedLng)) {
+    locationMap.setView([parsedLat, parsedLng], 15);
+    if (locationMarker) locationMap.removeLayer(locationMarker);
+    locationMarker = L.marker([parsedLat, parsedLng], { draggable: true }).addTo(locationMap);
+    
+    locationMarker.on('dragend', function(e) {
+      const newLat = e.target.getLatLng().lat.toFixed(6);
+      const newLng = e.target.getLatLng().lng.toFixed(6);
+      document.getElementById('latitudeInput').value = newLat;
+      document.getElementById('longitudeInput').value = newLng;
+      updateCoordinatePreview();
+    });
+  }
+};
+
 window.updateCoordinatePreview = updateCoordinatePreview;
 
-// Stub functions for map/location features
+function updateCoordinatePreview() {
+  const lat = document.getElementById('latitudeInput')?.value;
+  const lng = document.getElementById('longitudeInput')?.value;
+  const preview = document.getElementById('coordinatePreview');
+  
+  if (lat && lng) {
+    const parsedLat = parseFloat(lat).toFixed(6);
+    const parsedLng = parseFloat(lng).toFixed(6);
+    preview.innerHTML = `📍 ${parsedLat}, ${parsedLng}`;
+    document.getElementById('coordinateAccuracy')?.classList.remove('hidden');
+  } else {
+    preview.innerHTML = '<span class="text-gray-500">Belum ada koordinat dipilih</span>';
+    document.getElementById('coordinateAccuracy')?.classList.add('hidden');
+  }
+}
+
 window.copyCoordinates = function () {
   const lat = document.getElementById('latitudeInput')?.value;
   const lng = document.getElementById('longitudeInput')?.value;
   if (lat && lng) {
-    navigator.clipboard.writeText(`${lat}, ${lng}`).then(() => {
+    navigator.clipboard.writeText(`${parseFloat(lat).toFixed(6)}, ${parseFloat(lng).toFixed(6)}`).then(() => {
       showToast('Koordinat disalin!', 'success');
     });
   }
@@ -212,14 +358,10 @@ function initAllUI() {
       const setting = this.getAttribute('data-setting');
       showSettingsTab(setting);
     });
-  });
+});
 
-  // Add coordinate preview listeners
-  document.getElementById('latitudeInput')?.addEventListener('input', updateCoordinatePreview);
-  document.getElementById('longitudeInput')?.addEventListener('input', updateCoordinatePreview);
-
-  // Add modal auto-detect button listener
-  document.getElementById('detectLocationBtn')?.addEventListener('click', (event) => autoDetectLocationModal(event));
+// Add modal auto-detect button listener
+   document.getElementById('autoDetectModalBtn')?.addEventListener('click', (event) => autoDetectLocationModal(event));
 
   // Add device modal button
   document.getElementById('add-device-modal-btn')?.addEventListener('click', () => {
@@ -757,6 +899,61 @@ function refreshTenantLocations() {
 document.getElementById('latitudeInput').addEventListener('input', updateCoordinatePreview);
 document.getElementById('longitudeInput').addEventListener('input', updateCoordinatePreview);
 
+// Location form submit handler
+document.getElementById('locationForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const tenantId = document.getElementById('locationTenantIdHidden').value;
+  const latitude = document.getElementById('latitudeInput').value;
+  const longitude = document.getElementById('longitudeInput').value;
+  const location_radius = document.getElementById('locationForm').elements['location_radius']?.value;
+  const location_name = document.getElementById('locationForm').elements['location_name']?.value;
+  const use_central_rules = document.getElementById('useCentralRulesInput').checked;
+
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  const originalText = submitBtn.innerHTML;
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Menyimpan...';
+
+  try {
+    const response = await fetch(`/api/admin/tenants/${tenantId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}`
+      },
+      body: JSON.stringify({
+        latitude,
+        longitude,
+        location_radius: parseInt(location_radius) || 100,
+        location_name,
+        use_central_rules: use_central_rules ? 1 : 0
+      })
+    });
+
+    if (response.status === 401 || response.status === 403) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.replace('login.html');
+      return;
+    }
+
+    const res = await response.json();
+    if (res.success) {
+      hideLocationModal();
+      fetchTenantLocations();
+      showToast('Lokasi berhasil disimpan', 'success');
+    } else {
+      showToast('Error: ' + (res.message || 'Gagal menyimpan lokasi'), 'error');
+    }
+  } catch (error) {
+    console.error('Location form submit error:', error);
+    showToast('Terjadi kesalahan saat menyimpan lokasi', 'error');
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = originalText;
+  }
+});
+
 async function fetchTenantLocations() {
   try {
     const response = await fetch('/api/admin/tenants', {
@@ -880,7 +1077,10 @@ function showLocationModal() {
   const modal = document.getElementById('locationModal');
   if (!modal) return;
   modal.classList.remove('hidden');
-  modal.classList.add('show');  // atau 'flex' sesuai kebutuhan
+  modal.classList.add('show');
+  setTimeout(() => {
+    if (locationMap) locationMap.invalidateSize();
+  }, 100);
 }
 
 async function editTeacher(id) {
@@ -1269,13 +1469,12 @@ async function editTenantLocation(tenantId) {
       const tenant = res.data.find(t => t.tenant_id === tenantId);
       if (tenant) {
         document.getElementById('locationModalTitle').textContent = 'Edit Lokasi Sekolah';
-        const form = document.getElementById('locationForm');
         document.getElementById('locationTenantIdHidden').value = tenant.tenant_id;
         document.getElementById('locationNamaSekolah').value = tenant.nama_sekolah;
-        form.latitude.value = tenant.latitude || '';
-        form.longitude.value = tenant.longitude || '';
-        form.location_radius.value = tenant.location_radius || 100;
-        form.location_name.value = tenant.location_name || '';
+        document.getElementById('latitudeInput').value = tenant.latitude || '';
+        document.getElementById('longitudeInput').value = tenant.longitude || '';
+        document.getElementById('locationForm').elements['location_radius'].value = tenant.location_radius || 100;
+        document.getElementById('locationForm').elements['location_name'].value = tenant.location_name || '';
         // Set toggle for use_central_rules
         const useCentralRulesCheckbox = document.getElementById('useCentralRulesInput');
         useCentralRulesCheckbox.checked = tenant.use_central_rules === true;
@@ -1406,18 +1605,6 @@ async function autoDetectLocationModal(event) {
   } finally {
     button.innerHTML = originalText;
     button.disabled = false;
-  }
-}
-
-function updateCoordinatePreview() {
-  const lat = document.getElementById('latitudeInput').value;
-  const lng = document.getElementById('longitudeInput').value;
-  const preview = document.getElementById('coordinatePreview');
-
-  if (lat && lng) {
-    preview.innerHTML = `📍 ${parseFloat(lat).toFixed(6)}, ${parseFloat(lng).toFixed(6)}`;
-  } else {
-    preview.innerHTML = '';
   }
 }
 
@@ -2043,3 +2230,87 @@ window.filterTenantLocations = function () {
     card.style.display = text.includes(search) ? '' : 'none';
   });
 };
+
+// Backup/Restore Functions
+window.createBackup = async function () {
+  const format = document.getElementById('backupFormat').value;
+  const btn = event.target;
+  const originalText = btn.innerHTML;
+  
+  btn.innerHTML = '<i class="fas fa-spinner spinner mr-2"></i> Membuat backup...';
+  btn.disabled = true;
+  
+  try {
+    const response = await fetch('/api/admin/backup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    
+    const data = await response.json();
+    if (data.success) {
+      let downloadUrl = data.downloadUrl;
+      window.location.href = downloadUrl;
+      loadBackupHistory();
+      alert('Backup berhasil dibuat dan diunduh!');
+    } else {
+      alert('Error: ' + data.message);
+    }
+  } catch (error) {
+    alert('Terjadi kesalahan: ' + error.message);
+  } finally {
+    btn.innerHTML = originalText;
+    btn.disabled = false;
+  }
+};
+
+window.restoreDatabase = function () {
+  const fileInput = document.getElementById('restoreFile');
+  if (!fileInput.files[0]) {
+    alert('Pilih file backup terlebih dahulu');
+    return;
+  }
+  
+  if (!confirm('PERINGATAN: Restore akan menimpa data yang ada! Lanjutkan?')) {
+    return;
+  }
+  
+  alert('Restore manual via phpMyAdmin dianjurkan untuk keamanan data');
+};
+
+window.loadBackupHistory = async function () {
+  try {
+    const response = await fetch('/api/admin/backup');
+    const data = await response.json();
+    
+    const historyEl = document.getElementById('backupHistory');
+    if (data.success && data.data.length > 0) {
+      historyEl.innerHTML = data.data.map(backup => `
+        <div class="flex items-center justify-between p-3 bg-white rounded-lg border">
+          <div>
+            <p class="font-medium text-gray-900">${backup.filename}</p>
+            <p class="text-sm text-gray-500">${new Date(backup.created_at).toLocaleDateString('id-ID')} - ${(backup.size / 1024).toFixed(2)} KB</p>
+          </div>
+          <a href="/api/admin/backup/download/${backup.filename}" 
+             class="text-blue-600 hover:text-blue-800 text-sm font-medium">
+            <i class="fas fa-download mr-1"></i>Download
+          </a>
+        </div>
+      `).join('');
+    } else {
+      historyEl.innerHTML = '<p class="text-center text-gray-500 py-8">Belum ada riwayat backup</p>';
+    }
+  } catch (error) {
+    document.getElementById('backupHistory').innerHTML = '<p class="text-red-500">Error memuat riwayat</p>';
+  }
+};
+
+// Listen for restore file selection
+document.addEventListener('DOMContentLoaded', function () {
+  const restoreFile = document.getElementById('restoreFile');
+  if (restoreFile) {
+    restoreFile.addEventListener('change', function () {
+      const fileName = this.files[0] ? this.files[0].name : 'Pilih file backup';
+      document.getElementById('restoreFileName').textContent = fileName;
+    });
+  }
+});
