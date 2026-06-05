@@ -875,7 +875,7 @@ router.get('/admin/summary', authenticateOperator, async (req, res) => {
       FROM attendance_logs a
       JOIN teachers t ON a.teacher_id = t.id
       JOIN teacher_assignments ta ON t.id = ta.teacher_id
-      WHERE DATE(a.waktu_scan) = CURDATE() ${tenantId ? 'AND (a.tenant_id = ? OR a.dinas_luar = 1)' : ''}
+      WHERE DATE(COALESCE(a.waktu_absen, a.waktu_scan)) = UTC_DATE() ${tenantId ? 'AND (a.tenant_id = ? OR a.dinas_luar = 1)' : ''}
     `;
     let activeParams = [];
     if (tenantId) {
@@ -888,7 +888,7 @@ router.get('/admin/summary', authenticateOperator, async (req, res) => {
       FROM attendance_logs a
       JOIN teachers t ON a.teacher_id = t.id
       JOIN teacher_assignments ta ON t.id = ta.teacher_id
-      WHERE DATE(a.waktu_scan) = CURDATE() AND a.status = 'terlambat' ${tenantId ? 'AND (a.tenant_id = ? OR a.dinas_luar = 1)' : ''}
+      WHERE DATE(COALESCE(a.waktu_absen, a.waktu_scan)) = UTC_DATE() AND a.status = 'terlambat' ${tenantId ? 'AND (a.tenant_id = ? OR a.dinas_luar = 1)' : ''}
     `;
     let lateParams = [];
     if (tenantId) {

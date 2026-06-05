@@ -16,8 +16,12 @@
         }
     ],
     "start_url": "/dashboard.html",
+    "scope": "/dashboard.html",
     "background_color": "#f8fafc",
     "theme_color": "#2563eb",
-    "display": "minimal-ui",
-    "orientation": "any"
+    "display": "standalone",
+    "orientation": "any",
+    "launch_handler": {
+        "client_mode": "navigate-existing"
+    }
 }

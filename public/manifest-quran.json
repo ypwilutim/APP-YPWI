@@ -1,0 +1,17 @@
+{
+  "name": "Mushaf Digital - Al-Quran",
+  "short_name": "Mushaf",
+  "id": "mushaf-digital",
+  "start_url": "quran-reader.html",
+  "scope": "/quran-reader.html",
+  "display": "standalone",
+  "background_color": "#fdf6e3",
+  "theme_color": "#8b6f47",
+  "icons": [
+    {
+      "src": "assets/images/icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}

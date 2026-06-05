@@ -12,8 +12,11 @@
         }
     ],
     "start_url": "/scanner.html",
-    "scope": "/",
+    "scope": "/scanner.html",
     "background_color": "#1f2937",
     "theme_color": "#1f2937",
-    "display": "standalone"
+    "display": "standalone",
+    "launch_handler": {
+        "client_mode": "navigate-existing"
+    }
 }

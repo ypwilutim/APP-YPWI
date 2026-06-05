@@ -261,7 +261,7 @@ function updateLocationDisplay(success, message) {
 function getLocationErrorMessage(error) {
     switch (error.code) {
         case error.PERMISSION_DENIED:
-            return 'Akses lokasi ditolak. Izinkan akses lokasi untuk melanjutkan.';
+            return 'Akses lokasi ditolak. Izinkan akses lokasi untuk melanjutnya.';
         case error.POSITION_UNAVAILABLE:
             return 'Lokasi tidak tersedia. Pastikan GPS aktif.';
         case error.TIMEOUT:
@@ -269,6 +269,28 @@ function getLocationErrorMessage(error) {
         default:
             return 'Error mendapatkan lokasi: ' + error.message;
     }
+}
+
+// Helper: Pengecekan hari absen (format: senin / senin,selasa / senin-rabu)
+function isDayMatch(ruleHari, currentDay) {
+    if (!ruleHari || ruleHari.trim() === '') return true;
+
+    const rule = ruleHari.toLowerCase().trim();
+    const day = currentDay.toLowerCase().trim();
+
+    if (rule.includes('-')) {
+        const [start, end] = rule.split('-').map(d => d.trim());
+        const days = ['minggu', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
+        const startIdx = days.indexOf(start);
+        const endIdx = days.indexOf(end);
+        const currentIdx = days.indexOf(day);
+
+        if (startIdx === -1 || endIdx === -1 || currentIdx === -1) return false;
+        return currentIdx >= startIdx && currentIdx <= endIdx;
+    }
+
+    const ruleDays = rule.split(',').map(d => d.trim());
+    return ruleDays.includes(day);
 }
 
 function togglePassword(inputId) {
@@ -313,8 +335,7 @@ document.addEventListener('click', function (e) {
 });
 
 function enableAttendanceButtons() {
-    // Don't enable buttons automatically - wait for radius validation
-    updateAttendanceButtonsState();
+    // Tidak dipakai lagi - sudah digantikan loadRecentAttendance
 }
 
 function getCurrentAttendancePeriod() {
@@ -423,7 +444,10 @@ function updateAttendanceButtonsState() {
 function applyTimeRulesToButtons(isInsideValidZone, statusClass, statusHtml, checkInBtn, checkOutBtn, locationInfo) {
     const permissionBtn = document.getElementById('permissionBtn');
     if (permissionBtn) permissionBtn.style.display = 'inline-block'; // Always show permission button
-    
+
+    // Check if user has already checked in today (from attendance history)
+    const hasCheckedInToday = window.hasCheckedInToday === true;
+
     if (!isInsideValidZone) {
         checkInBtn.disabled = true;
         checkOutBtn.disabled = true;
@@ -434,8 +458,11 @@ function applyTimeRulesToButtons(isInsideValidZone, statusClass, statusHtml, che
 
     if (window.currentAttendanceRules && window.currentAttendanceRules.length > 0) {
         const sekarang = new Date();
-        const opsiWaktu = { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false };
-        const jamSekarangString = sekarang.toLocaleTimeString('en-US', opsiWaktu);
+        const currentMinutes = sekarang.getHours() * 60 + sekarang.getMinutes();
+
+        // Dapatkan hari lokal WITA
+        const dayNames = ['minggu', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
+        const currentDay = dayNames[sekarang.getDay()];
 
         let bolehCheckIn = false;
         let bolehCheckOut = false;
@@ -443,32 +470,42 @@ function applyTimeRulesToButtons(isInsideValidZone, statusClass, statusHtml, che
         let nextRule = null;
         let nextRuleDiff = Infinity;
 
-        console.log('[DEBUG_RULE] Jam sekarang:', jamSekarangString);
+        console.log('[DEBUG_RULE] Menit sekarang:', currentMinutes, 'Hari:', currentDay);
 
         window.currentAttendanceRules.forEach(rule => {
             const tipeRule = (rule.tipe || '').toLowerCase().trim();
             const mulai = rule.jam_mulai;
             const selesai = rule.jam_selesai;
 
-            if (jamSekarangString >= mulai && jamSekarangString <= selesai) {
+            // CEK HARI TERLEBIH DAHULU
+            if (!isDayMatch(rule.hari, currentDay)) {
+                return; // Skip jika bukan hari yang diatur
+            }
+
+            const [mulaiH, mulaiM] = (mulai || '00:00').split(':').map(n => parseInt(n) || 0);
+            const [selesaiH, selesaiM] = (selesai || '00:00').split(':').map(n => parseInt(n) || 0);
+            const mulaiMenit = mulaiH * 60 + mulaiM;
+            const selesaiMenit = selesaiH * 60 + selesaiM;
+
+            if (currentMinutes >= mulaiMenit && currentMinutes <= selesaiMenit) {
                 console.log(`[DEBUG_RULE] Cocok dengan Rule ID ${rule.id}: ${rule.tipe} (${mulai} - ${selesai})`);
 
                 if (tipeRule === 'datang') {
-                    bolehCheckIn = true;
+                    if (!hasCheckedInToday) {
+                        bolehCheckIn = true;
+                    }
                     statusSesiAktif = rule.status_log || 'Tepat Waktu';
                 }
                 if (tipeRule === 'pulang') {
-                    bolehCheckOut = true;
+                    if (hasCheckedInToday) {
+                        bolehCheckOut = true;
+                    }
                     statusSesiAktif = rule.status_log || 'Pulang';
                 }
+
             } else {
-                const ruleStartDate = new Date(`2000-01-01T${mulai}`);
-                const currentTimeForCalc = new Date(`2000-01-01T${jamSekarangString}`);
-                let diffMs = ruleStartDate - currentTimeForCalc;
-                if (diffMs < 0) {
-                    ruleStartDate.setDate(ruleStartDate.getDate() + 1);
-                    diffMs = ruleStartDate - currentTimeForCalc;
-                }
+                const diffMenit = mulaiMenit - currentMinutes;
+                const diffMs = diffMenit * 60 * 1000;
                 if (diffMs < nextRuleDiff && diffMs > 0) {
                     nextRuleDiff = diffMs;
                     nextRule = rule;
@@ -489,9 +526,11 @@ function applyTimeRulesToButtons(isInsideValidZone, statusClass, statusHtml, che
                 const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
                 const seconds = String(totalSeconds % 60).padStart(2, '0');
                 const ruleLabel = (nextRule.tipe || '').toLowerCase().includes('datang') ? 'Absen Datang' : 'Absen Pulang';
+                const jamSekarangFormatted = String(sekarang.getHours()).padStart(2, '0') + ':' + String(sekarang.getMinutes()).padStart(2, '0');
                 infoTambahanAturan = `<br><small>⏳ Sesi berikutnya (${ruleLabel}) akan dibuka dalam: ${hours}:${minutes}:${seconds}</small>`;
             } else {
-                infoTambahanAturan = `<br><small>🕒 Sesi absen belum dibuka / sudah ditutup (Jam sekarang: ${jamSekarangString})</small>`;
+                const jamSekarangFormatted = String(sekarang.getHours()).padStart(2, '0') + ':' + String(sekarang.getMinutes()).padStart(2, '0');
+                infoTambahanAturan = `<br><small>🕒 Sesi absen belum dibuka / sudah ditutup (Jam sekarang: ${jamSekarangFormatted})</small>`;
             }
         } else {
             infoTambahanAturan = `<br><small>🕒 Sesi aktif: <b>${bolehCheckIn ? 'Absen Datang' : 'Absen Pulang'}</b> (${statusSesiAktif})</small>`;
@@ -510,23 +549,24 @@ function applyTimeRulesToButtons(isInsideValidZone, statusClass, statusHtml, che
 }
 
 // ==========================================
-// FUNGSI VALIDASI RADIUS GEOFENCING (FIXED — cek semua lokasi dari DB)
+// FUNGSI VALIDASI RADIUS GEOFENCING
+// Prioritas: tenant_id guru dulu, lalu dinas luar
 // ==========================================
 async function validateLocationRadius(userLat, userLng) {
     try {
         // ======================================================
-        // TAHAP 1: Cek SEMUA sekolah yang di-assign ke user, urutkan berdasarkan jarak
+        // TAHAP 1: Prioritaskan TENANT_ID GURU (walaupun ada sekolah lain yang lebih dekat)
         // ======================================================
         if (!window.userAssignments || window.userAssignments.length === 0) {
             console.log('[VALIDATE_RADIUS] Tidak ada unit assigned');
         } else {
-            const assignmentResults = [];
-            
-            for (let i = 0; i < window.userAssignments.length; i++) {
-                const assignment = window.userAssignments[i];
-                const tenantId = encodeURIComponent(assignment.tenant_id);
+            const userHomeTenantIds = window.userAssignments.map(a => a.tenant_id);
+            const acc = (currentLocation && currentLocation.accuracy) ? currentLocation.accuracy : 0;
 
-                const res = await fetch('/api/tenants/' + tenantId, {
+            // Cek dulu apakah guru berada di lokasi tenant_id yang ditugaskan
+            for (const assignment of window.userAssignments) {
+                const tenantId = assignment.tenant_id;
+                const res = await fetch('/api/tenants/' + encodeURIComponent(tenantId), {
                     headers: { 'Authorization': 'Bearer ' + token }
                 });
 
@@ -539,38 +579,35 @@ async function validateLocationRadius(userLat, userLng) {
                 const tLng = parseFloat(data.tenant.longitude);
                 const dist = calculateDistance(userLat, userLng, tLat, tLng) * 1000;
                 const rad = data.tenant.location_radius || 200;
-                const acc = (currentLocation && currentLocation.accuracy) ? currentLocation.accuracy : 0;
                 const eff = dist + (acc * 0.3);
 
-                console.log('[VALIDATE_RADIUS] Check', data.tenant.nama_sekolah, 'dist:', dist.toFixed(0), 'rad:', rad, 'eff:', eff.toFixed(0));
+                console.log('[VALIDATE_RADIUS] Home tenant check:', data.tenant.nama_sekolah, 'dist:', dist.toFixed(0), 'rad:', rad, 'eff:', eff.toFixed(0));
 
+                // JIKA GURU BERADA DI TENANT_ID YANG DITUGASKAN -> PAKSA GUNAKAN INI
                 if (eff <= rad) {
-                    assignmentResults.push({
+                    console.log('[VALIDATE_RADIUS] Guru berada di tenant_id yang ditugaskan:', tenantId);
+                    window.currentNearestTenantId = tenantId;
+                    window.lastDistanceResult = dist;
+                    window.isHomeUnit = true;
+                    window.homeUnitLocked = true; // Kunci 1 menit
+                    setTimeout(() => { window.homeUnitLocked = false; }, 60000); // Unlock setelah 1 menit
+                    return {
                         withinRadius: true,
                         distance: dist,
                         radius: rad,
                         schoolName: data.tenant.nama_sekolah,
-                        tenant_id: data.tenant.tenant_id
-                    });
+                        tenant_id: tenantId,
+                        isHomeUnit: true,
+                        isDinasLuarCandidate: false
+                    };
                 }
-            }
-
-            // Pilih assignment yang paling dekat
-            if (assignmentResults.length > 0) {
-                assignmentResults.sort((a, b) => a.distance - b.distance);
-                const closest = assignmentResults[0];
-                console.log('[VALIDATE_RADIUS] Closest assignment:', closest);
-                window.currentNearestTenantId = closest.tenant_id;
-                window.lastDistanceResult = closest.distance;
-                return { ...closest, isHomeUnit: true, isDinasLuarCandidate: false };
             }
         }
 
         // ======================================================
-        // TAHAP 2: Jika tidak ada sekolah assigned yang dalam radius,
-        //           cek SEMUA lokasi di database (tenants + tenant_locations)
+        // TAHAP 2: Jika guru tidak berada di tenant_idnya, cek SEMUA lokasi di database (dinas luar)
         // ======================================================
-        console.log('[VALIDATE_RADIUS] Tidak dalam sekolah assigned, cek semua lokasi...');
+        console.log('[VALIDATE_RADIUS] Guru tidak berada di tenant_idnya, cek semua lokasi...');
 
         const allUnitsRes = await fetch('/api/units/all', {
             headers: { 'Authorization': 'Bearer ' + token }
@@ -579,13 +616,9 @@ async function validateLocationRadius(userLat, userLng) {
         if (allUnitsRes.ok) {
             const allUnitsData = await allUnitsRes.json();
             if (allUnitsData.success && allUnitsData.units && allUnitsData.units.length > 0) {
-                const userHomeTenantNorm = normalizeTenantId(
-                    window.userAssignments?.[0]?.tenant_id || ''
-                );
-                const acc = (currentLocation && currentLocation.accuracy) ? currentLocation.accuracy : 0;
                 const userHomeTenantIds = window.userAssignments?.map(a => a.tenant_id) || [];
+                const acc = (currentLocation && currentLocation.accuracy) ? currentLocation.accuracy : 0;
 
-                // Kumpulkan semua unit dalam radius
                 const unitsInRadius = [];
                 for (const unit of allUnitsData.units) {
                     if (!unit.latitude || !unit.longitude) continue;
@@ -601,9 +634,7 @@ async function validateLocationRadius(userLat, userLng) {
                     console.log('[VALIDATE_RADIUS] Cek lokasi lain:', unit.nama_sekolah, 'dist:', dist.toFixed(0), 'rad:', rad, 'eff:', eff.toFixed(0));
 
                     if (eff <= rad) {
-                        const detectedTenantNorm = normalizeTenantId(unit.tenant_id);
                         const isHomeUnit = userHomeTenantIds.includes(unit.tenant_id);
-                        
                         unitsInRadius.push({
                             withinRadius: true,
                             distance: dist,
@@ -621,20 +652,13 @@ async function validateLocationRadius(userLat, userLng) {
                     }
                 }
 
-                // Urutkan berdasarkan jarak, prioritaskan home unit
                 if (unitsInRadius.length > 0) {
-                    unitsInRadius.sort((a, b) => {
-                        // Prioritas 1: Home unit (isHomeUnit: true lebih dulu)
-                        if (a.isHomeUnit && !b.isHomeUnit) return -1;
-                        if (!a.isHomeUnit && b.isHomeUnit) return 1;
-                        // Prioritas 2: Jarak terdekat
-                        return a.distance - b.distance;
-                    });
-                    
+                    unitsInRadius.sort((a, b) => a.distance - b.distance);
+
                     const closest = unitsInRadius[0];
                     console.log('[VALIDATE_RADIUS] Selected location:', closest.schoolName,
                         closest.isHomeUnit ? '(home unit)' : '(dinas luar)');
-                    
+
                     window.currentNearestTenantId = closest.tenant_id;
                     window.lastDistanceResult = closest.distance;
                     return closest;
@@ -645,6 +669,7 @@ async function validateLocationRadius(userLat, userLng) {
         console.log('[VALIDATE_RADIUS] Not within any location in database');
         return {
             withinRadius: false,
+            isDinasLuarAllowed: true, // Allow dinas luar (user can apply permission instead)
             distance: 0,
             radius: 0,
             schoolName: 'Tidak dalam lokasi manapun'
@@ -653,7 +678,8 @@ async function validateLocationRadius(userLat, userLng) {
     } catch (error) {
         console.error('Error validating radius:', error);
         return {
-            withinRadius: false,
+            withinRadius: true, // Allow fallback to dinas luar
+            isDinasLuarAllowed: true,
             distance: 0,
             radius: 0,
             schoolName: 'Error validasi'
@@ -775,8 +801,8 @@ function requestLocationPermission() {
                 });
 
                 await waitForAssignments;
-                loadAttendanceRules(currentLocation.latitude, currentLocation.longitude);
-                updateAttendanceButtonsState();
+                await loadAttendanceRules(currentLocation.latitude, currentLocation.longitude);
+                await loadRecentAttendance(); // Sudah termasuk updateAttendanceButtonsState
                 await detectNearbyUnits(position.coords.latitude, position.coords.longitude);
                 startLocationWatcher();
 
@@ -784,8 +810,21 @@ function requestLocationPermission() {
             function (error) {
                 console.error('Location error:', error);
                 updateLocationDisplay(false, getLocationErrorMessage(error));
-                loadAttendanceRules(); // Fallback: load rules tanpa lokasi
-                updateAttendanceButtonsState();
+                // Tunggu userAssignments terisi dulu baru panggil
+                const waitForAssignments = new Promise(resolve => {
+                    if (window.userAssignments?.length) return resolve();
+                    const check = setInterval(() => {
+                        if (window.userAssignments?.length) {
+                            clearInterval(check);
+                            resolve();
+                        }
+                    }, 100);
+                    setTimeout(() => { clearInterval(check); resolve(); }, 3000);
+                });
+waitForAssignments.then(async () => {
+                     await loadAttendanceRules();
+                     await loadRecentAttendance();
+                 });
             },
             {
                 enableHighAccuracy: true,
@@ -795,8 +834,11 @@ function requestLocationPermission() {
         );
     } else {
         updateLocationDisplay(false, 'Geolokasi tidak didukung oleh browser ini.');
-        loadAttendanceRules(); // Fallback: load rules tanpa lokasi
-        updateAttendanceButtonsState();
+        // Tunggu userAssignments terisi dulu baru panggil loadRecentAttendance
+        setTimeout(() => {
+            loadAttendanceRules();
+            loadRecentAttendance();
+        }, 100);
     }
 }
 
@@ -824,8 +866,9 @@ function startLocationWatcher() {
                 console.log('Location changed, updating status...');
                 currentLocation = newLocation;
                 updateLocationDisplay(true, `Lokasi diperbarui (${Math.round(position.coords.accuracy)}m akurasi)`);
-                loadAttendanceRules(newLocation.latitude, newLocation.longitude);
-                loadRecentAttendance().then(() => updateAttendanceButtonsState());
+                loadAttendanceRules(newLocation.latitude, newLocation.longitude).then(() => {
+                    loadRecentAttendance();
+                });
             }
         },
         function (error) {
@@ -851,10 +894,10 @@ async function recordAttendance(jenis) {
     if (checkOutBtn) { checkOutBtn.disabled = true; checkOutBtn.style.opacity = '0.6'; }
 
     const radiusCheck = await validateLocationRadius(currentLocation.latitude, currentLocation.longitude);
-    if (!radiusCheck.withinRadius) {
+    if (!radiusCheck.withinRadius && !radiusCheck.isDinasLuarAllowed) {
         if (checkInBtn) { checkInBtn.disabled = false; checkInBtn.style.opacity = ''; }
         if (checkOutBtn) { checkOutBtn.disabled = false; checkOutBtn.style.opacity = ''; }
-        alert(`Anda di luar radius: ${radiusCheck.schoolName}`);
+        alert(`Anda di luar radius: ${radiusCheck.schoolName}. Pilih "Ajukan Izin" untuk absen dinas luar.`);
         return;
     }
 
@@ -869,7 +912,7 @@ async function recordAttendance(jenis) {
     const matchedRule = window.currentAttendanceRules.find(r => {
         const [h1, m1] = r.jam_mulai.split(':');
         const [h2, m2] = r.jam_selesai.split(':');
-        return currentMin >= (h1 * 60 + +m1) && currentMin < (h2 * 60 + +m2) && r.tipe.toLowerCase() === (jenis === 'masuk' ? 'datang' : 'pulang');
+        return currentMin >= (h1 * 60 + +m1) && currentMin <= (h2 * 60 + +m2) && r.tipe.toLowerCase() === (jenis === 'masuk' ? 'datang' : 'pulang');
     });
 
     if (!matchedRule) {
@@ -885,6 +928,7 @@ async function recordAttendance(jenis) {
     formData.append('latitude', currentLocation.latitude);
     formData.append('longitude', currentLocation.longitude);
     formData.append('waktu_absen', now.toISOString());
+    formData.append('client_timezone', Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Makassar');
     const y = now.getFullYear();
     const m = String(now.getMonth() + 1).padStart(2, '0');
     const d = String(now.getDate()).padStart(2, '0');
@@ -938,9 +982,6 @@ async function recordAttendance(jenis) {
         await new Promise(r => setTimeout(r, 500));
         await loadRecentAttendance();
         loadTodaySummary();
-
-        // Update button disabled state based on time rules
-        updateAttendanceButtonsState();
 
         requestAnimationFrame(async () => {
             if (result.success) {
@@ -1073,7 +1114,7 @@ async function checkActiveLeave() {
         const today = new Date().toISOString().split('T')[0];
         const now = new Date();
         const currentHour = now.getHours();
-        
+
         const response = await fetch('/api/leave-requests?status=approved', {
             headers: { 'Authorization': 'Bearer ' + (window.token || localStorage.getItem('token')) }
         });
@@ -1084,7 +1125,7 @@ async function checkActiveLeave() {
                 const activeLeave = result.data.find(leave => {
                     return leave.tanggal_mulai <= today && leave.tanggal_selesai >= today;
                 });
-                
+
                 const permissionBtn = document.getElementById('permissionBtn');
                 if (permissionBtn) {
                     if (activeLeave) {
@@ -1157,7 +1198,7 @@ async function loadAttendanceRules(lat, lng) {
         if (lat && lng) {
             url += `?lat=${lat}&lng=${lng}`;
         }
-        
+
         const response = await fetch(url, {
             headers: { 'Authorization': 'Bearer ' + (window.token || localStorage.getItem('token')) }
         });
@@ -1266,9 +1307,6 @@ async function loadRecentAttendance() {
                 // Check if user is multi-tenant
                 const isMultiTenant = window.userAssignments && window.userAssignments.length > 1;
 
-                const todayLocal = new Date();
-                const localDateStr = todayLocal.getFullYear() + '-' + String(todayLocal.getMonth() + 1).padStart(2, '0') + '-' + String(todayLocal.getDate()).padStart(2, '0');
-
                 // 1. Render data ke dalam HTML riwayat - SEMUA log tampil (termasuk unit lain)
                 const activeTenantId = window.currentNearestTenantId || window.userAssignments?.[0]?.tenant_id;
                 // Render semua log yang diterima, dikelompokkan per bulan. Tampilkan 3 item visible, sisanya bisa di-scroll
@@ -1335,11 +1373,21 @@ async function loadRecentAttendance() {
                 // 2. SINKRONISASI TOTAL & JAM DARI DATA PALING BARU
                 if (totalBox) totalBox.innerText = data.data.length;
 
-                // Filter log terbaru untuk unit yang aktif (multi-tenant support)
+// Filter log terbaru untuk unit yang aktif (multi-tenant support)
                 // Setiap unit harus absen terpisah - tidak boleh terpengaruh log unit lain
+                // Gunakan WITA (Asia/Makassar) untuk konsistensi dengan UI user
+                const todayWITA = new Date();
+                const witaDateStr = todayWITA.getFullYear() + '-' + String(todayWITA.getMonth() + 1).padStart(2, '0') + '-' + String(todayWITA.getDate()).padStart(2, '0');
+
                 const todaysLogs = data.data.filter(log => {
-                    const logDate = log.waktu_scan ? log.waktu_scan.split(' ')[0] : '';
-                    return logDate === localDateStr && log.tenant_id === activeTenantId;
+                    // Prioritaskan waktu_scan (WITA) karena sudah dari client
+                    if (log.waktu_scan) {
+                        const [datePart, timePart] = log.waktu_scan.split(' ');
+                        if (datePart) {
+                            return datePart === witaDateStr && log.tenant_id === activeTenantId;
+                        }
+                    }
+                    return false;
                 });
                 // Jika sudah absen di unit ini hari ini, gunakan log terbaru unit ini
                 // Jika belum absen di unit ini, jangan fallback ke unit lain (biarkan tombol muncul)
@@ -1353,9 +1401,11 @@ async function loadRecentAttendance() {
                 }
 
                 // 3. SINKRONISASI KOTAK STATUS AKHIR
-                const teksHtmlBaru = recentDiv.innerHTML.toLowerCase();
                 const logDatePart = logParts[0] || '';
-                const isLogToday = logDatePart && logDatePart === localDateStr;
+                const isLogToday = logDatePart && logDatePart === witaDateStr;
+
+                // Set global flag for applyTimeRulesToButtons to check
+                window.hasCheckedInToday = isLogToday && logTerbaru.jenis === 'masuk';
 
                 if (statusBox) {
                     // Prioritas: pulang > masuk (log terbaru menentukan)
@@ -1371,23 +1421,74 @@ async function loadRecentAttendance() {
                 }
 
                 // ========================================================
-                // 4. KONTROL TAMPILAN DUA TOMBOL (SHOW / HIDE)
-                // ========================================================
-                // KONTROL TAMPILAN DUA TOMBOL (SHOW / HIDE)
-                if (isLogToday && logTerbaru.jenis === 'masuk') {
-                    // JIKA BARU ABSEN MASUK HARI INI -> Sembunyikan Tombol Masuk, Munculkan Tombol Pulang
-                    if (checkInBtn) checkInBtn.style.display = 'none';
-                    if (checkOutBtn) checkOutBtn.style.display = 'inline-block';
+// 4. KONTROL TAMPILAN DUA TOMBOL (SHOW / HIDE)
+// ========================================================
+// Dapatkan elemen lokasi info
+const locationInfo = document.getElementById('locationInfo');
 
-                } else if (isLogToday && logTerbaru.jenis === 'pulang') {
-                    // JIKA SUDAH ABSEN PULANG HARI INI -> Sembunyikan kedua tombol (Absensi beres)
-                    if (checkInBtn) checkInBtn.style.display = 'none';
-                    if (checkOutBtn) checkOutBtn.style.display = 'none';
-                } else {
-                    // Log terbaru dari hari lain -> TAMPilkan tombol Masuk (belum absen hari ini)
-                    if (checkInBtn) checkInBtn.style.display = 'inline-block';
-                    if (checkOutBtn) checkOutBtn.style.display = 'none';
+if (isLogToday && logTerbaru.jenis === 'masuk') {
+    // JIKA BARU ABSEN MASUK HARI INI -> Sembunyikan Tombol Masuk, Munculkan Tombol Pulang
+    if (checkInBtn) {
+        checkInBtn.style.display = 'none';
+        checkInBtn.disabled = true;
+    }
+    if (checkOutBtn) checkOutBtn.style.display = 'inline-block';
+
+    // Cek apakah jam sekarang sudah dalam periode pulang
+    if (checkOutBtn) {
+        const sekarang = new Date();
+        const currentMinutes = sekarang.getHours() * 60 + sekarang.getMinutes();
+        const pulangRule = (window.currentAttendanceRules || []).find(r => {
+            const tipeRule = (r.tipe || '').toLowerCase().trim();
+            console.log('[DEBUG_CHECKOUT] Checking rule:', r.id, 'tipe:', tipeRule);
+            return tipeRule.includes('pulang');
+        });
+        console.log('[DEBUG_CHECKOUT] All attendanceRules:', window.currentAttendanceRules);
+        console.log('[DEBUG_CHECKOUT] Found pulangRule:', pulangRule);
+        if (pulangRule) {
+            const [pulangH, pulangM] = (pulangRule.jam_mulai || '16:00').split(':').map(n => parseInt(n) || 0);
+            const [selesaiH, selesaiM] = (pulangRule.jam_selesai || '17:00').split(':').map(n => parseInt(n) || 0);
+            const mulaiMenit = pulangH * 60 + pulangM;
+            const selesaiMenit = selesaiH * 60 + selesaiM;
+            console.log('[DEBUG_CHECKOUT] Pulang time range:', mulaiMenit, '-', selesaiMenit, 'currentMinutes:', currentMinutes);
+
+            const dayNames = ['minggu', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
+            const currentDay = dayNames[sekarang.getDay()];
+            console.log('[DEBUG_CHECKOUT] Day check: currentDay=', currentDay, 'pulangRule.hari=', pulangRule.hari);
+
+            if (isDayMatch(pulangRule.hari, currentDay) && currentMinutes >= mulaiMenit && currentMinutes <= selesaiMenit) {
+                checkOutBtn.disabled = false;
+                if (locationInfo) {
+                    locationInfo.className = 'location-info success';
+                    locationInfo.innerHTML = `<span>✅ Lokasi valid — Tombol Pulang sudah aktif (Jam ${pulangRule.jam_mulai})</span>`;
                 }
+            } else {
+                checkOutBtn.disabled = true;
+            }
+        } else {
+            checkOutBtn.disabled = true;
+        }
+    }
+
+} else if (isLogToday && logTerbaru.jenis === 'pulang') {
+    // JIKA SUDAH ABSEN PULANG HARI INI -> Sembunyikan kedua tombol (Absensi beres)
+    if (checkInBtn) {
+        checkInBtn.style.display = 'none';
+        checkInBtn.disabled = true;
+    }
+    if (checkOutBtn) {
+        checkOutBtn.style.display = 'none';
+        checkOutBtn.disabled = true;
+    }
+} else {
+    // Log terbaru dari hari lain -> TAMPilkan tombol Masuk (belum absen hari ini)
+    if (checkInBtn) checkInBtn.style.display = 'inline-block';
+    if (checkOutBtn) {
+        checkOutBtn.style.display = 'none';
+        checkOutBtn.disabled = true;
+    }
+    window.hasCheckedInToday = false;
+}
             } else {
                 // KONDISI JIKA BELUM ADA LOG ABSENSI SAMA SEKALI (AWAL HARI)
                 recentDiv.innerHTML = '<p class="text-center text-gray-500">Belum ada riwayat absensi</p>';
@@ -1399,10 +1500,35 @@ async function loadRecentAttendance() {
                 if (timeBox) timeBox.innerText = '-';
                 if (totalBox) totalBox.innerText = '0';
 
-                // KONDISI AWAL: Munculkan Tombol Masuk saja, Sembunyikan Tombol Pulang
-                if (checkInBtn) checkInBtn.style.display = 'block';
-                if (checkOutBtn) checkOutBtn.style.display = 'none';
+                // KONDISI AWAL: Munculkan Tombol Masuk, cek periode jam masuk
+                if (checkInBtn) checkInBtn.style.display = 'inline-block';
+                if (checkOutBtn) {
+                    checkOutBtn.style.display = 'none';
+                    checkOutBtn.disabled = true;
+                }
+                window.hasCheckedInToday = false;
+
+                // Cek apakah jam sekarang dalam periode masuk
+                if (checkInBtn && window.currentAttendanceRules) {
+                    const sekarang = new Date();
+                    const currentMinutes = sekarang.getHours() * 60 + sekarang.getMinutes();
+                    const dayNames = ['minggu', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
+                    const currentDay = dayNames[sekarang.getDay()];
+
+                    const masukRule = window.currentAttendanceRules.find(r => {
+                        const tipeRule = (r.tipe || '').toLowerCase().trim();
+                        const [mulaiH, mulaiM] = r.jam_mulai.split(':').map(n => parseInt(n) || 0);
+                        const [selesaiH, selesaiM] = r.jam_selesai.split(':').map(n => parseInt(n) || 0);
+                        return tipeRule === 'datang' &&
+                               isDayMatch(r.hari, currentDay) &&
+                               currentMinutes >= (mulaiH * 60 + mulaiM) &&
+                               currentMinutes <= (selesaiH * 60 + selesaiM);
+                    });
+
+                    checkInBtn.disabled = !masukRule;
+                }
             }
+            // Tombol sudah diatur di atas, tidak perlu panggil updateAttendanceButtonsState lagi
         } else {
             console.log('Response not ok');
             recentDiv.innerHTML = '<p class="text-center text-red-500">Gagal memuat riwayat</p>';
@@ -1628,38 +1754,34 @@ async function uploadProfilePhoto(file) {
 // Initialize on load
 initializeDashboard();
 
+// Setup global error handler for user photo (fallback if script loads before DOM)
+window.showFallbackAvatar = function(img) { 
+    const fallback = document.getElementById('avatarFallback'); 
+    if (fallback) fallback.classList.add('show'); 
+};
+window.showUserPhoto = function() { 
+    const fallback = document.getElementById('avatarFallback'); 
+    if (fallback) fallback.classList.remove('show'); 
+};
+
 function initializeDashboard() {
     console.log('Initializing dashboard');
     setTeacherInfo();
     requestLocationPermission();
     loadTodaySummary();
-    loadRecentAttendance();
     loadLeaveStatus();
     checkActiveLeave();
     updateConnectionStatus();
-    // loadAttendanceRules() dipanggil dari requestLocationPermission setelah lokasi didapatkan
+    // loadAttendanceRules() dan loadRecentAttendance() dipanggil dari requestLocationPermission setelah lokasi didapatkan
     initQuranWidget(); // Initialize Quran widget
 
     window.attendanceInterval = setInterval(function () {
-        if (currentLocation) {
-            updateAttendanceButtonsState();
-        }
         checkActiveLeave(); // Cek izin setiap detik
     }, 1000);
 
     window.addEventListener('online', syncOfflineAttendance);
     window.addEventListener('offline', showOfflineMessage);
 }
-
-// ========================================================
-// JURUS PAMUNGKAS: PAKSA SINKRONISASI SETELAH HALAMAN SIAP
-// ========================================================
-window.addEventListener('DOMContentLoaded', () => {
-    // 1. Pastikan fungsi utama Anda dijalankan saat startup
-    if (typeof loadRecentAttendance === 'function') {
-        loadRecentAttendance();
-    }
-});
 
 // ========================================================
 // PWA INSTALL PROMPT

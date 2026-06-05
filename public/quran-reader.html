@@ -3,117 +3,732 @@
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Mushaf Digital</title>
-  <link href="https://fonts.googleapis.com/css2?family=Scheherazade+New:wght@400;700&display=swap" rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Scheherazade+New:wght@400;700&display=swap"
+    rel="stylesheet">
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="manifest" href="manifest-quran.json">
+  <meta name="theme-color" content="#8b6f47">
   <style>
-    body {
-      background-color: #e5d3b3;
-      font-family: 'Scheherazade New', serif;
-    }
+  .quran-content {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    position: relative;
+    overflow: hidden;
+  }
 
-    .mushaf-container {
-      max-width: 500px;
-      margin: 10px auto;
-      background: #fdf6e3;
-      min-height: 95vh;
-      padding: 20px;
-      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-      border-radius: 8px;
-    }
+  .quran-page {
+    background: #fffdf5;
+    border: 1px solid #e0d8c3;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+    border-radius: 8px;
+    max-width: 100%;
+    max-height: 85vh;
+    position: relative;
+    width: 100%;
+  }
 
-    .quran-text {
-      font-size: 1.8rem;
-      line-height: 2.8;
-      text-align: justify;
-      direction: rtl;
-      color: #2c1e0f;
-    }
+  .page-img {
+    width: 100%;
+    height: auto;
+    max-height: 85vh;
+    object-fit: contain;
+    transition: none;
+  }
 
-    .ayah-number {
-      font-family: sans-serif;
-      display: inline-block;
-      padding: 0 5px;
-      color: #856404;
-      font-size: 1rem;
-    }
+  @keyframes slideInRight {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
 
-    .nav-btn {
-      background: #856404;
-      color: #fff;
-      padding: 10px 15px;
-      border-radius: 5px;
-      font-size: 0.9rem;
-    }
+  @keyframes slideInLeft {
+    from { transform: translateX(-100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
 
-    .nav-btn:disabled {
-      background: #ccc;
-    }
+  .slide-in-right { animation: slideInRight 0.3s ease; }
+  .slide-in-left { animation: slideInLeft 0.3s ease; }
+  .page-transition {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: auto;
+    max-height: 85vh;
+    object-fit: contain;
+  }
+  .slide-left { animation: slideOutLeft 0.3s forwards; }
+  .slide-right { animation: slideOutRight 0.3s forwards; }
+  @keyframes slideOutLeft {
+    from { transform: translateX(0) scale(1); opacity: 1; }
+    to { transform: translateX(-30px) scale(0.95); opacity: 0; }
+  }
+  @keyframes slideOutRight {
+    from { transform: translateX(0) scale(1); opacity: 1; }
+    to { transform: translateX(30px) scale(0.95); opacity: 0; }
+  }
+  .sliding {
+    transition: transform 0.3s ease, opacity 0.3s ease;
+  }
+
+  .quran-header {
+    background: #4a3728;
+    color: white;
+    padding: 12px 16px;
+    text-align: center;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    position: relative;
+    z-index: 10;
+  }
+
+  .loading {
+    color: #8b6f47;
+    font-size: 1.1rem;
+    font-weight: bold;
+  }
+
+  .nav-btn {
+    background: #8b6f47;
+    border-radius: 50px;
+    padding: 10px 20px;
+    color: white;
+    font-weight: 500;
+    box-shadow: 0 3px 5px rgba(139, 111, 71, 0.3);
+    border: none;
+    cursor: pointer;
+    transition: transform 0.1s, opacity 0.2s;
+  }
+
+  .nav-btn:hover:not(:disabled) {
+    transform: scale(1.05);
+  }
+
+  .nav-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .page-indicator {
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(74, 55, 40, 0.8);
+    color: white;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.85rem;
+  }
+
+  .swipe-hint {
+    position: absolute;
+    bottom: 8px;
+    left: 16px;
+    background: rgba(139, 111, 71, 0.8);
+    color: white;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+  }
+
+  .install-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.95);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: auto;
+  }
+
+  .install-wizard {
+    background: #fffdf5;
+    border-radius: 16px;
+    padding: 32px;
+    max-width: 380px;
+    width: 90%;
+    text-align: center;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+  }
+
+  .progress-bar {
+    width: 100%;
+    height: 12px;
+    background: #e0d8c3;
+    border-radius: 6px;
+    overflow: hidden;
+    margin: 20px 0;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: #8b6f47;
+    transition: width 0.3s ease;
+  }
+
+  .install-icon {
+    font-size: 4rem;
+    color: #8b6f47;
+    margin-bottom: 16px;
+  }
+
+  .search-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.95);
+    z-index: 1001;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .search-modal {
+    background: #fffdf5;
+    border-radius: 16px;
+    padding: 24px;
+    max-width: 500px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+
+  .search-input {
+    width: 100%;
+    padding: 12px 16px;
+    border: 1px solid #e0d8c3;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    font-size: 1rem;
+    background: white;
+  }
+
+  .search-result {
+    padding: 14px 12px;
+    border-bottom: 1px solid #e0d8c3;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .search-result:hover {
+    background: #f0e6d2;
+  }
+
+  .khatam-badge {
+    background: #fef3e7;
+    color: #8b6f47;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.9rem;
+    font-weight: 500;
+  }
   </style>
 </head>
 
 <body>
-
-  <div class="mushaf-container">
-    <div class="flex justify-between text-xs text-stone-600 mb-4 border-b pb-2">
-      <span>Halaman: <span id="currentPage">1</span>/604</span>
-      <span>Khatam: <span id="khatamCount">0</span>x</span>
-    </div>
-
-    <div id="quranText" class="quran-text">
-      <div class="text-center py-20">Memuat mushaf...</div>
-    </div>
-
-    <div class="flex justify-between mt-8 pt-4 border-t">
-      <button id="nextBtn" class="nav-btn"><i class="fas fa-arrow-left mr-2"></i>Selanjutnya</button>
-      <button id="prevBtn" class="nav-btn"><i class="fas fa-arrow-right ml-2"></i>Sebelumnya</button>
+  <div id="installWizard" class="install-overlay" style="display: none;">
+    <div class="install-wizard">
+      <i class="fas fa-book-open install-icon"></i>
+      <h2 class="text-2xl font-bold mb-3">Mushaf Digital</h2>
+      <p class="text-gray-600 mb-4">Mengunduh gambar Quran untuk akses offline...</p>
+      <div class="progress-bar">
+        <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+      </div>
+      <p class="text-sm text-gray-500 mb-4" id="progressText">0/604 halaman</p>
+      <button id="installBtn" class="nav-btn px-8 py-3 rounded-lg">
+        <i class="fas fa-download mr-2"></i>Mulai Unduh
+      </button>
     </div>
   </div>
 
+  <div id="modeModal" class="install-overlay" style="display: none;">
+    <div class="install-wizard" style="pointer-events: auto;">
+      <i class="fas fa-book-open install-icon"></i>
+      <h2 class="text-2xl font-bold mb-4">Pilih Mode</h2>
+      <p class="text-gray-600 mb-4">Silakan pilih mode membaca Quran:</p>
+      <button id="khatamMode" class="nav-btn px-6 py-3 rounded-lg mb-3 w-full">
+        <i class="fas fa-trophy mr-2"></i>Mode Khatam (Tracking)
+      </button>
+      <button id="browseMode" class="nav-btn px-6 py-3 rounded-lg w-full" style="background: #6b7280;">
+        <i class="fas fa-search mr-2"></i>Mode Pencarian (Tanpa Tracking)
+      </button>
+    </div>
+  </div>
+
+  <div id="searchModal" class="search-overlay" style="display: none;">
+    <div class="search-modal">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-bold text-gray-800">Pencarian Surah</h2>
+        <button id="closeSearch" class="text-gray-500 hover:text-gray-700">
+          <i class="fas fa-times text-2xl"></i>
+        </button>
+      </div>
+      <input type="text" id="searchInput" class="search-input" placeholder="Cari surah (nama atau nomor)">
+      <div id="searchResults"></div>
+    </div>
+  </div>
+
+<div class="mushaf-wrapper">
+    <div class="quran-header" style="position: relative; pointer-events: auto;">
+      <button id="backToModeBtn" class="nav-btn text-sm px-3 py-1" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); background: #6b7280; z-index: 20; pointer-events: auto;">
+        <i class="fas fa-arrow-left"></i>
+      </button>
+      <i class="fas fa-book-open mr-2"></i>
+      Mushaf Digital - Al-Quran
+      <button id="searchBtn" class="nav-btn text-sm px-3 py-1" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: #6b7280; z-index: 20; pointer-events: auto;">
+        <i class="fas fa-search"></i>
+      </button>
+    </div>
+
+    <div class="quran-content">
+      <div class="quran-page" id="quranPage">
+        <div class="loading" id="loading" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
+          <i class="fas fa-spinner fa-spin mr-2"></i>Memuat...
+        </div>
+        <img id="quranImage" src="" alt="Halaman Quran" style="display: none; width: 100%; height: auto; max-height: 85vh; object-fit: contain;">
+      </div>
+    </div>
+
+    <div class="footer-bar" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 16px; background: #f9fafb;">
+      <span id="pageLeft" style="width: 40px; text-align: center; font-size: 0.9rem; color: #6b7280;"></span>
+      <span id="khatamBadge" class="khatam-badge" style="flex: 1; text-align: center; display: none;">
+        <i class="fas fa-trophy"></i>
+        Khatam: <span id="khatamCount">0</span>x
+      </span>
+      <span id="pageRight" style="width: 40px; text-align: center; font-size: 0.9rem; color: #6b7280;"></span>
+    </div>
+
+  <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
   <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw-quran.js');
+    }
+  </script>
+  <script>
+    const SURAH_PAGES = [
+      { no: 1, name: "Al-Fatihah", page: 1 },
+      { no: 2, name: "Al-Baqarah", page: 2 },
+      { no: 3, name: "Ali 'Imran", page: 50 },
+      { no: 4, name: "An-Nisa'", page: 77 },
+      { no: 5, name: "Al-Ma'idah", page: 106 },
+      { no: 6, name: "Al-An'am", page: 128 },
+      { no: 7, name: "Al-A'raf", page: 151 },
+      { no: 8, name: "Al-Anfal", page: 177 },
+      { no: 9, name: "At-Tawbah", page: 187 },
+      { no: 10, name: "Yunus", page: 208 },
+      { no: 11, name: "Hud", page: 221 },
+      { no: 12, name: "Yusuf", page: 235 },
+      { no: 13, name: "Ar-Ra'd", page: 249 },
+      { no: 14, name: "Ibrahim", page: 255 },
+      { no: 15, name: "Al-Hijr", page: 262 },
+      { no: 16, name: "An-Nahl", page: 267 },
+      { no: 17, name: "Al-Isra'", page: 282 },
+      { no: 18, name: "Al-Kahf", page: 293 },
+      { no: 19, name: "Maryam", page: 305 },
+      { no: 20, name: "Ta-Ha", page: 312 },
+      { no: 21, name: "Al-Anbya", page: 322 },
+      { no: 22, name: "Al-Hajj", page: 332 },
+      { no: 23, name: "Al-Mu'minun", page: 342 },
+      { no: 24, name: "An-Nur", page: 354 },
+      { no: 25, name: "Al-Furqan", page: 367 },
+      { no: 26, name: "Asy-Syu'aara'", page: 377 },
+      { no: 27, name: "An-Naml", page: 385 },
+      { no: 28, name: "Al-Qasas", page: 396 },
+      { no: 29, name: "Al-'Ankabut", page: 405 },
+      { no: 30, name: "Ar-Rum", page: 411 },
+      { no: 31, name: "Luqman", page: 417 },
+      { no: 32, name: "As-Sajdah", page: 423 },
+      { no: 33, name: "Al-Ahzab", page: 430 },
+      { no: 34, name: "Saba'", page: 434 },
+      { no: 35, name: "Fatir", page: 440 },
+      { no: 36, name: "Yasin", page: 446 },
+      { no: 37, name: "As-Saffat", page: 453 },
+      { no: 38, name: "Sad", page: 458 },
+      { no: 39, name: "Az-Zumar", page: 467 },
+      { no: 40, name: "Ghafir", page: 477 },
+      { no: 41, name: "Fussilat", page: 489 },
+      { no: 42, name: "Asy-Syura", page: 496 },
+      { no: 43, name: "Az-Zukhruf", page: 503 },
+      { no: 44, name: "Ad-Dukhan", page: 511 },
+      { no: 45, name: "Al-Jatsiyah", page: 516 },
+      { no: 46, name: "Al-Ahqaf", page: 520 },
+      { no: 47, name: "Muhammad", page: 523 },
+      { no: 48, name: "Al-Fath", page: 526 },
+      { no: 49, name: "Al-Hujurat", page: 528 },
+      { no: 50, name: "Qaf", page: 531 },
+      { no: 51, name: "Adz-Dzariyat", page: 534 },
+      { no: 52, name: "Ath-Thur", page: 537 },
+      { no: 53, name: "An-Najm", page: 542 },
+      { no: 54, name: "Al-Qamar", page: 545 },
+      { no: 55, name: "Ar-Rahman", page: 548 },
+      { no: 56, name: "Al-Waqi'ah", page: 551 },
+      { no: 57, name: "Al-Hadid", page: 553 },
+      { no: 58, name: "Al-Mujadalah", page: 556 },
+      { no: 59, name: "Al-Hasyr", page: 558 },
+      { no: 60, name: "Al-Mumtahanah", page: 560 },
+      { no: 61, name: "As-Saf", page: 562 },
+      { no: 62, name: "Al-Jumu'ah", page: 564 },
+      { no: 63, name: "Al-Munafiqun", page: 566 },
+      { no: 64, name: "At-Taghabun", page: 568 },
+      { no: 65, name: "Ath-Thalaqah", page: 570 },
+      { no: 66, name: "At-Tahrim", page: 572 },
+      { no: 67, name: "Al-Mulk", page: 574 },
+      { no: 68, name: "Al-Qalam", page: 576 },
+      { no: 69, name: "Al-Haqqah", page: 578 },
+      { no: 70, name: "Al-Ma'arij", page: 580 },
+      { no: 71, name: "Nuh", page: 582 },
+      { no: 72, name: "Al-Jin", page: 585 },
+      { no: 73, name: "Al-Muzzammil", page: 587 },
+      { no: 74, name: "Al-Muddaththir", page: 589 },
+      { no: 75, name: "Al-Qiyamah", page: 591 },
+      { no: 76, name: "Al-Insan", page: 593 },
+      { no: 77, name: "Al-Mursalat", page: 595 },
+      { no: 78, name: "An-Naba'", page: 597 },
+      { no: 79, name: "An-Nazi'at", page: 599 },
+      { no: 80, name: "Abasa'", page: 601 },
+      { no: 81, name: "At-Takwir", page: 602 },
+      { no: 82, name: "Al-Infithar", page: 602 },
+      { no: 83, name: "Al-Mutholaqah", page: 603 },
+      { no: 84, name: "Al-Insyiqaq", page: 603 },
+      { no: 85, name: "Al-Buruj", page: 604 },
+      { no: 86, name: "Ath-Thariq", page: 604 },
+      { no: 87, name: "Al-A'la", page: 604 },
+      { no: 88, name: "Al-Ghasiyah", page: 604 },
+      { no: 89, name: "Al-Fath", page: 604 },
+      { no: 90, name: "Al-Balad", page: 604 },
+      { no: 91, name: "Ash-Shams", page: 604 },
+      { no: 92, name: "Al-Layl", page: 604 },
+      { no: 93, name: "Adh-Dhuha", page: 604 },
+      { no: 94, name: "Al-Insyirah", page: 604 },
+      { no: 95, name: "At-Tin", page: 604 },
+      { no: 96, name: "Al-Kawthar", page: 604 },
+      { no: 97, name: "Al-Kafirun", page: 604 },
+      { no: 98, name: "An-Nasr", page: 604 },
+      { no: 99, name: "Al-Lahab", page: 604 },
+      { no: 100, name: "Al-Ikhlas", page: 604 },
+      { no: 101, name: "Al-Falaq", page: 604 },
+      { no: 102, name: "An-Nas", page: 604 },
+      { no: 103, name: "Al-Ihlil", page: 604 },
+      { no: 104, name: "Al-Fatir", page: 604 }
+    ];
+
+const db = new Dexie('QuranDB');
+    db.version(1).stores({
+      images: '++id, page, data'
+    });
+
     let currentPage = parseInt(localStorage.getItem('quranPage') || '1');
     let khatamCount = parseInt(localStorage.getItem('khatamCount') || '0');
+    let isInstalled = localStorage.getItem('quranInstalled') === 'true';
+    let isKhatamMode = localStorage.getItem('quranMode') !== 'browse';
 
-    const quranTextEl = document.getElementById('quranText');
-    const pageEl = document.getElementById('currentPage');
-    const khatamEl = document.getElementById('khatamCount');
+    const quranImage = document.getElementById('quranImage');
+    const loading = document.getElementById('loading');
+    const khatamCountEl = document.getElementById('khatamCount');
+    const installWizard = document.getElementById('installWizard');
+    const installBtn = document.getElementById('installBtn');
+    const progressFill = document.getElementById('progressFill');
+    const progressText = document.getElementById('progressText');
+    const searchModal = document.getElementById('searchModal');
+    const searchInput = document.getElementById('searchInput');
+    const searchResults = document.getElementById('searchResults');
+    const searchBtn = document.getElementById('searchBtn');
+    const closeSearch = document.getElementById('closeSearch');
+    const modeModal = document.getElementById('modeModal');
+    const khatamMode = document.getElementById('khatamMode');
+    const browseMode = document.getElementById('browseMode');
+    const quranPage = document.getElementById('quranPage');
+    const pageLeft = document.getElementById('pageLeft');
+    const pageRight = document.getElementById('pageRight');
+    const backToModeBtn = document.getElementById('backToModeBtn');
 
-    async function loadPage(page) {
-      quranTextEl.innerHTML = '<div class="text-center py-20">Memuat...</div>';
-      const res = await fetch(`https://api.alquran.cloud/v1/page/${page}/quran-uthmani`);
-      const data = await res.json();
+    const TOTAL_PAGES = 604;
 
-      let html = '';
-      data.data.ayahs.forEach(a => {
-        html += `${a.text} <span class="ayah-number">(${a.numberInSurah})</span> `;
-      });
-      quranTextEl.innerHTML = html;
-      pageEl.textContent = page;
-      khatamEl.textContent = khatamCount;
-      localStorage.setItem('quranPage', page);
-      localStorage.setItem('khatamCount', khatamCount);
+    function updatePageIndicator() {
+      if (currentPage % 2 === 1) {
+        pageLeft.textContent = '';
+        pageRight.textContent = currentPage < TOTAL_PAGES ? (currentPage + 1) : '';
+      } else {
+        pageLeft.textContent = currentPage > 1 ? (currentPage - 1) : '';
+        pageRight.textContent = '';
+      }
     }
 
-    document.getElementById('nextBtn').addEventListener('click', () => {
-      if (currentPage < 604) {
-        currentPage++;
+    function setMode(mode) {
+      isKhatamMode = mode === 'khatam';
+      localStorage.setItem('quranMode', mode);
+      modeModal.style.display = 'none';
+      backToModeBtn.style.display = 'inline-flex';
+      khatamBadge.style.display = isKhatamMode ? 'inline-flex' : 'none';
+      if (isKhatamMode) {
+        searchBtn.style.display = 'none';
       } else {
-        currentPage = 1;
-        khatamCount++;
+        searchBtn.style.display = 'inline-flex';
       }
-      loadPage(currentPage);
+      if (isInstalled) {
+        loadPage(currentPage).then(() => preloadAdjacentPages(currentPage));
+        updatePageIndicator();
+      }
+    }
+
+    function animatePageChange(newPage, direction) {
+      const oldImg = quranImage.cloneNode();
+      oldImg.src = quranImage.src;
+      oldImg.className = 'page-transition';
+      if (direction === 'next') {
+        oldImg.classList.add('slide-left');
+      } else {
+        oldImg.classList.add('slide-right');
+      }
+      quranPage.appendChild(oldImg);
+      loadPage(newPage);
+      setTimeout(() => {
+        if (oldImg.parentNode) oldImg.parentNode.removeChild(oldImg);
+        preloadAdjacentPages(newPage);
+      }, 300);
+    }
+
+    function searchSurah(query) {
+      if (!query) return SURAH_PAGES;
+      return SURAH_PAGES.filter(s => 
+        s.name.toLowerCase().includes(query.toLowerCase()) ||
+        s.no.toString().includes(query)
+      );
+    }
+
+    function renderSearchResults(results) {
+      searchResults.innerHTML = results.map(surah => 
+        `<div class="search-result" data-page="${surah.page}">
+          <div class="font-bold">Surah ${surah.no}: ${surah.name}</div>
+          <div class="text-sm text-gray-500">Halaman ${surah.page}</div>
+        </div>`
+      ).join('');
+
+      document.querySelectorAll('.search-result').forEach(el => {
+        el.addEventListener('click', () => {
+          const page = parseInt(el.dataset.page);
+          const direction = page > currentPage ? 'next' : 'prev';
+          animatePageChange(page, direction);
+          currentPage = page;
+          if (isKhatamMode) {
+            localStorage.setItem('quranPage', currentPage);
+          }
+          searchModal.style.display = 'none';
+        });
+      });
+    }
+
+    searchBtn.addEventListener('click', () => {
+      searchModal.style.display = 'flex';
+      searchInput.focus();
     });
 
-    document.getElementById('prevBtn').addEventListener('click', () => {
-      if (currentPage > 1) {
-        currentPage--;
+    closeSearch.addEventListener('click', () => {
+      searchModal.style.display = 'none';
+    });
+
+    searchInput.addEventListener('input', () => {
+      const results = searchSurah(searchInput.value);
+      renderSearchResults(results);
+    });
+
+    renderSearchResults(SURAH_PAGES);
+
+    async function checkInstallation() {
+      const count = await db.images.count();
+      isInstalled = count >= TOTAL_PAGES;
+      if (!isInstalled) {
+        installWizard.style.display = 'flex';
+      } else {
+        const savedMode = localStorage.getItem('quranMode');
+        if (!savedMode) {
+          modeModal.style.display = 'flex';
+        } else {
+          setMode(savedMode);
+        }
         loadPage(currentPage);
+        preloadAdjacentPages(currentPage);
       }
+    }
+
+    async function downloadImages() {
+      installBtn.disabled = true;
+      installBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Mengunduh...';
+
+      for (let i = 1; i <= TOTAL_PAGES; i++) {
+        const paddedPage = String(i).padStart(3, '0');
+        try {
+          const response = await fetch(`quran/${paddedPage}.png`);
+          const blob = await response.blob();
+          await db.images.put({ page: i, data: blob });
+
+          const progress = Math.round((i / TOTAL_PAGES) * 100);
+          progressFill.style.width = progress + '%';
+          progressText.textContent = `${i}/${TOTAL_PAGES} halaman`;
+        } catch (error) {
+          console.error(`Failed to download page ${i}:`, error);
+        }
+      }
+
+      isInstalled = true;
+      localStorage.setItem('quranInstalled', 'true');
+      installWizard.style.display = 'none';
+      modeModal.style.display = 'flex';
+      loadPage(currentPage).then(() => preloadAdjacentPages(currentPage));
+    }
+
+    async function loadImageFromDB(page) {
+      const record = await db.images.where('page').equals(page).first();
+      if (record) {
+        return URL.createObjectURL(record.data);
+      }
+      return null;
+    }
+
+    const preloadedImages = {};
+
+    async function loadPage(page, showLoading = true) {
+      if (showLoading) {
+        loading.style.display = 'block';
+        loading.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Memuat...';
+        quranImage.style.display = 'none';
+      }
+
+      const cachedSrc = await loadImageFromDB(page);
+      if (cachedSrc) {
+        const oldSrc = quranImage.src;
+        quranImage.onload = null;
+        quranImage.onerror = null;
+        quranImage.onload = () => {
+          if (showLoading) {
+            loading.style.display = 'none';
+            quranImage.style.display = 'block';
+          }
+          quranImage.style.transform = 'translateX(0) scale(1)';
+          quranImage.style.opacity = '1';
+          quranImage.classList.remove('sliding');
+          updatePageIndicator();
+          if (oldSrc && oldSrc.startsWith('blob:')) {
+            URL.revokeObjectURL(oldSrc);
+          }
+        };
+        quranImage.onerror = () => {
+          if (showLoading) loading.innerHTML = '<i class="fas fa-exclamation-triangle mr-2"></i>Gagal memuat halaman';
+        };
+        quranImage.src = cachedSrc;
+      } else if (isInstalled && showLoading) {
+        loading.innerHTML = '<i class="fas fa-exclamation-triangle mr-2"></i>Gambar tidak ditemukan di cache';
+      }
+    }
+
+    async function preloadAdjacentPages(page) {
+      const promises = [];
+      if (page > 1) promises.push((async () => { preloadedImages[page - 1] = await loadImageFromDB(page - 1); })());
+      promises.push((async () => { preloadedImages[page + 1] = await loadImageFromDB(page + 1); })());
+      await Promise.all(promises);
+    }
+
+    function goToNextPage() {
+      if (currentPage < TOTAL_PAGES) {
+        const nextPage = currentPage + 1;
+        animatePageChange(nextPage, 'next');
+        currentPage = nextPage;
+        if (isKhatamMode) localStorage.setItem('quranPage', currentPage);
+        preloadAdjacentPages(currentPage);
+      } else if (isKhatamMode) {
+        khatamCount++;
+        khatamCountEl.textContent = khatamCount;
+        localStorage.setItem('khatamCount', khatamCount);
+        currentPage = 1;
+        localStorage.setItem('quranPage', currentPage);
+        loadPage(currentPage);
+        if ('vibrate' in navigator) navigator.vibrate([200, 100, 200]);
+        preloadAdjacentPages(currentPage);
+      }
+    }
+
+    function goToPrevPage() {
+      if (currentPage > 1) {
+        const prevPage = currentPage - 1;
+        animatePageChange(prevPage, 'prev');
+        currentPage = prevPage;
+        if (isKhatamMode) localStorage.setItem('quranPage', currentPage);
+        preloadAdjacentPages(currentPage);
+      }
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight') goToNextPage();
+      else if (e.key === 'ArrowLeft') goToPrevPage();
     });
 
-    loadPage(currentPage);
+    let touchStartX = 0;
+    let isDragging = false;
+
+    document.addEventListener('touchstart', (e) => {
+      if (!quranImage.src) return;
+      if (document.querySelector('.install-overlay[style*="flex"]') || e.target.closest('button')) return;
+      touchStartX = e.touches[0].clientX;
+      isDragging = true;
+      quranImage.style.transition = 'none';
+    });
+
+    document.addEventListener('touchmove', (e) => {
+      if (!isDragging) return;
+      const currentX = e.touches[0].clientX;
+      const diff = touchStartX - currentX;
+      const maxMove = 50;
+      const clampedDiff = Math.max(Math.min(diff, maxMove), -maxMove);
+      const movePercent = Math.abs(clampedDiff) / maxMove;
+      const opacity = 1 - movePercent * 0.5;
+      const scale = 1 - movePercent * 0.05;
+      const translateX = clampedDiff;
+
+      quranImage.style.transition = 'none';
+      quranImage.style.transform = `translateX(${translateX}px) scale(${scale})`;
+      quranImage.style.opacity = opacity;
+    });
+
+    document.addEventListener('touchend', (e) => {
+      if (!isDragging) return;
+      isDragging = false;
+      const diff = touchStartX - e.changedTouches[0].clientX;
+
+      if (Math.abs(diff) > 50) {
+        quranImage.style.transition = 'transform 0.3s ease, opacity 0.3s ease';
+        quranImage.style.transform = diff < 0 ? 'translateX(-30px) scale(0.95)' : 'translateX(30px) scale(0.95)';
+        quranImage.style.opacity = '0';
+        setTimeout(() => {
+          diff < 0 ? goToNextPage() : goToPrevPage();
+        }, 50);
+      } else {
+        quranImage.style.transition = 'transform 0.3s ease, opacity 0.3s ease';
+        quranImage.style.transform = 'translateX(0) scale(1)';
+        quranImage.style.opacity = '1';
+      }
+});
+
+    backToModeBtn.addEventListener('click', () => {
+      modeModal.style.display = 'flex';
+    });
+
+    khatamMode.addEventListener('click', () => setMode('khatam'));
+    browseMode.addEventListener('click', () => setMode('browse'));
+
+    khatamCountEl.textContent = khatamCount;
+    checkInstallation();
   </script>
 </body>
 

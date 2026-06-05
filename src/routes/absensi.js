@@ -34,8 +34,9 @@ const selfieUpload = multer({ storage: selfieStorage });
 
 router.post('/attendance', authenticateToken, selfieUpload.single('selfie'), async (req, res) => {
   try {
-    const { jenis, metode, latitude, longitude, waktu_absen, waktu_scan, rule_id, status, kegiatan_dinas } = req.body;
+    const { jenis, metode, latitude, longitude, waktu_absen, waktu_scan, rule_id, status, kegiatan_dinas, client_timezone } = req.body;
     let selfie_url = req.file ? req.file.path : null;
+    const userTimezone = client_timezone || 'Asia/Makassar';
 
     // Deteksi tenant_id dari lokasi GPS (jika guru multi-tenant)
     let detected_tenant_id = req.body.tenant_id || req.user.tenant_id;
@@ -67,77 +68,49 @@ router.post('/attendance', authenticateToken, selfieUpload.single('selfie'), asy
       return res.status(400).json({ success: false, message: 'jenis dan waktu_scan wajib diisi' });
     }
 
-    // Cek duplikat absen dalam 1 menit terakhir
-    const [existing] = await db.query(
-      'SELECT id FROM attendance_logs WHERE teacher_id = ? AND jenis = ? AND created_at >= DATE_SUB(NOW(), INTERVAL 1 MINUTE)',
-      [req.user.guru_id, jenis]
-    );
-    if (existing && existing.length > 0) {
-      return res.status(400).json({ success: false, message: 'Absen sudah dilakukan beberapa detik lalu' });
-    }
+    // Frontend sudah menangani validasi duplikat dan aturan waktu
+    // Backend hanya menerima dan menyimpan data ke database
 
-    // Cek absen masuk/pulang hari ini di unit yang sama
-    const today = new Date().toISOString().split('T')[0];
-    const [todayLog] = await db.query(
-      'SELECT jenis, tenant_id FROM attendance_logs WHERE teacher_id = ? AND DATE(created_at) = ? AND tenant_id = ? ORDER BY created_at DESC LIMIT 1',
-      [req.user.guru_id, today, detected_tenant_id]
-    );
-    if (todayLog && todayLog.jenis === jenis) {
-      return res.status(400).json({ success: false, message: `Anda sudah absen ${jenis} hari ini di unit ini` });
-    }
-
-    // 1. Simpan ke Database
+    // Simpan ke Database
     const insertQuery = `
       INSERT INTO attendance_logs 
-      (teacher_id, tenant_id, waktu_scan, created_at, jenis, metode, status, kegiatan_dinas, selfie_url, latitude, longitude, rule_id) 
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (teacher_id, tenant_id, waktu_scan, waktu_absen, jenis, metode, status, dinas_luar, kegiatan_dinas, selfie_url, latitude, longitude, rule_id) 
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
+    const is_dinas_luar = kegiatan_dinas ? 1 : 0;
     await db.query(insertQuery, [
       req.user.guru_id, detected_tenant_id,
       waktu_scan,    // Jam lokal (HH:mm:ss) dari Frontend
       waktu_absen,   // ISO String (UTC) untuk audit
-      jenis, metode || 'dashboard', status, kegiatan_dinas || null,
-      selfie_url, latitude, longitude, rule_id
+      jenis, metode || 'dashboard', status, is_dinas_luar,
+      kegiatan_dinas || null, selfie_url, latitude, longitude, rule_id
     ]);
 
-// Email notification for scanner attendance
-    try {
-      const [teacher] = await db.query('SELECT nama, no_wa, email FROM teachers WHERE id = ?', [req.user.guru_id]);
-      const [tenant] = await db.query('SELECT nama_sekolah FROM tenants WHERE tenant_id = ?', [detected_tenant_id]);
-      
-      if (teacher && teacher.no_wa) {
-        const waktuAbsenObj = new Date(waktu_absen);
-        const tanggalSekarang = waktuAbsenObj.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-        
-        const waMessage = `*PRESENSI BERHASIL ✅*
+// Email notification for scanner attendance (non-blocking)
+    setImmediate(async () => {
+      try {
+        const [teacher] = await db.query('SELECT nama, no_wa, email FROM teachers WHERE id = ?', [req.user.guru_id]);
+        const [tenant] = await db.query('SELECT nama_sekolah FROM tenants WHERE tenant_id = ?', [detected_tenant_id]);
 
-السَّلاَمُ عَلَيْكُمْ وَرَحْمَةُ اللهِ وَبَرَكَاتُهُ
-(Assalamu'alaikum Warahmatullahi Wabarakatuh)
+        if (teacher && teacher.no_wa) {
+          const [datePart, timePart] = (waktu_scan || '').split(' ');
+          const tanggalSekarang = datePart || new Date().toISOString().split('T')[0];
+          const jamLokal = timePart ? timePart.slice(0, 5) : '';
 
-Halo *${teacher.nama}*, 
-Alhamdulillah, data presensi *${jenis.toUpperCase()}* Anda telah tersimpan dengan baik.
+          const waMessage = `*PRESENSI BERHASIL ✅*\n\nالسَّلامُ عَلَيْكُمْ وَرَحْمَةُ اللهِ وَبَرَكَاتُهُ\n(Assalamu'alaikum Warahmatullahi Wabarakatuh)\n\nHalo *${teacher.nama}*,\nAlhamdulillah, data presensi *${jenis.toUpperCase()}* Anda telah tersimpan dengan baik.\n\n📌 *Detail Presensi:*\n• Unit: ${tenant ? tenant.nama_sekolah : detected_tenant_id}\n• Tgl : ${tanggalSekarang}\n• Jam : ${jamLokal}\n\nTerima kasih atas dedikasi dan kedisiplinan Anda.`;
 
-📌 *Detail Presensi:*
-• Unit: ${tenant ? tenant.nama_sekolah : detected_tenant_id}
-• Tgl : ${tanggalSekarang}
-• Jam : ${waktu_scan}
-
-Terima kasih atas dedikasi dan kedisiplinan Anda. Semoga Allah SWT memberkahi setiap langkah dan tugas yang Anda kerjakan hari ini. Barakallahu fiikum. 🤲`;
-        
-        if (typeof global.sendWhatsAppMessage === 'function') {
-          await global.sendWhatsAppMessage(teacher.no_wa, waMessage);
+          if (typeof global.sendWhatsAppMessage === 'function') {
+            global.sendWhatsAppMessage(teacher.no_wa, waMessage).catch(err => console.warn('WA Error:', err.message));
+          }
         }
-      }
 
-      // Send email notification for attendance
-      if (teacher && teacher.email) {
-        const waktuAbsenObj = new Date(waktu_absen);
-        const tanggalSekarang = waktuAbsenObj.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-        const tanggalISO = waktuAbsenObj.toISOString().split('T')[0];
-        const jamWIB = waktuAbsenObj.toLocaleTimeString('id-ID', { hour12: false }).slice(0, 5);
+        if (teacher && teacher.email) {
+          const [datePart, timePart] = (waktu_scan || '').split(' ');
+          const tanggalSekarang = datePart || new Date().toISOString().split('T')[0];
+          const jamLokal = timePart ? timePart.slice(0, 5) : '';
 
-        const htmlMessage = `<!DOCTYPE html>
+          const htmlMessage = `<!DOCTYPE html>
 <html lang="id">
 <head>
   <meta charset="UTF-8">
@@ -161,7 +134,7 @@ Terima kasih atas dedikasi dan kedisiplinan Anda. Semoga Allah SWT memberkahi se
       <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
         <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee; color: #666;">Unit Sekolah:</td><td style="padding: 8px 0; border-bottom: 1px solid #eee; font-weight: 600;">${tenant ? tenant.nama_sekolah : detected_tenant_id}</td></tr>
         <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee; color: #666;">Tanggal:</td><td style="padding: 8px 0; border-bottom: 1px solid #eee; font-weight: 600;">${tanggalSekarang}</td></tr>
-        <tr><td style="padding: 8px 0; color: #666;">Waktu:</td><td style="padding: 8px 0; font-weight: 600;">${jamWIB} WIB</td></tr>
+        <tr><td style="padding: 8px 0; color: #666;">Waktu:</td><td style="padding: 8px 0; font-weight: 600;">${jamLokal} (WITA)</td></tr>
       </table>
       <p style="margin: 20px 0 0 0; color: #888; font-size: 14px;">Email ini dikirim otomatis oleh sistem.</p>
     </div>
@@ -169,13 +142,14 @@ Terima kasih atas dedikasi dan kedisiplinan Anda. Semoga Allah SWT memberkahi se
 </body>
 </html>`;
 
-        if (typeof global.sendEmail === 'function') {
-          await global.sendEmail(teacher.email, `Presensi ${jenis.toUpperCase()} Berhasil - YPWI Lutim`, htmlMessage);
+          if (typeof global.sendEmail === 'function') {
+            global.sendEmail(teacher.email, `Presensi ${jenis.toUpperCase()} Berhasil - YPWI Lutim`, htmlMessage).catch(err => console.warn('Email Error:', err.message));
+          }
         }
+      } catch (waError) {
+        console.error('WA/Email Error:', waError.message);
       }
-    } catch (waError) {
-      console.error('WA/Email Error:', waError.message);
-    }
+    });
 
     return res.json({ success: true, message: 'Absensi berhasil' });
   } catch (error) {
@@ -301,7 +275,7 @@ router.get('/attendance-rules', authenticateToken, async (req, res) => {
 router.get('/attendance-history', authenticateToken, async (req, res) => {
   try {
     const attendance = await db.query(
-      `SELECT al.id, al.jenis, al.waktu_scan, al.status, al.tenant_id, t.nama_sekolah, al.rule_id, ar.keterangan as rule_keterangan
+      `SELECT al.id, al.jenis, al.waktu_scan, al.waktu_absen, al.status, al.tenant_id, t.nama_sekolah, al.rule_id, ar.keterangan as rule_keterangan
        FROM attendance_logs al
        JOIN tenants t ON al.tenant_id = t.tenant_id
        LEFT JOIN attendance_rules ar ON al.rule_id = ar.id
@@ -309,7 +283,7 @@ router.get('/attendance-history', authenticateToken, async (req, res) => {
       [req.user.guru_id]
     );
 
-    // Kirim waktu_scan yang disimpan (lokal string) bersama info rule/keterangan
+    // Kirim waktu_scan dan waktu_absen untuk konsistensi timezone
     res.json({ success: true, data: attendance });
 
   } catch (error) {
@@ -497,17 +471,27 @@ router.post('/evaluations/auto-calculate', authenticateToken, async (req, res) =
     `);
 
     // Calculate attendance rate per teacher for current month
+    // BARIS 401-409 - DIPERBAIKI
     const stats = await db.query(`
-      SELECT 
-        teacher_id,
-        tenant_id,
-        COUNT(DISTINCT DATE(waktu_scan)) as total_days,
-        SUM(CASE WHEN status = 'tepat_waktu' THEN 1 ELSE 0 END) as present_days,
-        SUM(CASE WHEN status = 'terlambat' THEN 1 ELSE 0 END) as late_days
-      FROM attendance_logs 
-      WHERE DATE_FORMAT(waktu_scan, '%Y-%m') = DATE_FORMAT(NOW(), '%Y-%m')
-      GROUP BY teacher_id, tenant_id
-    `);
+  SELECT 
+    teacher_id,
+    tenant_id,
+    COUNT(DISTINCT DATE(
+      CASE 
+        WHEN waktu_absen IS NOT NULL AND waktu_absen != '' THEN waktu_absen 
+        ELSE CONVERT_TZ(waktu_scan, '+08:00', '+00:00') 
+      END
+    )) as total_days,
+    SUM(CASE WHEN status = 'tepat_waktu' THEN 1 ELSE 0 END) as present_days,
+    SUM(CASE WHEN status = 'terlambat' THEN 1 ELSE 0 END) as late_days
+  FROM attendance_logs 
+  WHERE DATE_FORMAT(
+    CASE 
+      WHEN waktu_absen IS NOT NULL AND waktu_absen != '' THEN waktu_absen 
+      ELSE CONVERT_TZ(waktu_scan, '+08:00', '+00:00') 
+    END, '%Y-%m') = DATE_FORMAT(UTC_DATE(), '%Y-%m')
+  GROUP BY teacher_id, tenant_id
+`);
 
     const results = [];
 
@@ -530,7 +514,7 @@ router.post('/evaluations/auto-calculate', authenticateToken, async (req, res) =
       if (teacherStat.total_days > 0 && score > 0) {
         await db.query(`
           INSERT INTO evaluations (teacher_id, evaluator_id, tenant_id, score, category, notes, evaluation_date)
-          VALUES (?, ?, ?, ?, 'kehadiran', ?, CURDATE())
+          VALUES (?, ?, ?, ?, 'kehadiran', ?, UTC_DATE())
           ON DUPLICATE KEY UPDATE score = VALUES(score), notes = VALUES(notes)
         `, [teacher.id, evaluator_id, teacher.tenant_id, score, `Otomatis: ${teacherStat.present_days}/${teacherStat.total_days} hari hadir (${teacher.nama_sekolah})`]);
 
@@ -720,10 +704,10 @@ router.get('/dashboard', authenticateToken, async (req, res) => {
     res.json({
       success: true,
       data: {
-        totalAbsensi: totalResult[0]?.total || 0,
-        absensiToday: todayResult[0] ? (todayResult[0].jenis === 'masuk' ? 'Sudah Masuk' : 'Sudah Pulang') : 'Belum absen',
+        totalAbsensi: totalResult?.total || 0,
+        absensiToday: todayResult ? (todayResult.jenis === 'masuk' ? 'Sudah Masuk' : 'Sudah Pulang') : 'Belum absen',
         user: {
-          is_default_password: userCheck[0]?.is_default_password || 0
+          is_default_password: userCheck?.is_default_password || 0
         }
       }
     });

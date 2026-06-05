@@ -106,6 +106,7 @@ router.get('/scanner/tenants/registration-token', authenticateToken, async (req,
     res.status(500).json({ success: false, message: 'Terjadi kesalahan server' });
   }
 });
+
 // POST /api/scanner/tenants/generate-token
 // Rute untuk membuat atau memperbarui token registrasi sekolah
 router.post('/scanner/tenants/generate-token', authenticateToken, async (req, res) => {
@@ -248,7 +249,6 @@ router.post('/scanner/register', async (req, res) => {
 });
 
 
-
 // POST /api/scanner/attendance - Receive attendance scan from scanner device
 router.post('/scanner/attendance', async (req, res) => {
   try {
@@ -306,7 +306,6 @@ router.post('/scanner/attendance', async (req, res) => {
       console.log(`[SCANNER] Expired QR from device ${device_id} for scan_id ${scan_id}, expiry: ${expiry}`);
       return res.status(403).json({ success: false, message: 'QR code sudah kedaluwarsa' });
     }
-    // ====================================================================
 
     const teacher = await db.query('SELECT id, nama, jenis_kelamin FROM teachers WHERE scan_id = ? AND status_aktif = 1', [scan_id]);
     if (teacher.length === 0) {
@@ -323,7 +322,18 @@ router.post('/scanner/attendance', async (req, res) => {
     if (isNaN(scanTime.getTime())) {
       return res.status(400).json({ success: false, message: 'Format timestamp tidak valid' });
     }
-    const localDateString = scanTime.toLocaleDateString('en-CA');
+    
+    // Konversi ke timezone WITA untuk logika bisnis
+    const userTimezone = 'Asia/Makassar';
+    const currentDay = scanTime.toLocaleDateString('id-ID', { 
+      weekday: 'long', 
+      timeZone: userTimezone 
+    }).toLowerCase();
+    
+    const scanTimeWITA = scanTime.toLocaleTimeString('id-ID', { 
+      hour12: false, 
+      timeZone: userTimezone 
+    }).slice(0, 8);
 
     // ====================================================================
     // 🔥 [SOLUSI FINAL TIMEZONE]: Serahkan Pembandingan Tanggal ke MySQL
@@ -331,33 +341,43 @@ router.post('/scanner/attendance', async (req, res) => {
     // Kita kirim string timestamp apa adanya ke MySQL, lalu minta MySQL
     // mengonversi parameter input dan kolom database ke tanggal yang sama.
 
+    // Ekstrak tanggal untuk pengecekan duplikat
+    const scanDateStr = timestamp.substring(0, 10);
+
     // ====================================================================
     // 🛡️ [PERBAIKAN FINAL STABIL]: Gunakan String Mentah untuk Duplikasi
     // ====================================================================
     // Karena tablet mengirimkan teks waktu lokal ("2026-05-21 07:46:00"), 
     // kita ambil 10 karakter pertamanya saja ("2026-05-21") untuk mencocokkan tanggal.
-    // ====================================================================
-    // 🛡️ [PERBAIKAN] Gunakan String Mentah agar Sinkron dengan Database
-    // ====================================================================
-    const rawDateString = timestamp.substring(0, 10); // "2026-05-21"
-
-    const duplicate = await db.query(
-      "SELECT id FROM attendance_logs WHERE teacher_id = ? AND jenis = ? AND DATE(waktu_scan) = ?",
-      [teacher_id, type, rawDateString]
-    );
-
-    if (duplicate.length > 0) {
-      console.log(`[SCANNER DIKUNCI] Double-scan harian ditolak untuk guru ${teacherRecord.nama} pada tanggal lokal ${rawDateString}`);
-      return res.status(409).json({
-        success: false,
-        message: `Absensi ${type.toUpperCase()} Anda untuk tanggal ${rawDateString} sudah tercatat di sistem pusat.`,
-        duplicate: true
-      });
+    // ===========================================================
+    // 🛡️ [PERBAIKAN] Handle kolom waktu_absen yang mungkin belum ada di DB lama
+    // ===========================================================
+    let duplicate;
+    try {
+      duplicate = await db.query(
+        "SELECT id FROM attendance_logs WHERE teacher_id = ? AND jenis = ? AND DATE(waktu_absen) = ?",
+        [teacher_id, type, scanDateStr]
+      );
+    } catch (err) {
+      // Fallback jika kolom waktu_absen belum ada - gunakan waktu_scan dengan konversi
+      duplicate = await db.query(
+        "SELECT id FROM attendance_logs WHERE teacher_id = ? AND jenis = ? AND DATE(waktu_scan) = DATE(CONVERT_TZ(?, '+00:00', '+08:00'))",
+        [teacher_id, type, scanDateStr]
+      );
     }
-    // (Hapus blok pengecekan duplicate kedua yang double di bawahnya agar kode bersih)
-    // ====================================================================
 
     let status = 'terlambat';
+
+    // Konversi timestamp ISO ke format lokal datetime untuk waktu_scan
+    const localDateTime = scanTime.toLocaleString('id-ID', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    }).replace(/\//g, '-'); // Format: "2026-06-04 09:24:17"
 
     try {
       const [tenantData] = await db.query('SELECT use_central_rules FROM tenants WHERE tenant_id = ?', [tenant_id]);
@@ -366,11 +386,9 @@ router.post('/scanner/attendance', async (req, res) => {
         rulesTenantId = 'YPWILUTIM';
       }
 
-      const currentDay = scanTime.toLocaleDateString('id-ID', { weekday: 'long' }).toLowerCase();
-
       const allRules = await db.query(
         'SELECT status_log, hari, jam_mulai FROM attendance_rules WHERE tenant_id = ? AND tipe = ? AND ? BETWEEN jam_mulai AND jam_selesai ORDER BY jam_mulai DESC',
-        [rulesTenantId, type === 'masuk' ? 'Datang' : 'Pulang', scanTime.toTimeString().slice(0, 8)]
+        [rulesTenantId, type === 'masuk' ? 'Datang' : 'Pulang', scanTimeWITA]
       );
 
       const matchingRules = allRules.filter(rule => {
@@ -382,23 +400,33 @@ router.post('/scanner/attendance', async (req, res) => {
       if (matchingRules.length > 0) {
         status = matchingRules[0].status_log;
       }
-    } catch (ruleError) {
-      console.log('[SCANNER] Could not fetch attendance rules, using default terlambat');
+    } catch (err) {
+      console.log('[SCANNER] Rule check error, using default status terlambat:', err.message);
     }
 
-    const result = await db.query(
-      `INSERT INTO attendance_logs
+    let result;
+    try {
+      result = await db.query(
+        `INSERT INTO attendance_logs
+        (teacher_id, tenant_id, waktu_scan, waktu_absen, jenis, metode, status, dinas_luar, kegiatan_dinas, selfie_url, latitude, longitude)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL)`,
+        [teacher_id, tenant_id, localDateTime, timestamp, type, 'scanner', status, is_dinas_luar ? 1 : 0, is_dinas_luar ? 'Dinas luar' : null]
+      );
+    } catch (err) {
+      // Fallback jika kolom waktu_absen belum ada
+      result = await db.query(
+        `INSERT INTO attendance_logs
         (teacher_id, tenant_id, waktu_scan, jenis, metode, status, dinas_luar, kegiatan_dinas, selfie_url, latitude, longitude)
-        VALUES (?, ?, ?, ?, 'scanner', ?, ?, ?, NULL, NULL, NULL)`,
-      [teacher_id, tenant_id, timestamp, type, status, is_dinas_luar ? 1 : 0, is_dinas_luar ? 1 : null]
-    );
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL)`,
+        [teacher_id, tenant_id, localDateTime, type, 'scanner', status, is_dinas_luar ? 1 : 0, is_dinas_luar ? 'Dinas luar' : null]
+      );
+    }
 
-    const attendance_id = result.insertId;
-
+    // qr_attendance_logs INSERT (keep original timestamp for sync tracking)
     await db.query(
       `INSERT INTO qr_attendance_logs 
-        (scan_id, teacher_id, device_id, tenant_id, waktu_scan, jenis, signature, sync_status, offline_validated) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'synced', ?)`,
+      (scan_id, teacher_id, device_id, tenant_id, waktu_scan, jenis, signature, sync_status, offline_validated) 
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'synced', ?)`,
       [scan_id, teacher_id, device_id, tenant_id, timestamp, type, signature, offline_validated || false]
     );
 
@@ -406,36 +434,39 @@ router.post('/scanner/attendance', async (req, res) => {
 
     // WhatsApp notification for scanner attendance
     try {
-      const [teacher] = await db.query('SELECT nama, no_wa, email FROM teachers WHERE id = ?', [teacher_id]);
+      const [teacherNotif] = await db.query('SELECT nama, no_wa, email FROM teachers WHERE id = ?', [teacher_id]);
       const [tenant] = await db.query('SELECT nama_sekolah FROM tenants WHERE tenant_id = ?', [tenant_id]);
-      
-      if (teacher && teacher.no_wa) {
+      const userTimezone = 'Asia/Makassar'; // Default untuk scanner
+
+      if (teacherNotif && teacherNotif.no_wa) {
         const waktuAbsenObj = new Date(timestamp);
-        const tanggalSekarang = waktuAbsenObj.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-        
+        const tanggalSekarang = waktuAbsenObj.toLocaleDateString('id-ID', { 
+          weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+          timeZone: userTimezone 
+        });
+        const jamLokal = waktuAbsenObj.toLocaleTimeString('id-ID', { 
+          hour12: false, 
+          timeZone: userTimezone 
+        }).slice(0, 5);
+
         const waMessage = `*NOTIFIKASI PRESENSI SCANNER YPWI*
-Hai *${teacher.nama}*, 
+Hai *${teacherNotif.nama}*, 
 Laporan absensi scanner Anda berhasil direkam.
 
 *Detail:*
 • Jenis: Absen ${type.toUpperCase()}
 • Instansi: ${tenant ? tenant.nama_sekolah : tenant_id}
 • Hari/Tgl: ${tanggalSekarang}
-• Jam Log: ${waktuAbsenObj.toLocaleTimeString('id-ID', { hour12: false }).slice(0, 5)} (Waktu Lokal)
+• Jam Log: ${jamLokal} (WITA)
 
 Terima kasih.`;
-        
+
         if (typeof global.sendWhatsAppMessage === 'function') {
-          await global.sendWhatsAppMessage(teacher.no_wa, waMessage);
+          await global.sendWhatsAppMessage(teacherNotif.no_wa, waMessage);
         }
       }
 
-      // Send email notification for scanner attendance
-      if (teacher && teacher.email) {
-        const waktuAbsenObj = new Date(timestamp);
-        const tanggalSekarang = waktuAbsenObj.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-        const jamWIB = waktuAbsenObj.toLocaleTimeString('id-ID', { hour12: false }).slice(0, 5);
-
+      if (teacherNotif && teacherNotif.email) {
         const htmlMessage = `<!DOCTYPE html>
 <html lang="id">
 <head>
@@ -452,15 +483,15 @@ Terima kasih.`;
     <div style="padding: 30px;">
       <h2 style="margin: 0 0 20px 0; color: #333; font-size: 20px;">📱 Absensi ${type.toUpperCase()} via Scanner</h2>
       <p style="margin: 0 0 15px 0; color: #555; font-size: 16px; line-height: 1.6;">
-        Assalamu'alaikum <strong>${teacher.nama}</strong>,
+        Assalamu'alaikum <strong>${teacherNotif.nama}</strong>,
       </p>
       <p style="margin: 0 0 20px 0; color: #555; font-size: 16px; line-height: 1.6;">
         Presensi ${type} Anda via scanner telah berhasil direkam.
       </p>
       <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
         <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee; color: #666;">Instansi:</td><td style="padding: 8px 0; border-bottom: 1px solid #eee; font-weight: 600;">${tenant ? tenant.nama_sekolah : tenant_id}</td></tr>
-        <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee; color: #666;">Tanggal:</td><td style="padding: 8px 0; border-bottom: 1px solid #eee; font-weight: 600;">${tanggalSekarang}</td></tr>
-        <tr><td style="padding: 8px 0; color: #666;">Waktu:</td><td style="padding: 8px 0; font-weight: 600;">${jamWIB} WIB</td></tr>
+        <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee; color: #666;">Tanggal:</td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${tanggalSekarang}</td></tr>
+        <tr><td style="padding: 8px 0; color: #666;">Waktu:</td><td style="padding: 8px 0; font-weight: 600;">${jamLokal} WITA</td></tr>
       </table>
       <p style="margin: 20px 0 0 0; color: #888; font-size: 14px;">Email ini dikirim otomatis oleh sistem.</p>
     </div>
@@ -469,7 +500,7 @@ Terima kasih.`;
 </html>`;
 
         if (typeof global.sendEmail === 'function') {
-          await global.sendEmail(teacher.email, `Absensi ${type.toUpperCase()} Scanner - YPWI Lutim`, htmlMessage);
+          await global.sendEmail(teacherNotif.email, `Absensi ${type.toUpperCase()} Scanner - YPWI Lutim`, htmlMessage);
         }
       }
     } catch (waError) {
@@ -477,6 +508,8 @@ Terima kasih.`;
     }
 
     console.log(`[SCANNER] Attendance recorded: ${teacherRecord.nama} (${scan_id}) - ${type} at ${timestamp}`);
+
+    const attendance_id = result.insertId;
 
     res.json({
       success: true,
@@ -673,7 +706,7 @@ router.get('/scanner/status', authenticateToken, async (req, res) => {
       FROM scanner_devices sd
       LEFT JOIN qr_attendance_logs qal 
         ON sd.device_id = qal.device_id 
-        AND DATE(qal.created_at) = CURDATE()
+        AND DATE(qal.created_at) = UTC_DATE()
       GROUP BY sd.id
       ORDER BY sd.school_name ASC
     `);

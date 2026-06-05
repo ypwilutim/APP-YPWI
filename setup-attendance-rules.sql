@@ -36,9 +36,10 @@ CREATE TABLE IF NOT EXISTS attendance_rules (
     FOREIGN KEY (tenant_id) REFERENCES tenants(tenant_id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 3. UPDATE attendance_logs TABLE - Add rule_id reference
+-- 3. UPDATE attendance_logs TABLE - Add rule_id and waktu_absen columns
 ALTER TABLE attendance_logs 
 ADD COLUMN rule_id INT NULL AFTER teacher_id,
+ADD COLUMN waktu_absen DATETIME NULL AFTER waktu_scan,
 ADD INDEX idx_rule_id (rule_id),
 ADD FOREIGN KEY (rule_id) REFERENCES attendance_rules(id) ON DELETE SET NULL;
 
