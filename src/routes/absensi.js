@@ -47,7 +47,9 @@ router.post('/attendance', authenticateToken, selfieUpload.single('selfie'), asy
     }
 
     const userAssignments = req.user?.assignments || [];
+    console.log('[ATTENDANCE_DEBUG] req.user:', { guru_id: req.user?.guru_id, role: req.user?.role, assignmentsCount: userAssignments.length });
     const allowedTenantIds = userAssignments.map(a => a.tenant_id);
+    console.log('[ATTENDANCE_DEBUG] allowedTenantIds:', allowedTenantIds, 'requested tenant_id:', tenant_id);
     if (!allowedTenantIds.includes(tenant_id)) {
       console.warn(`[ANTI-FRAUD] User ${req.user.guru_id} mencoba absen di tenant ${tenant_id} yang tidak diassignment. Allowed: ${allowedTenantIds.join(',')}`);
       return res.status(403).json({ success: false, message: 'Anda tidak memiliki akses untuk unit ini.' });

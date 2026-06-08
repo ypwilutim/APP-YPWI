@@ -105,10 +105,11 @@ router.post('/auth/login', async (req, res) => {
     // Cari assignments untuk semua user (needed for admin dashboard access check)
     if (user.guru_id) {
       try {
-        tokenPayload.assignments = await db.query(
+        const assignments = await db.query(
           'SELECT ta.tenant_id, ta.jabatan_di_unit, t.nama_sekolah FROM teacher_assignments ta JOIN tenants t ON ta.tenant_id = t.tenant_id WHERE ta.teacher_id = ?',
           [user.guru_id]
         );
+        tokenPayload.assignments = assignments || [];
         console.log('[LOGIN_DEBUG] User assignments loaded:', tokenPayload.assignments);
         logToFile(`AUTH_ASSIGNMENTS_LOADED: count=${tokenPayload.assignments?.length || 0}`);
       } catch (e) {

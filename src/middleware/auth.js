@@ -32,16 +32,20 @@ const authenticateToken = (req, res, next) => {
     }
     req.user = user;
 
-    // Load assignments for role-based access (only for guru users with guru_id)
-    if (user.guru_id) {
+    // Use assignments from JWT if present (backward compatible), otherwise load from database
+    if (user.assignments && user.assignments.length > 0) {
+      console.log('[AUTH_DEBUG] Using assignments from JWT, count:', user.assignments.length);
+    } else if (user.guru_id) {
       try {
         const assignments = await db.query(
           'SELECT ta.tenant_id, ta.jabatan_di_unit, t.nama_sekolah FROM teacher_assignments ta JOIN tenants t ON ta.tenant_id = t.tenant_id WHERE ta.teacher_id = ? AND ta.status_aktif = 1',
           [user.guru_id]
         );
         req.user.assignments = assignments;
+        console.log('[AUTH_DEBUG] Loaded assignments from DB:', assignments?.length || 0);
       } catch (error) {
         req.user.assignments = [];
+        console.error('[AUTH_DEBUG] Error loading assignments:', error.message);
       }
     } else {
       req.user.assignments = [];

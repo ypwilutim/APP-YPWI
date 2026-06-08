@@ -227,15 +227,90 @@
     background: #f0e6d2;
   }
 
-  .khatam-badge {
-    background: #fef3e7;
-    color: #8b6f47;
-    padding: 4px 12px;
-    border-radius: 12px;
-    font-size: 0.9rem;
-    font-weight: 500;
-  }
-  </style>
+.khatam-badge {
+     background: #fef3e7;
+     color: #8b6f47;
+     padding: 4px 12px;
+     border-radius: 12px;
+     font-size: 0.9rem;
+     font-weight: 500;
+   }
+
+   /* Wake Lock indicator */
+   .wake-lock-active {
+     color: #10b981 !important;
+   }
+
+   /* Bookmark modal */
+   .bookmark-modal {
+     position: fixed;
+     top: 0;
+     left: 0;
+     width: 100%;
+     height: 100%;
+     background: rgba(0, 0, 0, 0.95);
+     z-index: 1002;
+     display: none;
+     align-items: center;
+     justify-content: center;
+   }
+
+   .bookmark-content {
+     background: #fffdf5;
+     border-radius: 16px;
+     padding: 24px;
+     max-width: 400px;
+     width: 90%;
+     max-height: 80vh;
+     overflow-y: auto;
+   }
+
+   .bookmark-item {
+     padding: 12px;
+     border-bottom: 1px solid #e0d8c3;
+     cursor: pointer;
+     display: flex;
+     justify-content: space-between;
+     align-items: center;
+   }
+
+   .bookmark-item:hover {
+     background: #f0e6d2;
+   }
+
+   .bookmark-item.bookmarked {
+     background: #e0f2fe;
+   }
+
+   /* Landscape/Spread mode */
+   @media (min-width: 768px) and (orientation: landscape) {
+     .quran-content {
+       flex-direction: row-reverse;
+       justify-content: center;
+     }
+
+     .quran-page {
+       width: 48%;
+       max-width: none;
+     }
+
+     .quran-page.spread-even {
+       order: 1;
+     }
+
+     .quran-page.spread-odd {
+       order: 2;
+     }
+   }
+
+   /* Double-tap zoom */
+   .zoomed {
+     transform: scale(2) !important;
+     cursor: move;
+     max-height: 150vh !important;
+     overflow: auto !important;
+   }
+   </style>
 </head>
 
 <body>
@@ -291,6 +366,12 @@
       <button id="searchBtn" class="nav-btn text-sm px-3 py-1" style="position: absolute; right: 12px; top: 50%; transform: translateY(-50%); background: #6b7280; z-index: 20; pointer-events: auto;">
         <i class="fas fa-search"></i>
       </button>
+      <button id="bookmarkBtn" class="nav-btn text-sm px-3 py-1" style="position: absolute; right: 60px; top: 50%; transform: translateY(-50%); background: #6b7280; z-index: 20; pointer-events: auto;">
+        <i class="fas fa-bookmark"></i>
+      </button>
+      <button id="bookmarkListBtn" class="nav-btn text-sm px-3 py-1" style="position: absolute; right: 108px; top: 50%; transform: translateY(-50%); background: #6b7280; z-index: 20; pointer-events: auto;">
+        <i class="fas fa-list"></i>
+      </button>
     </div>
 
     <div class="quran-content">
@@ -308,6 +389,19 @@
         Khatam: <span id="khatamCount">0</span>x
       </span>
     </div>
+
+  <!-- Bookmark Modal -->
+  <div id="bookmarkModal" class="bookmark-modal">
+    <div class="bookmark-content">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-bold text-gray-800">Daftar Bookmark</h2>
+        <button id="closeBookmarkModal" class="text-gray-500 hover:text-gray-700">
+          <i class="fas fa-times text-2xl"></i>
+        </button>
+      </div>
+      <div id="bookmarkList"></div>
+    </div>
+  </div>
 
   <script src="/js/dexie.js"></script>
   <script>

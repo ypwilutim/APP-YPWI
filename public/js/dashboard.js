@@ -141,7 +141,7 @@ function forceLogout() {
     window.location.replace('login.html');
 }
 
-// Global fetch wrapper: proactive token expiry check + auto-logout on 401/403
+// Global fetch wrapper: proactive token expiry check + auto-logout on 401 (only for expired tokens)
 (function () {
     const _fetch = window.fetch.bind(window);
     window.fetch = async function (input, init) {
@@ -152,8 +152,8 @@ function forceLogout() {
         }
         try {
             const res = await _fetch(input, init);
-            if (res && (res.status === 401 || res.status === 403)) {
-                // Clear sensitive local data and redirect to login immediately
+            // Only logout on 401 (unauthorized), not on 403 (forbidden) to allow error handling
+            if (res && res.status === 401) {
                 forceLogout();
             }
             return res;
@@ -926,7 +926,7 @@ async function recordAttendance(jenis) {
     const formData = new FormData();
     formData.append('jenis', jenis);
     formData.append('metode', 'dashboard');
-    formData.append('tenant_id', window.currentRulesTenantId || window.userAssignments?.[0]?.tenant_id || '');
+    formData.append('tenant_id', window.currentNearestTenantId || window.currentRulesTenantId || window.userAssignments?.[0]?.tenant_id || '');
     formData.append('latitude', currentLocation.latitude);
     formData.append('longitude', currentLocation.longitude);
     formData.append('waktu_absen', now.toISOString());
@@ -970,6 +970,8 @@ async function recordAttendance(jenis) {
     }
 
     try {
+        console.log('[DEBUG_ATTENDANCE] Sending attendance with tenant_id:', window.currentNearestTenantId || window.currentRulesTenantId || window.userAssignments?.[0]?.tenant_id);
+        console.log('[DEBUG_ATTENDANCE] formData tenant_id:', formData.get('tenant_id'));
         const response = await fetch('/api/attendance', {
             method: 'POST',
             headers: {
