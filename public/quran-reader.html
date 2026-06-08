@@ -12,6 +12,7 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="manifest" href="manifest-quran.json">
   <meta name="theme-color" content="#8b6f47">
+  <link rel="icon" type="image/png" href="/icons/icon-192.png">
   <style>
   .quran-content {
     flex: 1;
@@ -301,16 +302,14 @@
       </div>
     </div>
 
-    <div class="footer-bar" style="display: flex; justify-content: space-between; align-items: center; padding: 8px 16px; background: #f9fafb;">
-      <span id="pageLeft" style="width: 40px; text-align: center; font-size: 0.9rem; color: #6b7280;"></span>
+    <div class="footer-bar" style="display: flex; justify-content: center; align-items: center; padding: 8px 16px; background: #f9fafb;">
       <span id="khatamBadge" class="khatam-badge" style="flex: 1; text-align: center; display: none;">
         <i class="fas fa-trophy"></i>
         Khatam: <span id="khatamCount">0</span>x
       </span>
-      <span id="pageRight" style="width: 40px; text-align: center; font-size: 0.9rem; color: #6b7280;"></span>
     </div>
 
-  <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
+  <script src="/js/dexie.js"></script>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('sw-quran.js');
@@ -450,21 +449,10 @@ const db = new Dexie('QuranDB');
     const khatamMode = document.getElementById('khatamMode');
     const browseMode = document.getElementById('browseMode');
     const quranPage = document.getElementById('quranPage');
-    const pageLeft = document.getElementById('pageLeft');
-    const pageRight = document.getElementById('pageRight');
     const backToModeBtn = document.getElementById('backToModeBtn');
+    const khatamBadge = document.getElementById('khatamBadge');
 
     const TOTAL_PAGES = 604;
-
-    function updatePageIndicator() {
-      if (currentPage % 2 === 1) {
-        pageLeft.textContent = '';
-        pageRight.textContent = currentPage < TOTAL_PAGES ? (currentPage + 1) : '';
-      } else {
-        pageLeft.textContent = currentPage > 1 ? (currentPage - 1) : '';
-        pageRight.textContent = '';
-      }
-    }
 
     function setMode(mode) {
       isKhatamMode = mode === 'khatam';
@@ -479,7 +467,6 @@ const db = new Dexie('QuranDB');
       }
       if (isInstalled) {
         loadPage(currentPage).then(() => preloadAdjacentPages(currentPage));
-        updatePageIndicator();
       }
     }
 
@@ -619,7 +606,6 @@ const db = new Dexie('QuranDB');
           quranImage.style.transform = 'translateX(0) scale(1)';
           quranImage.style.opacity = '1';
           quranImage.classList.remove('sliding');
-          updatePageIndicator();
           if (oldSrc && oldSrc.startsWith('blob:')) {
             URL.revokeObjectURL(oldSrc);
           }
@@ -718,7 +704,7 @@ const db = new Dexie('QuranDB');
         quranImage.style.transform = 'translateX(0) scale(1)';
         quranImage.style.opacity = '1';
       }
-});
+    });
 
     backToModeBtn.addEventListener('click', () => {
       modeModal.style.display = 'flex';
@@ -727,9 +713,12 @@ const db = new Dexie('QuranDB');
     khatamMode.addEventListener('click', () => setMode('khatam'));
     browseMode.addEventListener('click', () => setMode('browse'));
 
+    installBtn.addEventListener('click', downloadImages);
+
     khatamCountEl.textContent = khatamCount;
     checkInstallation();
   </script>
+  </div>
 </body>
 
 </html>
