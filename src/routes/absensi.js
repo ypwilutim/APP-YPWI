@@ -8,7 +8,7 @@ const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const db = require('../../db');
-const { authenticateToken, authenticateOperator } = require('../middleware/auth');
+const { authenticateToken, authenticateOperator, calculateDistance } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -206,10 +206,14 @@ router.get('/attendance-rules', authenticateToken, async (req, res) => {
       });
     }
 
-    const [tenantInfo] = await db.query(
+    const tenantInfoArray = await db.query(
       'SELECT use_central_rules FROM tenants WHERE tenant_id = ?',
       [targetTenantId]
-    );
+    ).catch(err => {
+      console.error('[DEBUG] Tenant query error:', err.message);
+      return [];
+    });
+    const tenantInfo = Array.isArray(tenantInfoArray) && tenantInfoArray.length > 0 ? tenantInfoArray[0] : null;
 
     if (tenantInfo && tenantInfo.use_central_rules === 1) {
       targetTenantId = 'YPWILUTIM';
@@ -217,15 +221,20 @@ router.get('/attendance-rules', authenticateToken, async (req, res) => {
     }
 
     const rules = await db.query(
-      `SELECT id, tenant_id, nama_aturan, tipe, jam_masuk as jam_mulai, jam_pulang as jam_selesai, 
-              status_log, hari_kerja as hari, keterangan, is_active 
+      `SELECT id, tenant_id, tipe, jam_mulai, jam_selesai, 
+              status_log, hari, keterangan 
        FROM attendance_rules 
-       WHERE tenant_id = ? AND is_active = 1 
+       WHERE tenant_id = ?
        ORDER BY jam_mulai`,
       [targetTenantId]
-    );
+    ).catch(err => {
+      console.error('[DEBUG] Rules query error:', err.message);
+      return [];
+    });
 
-    const dataRules = Array.isArray(rules) ? rules : (rules.rows || rules[0] || []);
+    console.log('[DEBUG] Rules query result:', targetTenantId, rules?.length || 0);
+
+    const dataRules = Array.isArray(rules) ? rules : [];
 
     return res.status(200).json({
       success: true,
