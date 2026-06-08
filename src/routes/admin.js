@@ -398,14 +398,26 @@ router.post('/admin/rules', authenticateOperator, async (req, res) => {
 router.put('/admin/rules/:id', authenticateOperator, async (req, res) => {
   try {
     const { id } = req.params;
-    const { tenant_id, tipe, jam_mulai, jam_selesai, keterangan, status_log, hari } = req.body;
+    let { tenant_id, tipe, jam_mulai, jam_selesai, keterangan, status_log, hari } = req.body;
 
-    if (!tenant_id || !tipe || !jam_mulai || !jam_selesai || !status_log) {
-      return res.status(400).json({ success: false, message: 'Semua field wajib diisi' });
+    // Get existing rule to verify tenant access and use its tenant_id if not provided in body
+    const [existingRule] = await db.query('SELECT tenant_id FROM attendance_rules WHERE id = ?', [id]);
+    if (!existingRule) {
+      return res.status(404).json({ success: false, message: 'Rule tidak ditemukan' });
     }
 
-    if (!verifyTenantAccess(req, tenant_id)) {
+    // Use query tenant_id as fallback, then existing rule's tenant_id
+    const targetTenantId = tenant_id || req.query.tenant_id || existingRule.tenant_id;
+
+    if (!verifyTenantAccess(req, targetTenantId)) {
       return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+
+    // Use existing rule's tenant_id if body tenant_id is empty but query or existing has it
+    tenant_id = targetTenantId;
+
+    if (!tipe || !jam_mulai || !jam_selesai || !status_log) {
+      return res.status(400).json({ success: false, message: 'Field tipe, jam_mulai, jam_selesai, status_log wajib diisi' });
     }
 
     const result = await db.query(

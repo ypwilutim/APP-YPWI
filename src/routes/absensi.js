@@ -8,7 +8,7 @@ const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const db = require('../../db');
-const { authenticateToken, authenticateOperator, isDayMatch, calculateDistance, verifyTenantAccess } = require('../middleware/auth');
+const { authenticateToken, authenticateOperator } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -34,38 +34,62 @@ const selfieUpload = multer({ storage: selfieStorage });
 
 router.post('/attendance', authenticateToken, selfieUpload.single('selfie'), async (req, res) => {
   try {
-    const { jenis, metode, latitude, longitude, waktu_absen, waktu_scan, rule_id, status, kegiatan_dinas, client_timezone } = req.body;
+    const { jenis, metode, latitude, longitude, waktu_absen, waktu_scan, rule_id, status, kegiatan_dinas, client_timezone, tenant_id } = req.body;
     let selfie_url = req.file ? req.file.path : null;
     const userTimezone = client_timezone || 'Asia/Makassar';
 
-    // Deteksi tenant_id dari lokasi GPS (jika guru multi-tenant)
-    let detected_tenant_id = req.body.tenant_id || req.user.tenant_id;
-    if (latitude && longitude && !req.body.tenant_id) {
+    if (!jenis || !waktu_scan) {
+      return res.status(400).json({ success: false, message: 'jenis dan waktu_scan wajib diisi' });
+    }
+
+    if (!tenant_id) {
+      return res.status(400).json({ success: false, message: 'tenant_id wajib dikirim dari frontend.' });
+    }
+
+    const userAssignments = req.user?.assignments || [];
+    const allowedTenantIds = userAssignments.map(a => a.tenant_id);
+    if (!allowedTenantIds.includes(tenant_id)) {
+      console.warn(`[ANTI-FRAUD] User ${req.user.guru_id} mencoba absen di tenant ${tenant_id} yang tidak diassignment. Allowed: ${allowedTenantIds.join(',')}`);
+      return res.status(403).json({ success: false, message: 'Anda tidak memiliki akses untuk unit ini.' });
+    }
+
+    let detected_tenant_id = tenant_id;
+
+    if (latitude && longitude) {
       const userLat = parseFloat(latitude);
       const userLng = parseFloat(longitude);
 
-      // Ambil semua tenant dengan lokasi
-      const tenants = await db.query(
-        `SELECT tenant_id, latitude, longitude, location_radius 
-         FROM tenants 
-         WHERE latitude IS NOT NULL AND longitude IS NOT NULL`
-      );
-
-      // Cari tenant mana yang mencakup lokasi user
-      for (const t of tenants) {
-        const dist = Math.sqrt(
-          Math.pow((t.latitude - userLat), 2) + Math.pow((t.longitude - userLng), 2)
+      if (!isNaN(userLat) && !isNaN(userLng)) {
+        const [tenantData] = await db.query(
+          'SELECT latitude, longitude, location_radius FROM tenants WHERE tenant_id = ?',
+          [tenant_id]
         );
-        const radiusKm = (t.location_radius || 200) / 111000; // Convert meter to km approximation
-        if (dist <= radiusKm) {
-          detected_tenant_id = t.tenant_id;
-          break;
+
+        if (tenantData && tenantData.latitude && tenantData.longitude) {
+          const tLat = parseFloat(tenantData.latitude);
+          const tLng = parseFloat(tenantData.longitude);
+          const R = 6371;
+          const dLat = (tLat - userLat) * Math.PI / 180;
+          const dLng = (tLng - userLng) * Math.PI / 180;
+          const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                    Math.cos(userLat * Math.PI / 180) * Math.cos(tLat * Math.PI / 180) *
+                    Math.sin(dLng/2) * Math.sin(dLng/2);
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+          const distanceKm = R * c;
+          const distanceM = distanceKm * 1000;
+          const radiusM = tenantData.location_radius || 200;
+
+          if (distanceM > radiusM) {
+            console.warn(`[ANTI-FRAUD] User ${req.user.guru_id} di luar radius. Jarak: ${distanceM.toFixed(1)}m, Radius: ${radiusM}m, Tenant: ${tenant_id}`);
+            return res.status(403).json({
+              success: false,
+              message: `Lokasi Anda di luar radius sekolah (${distanceM.toFixed(0)}m dari ${radiusM}m).`
+            });
+          }
+
+          console.log(`[ANTI-FRAUD] Validasi lokasi berhasil. Jarak: ${distanceM.toFixed(1)}m, Radius: ${radiusM}m, Tenant: ${tenant_id}`);
         }
       }
-    }
-
-    if (!jenis || !waktu_scan) {
-      return res.status(400).json({ success: false, message: 'jenis dan waktu_scan wajib diisi' });
     }
 
     // Frontend sudah menangani validasi duplikat dan aturan waktu
@@ -162,106 +186,61 @@ router.post('/attendance', authenticateToken, selfieUpload.single('selfie'), asy
 
 router.get('/attendance-rules', authenticateToken, async (req, res) => {
   try {
-    const { lat, lng, tenant_id } = req.query;
+    const { tenant_id } = req.query;
     let targetTenantId = tenant_id;
     let useCentral = false;
 
-    // Jika ada lat/lng, deteksi tenant otomatis berdasarkan lokasi GPS
-    if (lat && lng && !targetTenantId) {
-      const userLat = parseFloat(lat);
-      const userLng = parseFloat(lng);
-
-      if (!isNaN(userLat) && !isNaN(userLng)) {
-        const tenants = await db.query(
-          `SELECT tenant_id, latitude, longitude, location_radius 
-           FROM tenants 
-           WHERE latitude IS NOT NULL AND longitude IS NOT NULL`
-        );
-
-        const subLocations = await db.query(
-          `SELECT tl.tenant_id, tl.latitude, tl.longitude, tl.location_radius
-           FROM tenant_locations tl
-           JOIN tenants t ON tl.tenant_id = t.tenant_id
-           WHERE tl.latitude IS NOT NULL AND tl.longitude IS NOT NULL AND tl.is_active = 1`
-        );
-
-        const allLocations = [...tenants, ...subLocations];
-
-        // Cari semua tenant assignment user yang dalam radius, urutkan berdasarkan jarak
-        const userAssignments = req.user?.assignments || [];
-        const userHomeTenantIds = [...new Set(userAssignments.map(a => a.tenant_id))];
-
-        const homeTenantsInRadius = userHomeTenantIds
-          .map(tenantId => {
-            const loc = allLocations.find(l => l.tenant_id === tenantId);
-            if (!loc) return null;
-
-            const dist = Math.sqrt(
-              Math.pow(parseFloat(loc.latitude) - userLat, 2) +
-              Math.pow(parseFloat(loc.longitude) - userLng, 2)
-            );
-            const radiusKm = (loc.location_radius || 200) / 111000;
-
-            return dist <= radiusKm ? { tenant_id: loc.tenant_id, distance: dist * 1000 } : null;
-          })
-          .filter(Boolean)
-          .sort((a, b) => a.distance - b.distance);
-
-        // Jika ada assignment dalam radius, pilih yang terdekat
-        // Jika tidak ada, cari tenant mana saja yang dalam radius (dinas luar)
-        targetTenantId = homeTenantsInRadius.length > 0
-          ? homeTenantsInRadius[0].tenant_id
-          : allLocations
-            .map(loc => {
-              const dist = Math.sqrt(
-                Math.pow(parseFloat(loc.latitude) - userLat, 2) +
-                Math.pow(parseFloat(loc.longitude) - userLng, 2)
-              );
-              const radiusKm = (loc.location_radius || 200) / 111000;
-
-              return dist <= radiusKm ? { tenant_id: loc.tenant_id, distance: dist * 1000 } : null;
-            })
-            .filter(Boolean)
-            .sort((a, b) => a.distance - b.distance)[0]?.tenant_id;
-
-        console.log('[ATTENDANCE-RULES] Home tenants in radius:', homeTenantsInRadius, 'Selected:', targetTenantId);
+    if (!targetTenantId) {
+      const userAssignments = req.user?.assignments || [];
+      if (userAssignments.length > 0) {
+        targetTenantId = userAssignments[0].tenant_id;
+      } else if (req.user.tenant_id) {
+        targetTenantId = req.user.tenant_id;
       }
     }
 
-    // Cek apakah tenant menggunakan aturan pusat
-    if (targetTenantId) {
-      const [tenantInfo] = await db.query(
-        'SELECT use_central_rules FROM tenants WHERE tenant_id = ?',
-        [targetTenantId]
-      );
-
-      if (tenantInfo && tenantInfo.use_central_rules === 1) {
-        targetTenantId = 'YPWILUTIM';
-        useCentral = true;
-      }
+    if (!targetTenantId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Tidak ada tenant_id yang ditugaskan untuk guru ini.'
+      });
     }
 
-    // Query rules berdasarkan tenant_id
-    let query = 'SELECT id, tenant_id, tipe, jam_mulai, jam_selesai, status_log, hari FROM attendance_rules';
-    let params = [];
+    const [tenantInfo] = await db.query(
+      'SELECT use_central_rules FROM tenants WHERE tenant_id = ?',
+      [targetTenantId]
+    );
 
-    if (targetTenantId) {
-      query += ' WHERE tenant_id = ?';
-      params.push(targetTenantId);
+    if (tenantInfo && tenantInfo.use_central_rules === 1) {
+      targetTenantId = 'YPWILUTIM';
+      useCentral = true;
     }
 
-    query += ' ORDER BY tipe, jam_mulai';
-
-    const rules = await db.query(query, params);
+    const rules = await db.query(
+      `SELECT id, tenant_id, nama_aturan, tipe, jam_masuk as jam_mulai, jam_pulang as jam_selesai, 
+              status_log, hari_kerja as hari, keterangan, is_active 
+       FROM attendance_rules 
+       WHERE tenant_id = ? AND is_active = 1 
+       ORDER BY jam_mulai`,
+      [targetTenantId]
+    );
 
     const dataRules = Array.isArray(rules) ? rules : (rules.rows || rules[0] || []);
 
     return res.status(200).json({
       success: true,
       rules: dataRules,
-      source_tenant: targetTenantId || 'universal',
+      source_tenant: targetTenantId,
       use_central: useCentral
     });
+  } catch (error) {
+    console.error('Error fetching attendance rules:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Gagal mengambil data aturan absensi internal server.'
+    });
+  }
+});
   } catch (error) {
     console.error('Error fetching attendance rules:', error);
     return res.status(500).json({
@@ -683,7 +662,22 @@ Pesan akan otomatis terkirim ke admin untuk review.`;
 // GET /api/dashboard - Get dashboard summary for teacher
 router.get('/dashboard', authenticateToken, async (req, res) => {
   try {
-    const guruId = req.user.guru_id;
+    console.log('[DEBUG_DASHBOARD] User data:', { id: req.user.id, guru_id: req.user.guru_id, role: req.user.role });
+    const guruId = req.user.guru_id || req.user.id;
+    
+    if (!req.user.guru_id) {
+      return res.json({
+        success: true,
+        data: {
+          totalAbsensi: 0,
+          absensiToday: 'Belum absen',
+          user: {
+            is_default_password: 0
+          }
+        }
+      });
+    }
+
     const today = new Date().toISOString().split('T')[0];
 
     const totalResult = await db.query(
@@ -697,17 +691,17 @@ router.get('/dashboard', authenticateToken, async (req, res) => {
     );
 
     const userCheck = await db.query(
-      'SELECT is_default_password FROM teachers WHERE id = ?',
-      [guruId]
+      'SELECT is_default_password FROM users WHERE id = ?',
+      [req.user.id]
     );
 
     res.json({
       success: true,
       data: {
-        totalAbsensi: totalResult?.total || 0,
-        absensiToday: todayResult ? (todayResult.jenis === 'masuk' ? 'Sudah Masuk' : 'Sudah Pulang') : 'Belum absen',
+        totalAbsensi: totalResult[0]?.total || 0,
+        absensiToday: todayResult[0] ? (todayResult[0].jenis === 'masuk' ? 'Sudah Masuk' : 'Sudah Pulang') : 'Belum absen',
         user: {
-          is_default_password: userCheck?.is_default_password || 0
+          is_default_password: userCheck[0]?.is_default_password || 0
         }
       }
     });

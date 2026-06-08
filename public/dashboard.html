@@ -508,11 +508,12 @@
         <div style="display: flex; align-items: center; gap: 1rem;">
           <!-- Avatar User -->
           <div class="user-avatar avatar-md" title="Foto Profil" onclick="changeProfilePhoto()"
-            style="position: relative; width: 56px; height: 56px; border-radius: 50%; overflow: hidden; border: 2px solid #3b82f6; background: #f1f5f9; cursor: pointer; display: flex; align-items: center; justify-content: center; shrink-0;">
-<img id="userPhoto" src="" alt="Foto Profil"
-               style="display: none; width: 100%; height: 100%; object-fit: cover;"
-               onload="showUserPhoto()">
-            <div class="avatar-fallback show" id="avatarFallback" style="font-size: 1.25rem; color: #64748b;">
+            style="position: relative; width: 60px; height: 60px; border-radius: 12px; overflow: hidden; background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; shrink-0;">
+            <img id="userPhoto" src="" alt="Foto Profil"
+              style="display: none; width: 100%; height: 100%; object-fit: cover; background: transparent;"
+              onload="showUserPhoto()">
+            <div class="avatar-fallback show" id="avatarFallback"
+              style="font-size: 1.25rem; color: #64748b; background: transparent;">
               <i class="fas fa-user"></i>
             </div>
           </div>
@@ -528,13 +529,13 @@
           </div>
         </div>
 
-<!-- Tombol Aksi Kanan (Hanya Muncul di Tampilan PC) -->
-         <div class="pc-action-header">
-           <button onclick="hardRefresh()" title="Muat Ulang Halaman"
-             style="display: inline-flex; align-items: center; gap: 0.5rem; background: #f1f5f9; color: #475569; padding: 0.6rem 1rem; border-radius: 0.5rem; font-weight: 600; font-size: 0.85rem; border: 1px solid #e2e8f0; cursor: pointer; transition: all 0.2s;">
-             <i class="fas fa-sync-alt"></i> Refresh
-           </button>
-           <div id="adminNavSection" class="hidden" style="margin:0;"></div>
+        <!-- Tombol Aksi Kanan (Hanya Muncul di Tampilan PC) -->
+        <div class="pc-action-header">
+          <button onclick="hardRefresh()" title="Muat Ulang Halaman"
+            style="display: inline-flex; align-items: center; gap: 0.5rem; background: #f1f5f9; color: #475569; padding: 0.6rem 1rem; border-radius: 0.5rem; font-weight: 600; font-size: 0.85rem; border: 1px solid #e2e8f0; cursor: pointer; transition: all 0.2s;">
+            <i class="fas fa-sync-alt"></i> Refresh
+          </button>
+          <div id="adminNavSection" class="hidden" style="margin:0;"></div>
           <div id="desktopAdminBtn" style="display: none; margin-right: 0.5rem;">
             <button onclick="showDesktopAdminModal()"
               style="display: inline-flex; align-items: center; gap: 0.5rem; background: #dbeafe; color: #1d4ed8; padding: 0.6rem 1.25rem; border-radius: 0.5rem; font-weight: 700; font-size: 0.85rem; border: 1px solid #93c5fd; cursor: pointer; transition: all 0.2s;">
@@ -547,6 +548,28 @@
           </a>
         </div>
       </div>
+    </div>
+
+    <div id="ruleStatusCard"
+      style="background: #ffffff; border-radius: 1.25rem; padding: 1.25rem; box-shadow: 0 4px 15px rgba(0,0,0,0.02); border: 1px solid #e2e8f0; margin-bottom: 1.5rem;">
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem;">
+        <div style="display: flex; align-items: center; gap: 1rem;">
+          <div
+            style="width: 40px; height: 40px; background: #eef2ff; border-radius: 0.75rem; display: flex; align-items: center; justify-content: center;">
+            <i class="fas fa-calendar-check" style="color: #4f46e5; font-size: 1.1rem;"></i>
+          </div>
+          <div>
+            <p style="margin: 0; font-size: 0.75rem; color: #64748b; font-weight: 600;">Status Aturan Absensi</p>
+            <p id="ruleStatusText" style="margin: 2px 0 0; font-size: 0.95rem; font-weight: 700; color: #0f172a;">Memuat
+              aturan...</p>
+          </div>
+        </div>
+        <div id="ruleStatusBadge"
+          style="padding: 0.35rem 0.75rem; border-radius: 999px; font-size: 0.75rem; font-weight: 700; background: #f1f5f9; color: #475569;">
+          <i class="fas fa-circle-notch fa-spin" style="margin-right: 0.25rem;"></i>Memuat
+        </div>
+      </div>
+      <p id="ruleNextInfo" style="margin: 0.5rem 0 0; font-size: 0.8rem; color: #94a3b8;"></p>
     </div>
 
     <!-- ==========================================
@@ -739,7 +762,8 @@
       <i class="fas fa-fingerprint" style="font-size: 1.3rem; display: block; margin-bottom: 2px;"></i>
       <span style="font-size: 0.65rem; font-weight: 700;">Presensi</span>
     </div>
-    <div onclick="hardRefresh();" style="text-align: center; color: #64748b; cursor: pointer; -webkit-tap-highlight-color: transparent;">
+    <div onclick="hardRefresh();"
+      style="text-align: center; color: #64748b; cursor: pointer; -webkit-tap-highlight-color: transparent;">
       <i class="fas fa-sync-alt" style="font-size: 1.3rem; display: block; margin-bottom: 2px;"></i>
       <span style="font-size: 0.65rem; font-weight: 600;">Refresh</span>
     </div>
@@ -898,7 +922,8 @@
             <i class="fas fa-file-medical" style="font-size: 1.25rem;"></i>
             <h3 style="margin: 0; font-size: 1.25rem;">Pengajuan Izin</h3>
           </div>
-          <button onclick="closePermissionModal()" style="background: none; border: none; color: white; cursor: pointer;">
+          <button onclick="closePermissionModal()"
+            style="background: none; border: none; color: white; cursor: pointer;">
             <i class="fas fa-times"></i>
           </button>
         </div>
@@ -907,7 +932,8 @@
 
       <div style="padding: 1rem;">
         <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-          <select id="permissionType" style="width: 100%; padding: 0.75rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem;">
+          <select id="permissionType"
+            style="width: 100%; padding: 0.75rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem;">
             <option value="">-- Pilih Jenis Izin --</option>
             <option value="izin">Izin</option>
             <option value="sakit">Sakit</option>
@@ -917,12 +943,16 @@
 
           <div style="display: flex; gap: 0.5rem;">
             <div style="flex: 1;">
-              <label style="font-size: 0.8rem; color: #64748b; display: block; margin-bottom: 0.25rem;">Tanggal Mulai</label>
-              <input type="date" id="permissionStartDate" style="width: 100%; padding: 0.65rem; border: 1px solid #cbd5e1; border-radius: 0.5rem;">
+              <label style="font-size: 0.8rem; color: #64748b; display: block; margin-bottom: 0.25rem;">Tanggal
+                Mulai</label>
+              <input type="date" id="permissionStartDate"
+                style="width: 100%; padding: 0.65rem; border: 1px solid #cbd5e1; border-radius: 0.5rem;">
             </div>
             <div style="flex: 1;">
-              <label style="font-size: 0.8rem; color: #64748b; display: block; margin-bottom: 0.25rem;">Tanggal Selesai</label>
-              <input type="date" id="permissionEndDate" style="width: 100%; padding: 0.65rem; border: 1px solid #cbd5e1; border-radius: 0.5rem;">
+              <label style="font-size: 0.8rem; color: #64748b; display: block; margin-bottom: 0.25rem;">Tanggal
+                Selesai</label>
+              <input type="date" id="permissionEndDate"
+                style="width: 100%; padding: 0.65rem; border: 1px solid #cbd5e1; border-radius: 0.5rem;">
             </div>
           </div>
 
@@ -933,13 +963,14 @@
 
       <div style="padding: 1rem; border-top: 1px solid #e2e8f0; display: flex; gap: 8px;">
         <button onclick="closePermissionModal()" class="btn-secondary" style="flex: 1;">Batal</button>
-        <button id="submitPermissionBtn" onclick="submitPermission()" class="btn-primary" style="flex: 1;">Ajukan Izin</button>
+        <button id="submitPermissionBtn" onclick="submitPermission()" class="btn-primary" style="flex: 1;">Ajukan
+          Izin</button>
       </div>
     </div>
   </div>
 
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-   <script src="js/dashboard.js" defer></script>
-  </body>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script src="js/dashboard.js" defer></script>
+</body>
 
 </html>

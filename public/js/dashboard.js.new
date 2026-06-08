@@ -251,7 +251,6 @@ async function setTeacherInfo() {
 
 let currentLocation = null;
 let currentAttendanceRule = null;
-window.isLocationValid = false;
 
 function updateLocationDisplay(success, message) {
     const locationInfo = document.getElementById('locationInfo');
@@ -274,7 +273,7 @@ function getLocationErrorMessage(error) {
 
 // Helper: Pengecekan hari absen (format: senin / senin,selasa / senin-rabu)
 function isDayMatch(ruleHari, currentDay) {
-    if (!ruleHari || ruleHari.trim() === '') return true;
+    if (!ruleHari || ruleHari.trim() === '') return false;
 
     const rule = ruleHari.toLowerCase().trim();
     const day = currentDay.toLowerCase().trim();
@@ -367,72 +366,94 @@ function getCurrentAttendancePeriod() {
     return { period: 'outside', canAttend: false, label: 'Di Luar Jam Absensi' };
 }
 
-async function updateAttendanceButtonsState() {
+function updateAttendanceButtonsState() {
     console.log('updateAttendanceButtonsState called, currentLocation:', currentLocation);
     const checkInBtn = document.getElementById('checkInBtn');
     const checkOutBtn = document.getElementById('checkOutBtn');
     const locationInfo = document.getElementById('locationInfo');
 
     if (!currentLocation) {
-        if (checkInBtn) checkInBtn.disabled = true;
-        if (checkOutBtn) checkOutBtn.disabled = true;
-        if (locationInfo) {
-            locationInfo.className = 'location-info error';
-            locationInfo.innerHTML = '<span>❌ Lokasi tidak tersedia. Aktifkan GPS untuk absensi.</span>';
-        }
+        checkInBtn.disabled = true;
+        checkOutBtn.disabled = true;
+        locationInfo.className = 'location-info error';
+        locationInfo.innerHTML = '<span>❌ Lokasi tidak tersedia. Aktifkan GPS untuk absensi.</span>';
         return;
     }
 
-    try {
-        const result = await validateLocationRadius(currentLocation.latitude, currentLocation.longitude);
-        console.log('Radius validation result:', result);
+    // Validate radius with nearest school
+    validateLocationRadius(currentLocation.latitude, currentLocation.longitude)
+        .then(result => {
+            console.log('Radius validation result in updateAttendanceButtonsState:', result);
 
-        const isInsideValidZone = result.withinRadius;
-        window.isLocationValid = isInsideValidZone;
+            let isInsideValidZone = false;
+            let statusHtml = '';
+            let statusClass = '';
 
-        let statusHtml = '';
-        let statusClass = '';
+            if (result.withinRadius) {
+                isInsideValidZone = true;
 
-        if (isInsideValidZone) {
-            statusClass = 'location-info success';
-            statusHtml = `<span>✅ Lokasi valid — Dalam radius ${result.radius}m dari ${result.schoolName}</span>`;
-        } else {
-            statusClass = 'location-info error';
-            statusHtml = `<span>❌ Di luar radius unit Anda (${result.schoolName})</span>`;
-        }
+                if (result.isHomeUnit !== false) {
+                    // Sekolah sendiri — tampil hijau normal
+                    statusClass = 'location-info success';
+                    statusHtml = `<span>✅ Lokasi valid — Dalam radius ${result.radius}m dari ${result.schoolName}</span>`;
+                } else if (result.isDinasLuarCandidate) {
+                    // Sekolah lain dalam radius — tampil kuning (dinas luar)
+                    statusClass = 'location-info warning';
+                    statusHtml = `<span>⚠️ Di luar unit utama — Dinas luar di ${result.schoolName}</span>`;
+                } else {
+                    // Sekolah lain tapi tidak ada penanda khusus
+                    statusClass = 'location-info warning';
+                    statusHtml = `<span>⚠️ Di luar unit utama — Dinas luar di ${result.schoolName}</span>`;
+                }
+            } else {
+                // Coba checkDinasLuar sebagai fallback tambahan
+                return checkDinasLuar(currentLocation.latitude, currentLocation.longitude)
+                    .then(dinasCheck => {
+                        if (dinasCheck.canDinasLuar) {
+                            isInsideValidZone = true;
+                            statusClass = 'location-info warning';
+                            statusHtml = `<span>⚠️ Di luar unit utama — Dinas luar di ${dinasCheck.unit.nama_sekolah}</span>`;
+                        } else {
+                            isInsideValidZone = false;
+                            statusClass = 'location-info error';
+                            statusHtml = `<span>❌ Di luar radius semua unit sekolah YPWI</span>`;
+                        }
+                        applyTimeRulesToButtons(isInsideValidZone, statusClass, statusHtml, checkInBtn, checkOutBtn, locationInfo);
+                    })
+                    .catch(() => {
+                        isInsideValidZone = false;
+                        statusClass = 'location-info error';
+                        statusHtml = `<span>❌ Di luar radius semua unit sekolah YPWI</span>`;
+                        applyTimeRulesToButtons(isInsideValidZone, statusClass, statusHtml, checkInBtn, checkOutBtn, locationInfo);
+                    });
+            }
 
-        if (locationInfo) {
-            locationInfo.className = statusClass;
-            locationInfo.innerHTML = statusHtml;
-        }
-
-        if (isInsideValidZone && window.currentRulesTenantId) {
-            await loadAttendanceRules();
-            await loadRecentAttendance();
-        }
-
-        applyTimeRulesToButtons(isInsideValidZone, statusClass, statusHtml, checkInBtn, checkOutBtn, locationInfo);
-    } catch (error) {
-        console.error('Radius validation error:', error);
-        window.isLocationValid = false;
-        if (checkInBtn) checkInBtn.disabled = true;
-        if (checkOutBtn) checkOutBtn.disabled = true;
-        if (locationInfo) {
+            // Jalankan jika valid atau sekolah lain
+            applyTimeRulesToButtons(isInsideValidZone, statusClass, statusHtml, checkInBtn, checkOutBtn, locationInfo);
+        })
+        .catch(error => {
+            console.error('Radius validation error:', error);
+            // Fallback aman: disable tombol jika validasi gagal
+            const hasCheckedInToday = window.hasCheckedInToday === true;
+            checkInBtn.disabled = true;
+            checkOutBtn.disabled = true;
             locationInfo.className = 'location-info error';
             locationInfo.innerHTML = '<span>❌ Gagal memvalidasi lokasi. Absensi tidak diizinkan.</span>';
-        }
-    }
+        });
 }
 
 function applyTimeRulesToButtons(isInsideValidZone, statusClass, statusHtml, checkInBtn, checkOutBtn, locationInfo) {
     const permissionBtn = document.getElementById('permissionBtn');
-    if (permissionBtn) permissionBtn.style.display = 'inline-block';
+    if (permissionBtn) permissionBtn.style.display = 'inline-block'; // Always show permission button
 
+    // Check if user has already checked in today (from attendance history)
     const hasCheckedInToday = window.hasCheckedInToday === true;
 
     if (window.currentAttendanceRules && window.currentAttendanceRules.length > 0) {
         const sekarang = new Date();
         const currentMinutes = sekarang.getHours() * 60 + sekarang.getMinutes();
+
+        // Dapatkan hari lokal WITA
         const dayNames = ['minggu', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
         const currentDay = dayNames[sekarang.getDay()];
 
@@ -442,97 +463,66 @@ function applyTimeRulesToButtons(isInsideValidZone, statusClass, statusHtml, che
         let nextRule = null;
         let nextRuleDiff = Infinity;
 
-        const hasPulangRuleToday = window.currentAttendanceRules.some(r => {
-            const hari = r.hari || r.hari_kerja || '';
-            return isDayMatch(hari, currentDay) && (r.tipe || '').toLowerCase().includes('pulang');
-        });
-
-        console.log('[DEBUG_RULE] Menit sekarang:', currentMinutes, 'Hari:', currentDay, 'hasPulangRuleToday:', hasPulangRuleToday);
+        console.log('[DEBUG_RULE] Menit sekarang:', currentMinutes, 'Hari:', currentDay);
 
         window.currentAttendanceRules.forEach(rule => {
             const tipeRule = (rule.tipe || '').toLowerCase().trim();
             const mulai = rule.jam_mulai;
             const selesai = rule.jam_selesai;
 
-            if (!isDayMatch(rule.hari, currentDay)) return;
+            // CEK HARI TERLEBIH DAHULU
+            if (!isDayMatch(rule.hari, currentDay)) {
+                return; // Skip jika bukan hari yang diatur
+            }
 
-            const [mulaiH, mulaiM] = ((rule.jam_mulai || rule.jam_masuk || '00:00').split(':').map(n => parseInt(n) || 0));
-            const [selesaiH, selesaiM] = ((rule.jam_selesai || rule.jam_pulang || '00:00').split(':').map(n => parseInt(n) || 0));
+            const [mulaiH, mulaiM] = (mulai || '00:00').split(':').map(n => parseInt(n) || 0);
+            const [selesaiH, selesaiM] = (selesai || '00:00').split(':').map(n => parseInt(n) || 0);
             const mulaiMenit = mulaiH * 60 + mulaiM;
             const selesaiMenit = selesaiH * 60 + selesaiM;
 
-            const isOvernight = mulaiMenit > selesaiMenit;
-            const isInRange = isOvernight
-                ? (currentMinutes >= mulaiMenit || currentMinutes <= selesaiMenit)
-                : (currentMinutes >= mulaiMenit && currentMinutes <= selesaiMenit);
-
-            if (isInRange) {
+            if (currentMinutes >= mulaiMenit && currentMinutes <= selesaiMenit) {
                 console.log(`[DEBUG_RULE] Cocok dengan Rule ID ${rule.id}: ${rule.tipe} (${mulai} - ${selesai})`);
 
-                if (tipeRule === 'datang' && !hasCheckedInToday) {
-                    bolehCheckIn = true;
+                if (tipeRule === 'datang') {
+                    if (!hasCheckedInToday) {
+                        bolehCheckIn = true;
+                    }
                     statusSesiAktif = rule.status_log || 'Tepat Waktu';
                 }
-                if (tipeRule === 'pulang' && hasCheckedInToday) {
-                    bolehCheckOut = true;
+                if (tipeRule === 'pulang') {
+                    if (hasCheckedInToday) {
+                        bolehCheckOut = true;
+                    }
                     statusSesiAktif = rule.status_log || 'Pulang';
                 }
+
             } else {
-                let diffMenit = mulaiMenit - currentMinutes;
-                if (isOvernight && diffMenit < 0) diffMenit += 1440;
+                const diffMenit = mulaiMenit - currentMinutes;
                 const diffMs = diffMenit * 60 * 1000;
                 if (diffMs < nextRuleDiff && diffMs > 0) {
                     nextRuleDiff = diffMs;
                     nextRule = rule;
                 }
-                if (diffMenit < 0 && !isOvernight) {
-                    // Rule sudah lewat
-                } else if (tipeRule === 'pulang' && mulaiMenit > currentMinutes && !nextRule && hasCheckedInToday) {
-                    nextRuleDiff = diffMenit;
-                    nextRule = rule;
-                }
             }
         });
 
-        checkInBtn.style.display = 'none';
-        checkInBtn.disabled = true;
-        checkOutBtn.style.display = 'none';
-        checkOutBtn.disabled = true;
+        // Tombol hanya aktif jika dalam radius DAN waktu aturan terpenuhi
+        checkInBtn.disabled = !isInsideValidZone || !bolehCheckIn;
+        checkOutBtn.disabled = !isInsideValidZone || !bolehCheckOut;
 
-        if (!hasCheckedInToday) {
-            checkInBtn.style.display = 'block';
-            checkInBtn.disabled = !bolehCheckIn || !isInsideValidZone;
-            checkOutBtn.style.display = 'none';
-            checkOutBtn.disabled = true;
-        } else {
+        if (!bolehCheckIn && !bolehCheckOut) {
             checkInBtn.style.display = 'none';
-            checkInBtn.disabled = true;
-
-            if (hasPulangRuleToday) {
-                checkOutBtn.style.display = 'block';
-                checkOutBtn.disabled = !bolehCheckOut || !isInsideValidZone;
-            } else {
-                checkOutBtn.style.display = 'none';
-                checkOutBtn.disabled = true;
-                updateAttendanceWidget('Absensi Hari Ini Selesai', '#15803d', '#dcfce7');
-            }
-        }
-
-        if (!isInsideValidZone) {
-            checkInBtn.title = 'Aktifkan GPS untuk melakukan absensi';
-            checkOutBtn.title = 'Aktifkan GPS untuk melakukan absensi';
+            checkOutBtn.style.display = 'none';
         } else {
-            checkInBtn.title = '';
-            checkOutBtn.title = '';
+            checkInBtn.style.display = bolehCheckIn ? 'block' : 'none';
+            checkOutBtn.style.display = bolehCheckOut ? 'block' : 'none';
         }
 
         const distanceText = window.lastDistanceResult !== undefined ? `<br><small>📍 Jarak Anda saat ini: ${Math.round(window.lastDistanceResult)} meter dari target</small>` : '';
-        let infoTambahanAturan = '';
 
-        if (!hasCheckedInToday) {
-            if (bolehCheckIn) {
-                infoTambahanAturan = `<br><small>🕒 Sesi aktif: <b>Absen Datang</b> (${statusSesiAktif})</small>`;
-            } else if (nextRule) {
+        let infoTambahanAturan = '';
+        if (!bolehCheckIn && !bolehCheckOut) {
+            if (nextRule) {
                 const totalSeconds = Math.floor(nextRuleDiff / 1000);
                 const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
                 const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
@@ -543,31 +533,17 @@ function applyTimeRulesToButtons(isInsideValidZone, statusClass, statusHtml, che
                 infoTambahanAturan = `<br><small>🕒 Sesi absen belum dibuka / sudah ditutup (Jam sekarang: ${String(sekarang.getHours()).padStart(2, '0')}:${String(sekarang.getMinutes()).padStart(2, '0')})</small>`;
             }
         } else {
-            if (hasPulangRuleToday) {
-                if (bolehCheckOut) {
-                    infoTambahanAturan = `<br><small>🕒 Sesi aktif: <b>Absen Pulang</b> (${statusSesiAktif})</small>`;
-                } else if (nextRule && nextRule.tipe && (nextRule.tipe || '').toLowerCase().includes('pulang')) {
-                    const totalSeconds = Math.floor(nextRuleDiff / 1000);
-                    const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
-                    const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
-                    const seconds = String(totalSeconds % 60).padStart(2, '0');
-                    infoTambahanAturan = `<br><small>⏳ Absen Pulang akan dibuka dalam: ${hours}:${minutes}:${seconds}</small>`;
-                } else {
-                    infoTambahanAturan = `<br><small>🕒 Menunggu jam absen pulang...</small>`;
-                }
-            } else {
-                infoTambahanAturan = `<br><small>✅ Unit ini hanya memerlukan absen masuk. Absensi hari ini selesai.</small>`;
-            }
+            infoTambahanAturan = `<br><small>🕒 Sesi aktif: <b>${bolehCheckIn ? 'Absen Datang' : 'Absen Pulang'}</b> (${statusSesiAktif})</small>`;
         }
 
         locationInfo.className = statusClass;
         locationInfo.innerHTML = statusHtml + distanceText + infoTambahanAturan;
 
     } else {
-        checkInBtn.style.display = 'none';
-        checkInBtn.disabled = true;
-        checkOutBtn.style.display = 'none';
-        checkOutBtn.disabled = true;
+        checkInBtn.style.display = 'block';
+        checkOutBtn.style.display = 'block';
+        checkInBtn.disabled = !isInsideValidZone;
+        checkOutBtn.disabled = !isInsideValidZone;
         const distanceText = window.lastDistanceResult !== undefined ? `<br><small>📍 Jarak Anda saat ini: ${Math.round(window.lastDistanceResult)} meter dari target</small>` : '';
         locationInfo.className = 'location-info warning';
         locationInfo.innerHTML = statusHtml + distanceText + '<br><small>⚠️ Tenant ini belum memiliki aturan absensi.</small>';
@@ -576,91 +552,139 @@ function applyTimeRulesToButtons(isInsideValidZone, statusClass, statusHtml, che
 
 // ==========================================
 // FUNGSI VALIDASI RADIUS GEOFENCING
-// HANYA CEK HOME TENANT (tenant_id assignment guru)
+// Prioritas: tenant_id guru dulu, lalu dinas luar
 // ==========================================
 async function validateLocationRadius(userLat, userLng) {
     try {
+        // ======================================================
+        // TAHAP 1: Prioritaskan TENANT_ID GURU (walaupun ada sekolah lain yang lebih dekat)
+        // ======================================================
         if (!window.userAssignments || window.userAssignments.length === 0) {
             console.log('[VALIDATE_RADIUS] Tidak ada unit assigned');
-            return {
-                withinRadius: false,
-                isDinasLuarAllowed: false,
-                distance: 0,
-                radius: 0,
-                schoolName: 'Tidak ada unit yang ditugaskan'
-            };
-        }
+        } else {
+            const userHomeTenantIds = window.userAssignments.map(a => a.tenant_id);
+            const acc = (currentLocation && currentLocation.accuracy) ? currentLocation.accuracy : 0;
 
-        const acc = (currentLocation && currentLocation.accuracy) ? currentLocation.accuracy : 0;
+            // Cek dulu apakah guru berada di lokasi tenant_id yang ditugaskan
+            for (const assignment of window.userAssignments) {
+                const tenantId = assignment.tenant_id;
+                const res = await fetch('/api/tenants/' + encodeURIComponent(tenantId), {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
 
-        const allUnitsResults = [];
-        for (const assignment of window.userAssignments) {
-            const tenantId = assignment.tenant_id;
-            const res = await fetch('/api/tenants/' + encodeURIComponent(tenantId), {
-                headers: { 'Authorization': 'Bearer ' + token }
-            });
+                if (!res.ok) continue;
 
-            if (!res.ok) continue;
+                const data = await res.json();
+                if (!data.success || !data.tenant.latitude) continue;
 
-            const data = await res.json();
-            if (!data.success || !data.tenant.latitude) continue;
+                const tLat = parseFloat(data.tenant.latitude);
+                const tLng = parseFloat(data.tenant.longitude);
+                const dist = calculateDistance(userLat, userLng, tLat, tLng) * 1000;
+                const rad = data.tenant.location_radius || 200;
+                const eff = dist + (acc * 0.3);
 
-            const tLat = parseFloat(data.tenant.latitude);
-            const tLng = parseFloat(data.tenant.longitude);
-            const dist = calculateDistance(userLat, userLng, tLat, tLng) * 1000;
-            const rad = data.tenant.location_radius || 200;
-            const eff = dist + (acc * 0.3);
+                console.log('[VALIDATE_RADIUS] Home tenant check:', data.tenant.nama_sekolah, 'dist:', dist.toFixed(0), 'rad:', rad, 'eff:', eff.toFixed(0));
 
-            console.log('[VALIDATE_RADIUS] Multi-tenant check:', data.tenant.nama_sekolah, 'dist:', dist.toFixed(0), 'rad:', rad, 'eff:', eff.toFixed(0));
-
-            allUnitsResults.push({
-                tenantId,
-                schoolName: data.tenant.nama_sekolah,
-                distance: dist,
-                radius: rad,
-                effectiveDist: eff,
-                isHomeUnit: true
-            });
-        }
-
-        allUnitsResults.sort((a, b) => a.effectiveDist - b.effectiveDist);
-
-        for (const unit of allUnitsResults) {
-            if (unit.effectiveDist <= unit.radius) {
-                console.log('[VALIDATE_RADIUS] Unit aktif ditemukan:', unit.schoolName, 'tenant:', unit.tenantId);
-                window.currentNearestTenantId = unit.tenantId;
-                window.currentRulesTenantId = unit.tenantId;
-                window.lastDistanceResult = unit.distance;
-                window.isHomeUnit = true;
-                return {
-                    withinRadius: true,
-                    distance: unit.distance,
-                    radius: unit.radius,
-                    schoolName: unit.schoolName,
-                    tenant_id: unit.tenantId,
-                    isHomeUnit: true,
-                    isDinasLuarCandidate: false
-                };
+                // JIKA GURU BERADA DI TENANT_ID YANG DITUGASKAN -> PAKSA GUNAKAN INI
+                if (eff <= rad) {
+                    console.log('[VALIDATE_RADIUS] Guru berada di tenant_id yang ditugaskan:', tenantId);
+                    window.currentNearestTenantId = tenantId;
+                    window.lastDistanceResult = dist;
+                    window.isHomeUnit = true;
+                    window.homeUnitLocked = true; // Kunci 1 menit
+                    setTimeout(() => { window.homeUnitLocked = false; }, 60000); // Unlock setelah 1 menit
+                    return {
+                        withinRadius: true,
+                        distance: dist,
+                        radius: rad,
+                        schoolName: data.tenant.nama_sekolah,
+                        tenant_id: tenantId,
+                        isHomeUnit: true,
+                        isDinasLuarCandidate: false
+                    };
+                }
             }
         }
 
-        console.log('[VALIDATE_RADIUS] Di luar radius semua unit yang ditugaskan');
+        // ======================================================
+        // TAHAP 2: Jika guru tidak berada di tenant_idnya, cek SEMUA lokasi di database (dinas luar)
+        // ======================================================
+        console.log('[VALIDATE_RADIUS] Guru tidak berada di tenant_idnya, cek semua lokasi...');
+
+        const allUnitsRes = await fetch('/api/units/all', {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+
+        if (allUnitsRes.ok) {
+            const allUnitsData = await allUnitsRes.json();
+            if (allUnitsData.success && allUnitsData.units && allUnitsData.units.length > 0) {
+                const userHomeTenantIds = window.userAssignments?.map(a => a.tenant_id) || [];
+                const acc = (currentLocation && currentLocation.accuracy) ? currentLocation.accuracy : 0;
+
+                const unitsInRadius = [];
+                for (const unit of allUnitsData.units) {
+                    if (!unit.latitude || !unit.longitude) continue;
+
+                    const tLat = parseFloat((unit.latitude || '').toString().trim());
+                    const tLng = parseFloat((unit.longitude || '').toString().trim());
+                    if (isNaN(tLat) || isNaN(tLng)) continue;
+
+                    const dist = calculateDistance(userLat, userLng, tLat, tLng) * 1000;
+                    const rad = parseInt(unit.location_radius) || 100;
+                    const eff = dist + (acc * 0.3);
+
+                    console.log('[VALIDATE_RADIUS] Cek lokasi lain:', unit.nama_sekolah, 'dist:', dist.toFixed(0), 'rad:', rad, 'eff:', eff.toFixed(0));
+
+                    if (eff <= rad) {
+                        const isHomeUnit = userHomeTenantIds.includes(unit.tenant_id);
+                        unitsInRadius.push({
+                            withinRadius: true,
+                            distance: dist,
+                            radius: rad,
+                            schoolName: unit.nama_sekolah,
+                            nama_sekolah: unit.nama_sekolah,
+                            tenant_id: unit.tenant_id,
+                            latitude: unit.latitude,
+                            longitude: unit.longitude,
+                            location_radius: unit.location_radius,
+                            unit: unit,
+                            isHomeUnit: isHomeUnit,
+                            isDinasLuarCandidate: !isHomeUnit
+                        });
+                    }
+                }
+
+                if (unitsInRadius.length > 0) {
+                    unitsInRadius.sort((a, b) => a.distance - b.distance);
+
+                    const closest = unitsInRadius[0];
+                    console.log('[VALIDATE_RADIUS] Selected location:', closest.schoolName,
+                        closest.isHomeUnit ? '(home unit)' : '(dinas luar)');
+
+                    window.currentNearestTenantId = closest.tenant_id;
+                    window.lastDistanceResult = closest.distance;
+                    return closest;
+                }
+            }
+        }
+
+        console.log('[VALIDATE_RADIUS] Not within any location in database');
         return {
             withinRadius: false,
-            isDinasLuarAllowed: false,
+            isDinasLuarAllowed: true, // Allow dinas luar (user can apply permission instead)
             distance: 0,
             radius: 0,
-            schoolName: 'Di luar radius semua unit Anda'
+            schoolName: 'Tidak dalam lokasi manapun'
         };
 
     } catch (error) {
         console.error('Error validating radius:', error);
         return {
-            withinRadius: false,
-            isDinasLuarAllowed: false,
+            withinRadius: true, // Allow fallback to dinas luar
+            isDinasLuarAllowed: true,
             distance: 0,
             radius: 0,
-            schoolName: 'Error validasi lokasi'
+            schoolName: 'Error validasi'
         };
     }
 }
@@ -779,9 +803,8 @@ function requestLocationPermission() {
                 });
 
                 await waitForAssignments;
-                await updateAttendanceButtonsState();
-                await loadAttendanceRules();
-                await loadRecentAttendance();
+                await loadAttendanceRules(currentLocation.latitude, currentLocation.longitude);
+                await loadRecentAttendance(); // Sudah termasuk updateAttendanceButtonsState
                 await detectNearbyUnits(position.coords.latitude, position.coords.longitude);
                 startLocationWatcher();
 
@@ -801,18 +824,9 @@ function requestLocationPermission() {
                     setTimeout(() => { clearInterval(check); resolve(); }, 3000);
                 });
 waitForAssignments.then(async () => {
-                    await loadAttendanceRules();
-                    await loadRecentAttendance();
-                    updateAttendanceButtonsState();
-                    const checkInBtn = document.getElementById('checkInBtn');
-                    const checkOutBtn = document.getElementById('checkOutBtn');
-                    const locationInfo = document.getElementById('locationInfo');
-                    if (checkInBtn && checkOutBtn && locationInfo) {
-                        applyTimeRulesToButtons(false, 'location-info warning', 
-                            '<span>⚠️ GPS tidak aktif. Absensi dibatasi.</span>', 
-                            checkInBtn, checkOutBtn, locationInfo);
-                    }
-                });
+                     await loadAttendanceRules();
+                     await loadRecentAttendance();
+                 });
             },
             {
                 enableHighAccuracy: true,
@@ -854,9 +868,8 @@ function startLocationWatcher() {
                 console.log('Location changed, updating status...');
                 currentLocation = newLocation;
                 updateLocationDisplay(true, `Lokasi diperbarui (${Math.round(position.coords.accuracy)}m akurasi)`);
-                loadAttendanceRules().then(() => {
+                loadAttendanceRules(newLocation.latitude, newLocation.longitude).then(() => {
                     loadRecentAttendance();
-                    updateAttendanceButtonsState();
                 });
             }
         },
@@ -901,12 +914,7 @@ async function recordAttendance(jenis) {
     const matchedRule = window.currentAttendanceRules.find(r => {
         const [h1, m1] = r.jam_mulai.split(':');
         const [h2, m2] = r.jam_selesai.split(':');
-        const startMin = h1 * 60 + +m1;
-        const endMin = h2 * 60 + +m2;
-        const inTimeRange = startMin <= endMin
-            ? currentMin >= startMin && currentMin <= endMin
-            : currentMin >= startMin || currentMin <= endMin;
-        return inTimeRange && r.tipe.toLowerCase() === (jenis === 'masuk' ? 'datang' : 'pulang');
+        return currentMin >= (h1 * 60 + +m1) && currentMin <= (h2 * 60 + +m2) && r.tipe.toLowerCase() === (jenis === 'masuk' ? 'datang' : 'pulang');
     });
 
     if (!matchedRule) {
@@ -916,17 +924,9 @@ async function recordAttendance(jenis) {
         return;
     }
 
-    if (jenis === 'pulang' && !window.hasCheckedInToday) {
-        if (checkInBtn) { checkInBtn.disabled = false; checkInBtn.style.opacity = ''; }
-        if (checkOutBtn) { checkOutBtn.disabled = false; checkOutBtn.style.opacity = ''; }
-        alert("Anda tidak bisa absen pulang karena belum melakukan absen masuk hari ini.");
-        return;
-    }
-
     const formData = new FormData();
     formData.append('jenis', jenis);
     formData.append('metode', 'dashboard');
-    formData.append('tenant_id', window.currentRulesTenantId || window.userAssignments?.[0]?.tenant_id || '');
     formData.append('latitude', currentLocation.latitude);
     formData.append('longitude', currentLocation.longitude);
     formData.append('waktu_absen', now.toISOString());
@@ -1194,16 +1194,14 @@ async function loadLeaveStatus() {
     }
 }
 
-async function loadAttendanceRules() {
+async function loadAttendanceRules(lat, lng) {
     try {
-        const url = new URL('/api/attendance-rules', window.location.origin);
-        const tenantId = window.currentRulesTenantId || window.userAssignments?.[0]?.tenant_id || user.tenant_id;
-        if (tenantId) {
-            url.searchParams.set('tenant_id', tenantId);
+        let url = '/api/attendance-rules';
+        if (lat && lng) {
+            url += `?lat=${lat}&lng=${lng}`;
         }
 
-        console.log('[loadAttendanceRules] URL:', url.toString(), 'tenantId:', tenantId);
-        const response = await fetch(url.toString(), {
+        const response = await fetch(url, {
             headers: { 'Authorization': 'Bearer ' + (window.token || localStorage.getItem('token')) }
         });
 
@@ -1211,189 +1209,32 @@ async function loadAttendanceRules() {
             const result = await response.json();
             if (result.success) {
                 window.currentAttendanceRules = result.rules;
-                window.currentRulesTenantId = result.source_tenant || tenantId;
                 console.log('[DASHBOARD] Aturan absensi berhasil dimuat:', result.source_tenant, window.currentAttendanceRules);
-            } else {
-                window.currentAttendanceRules = [];
-                window.currentRulesTenantId = tenantId;
             }
-        } else {
-            window.currentAttendanceRules = [];
-            window.currentRulesTenantId = tenantId;
         }
     } catch (error) {
         console.error('Gagal mengambil data aturan absensi dari server:', error);
-        window.currentAttendanceRules = [];
     }
-    updateDashboardRuleStatus();
 }
 
-function updateDashboardRuleStatus(rules) {
-    const statusText = document.getElementById('ruleStatusText');
-    const statusBadge = document.getElementById('ruleStatusBadge');
-    const nextInfo = document.getElementById('ruleNextInfo');
+function updateAttendanceButtons(hasMasuk, hasPulang) {
+    const checkInBtn = document.getElementById('checkInBtn');
+    const checkOutBtn = document.getElementById('checkOutBtn');
 
-    if (!statusText || !statusBadge) return;
-
-    const activeRules = rules || window.currentAttendanceRules || [];
-    console.log('[updateDashboardRuleStatus] Rules:', activeRules);
-
-    if (!activeRules || activeRules.length === 0) {
-        statusText.textContent = 'Tidak ada aturan untuk unit Anda';
-        statusBadge.innerHTML = '<i class="fas fa-exclamation" style="margin-right: 0.25rem;"></i>Tidak Ada';
-        statusBadge.style.background = '#fef3c7';
-        statusBadge.style.color = '#92400e';
-        if (nextInfo) nextInfo.textContent = 'Belum ada jadwal sesi absensi sekolah Anda';
-        return;
-    }
-
-    const sekarang = new Date();
-    const currentMinutes = sekarang.getHours() * 60 + sekarang.getMinutes();
-    const dayNames = ['minggu', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
-    const currentDayIndex = sekarang.getDay();
-    const currentDay = dayNames[currentDayIndex];
-
-    let activeRule = null;
-    let nextRule = null;
-    let nextRuleDiff = Infinity;
-
-    const rulesForToday = activeRules.filter(rule => {
-        const hari = rule.hari || rule.hari_kerja || '';
-        return isDayMatch(hari, currentDay);
-    });
-
-    rulesForToday.forEach(rule => {
-        const mulai = rule.jam_mulai || rule.jam_masuk || '00:00';
-        const selesai = rule.jam_selesai || rule.jam_pulang || '23:59';
-        const [mulaiH, mulaiM] = mulai.split(':').map(n => parseInt(n) || 0);
-        const [selesaiH, selesaiM] = selesai.split(':').map(n => parseInt(n) || 0);
-        const mulaiMenit = mulaiH * 60 + mulaiM;
-        const selesaiMenit = selesaiH * 60 + selesaiM;
-
-        if (currentMinutes >= mulaiMenit && currentMinutes <= selesaiMenit) {
-            activeRule = rule;
-        } else if (mulaiMenit > currentMinutes) {
-            const diff = mulaiMenit - currentMinutes;
-            if (diff < nextRuleDiff) {
-                nextRuleDiff = diff;
-                nextRule = rule;
-            }
-        }
-    });
-
-    const formatTime = (time) => (time || '00:00').substring(0, 5);
-    const capitalize = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : '';
-
-    if (activeRule) {
-        const isPulang = (activeRule.nama_aturan || activeRule.tipe || '').toLowerCase().includes('pulang') ||
-                          (activeRule.jam_pulang && !(activeRule.jam_mulai || activeRule.jam_masuk));
-        const tipeLabel = isPulang ? 'Absen Pulang' : 'Absen Datang';
-        statusText.textContent = `Aturan aktif: ${tipeLabel} (${formatTime(activeRule.jam_mulai || activeRule.jam_masuk)} - ${formatTime(activeRule.jam_selesai || activeRule.jam_pulang)})`;
-        statusBadge.innerHTML = '<i class="fas fa-check-circle" style="margin-right: 0.25rem;"></i>Aktif';
-        statusBadge.style.background = '#dcfce7';
-        statusBadge.style.color = '#15803d';
-        if (nextInfo) nextInfo.textContent = activeRule.status_log || activeRule.keterangan || '-';
-    } else if (nextRule) {
-        const totalSeconds = nextRuleDiff * 60;
-        const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
-        const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
-        const isPulang = (nextRule.nama_aturan || nextRule.tipe || '').toLowerCase().includes('pulang') ||
-                          (nextRule.jam_pulang && !(nextRule.jam_mulai || nextRule.jam_masuk));
-        const tipeLabel = isPulang ? 'Absen Pulang' : 'Absen Datang';
-        statusText.textContent = `Aturan berikutnya: ${tipeLabel} (${formatTime(nextRule.jam_mulai || nextRule.jam_masuk)} - ${formatTime(nextRule.jam_selesai || nextRule.jam_pulang)})`;
-        statusBadge.innerHTML = '<i class="fas fa-clock" style="margin-right: 0.25rem;"></i>Menunggu';
-        statusBadge.style.background = '#dbeafe';
-        statusBadge.style.color = '#1d4ed8';
-        if (nextInfo) nextInfo.textContent = `Dibuka dalam ${hours}:${minutes} • ${nextRule.hari || nextRule.hari_kerja || ''}`;
+    if (!hasMasuk) {
+        checkInBtn.style.display = 'inline-block';
+        checkOutBtn.style.display = 'none';
+        checkInBtn.disabled = true; // Start disabled, updateAttendanceButtonsState will enable if valid
+        checkInBtn.innerHTML = '<i class="fas fa-sign-in-alt" style="margin-right: 0.5rem;"></i>Absen Masuk';
+    } else if (!hasPulang) {
+        checkInBtn.style.display = 'none';
+        checkOutBtn.style.display = 'inline-block';
+        checkOutBtn.disabled = true; // Start disabled, updateAttendanceButtonsState will enable if valid
+        checkOutBtn.innerHTML = '<i class="fas fa-sign-out-alt" style="margin-right: 0.5rem;"></i>Absen Pulang';
     } else {
-        const isMultiDay = rulesForToday.length > 0 && (rulesForToday[0]?.hari || rulesForToday[0]?.hari_kerja || '').includes(',');
-        const hasPulang = rulesForToday.some(r => (r.nama_aturan || r.tipe || '').toLowerCase().includes('pulang') ||
-                                                   (r.jam_pulang && !(r.jam_mulai || r.jam_masuk)));
-        
-        if (rulesForToday.length === 0) {
-            let foundNextDay = null;
-            for (let offset = 1; offset <= 7; offset++) {
-                const nextDayIndex = (currentDayIndex + offset) % 7;
-                const nextDay = dayNames[nextDayIndex];
-                const nextDayRules = activeRules.filter(r => {
-                    const hari = (r.hari || r.hari_kerja || '');
-                    return isDayMatch(hari, nextDay);
-                });
-                if (nextDayRules.length > 0) {
-                    foundNextDay = { day: nextDay, rules: nextDayRules };
-                    break;
-                }
-            }
-            
-            if (foundNextDay) {
-                const nextDay = foundNextDay.day;
-                const firstRule = foundNextDay.rules[0];
-                const nextTime = firstRule.jam_mulai || firstRule.jam_masuk || '00:00';
-                const isNextPulang = (firstRule.nama_aturan || firstRule.tipe || '').toLowerCase().includes('pulang') ||
-                                       (firstRule.jam_pulang && !(firstRule.jam_mulai || firstRule.jam_masuk));
-                const tipeLabel = isNextPulang ? 'Absen Pulang' : 'Absen Datang';
-                const isNextDay = dayNames[(currentDayIndex + 1) % 7] === nextDay;
-                statusText.textContent = isNextDay 
-                    ? `Besok: ${tipeLabel} (${formatTime(nextTime)})`
-                    : `${capitalize(nextDay)}: ${tipeLabel} (${formatTime(nextTime)})`;
-                statusBadge.innerHTML = '<i class="fas fa-calendar-day" style="margin-right: 0.25rem;"></i>Jadwal';
-                statusBadge.style.background = '#eff6ff';
-                statusBadge.style.color = '#0c4a6e';
-                if (nextInfo) nextInfo.textContent = `Jadwal untuk hari ${capitalize(nextDay)} pukul ${formatTime(nextTime)}`;
-            } else {
-                statusText.textContent = 'Tidak ada jadwal absensi yang tersedia';
-                statusBadge.innerHTML = '<i class="fas fa-exclamation" style="margin-right: 0.25rem;"></i>Tidak Ada';
-                statusBadge.style.background = '#fef3c7';
-                statusBadge.style.color = '#92400e';
-                if (nextInfo) nextInfo.textContent = 'Belum ada jadwal sesi absensi sekolah Anda';
-            }
-        } else if (!isMultiDay && !hasPulang) {
-            const isPulang = (activeRules[0]?.nama_aturan || activeRules[0]?.tipe || '').toLowerCase().includes('pulang') ||
-                              (activeRules[0]?.jam_pulang && !activeRules[0]?.jam_masuk);
-            const tipeLabel = isPulang ? 'Absen Pulang' : 'Absen Datang';
-            statusText.textContent = `Sedang aktif: ${tipeLabel}`;
-            statusBadge.innerHTML = '<i class="fas fa-check-double" style="margin-right: 0.25rem;"></i>Selesai';
-            statusBadge.style.background = '#e2fbe8';
-            statusBadge.style.color = '#15803d';
-            if (nextInfo) nextInfo.textContent = 'Hanya ada aturan absen masuk untuk unit ini.';
-        } else {
-            let foundNextDay = null;
-            for (let offset = 1; offset <= 7; offset++) {
-                const nextDayIndex = (currentDayIndex + offset) % 7;
-                const nextDay = dayNames[nextDayIndex];
-                const nextDayRules = activeRules.filter(r => {
-                    const hari = (r.hari || r.hari_kerja || '');
-                    return isDayMatch(hari, nextDay);
-                });
-                if (nextDayRules.length > 0) {
-                    foundNextDay = { day: nextDay, rules: nextDayRules };
-                    break;
-                }
-            }
-            
-            if (foundNextDay) {
-                const nextDay = foundNextDay.day;
-                const firstRule = foundNextDay.rules[0];
-                const nextTime = firstRule.jam_mulai || firstRule.jam_masuk || '00:00';
-                const isNextPulang = (firstRule.nama_aturan || firstRule.tipe || '').toLowerCase().includes('pulang') ||
-                                       (firstRule.jam_pulang && !(firstRule.jam_mulai || firstRule.jam_masuk));
-                const tipeLabel = isNextPulang ? 'Absen Pulang' : 'Absen Datang';
-                const isNextDay = dayNames[(currentDayIndex + 1) % 7] === nextDay;
-                statusText.textContent = isNextDay 
-                    ? `Besok: ${tipeLabel} (${formatTime(nextTime)})`
-                    : `${capitalize(nextDay)}: ${tipeLabel} (${formatTime(nextTime)})`;
-                statusBadge.innerHTML = '<i class="fas fa-calendar-day" style="margin-right: 0.25rem;"></i>Jadwal';
-                statusBadge.style.background = '#eff6ff';
-                statusBadge.style.color = '#0c4a6e';
-                if (nextInfo) nextInfo.textContent = `Jadwal untuk hari ${capitalize(nextDay)} pukul ${formatTime(nextTime)}`;
-            } else {
-                statusText.textContent = 'Sesi hari ini telah berakhir';
-                statusBadge.innerHTML = '<i class="fas fa-check-double" style="margin-right: 0.25rem;"></i>Selesai';
-                statusBadge.style.background = '#e2fbe8';
-                statusBadge.style.color = '#15803d';
-                if (nextInfo) nextInfo.textContent = 'Tidak ada jadwal absensi yang tersedia.';
-            }
-        }
+        checkInBtn.style.display = 'none';
+        checkOutBtn.style.display = 'none';
+        updateLocationDisplay(true, 'Absensi hari ini telah lengkap ✅');
     }
 }
 
@@ -1443,7 +1284,6 @@ async function loadTodaySummary() {
 
 async function loadRecentAttendance() {
     console.log('Loading recent attendance');
-    if (window.isLocationValid === undefined) window.isLocationValid = false;
     try {
         const response = await fetch('/api/attendance-history', {
             headers: { 'Authorization': `Bearer ${token}` }
@@ -1451,70 +1291,126 @@ async function loadRecentAttendance() {
         console.log('Attendance history response status:', response.status);
 
         const recentDiv = document.getElementById('recentAttendance');
+
+        // Ambil elemen widget status atas
         const statusBox = document.getElementById('lastStatus');
         const timeBox = document.getElementById('lastTime');
         const totalBox = document.getElementById('totalAttendance');
+
+        // TANGKAP KEDUA TOMBOL ASLI ANDA
         const checkInBtn = document.getElementById('checkInBtn');
         const checkOutBtn = document.getElementById('checkOutBtn');
-        const locationInfo = document.getElementById('locationInfo');
 
         if (response.ok) {
             const data = await response.json();
             console.log('Attendance history data:', data);
 
-            const activeTenantId = window.currentNearestTenantId || window.userAssignments?.[0]?.tenant_id;
-            const todayWITA = new Date();
-            const witaDateStr = todayWITA.getFullYear() + '-' + String(todayWITA.getMonth() + 1).padStart(2, '0') + '-' + String(todayWITA.getDate()).padStart(2, '0');
-
             if (data.success && data.data.length > 0) {
+                // Check if user is multi-tenant
+                const isMultiTenant = window.userAssignments && window.userAssignments.length > 1;
+
+                // 1. Render data ke dalam HTML riwayat - SEMUA log tampil (termasuk unit lain)
+                const activeTenantId = window.currentNearestTenantId || window.userAssignments?.[0]?.tenant_id;
+                // Render semua log yang diterima, dikelompokkan per bulan. Tampilkan 3 item visible, sisanya bisa di-scroll
                 const groups = {};
                 const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agt', 'Sep', 'Okt', 'Nov', 'Des'];
 
                 data.data.forEach(attendance => {
-                    const [datePart] = (attendance.waktu_scan || '').split(' ');
-                    const [y, m] = datePart ? datePart.split('-') : ['unknown', 'unknown'];
+                    const [datePart, timePart] = (attendance.waktu_scan || '').split(' ');
+                    const [y, m, d] = (datePart || '').split('-');
                     const groupKey = y && m ? `${y}-${m}` : 'unknown';
                     if (!groups[groupKey]) groups[groupKey] = [];
-                    groups[groupKey].push(attendance);
+                    groups[groupKey].push({ attendance, datePart, timePart });
                 });
 
                 let html = '';
                 Object.keys(groups).forEach(groupKey => {
-                    if (groupKey === 'unknown') return;
+                    if (groupKey === 'unknown') return; // skip malformed
                     const [y, m] = groupKey.split('-');
                     html += `<div class="attendance-month-group" style="margin-bottom:0.75rem;"><h4 style="font-size:0.9rem;font-weight:700;color:#0f172a;margin:0 0 0.5rem 0;">${monthNames[parseInt(m, 10) - 1] || m} ${y}</h4>`;
-                    groups[groupKey].forEach(attendance => {
-                        const datePart = attendance.waktu_scan?.split(' ')[0] || '';
-                        const timePart = attendance.waktu_scan?.split(' ')[1] || '';
-                        const dd = datePart.split('-')[2];
-                        const shortDate = dd ? `${parseInt(dd)} ${monthNames[parseInt(datePart.split('-')[1]) - 1]}` : '';
+                    groups[groupKey].forEach((item, idx) => {
+                        const attendance = item.attendance;
+                        const datePart = item.datePart || '';
+                        const timePart = item.timePart || '';
+                        const [yy, mm, dd] = datePart.split('-');
+                        const shortDate = dd ? `${parseInt(dd, 10)} ${monthNames[parseInt(mm, 10) - 1]}` : '';
                         const timeStr = timePart ? timePart.slice(0, 5) : '';
                         const jenisText = attendance.jenis === 'masuk' ? 'Masuk' : 'Pulang';
                         const statusText = attendance.status === 'tepat_waktu' ? 'Tepat Waktu' : 'Terlambat';
-                        html += `<div class="recent-attendance-item" style="padding:0.6rem 0.5rem;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem;"><div style="flex:1;"><div style="display:flex;align-items:center;gap:0.5rem;"><span style="font-weight:700;color:#0f172a">${shortDate}</span><span style="color:#94a3b8">|</span><span style="font-weight:600;color:${attendance.jenis === 'masuk' ? '#16a34a' : '#dc2626'}">${jenisText}</span></div><div style="font-size:0.78rem;color:#6b7280;margin-top:0.25rem">${timeStr} • ${statusText}</div></div></div>`;
+                        const ruleDesc = attendance.rule_keterangan ? `<div class="text-xs text-gray-400 mt-1">${attendance.rule_keterangan}</div>` : '';
+                        const schoolHtml = (isMultiTenant && attendance.nama_sekolah) ? `<div class="text-xs text-gray-500 mt-0.5">${attendance.nama_sekolah}</div>` : '';
+
+                        html += `<div class="recent-attendance-item" style="padding:0.6rem 0.5rem; border-bottom:1px solid #f1f5f9; display:flex; justify-content:space-between; align-items:flex-start; gap:0.5rem;">
+                    <div style="flex:1;">
+                      <div style="display:flex; align-items:center; gap:0.5rem;">
+                        <span style="font-weight:700;color:#0f172a">${shortDate}</span>
+                        <span style="color:#94a3b8">|</span>
+                        <span style="font-weight:600; color:${attendance.jenis === 'masuk' ? '#16a34a' : '#dc2626'}">${jenisText}</span>
+                      </div>
+                      <div style="font-size:0.78rem;color:#6b7280;margin-top:0.25rem">${timeStr} • ${statusText}</div>
+                      ${ruleDesc}
+                      ${schoolHtml}
+                    </div>
+                    <div style="margin-left:0.5rem; font-size:0.8rem; font-weight:700; display:flex; align-items:center;">
+                      <span class="badge ${attendance.status === 'tepat_waktu' ? 'badge-success' : 'badge-warning'}">${statusText}</span>
+                    </div>
+                  </div>`;
                     });
-                    html += '</div>';
+                    html += `</div>`;
                 });
+
                 recentDiv.innerHTML = html;
 
+                // Atur wrapper supaya menampilkan 3 item saja dan sisanya scrollable
                 const wrapperEl = document.getElementById('historyWrapper');
-                if (wrapperEl) { wrapperEl.style.maxHeight = '210px'; wrapperEl.style.overflowY = 'auto'; }
-                const toggleBtn = document.getElementById('toggleHistoryBtn');
-                if (toggleBtn) toggleBtn.style.display = 'none';
-                const fadeEl = document.getElementById('historyFade');
-                if (fadeEl) fadeEl.style.display = 'none';
+                if (wrapperEl) {
+                    // tinggi kira-kira 3 item × 64px
+                    wrapperEl.style.maxHeight = '210px';
+                    wrapperEl.style.overflowY = 'auto';
+                }
+                // Hilangkan tombol 'Lihat Selengkapnya'
+                const toggleBtn = document.getElementById('toggleHistoryBtn'); if (toggleBtn) toggleBtn.style.display = 'none';
+                const fadeEl = document.getElementById('historyFade'); if (fadeEl) fadeEl.style.display = 'none';
 
+                // 2. SINKRONISASI TOTAL & JAM DARI DATA PALING BARU
                 if (totalBox) totalBox.innerText = data.data.length;
 
-                const todaysLogs = data.data.filter(log => log.waktu_scan?.split(' ')[0] === witaDateStr && log.tenant_id === activeTenantId);
-                const logTerbaru = todaysLogs[0] || { jenis: null };
-                const isLogToday = !!logTerbaru.jenis;
+// Filter log terbaru untuk unit yang aktif (multi-tenant support)
+                // Setiap unit harus absen terpisah - tidak boleh terpengaruh log unit lain
+                // Gunakan WITA (Asia/Makassar) untuk konsistensi dengan UI user
+                const todayWITA = new Date();
+                const witaDateStr = todayWITA.getFullYear() + '-' + String(todayWITA.getMonth() + 1).padStart(2, '0') + '-' + String(todayWITA.getDate()).padStart(2, '0');
 
+                const todaysLogs = data.data.filter(log => {
+                    // Prioritaskan waktu_scan (WITA) karena sudah dari client
+                    if (log.waktu_scan) {
+                        const [datePart, timePart] = log.waktu_scan.split(' ');
+                        if (datePart) {
+                            return datePart === witaDateStr && log.tenant_id === activeTenantId;
+                        }
+                    }
+                    return false;
+                });
+                // Jika sudah absen di unit ini hari ini, gunakan log terbaru unit ini
+                // Jika belum absen di unit ini, jangan fallback ke unit lain (biarkan tombol muncul)
+                const logTerbaru = todaysLogs[0] || { jenis: null, tenant_id: activeTenantId };
+                const logParts = logTerbaru.waktu_scan ? logTerbaru.waktu_scan.split(' ') : [];
+
+                // Set timeBox dari waktu lokal database
+                if (timeBox && logParts.length >= 2) {
+                    const logTimePart = logParts[1];
+                    timeBox.innerText = logTimePart ? logTimePart.slice(0, 5).replace(':', '.') : '';
+                }
+
+                // 3. SINKRONISASI KOTAK STATUS AKHIR
+                const logDatePart = logParts[0] || '';
+                const isLogToday = logDatePart && logDatePart === witaDateStr;
+
+                // Set global flag for applyTimeRulesToButtons to check
                 window.hasCheckedInToday = isLogToday && logTerbaru.jenis === 'masuk';
 
-                if (timeBox && logTerbaru.waktu_scan) timeBox.innerText = logTerbaru.waktu_scan.split(' ')[1]?.slice(0, 5) || '';
-
                 if (statusBox) {
+                    // Prioritas: pulang > masuk (log terbaru menentukan)
                     if (isLogToday && logTerbaru.jenis === 'pulang') {
                         statusBox.innerText = 'Sudah Pulang';
                         statusBox.style.setProperty('background', '#eff6ff', 'important');
@@ -1523,37 +1419,126 @@ async function loadRecentAttendance() {
                         statusBox.innerText = 'Sudah Masuk';
                         statusBox.style.setProperty('background', '#e2fbe8', 'important');
                         statusBox.style.setProperty('color', '#15803d', 'important');
-                    } else {
-                        statusBox.innerText = 'Belum absen';
-                        statusBox.style.setProperty('background', '#fef3c7', 'important');
-                        statusBox.style.setProperty('color', '#92400e', 'important');
                     }
                 }
 
-                if (isLogToday && logTerbaru.jenis === 'masuk') {
-                    window.hasCheckedInToday = true;
-                } else if (isLogToday && logTerbaru.jenis === 'pulang') {
-                    window.hasCheckedInToday = true;
-                } else {
-                    window.hasCheckedInToday = false;
+                // ========================================================
+// 4. KONTROL TAMPILAN DUA TOMBOL (SHOW / HIDE)
+// ========================================================
+// Dapatkan elemen lokasi info
+const locationInfo = document.getElementById('locationInfo');
+
+if (isLogToday && logTerbaru.jenis === 'masuk') {
+    // JIKA BARU ABSEN MASUK HARI INI -> Sembunyikan Tombol Masuk, Munculkan Tombol Pulang
+    if (checkInBtn) {
+        checkInBtn.style.display = 'none';
+        checkInBtn.disabled = true;
+    }
+    if (checkOutBtn) checkOutBtn.style.display = 'inline-block';
+
+    // Cek apakah jam sekarang sudah dalam periode pulang
+    if (checkOutBtn) {
+        const sekarang = new Date();
+        const currentMinutes = sekarang.getHours() * 60 + sekarang.getMinutes();
+        const pulangRule = (window.currentAttendanceRules || []).find(r => {
+            const tipeRule = (r.tipe || '').toLowerCase().trim();
+            console.log('[DEBUG_CHECKOUT] Checking rule:', r.id, 'tipe:', tipeRule);
+            return tipeRule.includes('pulang');
+        });
+        console.log('[DEBUG_CHECKOUT] All attendanceRules:', window.currentAttendanceRules);
+        console.log('[DEBUG_CHECKOUT] Found pulangRule:', pulangRule);
+        if (pulangRule) {
+            const [pulangH, pulangM] = (pulangRule.jam_mulai || '16:00').split(':').map(n => parseInt(n) || 0);
+            const [selesaiH, selesaiM] = (pulangRule.jam_selesai || '17:00').split(':').map(n => parseInt(n) || 0);
+            const mulaiMenit = pulangH * 60 + pulangM;
+            const selesaiMenit = selesaiH * 60 + selesaiM;
+            console.log('[DEBUG_CHECKOUT] Pulang time range:', mulaiMenit, '-', selesaiMenit, 'currentMinutes:', currentMinutes);
+
+            const dayNames = ['minggu', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
+            const currentDay = dayNames[sekarang.getDay()];
+            console.log('[DEBUG_CHECKOUT] Day check: currentDay=', currentDay, 'pulangRule.hari=', pulangRule.hari);
+
+            if (isDayMatch(pulangRule.hari, currentDay) && currentMinutes >= mulaiMenit && currentMinutes <= selesaiMenit) {
+                checkOutBtn.disabled = false;
+                if (locationInfo) {
+                    locationInfo.className = 'location-info success';
+                    locationInfo.innerHTML = `<span>✅ Lokasi valid — Tombol Pulang sudah aktif (Jam ${pulangRule.jam_mulai})</span>`;
                 }
-            } else if (data.data.length === 0) {
-                recentDiv.innerHTML = '<p class="text-center text-gray-500">Belum ada riwayat absensi</p>';
-                if (statusBox) { statusBox.innerText = 'Belum absen'; statusBox.style.setProperty('background', '#fef3c7', 'important'); statusBox.style.setProperty('color', '#92400e', 'important'); }
-                if (timeBox) timeBox.innerText = '-';
-                if (totalBox) totalBox.innerText = '0';
-                if (checkInBtn) checkInBtn.style.display = 'inline-block';
-                if (checkOutBtn) { checkOutBtn.style.display = 'none'; }
-                window.hasCheckedInToday = false;
+            } else {
+                checkOutBtn.disabled = true;
             }
         } else {
-            recentDiv.innerHTML = '<p class="text-center text-red-500">Gagal memuat data</p>';
+            checkOutBtn.disabled = true;
+        }
+    }
+
+} else if (isLogToday && logTerbaru.jenis === 'pulang') {
+    // JIKA SUDAH ABSEN PULANG HARI INI -> Sembunyikan kedua tombol (Absensi beres)
+    if (checkInBtn) {
+        checkInBtn.style.display = 'none';
+        checkInBtn.disabled = true;
+    }
+    if (checkOutBtn) {
+        checkOutBtn.style.display = 'none';
+        checkOutBtn.disabled = true;
+    }
+} else {
+    // Log terbaru dari hari lain -> TAMPilkan tombol Masuk (belum absen hari ini)
+    if (checkInBtn) checkInBtn.style.display = 'inline-block';
+    if (checkOutBtn) {
+        checkOutBtn.style.display = 'none';
+        checkOutBtn.disabled = true;
+    }
+    window.hasCheckedInToday = false;
+}
+            } else {
+                // KONDISI JIKA BELUM ADA LOG ABSENSI SAMA SEKALI (AWAL HARI)
+                recentDiv.innerHTML = '<p class="text-center text-gray-500">Belum ada riwayat absensi</p>';
+                if (statusBox) {
+                    statusBox.innerText = 'Belum absen';
+                    statusBox.style.setProperty('background', '#fef3c7', 'important');
+                    statusBox.style.setProperty('color', '#92400e', 'important');
+                }
+                if (timeBox) timeBox.innerText = '-';
+                if (totalBox) totalBox.innerText = '0';
+
+                // KONDISI AWAL: Munculkan Tombol Masuk, cek periode jam masuk
+                if (checkInBtn) checkInBtn.style.display = 'inline-block';
+                if (checkOutBtn) {
+                    checkOutBtn.style.display = 'none';
+                    checkOutBtn.disabled = true;
+                }
+                window.hasCheckedInToday = false;
+
+                // Cek apakah jam sekarang dalam periode masuk
+                if (checkInBtn && window.currentAttendanceRules) {
+                    const sekarang = new Date();
+                    const currentMinutes = sekarang.getHours() * 60 + sekarang.getMinutes();
+                    const dayNames = ['minggu', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu'];
+                    const currentDay = dayNames[sekarang.getDay()];
+
+                    const masukRule = window.currentAttendanceRules.find(r => {
+                        const tipeRule = (r.tipe || '').toLowerCase().trim();
+                        const [mulaiH, mulaiM] = r.jam_mulai.split(':').map(n => parseInt(n) || 0);
+                        const [selesaiH, selesaiM] = r.jam_selesai.split(':').map(n => parseInt(n) || 0);
+                        return tipeRule === 'datang' &&
+                               isDayMatch(r.hari, currentDay) &&
+                               currentMinutes >= (mulaiH * 60 + mulaiM) &&
+                               currentMinutes <= (selesaiH * 60 + selesaiM);
+                    });
+
+                    checkInBtn.disabled = !masukRule;
+                }
+            }
+            // Tombol sudah diatur di atas, tidak perlu panggil updateAttendanceButtonsState lagi
+        } else {
+            console.log('Response not ok');
+            recentDiv.innerHTML = '<p class="text-center text-red-500">Gagal memuat riwayat</p>';
         }
     } catch (error) {
         console.error('Recent attendance load error:', error);
         document.getElementById('recentAttendance').innerHTML = '<p class="text-center text-red-500">Error loading data</p>';
     }
-    updateDashboardRuleStatus();
 }
 
 function toggleHistoryLayout() {
@@ -2014,7 +1999,7 @@ async function submitPermission() {
                 keterangan: keterangan,
                 tanggal_mulai: startDate,
                 tanggal_selesai: endDate || startDate,
-            tenant_id: window.currentRulesTenantId || window.userAssignments?.[0]?.tenant_id || ''
+                tenant_id: window.currentNearestTenantId || window.userAssignments?.[0]?.tenant_id
             })
         });
 

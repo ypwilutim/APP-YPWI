@@ -884,6 +884,49 @@ function hideRuleModal() {
   document.getElementById('ruleModal').classList.remove('show');
 }
 
+// Rule form submit handler - handles multi-select hari checkboxes
+document.getElementById('ruleForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const formData = new FormData(e.target);
+  const hariList = Array.from(e.target.querySelectorAll('input[name="hari"]:checked')).map(cb => cb.value).join(',');
+  formData.set('hari', hariList);
+  const data = Object.fromEntries(formData);
+
+  const submitBtn = e.target.querySelector('button[type="submit"]');
+  const originalText = submitBtn.innerHTML;
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menyimpan...';
+
+  try {
+    const method = currentRuleId ? 'PUT' : 'POST';
+    const url = currentRuleId ? `/api/admin/rules/${currentRuleId}` : '/api/admin/rules';
+
+    const response = await fetch(url, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}`
+      },
+      body: JSON.stringify(data)
+    });
+
+    const res = await response.json();
+    if (res.success) {
+      hideRuleModal();
+      fetchRules();
+      alert('Aturan berhasil disimpan');
+    } else {
+      alert('Error: ' + (res.message || 'Gagal menyimpan aturan'));
+    }
+  } catch (error) {
+    console.error('Rule form submit error:', error);
+    alert('Terjadi kesalahan');
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = originalText;
+  }
+});
+
 function refreshTenantLocations() {
   const container = document.getElementById('tenantLocations');
   container.innerHTML = `
@@ -1242,6 +1285,9 @@ async function editRule(id) {
       form.jam_selesai.value = rule.jam_selesai;
       form.keterangan.value = rule.keterangan;
       form.status_log.value = rule.status_log;
+
+      const days = (rule.hari || '').split(',').map(s => s.trim()).filter(Boolean);
+      form.querySelectorAll('input[name="hari"]').forEach(cb => cb.checked = days.includes(cb.value));
 
       // ... sisa kode pengisian tenant option Anda di bawahnya tetap sama ...
 
