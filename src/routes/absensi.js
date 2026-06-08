@@ -241,14 +241,6 @@ router.get('/attendance-rules', authenticateToken, async (req, res) => {
     });
   }
 });
-  } catch (error) {
-    console.error('Error fetching attendance rules:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Gagal mengambil data aturan absensi internal server.'
-    });
-  }
-});
 
 
 router.get('/attendance-history', authenticateToken, async (req, res) => {
