@@ -373,6 +373,10 @@ async function updateAttendanceButtonsState() {
     const checkOutBtn = document.getElementById('checkOutBtn');
     const locationInfo = document.getElementById('locationInfo');
 
+    // Pastikan variabel absen diinisialisasi
+    if (window.hasCheckedInToday === undefined) window.hasCheckedInToday = false;
+    if (window.hasCheckedOutToday === undefined) window.hasCheckedOutToday = false;
+
     if (!currentLocation) {
         if (checkInBtn) checkInBtn.disabled = true;
         if (checkOutBtn) checkOutBtn.disabled = true;
@@ -797,9 +801,9 @@ function requestLocationPermission() {
                 });
 
                 await waitForAssignments;
-                await updateAttendanceButtonsState();
-                await loadAttendanceRules();
                 await loadRecentAttendance();
+                await loadAttendanceRules();
+                await updateAttendanceButtonsState();
                 await detectNearbyUnits(position.coords.latitude, position.coords.longitude);
                 startLocationWatcher();
 
@@ -872,8 +876,8 @@ function startLocationWatcher() {
                 console.log('Location changed, updating status...');
                 currentLocation = newLocation;
                 updateLocationDisplay(true, `Lokasi diperbarui (${Math.round(position.coords.accuracy)}m akurasi)`);
-                loadAttendanceRules().then(() => {
-                    loadRecentAttendance();
+                loadRecentAttendance().then(() => {
+                    loadAttendanceRules();
                     updateAttendanceButtonsState();
                 });
             }
