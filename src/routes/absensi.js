@@ -47,8 +47,8 @@ router.post('/attendance', authenticateToken, selfieUpload.single('selfie'), asy
     }
 
     const userAssignments = req.user?.assignments || [];
-    console.log('[ATTENDANCE_DEBUG] req.user:', { guru_id: req.user?.guru_id, role: req.user?.role, assignmentsCount: userAssignments.length });
-    const allowedTenantIds = userAssignments.map(a => a.tenant_id);
+    console.log('[ATTENDANCE_DEBUG] req.user.assignments raw:', JSON.stringify(req.user?.assignments));
+    const allowedTenantIds = Array.isArray(userAssignments) ? userAssignments.map(a => a.tenant_id) : [];
     console.log('[ATTENDANCE_DEBUG] allowedTenantIds:', allowedTenantIds, 'requested tenant_id:', tenant_id);
     if (!allowedTenantIds.includes(tenant_id)) {
       console.warn(`[ANTI-FRAUD] User ${req.user.guru_id} mencoba absen di tenant ${tenant_id} yang tidak diassignment. Allowed: ${allowedTenantIds.join(',')}`);
@@ -62,14 +62,29 @@ router.post('/attendance', authenticateToken, selfieUpload.single('selfie'), asy
       const userLng = parseFloat(longitude);
 
       if (!isNaN(userLat) && !isNaN(userLng)) {
+        // Cek lokasi utama (tenants) dan lokasi pecahan (tenant_locations)
         const [tenantData] = await db.query(
           'SELECT latitude, longitude, location_radius FROM tenants WHERE tenant_id = ?',
           [tenant_id]
         );
 
-        if (tenantData && tenantData.latitude && tenantData.longitude) {
-          const tLat = parseFloat(tenantData.latitude);
-          const tLng = parseFloat(tenantData.longitude);
+        // Cek juga lokasi pecahan/sub-lokasi
+        const subLocationData = await db.query(
+          'SELECT latitude, longitude, location_radius FROM tenant_locations WHERE tenant_id = ? AND is_active = 1',
+          [tenant_id]
+        );
+
+        // Gunakan lokasi pecahan jika ada, jika tidak pakai lokasi utama
+        let validLocation = null;
+        if (subLocationData && subLocationData.length > 0) {
+          validLocation = subLocationData[0];
+        } else if (tenantData && tenantData.latitude && tenantData.longitude) {
+          validLocation = tenantData;
+        }
+
+        if (validLocation) {
+          const tLat = parseFloat(validLocation.latitude);
+          const tLng = parseFloat(validLocation.longitude);
           const R = 6371;
           const dLat = (tLat - userLat) * Math.PI / 180;
           const dLng = (tLng - userLng) * Math.PI / 180;
@@ -79,7 +94,7 @@ router.post('/attendance', authenticateToken, selfieUpload.single('selfie'), asy
           const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
           const distanceKm = R * c;
           const distanceM = distanceKm * 1000;
-          const radiusM = tenantData.location_radius || 200;
+          const radiusM = validLocation.location_radius || 200;
 
           if (distanceM > radiusM) {
             console.warn(`[ANTI-FRAUD] User ${req.user.guru_id} di luar radius. Jarak: ${distanceM.toFixed(1)}m, Radius: ${radiusM}m, Tenant: ${tenant_id}`);
@@ -522,7 +537,7 @@ router.get('/tenants', async (req, res) => {
   }
 });
 
-// GET /api/tenants/:id - Get tenant by ID with full info
+// GET /api/tenants/:id - Get tenant by ID with full info (including sub-locations)
 router.get('/tenants/:id', authenticateToken, async (req, res) => {
   try {
     const [tenant] = await db.query(
@@ -530,6 +545,18 @@ router.get('/tenants/:id', authenticateToken, async (req, res) => {
       [req.params.id]
     );
     if (tenant) {
+      // Cek juga lokasi pecahan jika tidak ada di tabel tenants
+      if (!tenant.latitude || !tenant.longitude) {
+        const subLocations = await db.query(
+          'SELECT latitude, longitude, location_radius FROM tenant_locations WHERE tenant_id = ? AND is_active = 1 LIMIT 1',
+          [req.params.id]
+        );
+        if (subLocations && subLocations.length > 0) {
+          tenant.latitude = subLocations[0].latitude;
+          tenant.longitude = subLocations[0].longitude;
+          tenant.location_radius = subLocations[0].location_radius;
+        }
+      }
       res.json({ success: true, tenant: tenant });
     } else {
       res.status(404).json({ success: false, message: 'Tenant not found' });

@@ -485,9 +485,9 @@ function applyTimeRulesToButtons(isInsideValidZone, statusClass, statusHtml, che
                     nextRuleDiff = diffMs;
                     nextRule = rule;
                 }
-                if (diffMenit < 0 && !isOvernight) {
+if (diffMenit < 0 && !isOvernight) {
                     // Rule sudah lewat
-                } else if (tipeRule === 'pulang' && mulaiMenit > currentMinutes && !nextRule && hasCheckedInToday) {
+                    } else if (tipeRule === 'pulang' && mulaiMenit > currentMinutes && !nextRule && window.hasCheckedInToday) {
                     nextRuleDiff = diffMenit;
                     nextRule = rule;
                 }
@@ -498,6 +498,14 @@ function applyTimeRulesToButtons(isInsideValidZone, statusClass, statusHtml, che
         checkInBtn.disabled = true;
         checkOutBtn.style.display = 'none';
         checkOutBtn.disabled = true;
+
+        // Jika sudah absen masuk dan pulang, sembunyikan semua tombol
+        if (window.hasCheckedOutToday) {
+            const distanceText = window.lastDistanceResult !== undefined ? `<br><small>📍 Jarak Anda saat ini: ${Math.round(window.lastDistanceResult)} meter dari target</small>` : '';
+            locationInfo.className = 'location-info success';
+            locationInfo.innerHTML = statusHtml + distanceText + '<br><small>✅ Absensi hari ini selesai (sudah masuk & pulang).</small>';
+            return;
+        }
 
         if (!hasCheckedInToday) {
             checkInBtn.style.display = 'block';
@@ -593,29 +601,39 @@ async function validateLocationRadius(userLat, userLng) {
 
         const acc = (currentLocation && currentLocation.accuracy) ? currentLocation.accuracy : 0;
 
+        // Ambil semua units (termasuk tenant_locations) untuk validasi radius
+        const unitsResponse = await fetch('/api/units/all', {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+
+        if (!unitsResponse.ok) {
+            throw new Error('Failed to fetch all units');
+        }
+
+        const unitsData = await unitsResponse.json();
+        if (!unitsData.success || !unitsData.units) {
+            throw new Error('No units data');
+        }
+
+        const assignedTenantIds = window.userAssignments.map(a => a.tenant_id);
         const allUnitsResults = [];
-        for (const assignment of window.userAssignments) {
-            const tenantId = assignment.tenant_id;
-            const res = await fetch('/api/tenants/' + encodeURIComponent(tenantId), {
-                headers: { 'Authorization': 'Bearer ' + token }
-            });
 
-            if (!res.ok) continue;
+        for (const unit of unitsData.units) {
+            // Hanya cek unit yang di-assign user
+            if (!assignedTenantIds.includes(unit.tenant_id)) continue;
+            if (!unit.latitude || !unit.longitude) continue;
 
-            const data = await res.json();
-            if (!data.success || !data.tenant.latitude) continue;
-
-            const tLat = parseFloat(data.tenant.latitude);
-            const tLng = parseFloat(data.tenant.longitude);
+            const tLat = parseFloat(unit.latitude);
+            const tLng = parseFloat(unit.longitude);
             const dist = calculateDistance(userLat, userLng, tLat, tLng) * 1000;
-            const rad = data.tenant.location_radius || 200;
+            const rad = unit.location_radius || 200;
             const eff = dist + (acc * 0.3);
 
-            console.log('[VALIDATE_RADIUS] Multi-tenant check:', data.tenant.nama_sekolah, 'dist:', dist.toFixed(0), 'rad:', rad, 'eff:', eff.toFixed(0));
+            console.log('[VALIDATE_RADIUS] Multi-tenant check:', unit.nama_sekolah, 'dist:', dist.toFixed(0), 'rad:', rad, 'eff:', eff.toFixed(0));
 
             allUnitsResults.push({
-                tenantId,
-                schoolName: data.tenant.nama_sekolah,
+                tenantId: unit.tenant_id,
+                schoolName: unit.nama_sekolah,
                 distance: dist,
                 radius: rad,
                 effectiveDist: eff,
@@ -1508,36 +1526,29 @@ async function loadRecentAttendance() {
 
                 if (totalBox) totalBox.innerText = data.data.length;
 
-                const todaysLogs = data.data.filter(log => log.waktu_scan?.split(' ')[0] === witaDateStr && log.tenant_id === activeTenantId);
-                const logTerbaru = todaysLogs[0] || { jenis: null };
-                const isLogToday = !!logTerbaru.jenis;
-
-                window.hasCheckedInToday = isLogToday && logTerbaru.jenis === 'masuk';
-
-                if (timeBox && logTerbaru.waktu_scan) timeBox.innerText = logTerbaru.waktu_scan.split(' ')[1]?.slice(0, 5) || '';
+const todaysLogs = data.data.filter(log => log.waktu_scan?.split(' ')[0] === witaDateStr && log.tenant_id === activeTenantId);
+                const hasMasukToday = todaysLogs.some(log => log.jenis === 'masuk');
+                const hasPulangToday = todaysLogs.some(log => log.jenis === 'pulang');
+                const logTerbaru = todaysLogs.length > 0 ? todaysLogs[0] : { jenis: null };
+                
+                window.hasCheckedInToday = hasMasukToday && !hasPulangToday;
+                window.hasCheckedOutToday = hasMasukToday && hasPulangToday; // Sudah absen masuk + pulang
+                if (timeBox) timeBox.innerText = logTerbaru.waktu_scan?.split(' ')[1]?.slice(0, 5) || '';
 
                 if (statusBox) {
-                    if (isLogToday && logTerbaru.jenis === 'pulang') {
+                    if (hasPulangToday) {
                         statusBox.innerText = 'Sudah Pulang';
                         statusBox.style.setProperty('background', '#eff6ff', 'important');
                         statusBox.style.setProperty('color', '#1e40af', 'important');
-                    } else if (isLogToday && logTerbaru.jenis === 'masuk') {
+                    } else if (hasMasukToday) {
                         statusBox.innerText = 'Sudah Masuk';
                         statusBox.style.setProperty('background', '#e2fbe8', 'important');
                         statusBox.style.setProperty('color', '#15803d', 'important');
                     } else {
                         statusBox.innerText = 'Belum absen';
                         statusBox.style.setProperty('background', '#fef3c7', 'important');
-                        statusBox.style.setProperty('color', '#92400e', 'important');
+statusBox.style.setProperty('color', '#92400e', 'important');
                     }
-                }
-
-                if (isLogToday && logTerbaru.jenis === 'masuk') {
-                    window.hasCheckedInToday = true;
-                } else if (isLogToday && logTerbaru.jenis === 'pulang') {
-                    window.hasCheckedInToday = true;
-                } else {
-                    window.hasCheckedInToday = false;
                 }
             } else if (data.data.length === 0) {
                 recentDiv.innerHTML = '<p class="text-center text-gray-500">Belum ada riwayat absensi</p>';

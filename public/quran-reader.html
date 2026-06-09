@@ -628,8 +628,10 @@ const db = new Dexie('QuranDB');
     renderSearchResults(SURAH_PAGES);
 
     async function checkInstallation() {
+      // Prioritaskan localStorage cache untuk performa
+      const savedInstalled = localStorage.getItem('quranInstalled') === 'true';
       const count = await db.images.count();
-      isInstalled = count >= TOTAL_PAGES;
+      isInstalled = savedInstalled || count >= TOTAL_PAGES;
       if (!isInstalled) {
         installWizard.style.display = 'flex';
       } else {
@@ -648,7 +650,11 @@ const db = new Dexie('QuranDB');
       installBtn.disabled = true;
       installBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Mengunduh...';
 
-      for (let i = 1; i <= TOTAL_PAGES; i++) {
+      // Cek dulu berapa banyak yang sudah ada
+      const existingCount = await db.images.count();
+      let startIndex = existingCount > 0 ? (await db.images.orderBy('page').last()).page + 1 : 1;
+      
+      for (let i = startIndex; i <= TOTAL_PAGES; i++) {
         const paddedPage = String(i).padStart(3, '0');
         try {
           const response = await fetch(`quran/${paddedPage}.png`);
