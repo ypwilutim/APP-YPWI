@@ -368,16 +368,14 @@ router.post('/scanner/attendance', async (req, res) => {
 
     let status = 'terlambat';
 
-    // Konversi timestamp ISO ke format lokal datetime untuk waktu_scan
-    const localDateTime = scanTime.toLocaleString('id-ID', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false
-    }).replace(/\//g, '-'); // Format: "2026-06-04 09:24:17"
+    // Konversi timestamp ISO ke format lokal datetime untuk waktu_scan (format: YYYY-MM-DD HH:MM:SS)
+    const year = scanTime.getFullYear();
+    const month = String(scanTime.getMonth() + 1).padStart(2, '0');
+    const day = String(scanTime.getDate()).padStart(2, '0');
+    const hours = String(scanTime.getHours()).padStart(2, '0');
+    const minutes = String(scanTime.getMinutes()).padStart(2, '0');
+    const seconds = String(scanTime.getSeconds()).padStart(2, '0');
+    const localDateTime = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 
     try {
       const [tenantData] = await db.query('SELECT use_central_rules FROM tenants WHERE tenant_id = ?', [tenant_id]);
@@ -438,16 +436,25 @@ router.post('/scanner/attendance', async (req, res) => {
       const [tenant] = await db.query('SELECT nama_sekolah FROM tenants WHERE tenant_id = ?', [tenant_id]);
       const userTimezone = 'Asia/Makassar'; // Default untuk scanner
 
+      let tanggalDisplay, jamDisplay;
       if (teacherNotif && teacherNotif.no_wa) {
         const waktuAbsenObj = new Date(timestamp);
-        const tanggalSekarang = waktuAbsenObj.toLocaleDateString('id-ID', { 
+        tanggalDisplay = waktuAbsenObj.toLocaleDateString('id-ID', { 
           weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
           timeZone: userTimezone 
         });
-        const jamLokal = waktuAbsenObj.toLocaleTimeString('id-ID', { 
+        jamDisplay = waktuAbsenObj.toLocaleTimeString('id-ID', { 
           hour12: false, 
           timeZone: userTimezone 
         }).slice(0, 5);
+
+        // Fallback format jika locale gagal
+        const fbDate = scanTime.getFullYear() + '-' + String(scanTime.getMonth() + 1).padStart(2, '0') + '-' + String(scanTime.getDate()).padStart(2, '0');
+        const fbTime = String(scanTime.getHours()).padStart(2, '0') + ':' + String(scanTime.getMinutes()).padStart(2, '0');
+        if (!tanggalDisplay || tanggalDisplay.includes('Invalid') || tanggalDisplay.includes('NaN')) {
+          tanggalDisplay = fbDate;
+          jamDisplay = fbTime;
+        }
 
         const waMessage = `*NOTIFIKASI PRESENSI SCANNER YPWI*
 Hai *${teacherNotif.nama}*, 
@@ -456,8 +463,8 @@ Laporan absensi scanner Anda berhasil direkam.
 *Detail:*
 • Jenis: Absen ${type.toUpperCase()}
 • Instansi: ${tenant ? tenant.nama_sekolah : tenant_id}
-• Hari/Tgl: ${tanggalSekarang}
-• Jam Log: ${jamLokal} (WITA)
+• Hari/Tgl: ${tanggalDisplay}
+• Jam Log: ${jamDisplay} (WITA)
 
 Terima kasih.`;
 
@@ -490,8 +497,8 @@ Terima kasih.`;
       </p>
       <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
         <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee; color: #666;">Instansi:</td><td style="padding: 8px 0; border-bottom: 1px solid #eee; font-weight: 600;">${tenant ? tenant.nama_sekolah : tenant_id}</td></tr>
-        <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee; color: #666;">Tanggal:</td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${tanggalSekarang}</td></tr>
-        <tr><td style="padding: 8px 0; color: #666;">Waktu:</td><td style="padding: 8px 0; font-weight: 600;">${jamLokal} WITA</td></tr>
+        <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee; color: #666;">Tanggal:</td><td style="padding: 8px 0; border-bottom: 1px solid #eee;">${tanggalDisplay}</td></tr>
+        <tr><td style="padding: 8px 0; color: #666;">Waktu:</td><td style="padding: 8px 0; font-weight: 600;">${jamDisplay} WITA</td></tr>
       </table>
       <p style="margin: 20px 0 0 0; color: #888; font-size: 14px;">Email ini dikirim otomatis oleh sistem.</p>
     </div>

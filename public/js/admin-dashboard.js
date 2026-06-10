@@ -2096,7 +2096,7 @@ async function handleSubmitDevice(event) {
   const token = document.getElementById('deviceRegistrationToken').value;
 
   try {
-    const response = await fetch('/api/admin/devices', {
+    const response = await fetch('/api/admin/scanner-devices', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
