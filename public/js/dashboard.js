@@ -1442,11 +1442,12 @@ async function loadTodaySummary() {
         }
 
         console.log('Checking password modal:', { data_user: data?.data?.user, is_default_password: data?.data?.user?.is_default_password });
-        if (data && data.data && data.data.user && data.data.user.is_default_password) {
+        if (data && data.success && data.data && data.data.user && data.data.user.is_default_password) {
             console.log('Showing password change modal now');
             const modal = document.getElementById('changePasswordModal');
             console.log('Modal element:', modal);
             if (modal) {
+                modal.style.display = 'flex';
                 modal.classList.add('show');
                 console.log('Modal classes after:', modal.className);
             } else {
@@ -1604,8 +1605,11 @@ function hardRefresh() {
 }
 
 function closeChangePasswordModal() {
-    document.getElementById('changePasswordModal').classList.remove('show');
-    // Clear fields
+    const modal = document.getElementById('changePasswordModal');
+    if (modal) {
+        modal.style.display = 'none';
+        modal.classList.remove('show');
+    }
     document.getElementById('oldPassword').value = '';
     document.getElementById('newPassword').value = '';
     document.getElementById('confirmPassword').value = '';

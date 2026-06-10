@@ -38,6 +38,8 @@ router.post('/attendance', authenticateToken, selfieUpload.single('selfie'), asy
     let selfie_url = req.file ? req.file.path : null;
     const userTimezone = client_timezone || 'Asia/Makassar';
 
+    console.log('[DEBUG] Attendance request:', { jenis, latitude, longitude, tenant_id });
+
     if (!jenis || !waktu_scan) {
       return res.status(400).json({ success: false, message: 'jenis dan waktu_scan wajib diisi' });
     }
@@ -62,49 +64,107 @@ router.post('/attendance', authenticateToken, selfieUpload.single('selfie'), asy
       const userLng = parseFloat(longitude);
 
       if (!isNaN(userLat) && !isNaN(userLng)) {
-        // Cek lokasi utama (tenants) dan lokasi pecahan (tenant_locations)
-        const [tenantData] = await db.query(
-          'SELECT latitude, longitude, location_radius FROM tenants WHERE tenant_id = ?',
-          [tenant_id]
-        );
-
-        // Cek juga lokasi pecahan/sub-lokasi
+        // Ambil semua lokasi pecahan yang aktif
         const subLocationData = await db.query(
           'SELECT latitude, longitude, location_radius FROM tenant_locations WHERE tenant_id = ? AND is_active = 1',
           [tenant_id]
         );
 
-        // Gunakan lokasi pecahan jika ada, jika tidak pakai lokasi utama
-        let validLocation = null;
+        console.log('[DEBUG] subLocationData for tenant', tenant_id, ':', subLocationData);
+
+        // Hitung jarak ke semua lokasi pecahan dan pilih yang terdekat
+        const R = 6371;
+        let closestLocation = null;
+        let closestDistance = Infinity;
+
+        // Cek tenant utama dulu
+        const [tenantMainData] = await db.query(
+          'SELECT latitude, longitude, location_radius FROM tenants WHERE tenant_id = ?',
+          [tenant_id]
+        );
+        console.log('[DEBUG] tenantMainData for tenant', tenant_id, ':', tenantMainData);
+
+        if (tenantMainData && tenantMainData.latitude && tenantMainData.longitude) {
+          const tLat = parseFloat(tenantMainData.latitude);
+          const tLng = parseFloat(tenantMainData.longitude);
+          if (!isNaN(tLat) && !isNaN(tLng)) {
+            const dLat = (tLat - userLat) * Math.PI / 180;
+            const dLng = (tLng - userLng) * Math.PI / 180;
+const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                       Math.cos(userLat * Math.PI / 180) * Math.cos(tLat * Math.PI / 180) *
+                       Math.sin(dLng/2) * Math.sin(dLng/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            const mainDistance = R * c * 1000;
+            console.log('[DEBUG] distance to main tenant:', mainDistance.toFixed(1), 'm');
+            if (mainDistance < closestDistance) {
+              closestDistance = mainDistance;
+              closestLocation = tenantMainData;
+            }
+          }
+        }
+
+        // Cek lokasi pecahan
         if (subLocationData && subLocationData.length > 0) {
-          validLocation = subLocationData[0];
-        } else if (tenantData && tenantData.latitude && tenantData.longitude) {
-          validLocation = tenantData;
+          for (const loc of subLocationData) {
+            const tLat = parseFloat(loc.latitude);
+            const tLng = parseFloat(loc.longitude);
+            if (!isNaN(tLat) && !isNaN(tLng)) {
+              const dLat = (tLat - userLat) * Math.PI / 180;
+              const dLng = (tLng - userLng) * Math.PI / 180;
+              const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                        Math.cos(userLat * Math.PI / 180) * Math.cos(tLat * Math.PI / 180) *
+                        Math.sin(dLng/2) * Math.sin(dLng/2);
+              const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+              const distanceM = R * c * 1000;
+              console.log('[DEBUG] distance to subloc:', distanceM.toFixed(1), 'm, lat:', loc.latitude, 'lng:', loc.longitude);
+              if (distanceM < closestDistance) {
+                closestDistance = distanceM;
+                closestLocation = loc;
+              }
+            }
+          }
+        }
+
+        // Jika tidak ada lokasi pecahan terdekat, fallback ke lokasi utama
+        let validLocation = closestLocation;
+        if (!validLocation) {
+          const [tenantData] = await db.query(
+            'SELECT latitude, longitude, location_radius FROM tenants WHERE tenant_id = ?',
+            [tenant_id]
+          );
+          if (tenantData && tenantData.latitude && tenantData.longitude) {
+            const tLat = parseFloat(tenantData.latitude);
+            const tLng = parseFloat(tenantData.longitude);
+            if (!isNaN(tLat) && !isNaN(tLng)) {
+              const dLat = (tLat - userLat) * Math.PI / 180;
+              const dLng = (tLng - userLng) * Math.PI / 180;
+              const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                        Math.cos(userLat * Math.PI / 180) * Math.cos(tLat * Math.PI / 180) *
+                        Math.sin(dLng/2) * Math.sin(dLng/2);
+              const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+              const fallbackDistance = R * c * 1000;
+              if (!closestLocation || fallbackDistance < closestDistance) {
+                closestDistance = fallbackDistance;
+                validLocation = tenantData;
+              }
+            }
+          }
         }
 
         if (validLocation) {
           const tLat = parseFloat(validLocation.latitude);
           const tLng = parseFloat(validLocation.longitude);
-          const R = 6371;
-          const dLat = (tLat - userLat) * Math.PI / 180;
-          const dLng = (tLng - userLng) * Math.PI / 180;
-          const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                    Math.cos(userLat * Math.PI / 180) * Math.cos(tLat * Math.PI / 180) *
-                    Math.sin(dLng/2) * Math.sin(dLng/2);
-          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-          const distanceKm = R * c;
-          const distanceM = distanceKm * 1000;
           const radiusM = validLocation.location_radius || 200;
 
-          if (distanceM > radiusM) {
-            console.warn(`[ANTI-FRAUD] User ${req.user.guru_id} di luar radius. Jarak: ${distanceM.toFixed(1)}m, Radius: ${radiusM}m, Tenant: ${tenant_id}`);
+          if (closestDistance > radiusM) {
+            console.warn(`[ANTI-FRAUD] User ${req.user.guru_id} di luar radius. Jarak: ${closestDistance.toFixed(1)}m, Radius: ${radiusM}m, Tenant: ${tenant_id}`);
             return res.status(403).json({
               success: false,
-              message: `Lokasi Anda di luar radius sekolah (${distanceM.toFixed(0)}m dari ${radiusM}m).`
+              message: `Lokasi Anda di luar radius sekolah (${closestDistance.toFixed(0)}m dari ${radiusM}m).`
             });
           }
 
-          console.log(`[ANTI-FRAUD] Validasi lokasi berhasil. Jarak: ${distanceM.toFixed(1)}m, Radius: ${radiusM}m, Tenant: ${tenant_id}`);
+          console.log(`[ANTI-FRAUD] Validasi lokasi berhasil. Jarak: ${closestDistance.toFixed(1)}m, Radius: ${radiusM}m, Tenant: ${tenant_id}`);
         }
       }
     }
@@ -361,20 +421,29 @@ router.get('/units/nearby', authenticateToken, async (req, res) => {
     const userLat = parseFloat(lat);
     const userLng = parseFloat(lng);
 
-    // Ambil data dari tabel tenants utama
+    // Ambil hanya tenant_id yang di-assign ke guru ini
+    const allowedTenantIds = Array.isArray(req.user.assignments)
+      ? req.user.assignments.map(a => a.tenant_id)
+      : [];
+
+    // Ambil data dari tabel tenants utama - hanya yang di-assign
     const tenantsData = await db.query(
       `SELECT tenant_id, nama_sekolah, latitude, longitude, location_radius, tipe_unit
        FROM tenants
-       WHERE latitude IS NOT NULL AND longitude IS NOT NULL`
+       WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+       ${allowedTenantIds.length > 0 ? 'AND tenant_id IN (' + allowedTenantIds.map(() => '?').join(',') + ')' : ''}`,
+      allowedTenantIds.length > 0 ? allowedTenantIds : []
     );
 
-    // Ambil data dari tabel tenant_locations (cabang/sub-lokasi)
+    // Ambil data dari tabel tenant_locations (cabang/sub-lokasi) - hanya yang di-assign
     const subLocationsData = await db.query(
       `SELECT tl.tenant_id, t.nama_sekolah, tl.latitude, tl.longitude,
               tl.location_radius, t.tipe_unit
        FROM tenant_locations tl
        JOIN tenants t ON tl.tenant_id = t.tenant_id
-       WHERE tl.latitude IS NOT NULL AND tl.longitude IS NOT NULL AND tl.is_active = 1`
+       WHERE tl.latitude IS NOT NULL AND tl.longitude IS NOT NULL AND tl.is_active = 1
+       ${allowedTenantIds.length > 0 ? 'AND tl.tenant_id IN (' + allowedTenantIds.map(() => '?').join(',') + ')' : ''}`,
+      allowedTenantIds.length > 0 ? [...allowedTenantIds] : []
     );
 
     // Gabungkan kedua array
@@ -424,20 +493,29 @@ router.get('/units/nearby', authenticateToken, async (req, res) => {
 // GET /api/units/all - Get all units (tenants + tenant_locations sub-locations) with tipe_unit
 router.get('/units/all', authenticateToken, async (req, res) => {
   try {
-    // Ambil data dari tabel tenants utama
+    // Ambil hanya tenant_id yang di-assign ke guru ini
+    const allowedTenantIds = Array.isArray(req.user.assignments)
+      ? req.user.assignments.map(a => a.tenant_id)
+      : [];
+
+    // Ambil data dari tabel tenants utama - hanya yang di-assign
     const tenantsData = await db.query(
       `SELECT tenant_id, nama_sekolah, latitude, longitude, location_radius, tipe_unit
        FROM tenants
-       WHERE latitude IS NOT NULL AND longitude IS NOT NULL`
+       WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+       ${allowedTenantIds.length > 0 ? 'AND tenant_id IN (' + allowedTenantIds.map(() => '?').join(',') + ')' : ''}`,
+      allowedTenantIds.length > 0 ? allowedTenantIds : []
     );
 
-    // Ambil data dari tabel tenant_locations (cabang/sub-lokasi)
+    // Ambil data dari tabel tenant_locations (cabang/sub-lokasi) - hanya yang di-assign
     const subLocationsData = await db.query(
       `SELECT tl.tenant_id, t.nama_sekolah, tl.latitude, tl.longitude,
               tl.location_radius, t.tipe_unit
        FROM tenant_locations tl
        JOIN tenants t ON tl.tenant_id = t.tenant_id
-       WHERE tl.latitude IS NOT NULL AND tl.longitude IS NOT NULL AND tl.is_active = 1`
+       WHERE tl.latitude IS NOT NULL AND tl.longitude IS NOT NULL AND tl.is_active = 1
+       ${allowedTenantIds.length > 0 ? 'AND tl.tenant_id IN (' + allowedTenantIds.map(() => '?').join(',') + ')' : ''}`,
+      allowedTenantIds.length > 0 ? [...allowedTenantIds] : []
     );
 
     // Gabungkan kedua array (jika ada tenant_id yang sama di kedua tabel, tetap tampilkan keduanya)
