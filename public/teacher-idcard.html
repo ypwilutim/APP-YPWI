@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ID Card Guru - YPWI Lutim</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <style>
+    @page { size: 8.5cm 5.5cm; margin: 0; }
+    body { font-family: 'Inter', sans-serif; background: #f3f4f6; }
+    .id-card { 
+      width: 8.5cm; height: 5.5cm; background: white; border-radius: 8px; 
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden; position: relative;
+      page-break-inside: avoid;
+    }
+    .id-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, #066e3a 0%, #0a8a4a 100%); }
+    .school-header { background: linear-gradient(135deg, #066e3a 0%, #0a8a4a 100%); color: white; text-align: center; padding: 6px 8px; font-size: 9px; font-weight: 600; }
+    .photo-frame { width: 55px; height: 70px; border: 2px solid #e5e7eb; border-radius: 4px; overflow: hidden; background: #f9fafb; }
+    @media print { body { background: white; padding: 0; margin: 0; } .no-print { display: none !important; } .id-card { box-shadow: none; page-break-inside: avoid; } }
+    .watermark { position: absolute; bottom: 10px; right: 10px; opacity: 0.05; font-size: 24px; transform: rotate(-15deg); pointer-events: none; }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+  <div class="container mx-auto px-4 py-8">
+    <div class="max-w-6xl mx-auto">
+      <div class="flex justify-between items-center mb-6 no-print">
+        <h1 class="text-2xl font-bold text-gray-800"><i class="fas fa-id-card text-green-600 mr-2"></i>ID Card Guru</h1>
+        <div class="flex space-x-2">
+          <button onclick="printCards()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"><i class="fas fa-print mr-2"></i>Cetak</button>
+          <button onclick="location.href='admin-dashboard.html'" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg"><i class="fas fa-arrow-left mr-2"></i>Kembali</button>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-lg shadow p-4 mb-6 no-print">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Sekolah</label>
+            <select id="tenantFilter" class="w-full border-gray-300 rounded-lg px-3 py-2">
+              <option value="">Semua Sekolah</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Pencarian</label>
+            <input type="text" id="searchInput" placeholder="Cari nama..." class="w-full border-gray-300 rounded-lg px-3 py-2">
+          </div>
+          <div class="flex items-end">
+            <button onclick="loadTeachers()" class="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg"><i class="fas fa-search mr-2"></i>Tampilkan</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="cardsContainer" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div class="text-center p-4 text-gray-500 col-span-full">Memuat data...</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let teachersData = [];
+    const token = localStorage.getItem('token');
+
+    async function loadTeachers() {
+      const tenantId = document.getElementById('tenantFilter').value;
+      const search = document.getElementById('searchInput').value;
+      
+      try {
+        const response = await fetch('/api/admin/teachers' + (tenantId ? '?tenant_id=' + tenantId : ''), {
+          headers: { 'Authorization': token ? 'Bearer ' + token : '' }
+        });
+        const result = await response.json();
+        
+        if (result.success) {
+          teachersData = result.data.filter(t => 
+            !search || (t.nama && t.nama.toLowerCase().includes(search.toLowerCase()))
+          );
+          renderCards();
+        } else {
+          document.getElementById('cardsContainer').innerHTML = '<p class="text-red-600 p-4">Error: ' + (result.message || 'Tidak ada akses') + '</p>';
+        }
+      } catch (error) {
+        document.getElementById('cardsContainer').innerHTML = '<p class="text-red-600 p-4">Error loading. Check console.</p>';
+        console.error(error);
+      }
+    }
+
+    async function loadTenants() {
+      try {
+        const response = await fetch('/api/tenants');
+        const result = await response.json();
+        if (result.success) {
+          const select = document.getElementById('tenantFilter');
+          result.data.forEach(tenant => {
+            const option = document.createElement('option');
+            option.value = tenant.tenant_id;
+            option.textContent = tenant.nama_sekolah;
+            select.appendChild(option);
+          });
+        }
+      } catch (error) {}
+    }
+
+    function renderCards() {
+      const container = document.getElementById('cardsContainer');
+      container.innerHTML = '';
+      
+      teachersData.forEach(teacher => {
+        // Get assignment info - data dari API admin/teachers format: assignments array
+        const assignment = teacher.assignments && teacher.assignments.length > 0 ? teacher.assignments[0] : {};
+        const namaSekolah = assignment.nama_sekolah || teacher.nama_sekolah || 'YPWI LUTIM';
+        const jabatan = assignment.jabatan_di_unit || teacher.jabatan_di_unit || 'Guru';
+        
+        const card = document.createElement('div');
+        card.className = 'id-card';
+        card.innerHTML = `
+          <div class="school-header">${namaSekolah}</div>
+          <div class="p-3 flex">
+            <div class="mr-3">
+              <div class="photo-frame">
+                <img src="${teacher.link_foto || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(teacher.nama) + '&size=55'}" 
+                     class="w-full h-full object-cover" onerror="this.src='https://ui-avatars.com/api/?name=Guru&size=55'">
+              </div>
+              <div class="text-center mt-1">
+                <img src="https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=${teacher.scan_id || teacher.id}" 
+                     class="w-12 h-12 mx-auto">
+              </div>
+            </div>
+            <div class="flex-1 text-xs">
+              <div class="font-bold text-sm text-gray-800 mb-1">${teacher.nama || 'Guru'}</div>
+              <div class="space-y-1 text-gray-600">
+                <div><span class="font-medium">ID:</span> ${teacher.scan_id || teacher.id}</div>
+                <div><span class="font-medium">NIK:</span> ${teacher.nik || '-'}</div>
+                <div><span class="font-medium">NIP:</span> ${teacher.nip || '-'}</div>
+                <div><span class="font-medium">Jabatan:</span> ${jabatan}</div>
+              </div>
+            </div>
+          </div>
+          <div class="watermark"><i class="fas fa-id-badge"></i></div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    function printCards() { window.print(); }
+    document.addEventListener('DOMContentLoaded', () => { loadTenants(); loadTeachers(); });
+  </script>
+</body>
+</html>

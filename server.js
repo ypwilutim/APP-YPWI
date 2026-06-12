@@ -228,12 +228,14 @@ const absensiRoutes = require('./src/routes/absensi');
 const authRoutes = require('./src/routes/auth');
 const scannerRoutes = require('./src/routes/scanner');
 const adminRoutes = require('./src/routes/admin');
+const idcardRoutes = require('./src/routes/idcard');
 
 // Register modular routes
 app.use('/api', absensiRoutes);
 app.use('/api', authRoutes);
 app.use('/api', scannerRoutes);
 app.use('/api', adminRoutes);
+app.use('/api/idcard', idcardRoutes);
 
 const logFilePath = path.join(__dirname, 'logs', 'app.log');
 // Ensure logs directory exists
@@ -576,10 +578,9 @@ app.post('/api/change-password', authenticateToken, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Password baru dan konfirmasi tidak cocok' });
     }
 
-    // 2. Ambil data user (Format hasil query adalah array langsung: [ {password: '...'} ])
-    const userRows = await db.query('SELECT u.id, t.nama, t.email FROM users u LEFT JOIN teachers t ON u.guru_id = t.id WHERE u.id = ?', [req.user.id]);
+// 2. Ambil data user
+    const userRows = await db.query('SELECT u.id, u.password, t.nama, t.email FROM users u LEFT JOIN teachers t ON u.guru_id = t.id WHERE u.id = ?', [req.user.id]);
 
-    // Karena formatnya array langsung, kita cek userRows[0]
     if (!userRows || userRows.length === 0) {
       return res.status(404).json({ success: false, message: 'User tidak ditemukan' });
     }
@@ -587,6 +588,9 @@ app.post('/api/change-password', authenticateToken, async (req, res) => {
     const user = userRows[0];
 
     // 3. Verifikasi password lama
+    if (!user.password) {
+      return res.status(400).json({ success: false, message: 'User tidak memiliki password. Silakan hubungi admin.' });
+    }
     const isOldPasswordValid = await bcrypt.compare(oldPassword, user.password);
     if (!isOldPasswordValid) {
       return res.status(400).json({ success: false, message: 'Password lama salah' });
@@ -594,21 +598,23 @@ app.post('/api/change-password', authenticateToken, async (req, res) => {
 
     // 4. Update password baru
     const hashedNewPassword = await bcrypt.hash(newPassword, 10);
-    const updateResult = await db.query(
+    await db.query(
       'UPDATE users SET password = ?, is_default_password = 0, updated_at = NOW() WHERE id = ?',
       [hashedNewPassword, req.user.id]
     );
 
-    // Send email notification for password change
+    // 5. Send email notification (optional, non-blocking)
     if (user && user.email) {
-      const htmlMessage = `<!DOCTYPE html>
+      try {
+        if (typeof global.sendEmail === 'function') {
+          const htmlMessage = `<!DOCTYPE html>
 <html lang="id">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Password Diubah - YPWI Lutim</title>
 </head>
-<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5;">
+<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5;">
   <div style="max-width: 600px; margin: 20px auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
     <div style="background: linear-gradient(135deg, #066e3a 0%, #0a8a4a 100%); padding: 30px; text-align: center;">
       <h1 style="margin: 0; color: white; font-size: 24px;">YPWI LUTIM</h1>
@@ -623,31 +629,56 @@ app.post('/api/change-password', authenticateToken, async (req, res) => {
         Password akun YPWI Lutim Anda telah berhasil diubah.
       </p>
       <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-        <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee; color: #666;">Tanggal:</td><td style="padding: 8px 0; border-bottom: 1px solid #eee; font-weight: 600;">${new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</td></tr>
+        <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee; color: #666;">Tanggal:</td><td style="padding: 8px 0; border-bottom: 1px solid #eee; font-weight: 600;">${new Date().toLocaleDateString('id-ID')}</td></tr>
         <tr><td style="padding: 8px 0; color: #666;">Waktu:</td><td style="padding: 8px 0; font-weight: 600;">${new Date().toLocaleTimeString('id-ID', { hour12: false }).slice(0, 5)} WIB</td></tr>
       </table>
-      <p style="margin: 20px 0 0 0; color: #888; font-size: 14px;">Email ini dikirim otomatis oleh sistem. Jika bukan Anda, segera hubungi admin.</p>
+      <p style="margin: 20px 0 0 0; color: #888; font-size: 14px;">Email ini dikirim otomatis oleh sistem.</p>
     </div>
   </div>
 </body>
 </html>`;
-
-      if (typeof global.sendEmail === 'function') {
-        await global.sendEmail(user.email, 'Password Berhasil Diubah - YPWI Lutim', htmlMessage);
+          await global.sendEmail(user.email, 'Password Berhasil Diubah - YPWI Lutim', htmlMessage);
+        }
+      } catch (emailErr) {
+        console.warn('Email notification failed (password still changed):', emailErr.message);
       }
     }
 
-    // Untuk driver mysql (bukan mysql2/promise), hasil update biasanya objek dengan affectedRows
-    if (updateResult && updateResult.affectedRows > 0) {
-      res.json({ success: true, message: 'Password berhasil diubah!' });
-    } else {
-      // Jika ternyata library mengembalikan format lain, kita coba kirim sukses saja
-      res.json({ success: true, message: 'Password berhasil diubah!' });
-    }
+res.json({ success: true, message: 'Password berhasil diubah!' });
 
-} catch (error) {
-    console.error('Change password error:', error);
-    res.status(500).json({ success: false, message: 'Terjadi kesalahan sistem' });
+  } catch (error) {
+    console.error('Change password error:', error.message);
+    console.error('Stack trace:', error.stack);
+    res.status(500).json({ success: false, message: 'Terjadi kesalahan sistem', error: error.message });
+  }
+});
+
+// Remove Background API endpoint (requires REMOVE_BG_API_KEY in .env)
+app.post('/api/remove-bg', authenticateToken, async (req, res) => {
+  try {
+    const { imageUrl } = req.body;
+    
+    if (!process.env.REMOVE_BG_API_KEY) {
+      return res.status(500).json({ success: false, message: 'Remove.bg API key tidak dikonfigurasi' });
+    }
+    
+    if (!imageUrl) {
+      return res.status(400).json({ success: false, message: 'imageUrl diperlukan' });
+    }
+    
+    const response = await axios.post('https://api.remove.bg/v1.0/removebg', 
+      new URLSearchParams({ image_url: imageUrl }),
+      {
+        headers: { 'X-Api-Key': process.env.REMOVE_BG_API_KEY },
+        responseType: 'arraybuffer'
+      }
+    );
+    
+    const base64 = Buffer.from(response.data).toString('base64');
+    res.json({ success: true, image: `data:image/png;base64,${base64}` });
+  } catch (error) {
+    console.error('Remove BG error:', error.message);
+    res.status(500).json({ success: false, message: 'Gagal menghapus background' });
   }
 });
 

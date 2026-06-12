@@ -1,0 +1,69 @@
+/* ID Card Styles */
+
+@media print {
+  body {
+    margin: 0;
+    padding: 0;
+    background: white !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .id-card {
+    page-break-inside: avoid;
+    box-shadow: none !important;
+  }
+}
+
+.id-card {
+  width: 8.5cm;
+  height: 5.5cm;
+  background: white;
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+  transition: transform 0.2s;
+}
+
+.id-card:hover {
+  transform: translateY(-2px);
+}
+
+.school-header {
+  background: linear-gradient(135deg, #066e3a 0%, #0a8a4a 100%);
+  color: white;
+  text-align: center;
+  padding: 6px 8px;
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.photo-frame {
+  width: 55px;
+  height: 70px;
+  border: 2px solid #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #f9fafb;
+}
+
+.watermark {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  opacity: 0.05;
+  font-size: 24px;
+  transform: rotate(-15deg);
+  pointer-events: none;
+}
+
+.student-badge {
+  background: #fef3c7;
+  color: #92400e;
+  padding: 2px 6px;
+  border-radius: 9999px;
+  font-size: 9px;
+  font-weight: 600;
+}

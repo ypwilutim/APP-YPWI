@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard Admin - YPWI Lutim</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .nav-active { background-color: #3b82f6; color: white; }
+    .skeleton-loader { background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: loading 1.5s infinite; }
+    @keyframes loading { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <div class="flex min-h-screen">
+    <aside class="w-64 bg-white shadow-lg border-r flex flex-col h-screen">
+      <div class="p-6 border-b">
+        <h1 class="text-xl font-bold text-gray-900">YPWI Lutim Admin</h1>
+        <p class="text-sm text-gray-500">Dashboard Panel</p>
+      </div>
+      <nav class="flex-1 p-4 space-y-2 overflow-y-auto">
+        <button class="nav-item nav-active w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg hover:bg-gray-100" data-tab="dashboard">
+          <i class="fas fa-chart-line"></i><span>Dashboard</span>
+        </button>
+        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="teachers">
+          <i class="fas fa-users"></i><span>Manajemen Guru</span>
+        </button>
+        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="students">
+          <i class="fas fa-user-graduate"></i><span>Manajemen Siswa</span>
+        </button>
+        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="evaluations">
+          <i class="fas fa-star"></i><span>Penilaian Guru Otomatis</span>
+        </button>
+        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="attendance">
+          <i class="fas fa-clipboard-list"></i><span>Log Kehadiran</span>
+        </button>
+        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="whatsapp">
+          <i class="fab fa-whatsapp"></i><span>Pesan WhatsApp</span>
+        </button>
+        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="payroll">
+          <i class="fas fa-wallet"></i><span>Penggajian</span>
+        </button>
+        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="documents">
+          <i class="fas fa-file-alt"></i><span>Dokumen HR</span>
+        </button>
+        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="qr-generator">
+          <i class="fas fa-qrcode"></i><span>QR Scanner & Generator</span>
+        </button>
+        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="idcard">
+          <i class="fas fa-id-card"></i><span>Cetak ID Card</span>
+        </button>
+        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="backup">
+          <i class="fas fa-database"></i><span>Backup/Restore Database</span>
+        </button>
+        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="settings">
+          <i class="fas fa-cog"></i><span>Pengaturan</span>
+        </button>
+      </nav>
+    </aside>
+
+    <main class="flex-1 p-8">
+      <h2 id="pageTitle" class="text-3xl font-bold text-gray-900 mb-8">Dashboard</h2>
+      
+      <div id="idcardTab" class="tab-content hidden">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <h3 class="text-lg font-semibold text-gray-900 mb-6">Cetak ID Card</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-6 border border-green-200">
+              <h4 class="text-md font-semibold text-gray-900 mb-2"><i class="fas fa-id-badge text-green-600 mr-2"></i>ID Card Guru</h4>
+              <p class="text-sm text-gray-600 mb-4">Buat dan cetak kartu identitas untuk guru dengan QR code.</p>
+              <a href="teacher-idcard.html" class="block w-full bg-green-600 text-white px-4 py-2.5 rounded-lg hover:bg-green-700 text-center">
+                <i class="fas fa-print mr-2"></i> Buka ID Card Guru
+              </a>
+            </div>
+            <div class="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200">
+              <h4 class="text-md font-semibold text-gray-900 mb-2"><i class="fas fa-id-card text-blue-600 mr-2"></i>ID Card Siswa</h4>
+              <p class="text-sm text-gray-600 mb-4">Buat dan cetak kartu identitas untuk siswa dengan QR code.</p>
+              <a href="student-idcard.html" class="block w-full bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 text-center">
+                <i class="fas fa-print mr-2"></i> Buka ID Card Siswa
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    document.querySelectorAll('.nav-item').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+        document.querySelectorAll('.nav-item').forEach(i => {
+          i.classList.remove('nav-active');
+          i.classList.add('text-gray-600');
+        });
+        document.getElementById(btn.dataset.tab + 'Tab').classList.remove('hidden');
+        btn.classList.add('nav-active');
+        document.getElementById('pageTitle').textContent = btn.querySelector('span').textContent;
+      });
+    });
+    document.getElementById('idcardTab').classList.remove('hidden');
+    document.querySelector('[data-tab="idcard"]').classList.add('nav-active');
+  </script>
+</body>
+</html>

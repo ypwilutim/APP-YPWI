@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ID Card Designer - YPWI Lutim</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0/css/all.min.css" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+  <style>
+    body { font-family: 'Inter', sans-serif; background: #f3f4f6; }
+    #canvas-container { background: #e5e7eb; border-radius: 8px; }
+    #c { background: white; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .tool-panel { background: white; border-radius: 8px; }
+    .layer-item { border: 1px solid #e5e7eb; border-radius: 4px; cursor: move; }
+    .layer-item.active { border-color: #3b82f6; background: #eff6ff; }
+    .properties-panel { background: #f9fafb; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <div class="container mx-auto px-4 py-6">
+    <div class="flex justify-between items-center mb-4">
+      <h1 class="text-2xl font-bold text-gray-800">
+        <i class="fas fa-palette text-purple-600 mr-2"></i>ID Card Designer
+      </h1>
+      <button onclick="location.href='admin-dashboard.html'" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg">
+        <i class="fas fa-arrow-left mr-2"></i>Kembali ke Dashboard
+      </button>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+      <!-- Tools Panel -->
+      <div class="tool-panel p-4 shadow">
+        <h3 class="font-semibold mb-3 text-gray-700">Tools</h3>
+        
+        <div class="mb-4">
+          <label class="block text-sm font-medium mb-2">Upload Template</label>
+          <input type="file" id="templateUpload" accept="image/*" class="w-full text-sm">
+        </div>
+
+        <div class="mb-4">
+          <label class="block text-sm font-medium mb-2">Upload Foto (Auto Remove BG)</label>
+          <input type="file" id="photoUpload" accept="image/*" class="w-full text-sm">
+          <input type="file" id="bulkPhotoUpload" accept="image/*" multiple class="w-full text-sm mt-2">
+          <button id="bulkProcessBtn" class="w-full bg-purple-600 hover:bg-purple-700 text-white py-1 rounded-lg mt-2 text-sm hidden">
+            <i class="fas fa-magic mr-1"></i> Proses Semua (Remove BG)
+          </button>
+        </div>
+
+        <div class="mb-4">
+          <button id="addTextBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg mb-2">
+            <i class="fas fa-font mr-2"></i>Tambah Teks
+          </button>
+          <button id="saveTemplateBtn" class="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg">
+            <i class="fas fa-save mr-2"></i>Simpan Template
+          </button>
+        </div>
+
+        <div class="border-t pt-3">
+          <h4 class="text-sm font-medium mb-2">Layer</h4>
+          <div id="layersList" class="space-y-2 max-h-64 overflow-y-auto"></div>
+        </div>
+      </div>
+
+      <!-- Canvas Area -->
+      <div class="lg:col-span-2">
+        <div id="canvas-container" class="p-4">
+          <div class="flex justify-center">
+            <canvas id="c" width="350" height="220"></canvas>
+          </div>
+        </div>
+        <div class="flex justify-center mt-3 space-x-2">
+          <button id="zoomOut" class="bg-gray-200 hover:bg-gray-300 px-3 py-1 rounded">-</button>
+          <span id="zoomLevel" class="px-3 py-1 bg-white rounded">100%</span>
+          <button id="zoomIn" class="bg-gray-200 hover:bg-gray-300 px-3 py-1 rounded">+</button>
+        </div>
+      </div>
+
+      <!-- Properties Panel -->
+      <div class="tool-panel p-4 shadow">
+        <h3 class="font-semibold mb-3 text-gray-700">Properties</h3>
+        <div id="propertiesPanel" class="properties-panel p-3 min-h-32">
+          <p class="text-gray-500 text-sm">Pilih layer untuk edit properti</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const canvas = new fabric.Canvas('c', {
+      backgroundColor: '#ffffff',
+      selection: true
+    });
+    let zoom = 1;
+    let selectedObject = null;
+
+    // Load saved template
+    function loadSavedTemplate() {
+      const saved = localStorage.getItem('idcardTemplate');
+      if (saved) {
+        canvas.loadFromJSON(saved, () => canvas.renderAll());
+      }
+    }
+
+    // Upload template
+    document.getElementById('templateUpload').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        fabric.Image.fromURL(event.target.result, (img) => {
+          img.set({
+            scaleX: canvas.width / img.width,
+            scaleY: canvas.height / img.height,
+            selectable: false
+          });
+          canvas.add(img);
+          canvas.renderAll();
+          updateLayers();
+        });
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // Upload photo with remove background (via API)
+    document.getElementById('photoUpload').addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const imageUrl = event.target.result;
+        
+        // Try remove background API
+        try {
+          const response = await fetch('/api/remove-bg', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + localStorage.getItem('token')
+            },
+            body: JSON.stringify({ imageUrl })
+          });
+          
+          const result = await response.json();
+          const imgUrl = result.success ? result.image : imageUrl;
+          
+          fabric.Image.fromURL(imgUrl, (img) => {
+            img.set({
+              left: 20,
+              top: 40,
+              scaleX: 55 / img.width,
+              scaleY: 70 / img.height,
+              cornerColor: '#3b82f6',
+              cornerSize: 8
+            });
+            canvas.add(img);
+            canvas.setActiveObject(img);
+            updateLayers();
+          });
+        } catch (error) {
+          // Fallback: use original image
+          fabric.Image.fromURL(imageUrl, (img) => {
+            img.set({
+              left: 20,
+              top: 40,
+              scaleX: 55 / img.width,
+              scaleY: 70 / img.height,
+              cornerColor: '#3b82f6',
+              cornerSize: 8
+            });
+            canvas.add(img);
+            canvas.setActiveObject(img);
+            updateLayers();
+          });
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // Add text
+    document.getElementById('addTextBtn').addEventListener('click', () => {
+      const text = new fabric.Textbox('Teks di sini', {
+        left: 80,
+        top: 50,
+        width: 200,
+        fontSize: 16,
+        fill: '#000000'
+      });
+      canvas.add(text);
+      canvas.setActiveObject(text);
+      updateLayers();
+    });
+
+    // Zoom controls
+    document.getElementById('zoomIn').addEventListener('click', () => {
+      zoom = Math.min(zoom + 0.1, 2);
+      canvas.setZoom(zoom);
+      document.getElementById('zoomLevel').textContent = Math.round(zoom * 100) + '%';
+    });
+
+    document.getElementById('zoomOut').addEventListener('click', () => {
+      zoom = Math.max(zoom - 0.1, 0.5);
+      canvas.setZoom(zoom);
+      document.getElementById('zoomLevel').textContent = Math.round(zoom * 100) + '%';
+    });
+
+    // Save template
+    document.getElementById('saveTemplateBtn').addEventListener('click', () => {
+      const json = canvas.toJSON();
+      localStorage.setItem('idcardTemplate', JSON.stringify(json));
+      alert('Template tersimpan!');
+    });
+
+    // Update layers list
+    function updateLayers() {
+      const layersList = document.getElementById('layersList');
+      layersList.innerHTML = '';
+      const objects = canvas.getObjects();
+      
+      objects.forEach((obj, index) => {
+        const layer = document.createElement('div');
+        layer.className = 'layer-item p-2 flex items-center justify-between';
+        layer.innerHTML = `
+          <span class="text-sm">${obj.type === 'textbox' ? '📝' : '🖼️'} Layer ${index + 1}</span>
+          <button onclick="deleteLayer(${index})"><i class="fas fa-trash text-red-500"></i></button>
+        `;
+        layersList.appendChild(layer);
+      });
+    }
+
+    function deleteLayer(index) {
+      const objects = canvas.getObjects();
+      canvas.remove(objects[index]);
+      updateLayers();
+    }
+
+    loadSavedTemplate();
+  </script>
+</body>
+</html>

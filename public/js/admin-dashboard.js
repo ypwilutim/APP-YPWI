@@ -1192,6 +1192,7 @@ function showTab(tabName) {
     payroll: 'Penggajian',
     documents: 'Dokumen HR',
     'qr-generator': 'QR Scanner & Generator',
+    idcard: 'Cetak ID Card',
     settings: 'Pengaturan'
   };
 
@@ -2417,3 +2418,64 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 });
+
+// Change Password functions
+function closeChangePasswordModal() {
+  const modal = document.getElementById('changePasswordModal');
+  if (modal) {
+    modal.style.display = 'none';
+    modal.classList.remove('show');
+  }
+  document.getElementById('oldPassword').value = '';
+  document.getElementById('newPassword').value = '';
+  document.getElementById('confirmPassword').value = '';
+}
+
+async function changePassword() {
+  const oldPassword = document.getElementById('oldPassword').value;
+  const newPassword = document.getElementById('newPassword').value;
+  const confirmPassword = document.getElementById('confirmPassword').value;
+  
+  if (!oldPassword || !newPassword || !confirmPassword) {
+    Swal.fire('Error', 'Semua field harus diisi', 'error');
+    return;
+  }
+  
+  if (newPassword !== confirmPassword) {
+    Swal.fire('Error', 'Password baru dan konfirmasi tidak cocok', 'error');
+    return;
+  }
+  
+  if (newPassword.length < 8) {
+    Swal.fire('Error', 'Password baru minimal 8 karakter', 'error');
+    return;
+  }
+  
+  const token = localStorage.getItem('token');
+  if (!token) {
+    Swal.fire('Error', 'Session tidak valid. Silakan login ulang', 'error');
+    return;
+  }
+  
+  try {
+    const response = await fetch('/api/change-password', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ oldPassword, newPassword, confirmPassword })
+    });
+    
+    const result = await response.json();
+    if (result.success) {
+      Swal.fire('Berhasil', 'Password berhasil diubah', 'success');
+      closeChangePasswordModal();
+    } else {
+      Swal.fire('Error', result.message || result.error || 'Gagal mengubah password', 'error');
+    }
+  } catch (error) {
+    console.error('Change password error:', error);
+    Swal.fire('Error', error.message || 'Terjadi kesalahan', 'error');
+  }
+}

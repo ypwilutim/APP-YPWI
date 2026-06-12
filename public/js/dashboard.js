@@ -1738,11 +1738,11 @@ async function changePassword() {
             Swal.fire('Berhasil', 'Password berhasil diubah', 'success');
             closeChangePasswordModal();
         } else {
-            Swal.fire('Error', result.message, 'error');
+            Swal.fire('Error', result.message || result.error || 'Gagal mengubah password', 'error');
         }
     } catch (error) {
         console.error('Change password error:', error);
-        Swal.fire('Error', 'Terjadi kesalahan', 'error');
+        Swal.fire('Error', error.message || 'Terjadi kesalahan', 'error');
     }
 }
 

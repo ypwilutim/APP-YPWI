@@ -156,14 +156,20 @@
           <span>Dokumen HR</span>
         </button>
 <button
-           class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
-           data-tab="qr-generator">
-           <i class="fas fa-qrcode"></i>
-           <span>QR Scanner & Generator</span>
-         </button>
-         <button
-           class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
-           data-tab="backup">
+            class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+            data-tab="qr-generator">
+            <i class="fas fa-qrcode"></i>
+            <span>QR Scanner & Generator</span>
+          </button>
+          <button
+            class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+            data-tab="idcard">
+            <i class="fas fa-id-card"></i>
+            <span>Cetak ID Card</span>
+          </button>
+          <button
+            class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+            data-tab="backup">
            <i class="fas fa-database"></i>
            <span>Backup/Restore Database</span>
          </button>
@@ -910,6 +916,57 @@
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ID Card Tab -->
+      <div id="idcardTab" class="tab-content hidden">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <h3 class="text-lg font-semibold text-gray-900 mb-6">Cetak ID Card</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-6 border border-green-200">
+              <div class="flex items-center mb-4">
+                <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mr-3">
+                  <i class="fas fa-id-badge text-green-600 text-xl"></i>
+                </div>
+                <div>
+                  <h4 class="text-md font-semibold text-gray-900">ID Card Guru</h4>
+                  <p class="text-sm text-gray-600">Cetak kartu identitas guru</p>
+                </div>
+              </div>
+              <p class="text-sm text-gray-600 mb-4">Buat dan cetak kartu identitas untuk guru dengan QR code untuk absensi.</p>
+              <button onclick="location.href='idcard-designer.html'"
+                class="w-full bg-green-600 text-white px-4 py-2.5 rounded-lg hover:bg-green-700 transition flex items-center justify-center">
+                <i class="fas fa-palette mr-2"></i> Designer ID Card
+              </button>
+            </div>
+            <div class="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200">
+              <div class="flex items-center mb-4">
+                <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+                  <i class="fas fa-id-card text-blue-600 text-xl"></i>
+                </div>
+                <div>
+                  <h4 class="text-md font-semibold text-gray-900">ID Card Siswa</h4>
+                  <p class="text-sm text-gray-600">Cetak kartu identitas siswa</p>
+                </div>
+              </div>
+              <p class="text-sm text-gray-600 mb-4">Buat dan cetak kartu identitas untuk siswa dengan QR code untuk absensi.</p>
+              <button onclick="location.href='idcard-designer.html'"
+                class="w-full bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 transition flex items-center justify-center">
+                <i class="fas fa-palette mr-2"></i> Buka Designer
+              </button>
+            </div>
+          </div>
+          <div class="mt-6 p-4 bg-gray-50 rounded-lg">
+            <h5 class="font-medium text-gray-900 mb-2">Petunjuk Cetak ID Card:</h5>
+            <ul class="text-sm text-gray-600 space-y-1 list-disc list-inside">
+              <li>Buka halaman ID Card guru/siswa</li>
+              <li>Pilih filter sekolah dan/atau pencarian nama</li>
+              <li>Tampilkan preview kartu</li>
+              <li>Klik "Cetak Semua" untuk mencetak semua kartu yang ditampilkan</li>
+              <li>Gunakan kertas kartu nama (8.5cm x 5.5cm) untuk hasil terbaik</li>
+            </ul>
           </div>
         </div>
       </div>
@@ -1912,13 +1969,39 @@
               <i class="fas fa-key mr-2"></i> Rilis Otorisasi
             </button>
           </div>
-        </form>
+</form>
+    </div>
+  </div>
+</div>
+
+<!-- Change Password Modal -->
+<div id="changePasswordModal" class="modal fixed inset-0 bg-black bg-opacity-50 z-50 justify-center items-center">
+  <div class="bg-white rounded-lg max-w-md w-full mx-4 overflow-hidden shadow-xl">
+    <div class="p-6">
+      <h3 class="text-lg font-semibold text-gray-900 mb-4">Ubah Password</h3>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Password Lama</label>
+          <input type="password" id="oldPassword" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Masukkan password lama">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Password Baru</label>
+          <input type="password" id="newPassword" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Password baru (min 8 karakter)">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Konfirmasi Password Baru</label>
+          <input type="password" id="confirmPassword" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Ulangi password baru">
+        </div>
+      </div>
+      <div class="flex space-x-3 mt-6">
+        <button type="button" onclick="closeChangePasswordModal()" class="flex-1 bg-gray-300 text-gray-700 py-2 rounded-md hover:bg-gray-400">Batal</button>
+        <button type="button" onclick="changePassword()" class="flex-1 bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700">Simpan</button>
       </div>
     </div>
   </div>
+</div>
 
-
-  <script src="js/admin-dashboard.js" defer></script>
+<script src="js/admin-dashboard.js" defer></script>
 </body>
 
 </html>
