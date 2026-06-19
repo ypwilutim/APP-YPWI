@@ -511,13 +511,16 @@
         const [summary, evalSummary, teachers] = await Promise.all([
           api('/api/admin/summary'),
           api('/api/evaluations/yayasan-summary'),
-          api('/api/teachers')
+          api('/api/admin/tenants')
         ]);
-        if (summary.success) {
-          const tenants = summary.data || [];
+        if (teachers.success) {
+          const tenants = teachers.data || [];
           document.getElementById('ov-total-schools').textContent = tenants.length;
           const totalGuru = tenants.reduce((s, t) => s + (t.teacher_count || 0), 0);
           document.getElementById('ov-total-teachers').textContent = totalGuru;
+        }
+        if (summary.success && summary.data) {
+          document.getElementById('ov-today-present').textContent = summary.data.activeToday || 0;
         }
         if (evalSummary.success && evalSummary.data) {
           let totalTeachers = 0, totalScore = 0;
@@ -525,17 +528,18 @@
           document.getElementById('ov-avg-score').textContent = totalTeachers ? (totalScore/totalTeachers).toFixed(1) : '-';
         }
         // Per-school breakdown
-        if (summary.success && summary.data) {
+        if (teachers.success && teachers.data) {
           const list = document.getElementById('ov-schools-list');
-          list.innerHTML = summary.data.map(s => `
-            <div class="flex items-center justify-between p-3 bg-gray-50 rounded">
-              <span class="font-medium">${s.tenant_id} - ${s.teacher_count||0} guru</span>
+          const tenantIds = [...new Set((teachers.data || []).map(t => t.tenant_id))];
+          list.innerHTML = tenantIds.map(tid => {
+            const tenant = teachers.data.find(t2 => t2.tenant_id === tid);
+            return `<div class="flex items-center justify-between p-3 bg-gray-50 rounded">
+              <span class="font-medium">${tid} - ${tenant?.nama_sekolah || tid}</span>
               <div class="text-right text-sm">
-                <div class="text-gray-500">Hadir: ${s.active_today||0} | Terlambat: ${s.late_count||0}</div>
-                <span class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">${s.location_count||0} lokasi</span>
+                <span class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">0 lokasi</span>
               </div>
-            </div>
-          `).join('');
+            </div>`;
+          }).join('');
         }
       } catch(e) { console.error('Overview error:', e); }
     }

@@ -229,13 +229,17 @@ const authRoutes = require('./src/routes/auth');
 const scannerRoutes = require('./src/routes/scanner');
 const adminRoutes = require('./src/routes/admin');
 const idcardRoutes = require('./src/routes/idcard');
+const chatRoutes = require('./src/routes/chat');
+const notificationsRoutes = require('./src/routes/notifications');
+require('./src/notifications');
 
-// Register modular routes
 app.use('/api', absensiRoutes);
 app.use('/api', authRoutes);
 app.use('/api', scannerRoutes);
 app.use('/api', adminRoutes);
 app.use('/api/idcard', idcardRoutes);
+app.use('/api', chatRoutes);
+app.use('/api', notificationsRoutes);
 
 const logFilePath = path.join(__dirname, 'logs', 'app.log');
 // Ensure logs directory exists
@@ -653,6 +657,19 @@ res.json({ success: true, message: 'Password berhasil diubah!' });
   }
 });
 
+// Render ID card template with actual data (requires REMOVE_BG_API_KEY)
+app.post('/api/idcard/render', authenticateToken, async (req, res) => {
+  try {
+    const { template, data } = req.body;
+    
+    // For now, return template as-is - frontend will handle placeholder replacement
+    res.json({ success: true, template });
+  } catch (error) {
+    console.error('ID card render error:', error.message);
+    res.status(500).json({ success: false, message: 'Gagal render template' });
+  }
+});
+
 // Remove Background API endpoint (requires REMOVE_BG_API_KEY in .env)
 app.post('/api/remove-bg', authenticateToken, async (req, res) => {
   try {
@@ -680,6 +697,94 @@ app.post('/api/remove-bg', authenticateToken, async (req, res) => {
     console.error('Remove BG error:', error.message);
     res.status(500).json({ success: false, message: 'Gagal menghapus background' });
   }
+});
+
+// ID Card Template Management
+app.post('/api/idcard/templates', authenticateToken, async (req, res) => {
+  try {
+    const { template_name, template_data } = req.body;
+    
+    if (!template_name || !template_data) {
+      return res.status(400).json({ success: false, message: 'Nama template dan data diperlukan' });
+    }
+    
+    // Check if table exists, create if not
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS idcard_templates (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        template_name VARCHAR(100) UNIQUE,
+        template_data LONGTEXT,
+        created_by INT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
+    // Insert or update template
+    const existing = await db.query('SELECT id FROM idcard_templates WHERE template_name = ?', [template_name]);
+    
+    if (existing.length > 0) {
+      await db.query(
+        'UPDATE idcard_templates SET template_data = ? WHERE template_name = ?',
+        [JSON.stringify(template_data), template_name]
+      );
+    } else {
+      await db.query(
+        'INSERT INTO idcard_templates (template_name, template_data, created_by) VALUES (?, ?, ?)',
+        [template_name, JSON.stringify(template_data), req.user.id]
+      );
+    }
+    
+    res.json({ success: true, message: 'Template tersimpan' });
+  } catch (error) {
+    console.error('Save template error:', error.message);
+    res.status(500).json({ success: false, message: 'Gagal menyimpan template' });
+  }
+});
+
+app.get('/api/idcard/templates', authenticateToken, async (req, res) => {
+  try {
+    // Create table if not exists
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS idcard_templates (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        template_name VARCHAR(100) UNIQUE,
+        template_data LONGTEXT,
+        created_by INT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
+    const templates = await db.query('SELECT id, template_name, created_at FROM idcard_templates ORDER BY created_at DESC');
+    res.json({ success: true, templates });
+  } catch (error) {
+    console.error('Get templates error:', error.message);
+    res.status(500).json({ success: false, message: 'Gagal mengambil templates' });
+  }
+});
+
+app.get('/api/idcard/templates/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const templates = await db.query('SELECT template_data FROM idcard_templates WHERE id = ?', [id]);
+    
+    if (templates.length > 0) {
+      res.json({ success: true, template: JSON.parse(templates[0].template_data) });
+    } else {
+      res.json({ success: false, message: 'Template tidak ditemukan' });
+    }
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Generate QR code for ID card
+app.get('/api/qrcode/:text', (req, res) => {
+  const { text } = req.params;
+  const size = req.query.size || 100;
+  
+  // Use Google Charts API for QR code (free, no API key needed)
+  const qrUrl = `https://chart.googleapis.com/chart?chs=${size}x${size}&cht=qr&chl=${encodeURIComponent(text)}`;
+  res.json({ success: true, qr_url: qrUrl });
 });
 
 // Get teacher list by tenant with completion status
@@ -1446,6 +1551,78 @@ async function startServer() {
   // ============================================
   // END EVALUATION ENDPOINTS
   // ============================================
+
+  // ============================================
+  // WHATSAPP WEBHOOK (Meta Graph API)
+  // ============================================
+  const crypto = require('crypto');
+
+  app.get('/api/whatsapp/webhook', (req, res) => {
+    const mode = req.query['hub.mode'];
+    const token = req.query['hub.verify_token'];
+    const challenge = req.query['hub.challenge'];
+
+    if (mode && token) {
+      if (mode === 'subscribe' && token === process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN) {
+        console.log('[WA] Webhook terverifikasi oleh Meta');
+        res.status(200).send(challenge);
+      } else {
+        res.sendStatus(403);
+      }
+    } else {
+      res.sendStatus(400);
+    }
+  });
+
+  app.post('/api/whatsapp/webhook', async (req, res) => {
+    const signature = req.headers['x-hub-signature-256'];
+    if (signature && process.env.WHATSAPP_APP_SECRET) {
+      const rawBody = JSON.stringify(req.body);
+      const expected = 'sha256=' + crypto.createHmac('sha256', process.env.WHATSAPP_APP_SECRET).update(rawBody).digest('hex');
+      if (signature !== expected) {
+        console.warn('[WA] Webhook signature mismatch — meneruskan payload untuk testing');
+      }
+    } else if (signature && !process.env.WHATSAPP_APP_SECRET) {
+      console.warn('[WA] Webhook signature mismatch — tambahkan WHATSAPP_APP_SECRET di .env untuk verifikasi penuh');
+    }
+
+    const payload = req.body;
+
+    if (payload.object !== 'whatsapp_business_account') {
+      return res.sendStatus(404);
+    }
+
+    payload.entry?.forEach((entry) => {
+      entry.changes?.forEach((change) => {
+        if (change.field === 'messages') {
+          const value = change.value;
+          value.messages?.forEach((msg) => {
+            const from = msg.from;
+            const messageType = msg.type;
+            const textBody = messageType === 'text' ? msg.text?.body : `[${messageType}]`;
+            console.log(`[WA] Pesan Masuk | Dari: ${from} | Tipe: ${messageType} | Isi: ${textBody}`);
+
+            if (messageType === 'text') {
+              const normalized = String(textBody).trim().toUpperCase();
+
+              if (normalized === 'STOP') {
+                console.log(`[WA] Stop opt-out request: ${from}`);
+              } else if (normalized === 'YA' || /^OTP[- ]/.test(normalized)) {
+                console.log(`[WA] Balasan OTP dari ${from}: ${textBody}`);
+              }
+            }
+          });
+        }
+
+        if (change.field === 'messaging_status') {
+          const status = change.value;
+          console.log('[WA] Status Update:', JSON.stringify(status));
+        }
+      });
+    });
+
+    res.status(200).send('EVENT_RECEIVED');
+  });
 
   app.use((req, res, next) => {
     // Debugging mentah: lihat semua header yang benar-benar masuk ke server

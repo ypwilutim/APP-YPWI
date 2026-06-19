@@ -8,7 +8,7 @@ const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const db = require('../../db');
-const { authenticateToken, authenticateOperator, calculateDistance } = require('../middleware/auth');
+const { authenticateToken, authenticateOperator, isDayMatch, calculateDistance, verifyTenantAccess } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -34,139 +34,38 @@ const selfieUpload = multer({ storage: selfieStorage });
 
 router.post('/attendance', authenticateToken, selfieUpload.single('selfie'), async (req, res) => {
   try {
-    const { jenis, metode, latitude, longitude, waktu_absen, waktu_scan, rule_id, status, kegiatan_dinas, client_timezone, tenant_id } = req.body;
+    const { jenis, metode, latitude, longitude, waktu_absen, waktu_scan, rule_id, status, kegiatan_dinas, client_timezone } = req.body;
     let selfie_url = req.file ? req.file.path : null;
     const userTimezone = client_timezone || 'Asia/Makassar';
 
-    console.log('[DEBUG] Attendance request:', { jenis, latitude, longitude, tenant_id });
-
-    if (!jenis || !waktu_scan) {
-      return res.status(400).json({ success: false, message: 'jenis dan waktu_scan wajib diisi' });
-    }
-
-    if (!tenant_id) {
-      return res.status(400).json({ success: false, message: 'tenant_id wajib dikirim dari frontend.' });
-    }
-
-    const userAssignments = req.user?.assignments || [];
-    console.log('[ATTENDANCE_DEBUG] req.user.assignments raw:', JSON.stringify(req.user?.assignments));
-    const allowedTenantIds = Array.isArray(userAssignments) ? userAssignments.map(a => a.tenant_id) : [];
-    console.log('[ATTENDANCE_DEBUG] allowedTenantIds:', allowedTenantIds, 'requested tenant_id:', tenant_id);
-    if (!allowedTenantIds.includes(tenant_id)) {
-      console.warn(`[ANTI-FRAUD] User ${req.user.guru_id} mencoba absen di tenant ${tenant_id} yang tidak diassignment. Allowed: ${allowedTenantIds.join(',')}`);
-      return res.status(403).json({ success: false, message: 'Anda tidak memiliki akses untuk unit ini.' });
-    }
-
-    let detected_tenant_id = tenant_id;
-
-    if (latitude && longitude) {
+    // Deteksi tenant_id dari lokasi GPS (jika guru multi-tenant)
+    let detected_tenant_id = req.body.tenant_id || req.user.tenant_id;
+    if (latitude && longitude && !req.body.tenant_id) {
       const userLat = parseFloat(latitude);
       const userLng = parseFloat(longitude);
 
-      if (!isNaN(userLat) && !isNaN(userLng)) {
-        // Ambil semua lokasi pecahan yang aktif
-        const subLocationData = await db.query(
-          'SELECT latitude, longitude, location_radius FROM tenant_locations WHERE tenant_id = ? AND is_active = 1',
-          [tenant_id]
+      // Ambil semua tenant dengan lokasi
+      const tenants = await db.query(
+        `SELECT tenant_id, latitude, longitude, location_radius 
+         FROM tenants 
+         WHERE latitude IS NOT NULL AND longitude IS NOT NULL`
+      );
+
+      // Cari tenant mana yang mencakup lokasi user
+      for (const t of tenants) {
+        const dist = Math.sqrt(
+          Math.pow((t.latitude - userLat), 2) + Math.pow((t.longitude - userLng), 2)
         );
-
-        console.log('[DEBUG] subLocationData for tenant', tenant_id, ':', subLocationData);
-
-        // Hitung jarak ke semua lokasi pecahan dan pilih yang terdekat
-        const R = 6371;
-        let closestLocation = null;
-        let closestDistance = Infinity;
-
-        // Cek tenant utama dulu
-        const [tenantMainData] = await db.query(
-          'SELECT latitude, longitude, location_radius FROM tenants WHERE tenant_id = ?',
-          [tenant_id]
-        );
-        console.log('[DEBUG] tenantMainData for tenant', tenant_id, ':', tenantMainData);
-
-        if (tenantMainData && tenantMainData.latitude && tenantMainData.longitude) {
-          const tLat = parseFloat(tenantMainData.latitude);
-          const tLng = parseFloat(tenantMainData.longitude);
-          if (!isNaN(tLat) && !isNaN(tLng)) {
-            const dLat = (tLat - userLat) * Math.PI / 180;
-            const dLng = (tLng - userLng) * Math.PI / 180;
-const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                       Math.cos(userLat * Math.PI / 180) * Math.cos(tLat * Math.PI / 180) *
-                       Math.sin(dLng/2) * Math.sin(dLng/2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-            const mainDistance = R * c * 1000;
-            console.log('[DEBUG] distance to main tenant:', mainDistance.toFixed(1), 'm');
-            if (mainDistance < closestDistance) {
-              closestDistance = mainDistance;
-              closestLocation = tenantMainData;
-            }
-          }
-        }
-
-        // Cek lokasi pecahan
-        if (subLocationData && subLocationData.length > 0) {
-          for (const loc of subLocationData) {
-            const tLat = parseFloat(loc.latitude);
-            const tLng = parseFloat(loc.longitude);
-            if (!isNaN(tLat) && !isNaN(tLng)) {
-              const dLat = (tLat - userLat) * Math.PI / 180;
-              const dLng = (tLng - userLng) * Math.PI / 180;
-              const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                        Math.cos(userLat * Math.PI / 180) * Math.cos(tLat * Math.PI / 180) *
-                        Math.sin(dLng/2) * Math.sin(dLng/2);
-              const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-              const distanceM = R * c * 1000;
-              console.log('[DEBUG] distance to subloc:', distanceM.toFixed(1), 'm, lat:', loc.latitude, 'lng:', loc.longitude);
-              if (distanceM < closestDistance) {
-                closestDistance = distanceM;
-                closestLocation = loc;
-              }
-            }
-          }
-        }
-
-        // Jika tidak ada lokasi pecahan terdekat, fallback ke lokasi utama
-        let validLocation = closestLocation;
-        if (!validLocation) {
-          const [tenantData] = await db.query(
-            'SELECT latitude, longitude, location_radius FROM tenants WHERE tenant_id = ?',
-            [tenant_id]
-          );
-          if (tenantData && tenantData.latitude && tenantData.longitude) {
-            const tLat = parseFloat(tenantData.latitude);
-            const tLng = parseFloat(tenantData.longitude);
-            if (!isNaN(tLat) && !isNaN(tLng)) {
-              const dLat = (tLat - userLat) * Math.PI / 180;
-              const dLng = (tLng - userLng) * Math.PI / 180;
-              const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                        Math.cos(userLat * Math.PI / 180) * Math.cos(tLat * Math.PI / 180) *
-                        Math.sin(dLng/2) * Math.sin(dLng/2);
-              const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-              const fallbackDistance = R * c * 1000;
-              if (!closestLocation || fallbackDistance < closestDistance) {
-                closestDistance = fallbackDistance;
-                validLocation = tenantData;
-              }
-            }
-          }
-        }
-
-        if (validLocation) {
-          const tLat = parseFloat(validLocation.latitude);
-          const tLng = parseFloat(validLocation.longitude);
-          const radiusM = validLocation.location_radius || 200;
-
-          if (closestDistance > radiusM) {
-            console.warn(`[ANTI-FRAUD] User ${req.user.guru_id} di luar radius. Jarak: ${closestDistance.toFixed(1)}m, Radius: ${radiusM}m, Tenant: ${tenant_id}`);
-            return res.status(403).json({
-              success: false,
-              message: `Lokasi Anda di luar radius sekolah (${closestDistance.toFixed(0)}m dari ${radiusM}m).`
-            });
-          }
-
-          console.log(`[ANTI-FRAUD] Validasi lokasi berhasil. Jarak: ${closestDistance.toFixed(1)}m, Radius: ${radiusM}m, Tenant: ${tenant_id}`);
+        const radiusKm = (t.location_radius || 200) / 111000; // Convert meter to km approximation
+        if (dist <= radiusKm) {
+          detected_tenant_id = t.tenant_id;
+          break;
         }
       }
+    }
+
+    if (!jenis || !waktu_scan) {
+      return res.status(400).json({ success: false, message: 'jenis dan waktu_scan wajib diisi' });
     }
 
     // Frontend sudah menangani validasi duplikat dan aturan waktu
@@ -188,30 +87,51 @@ const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
       kegiatan_dinas || null, selfie_url, latitude, longitude, rule_id
     ]);
 
-// Email notification for scanner attendance (non-blocking)
-    setImmediate(async () => {
-      try {
-        const [teacher] = await db.query('SELECT nama, no_wa, email FROM teachers WHERE id = ?', [req.user.guru_id]);
-        const [tenant] = await db.query('SELECT nama_sekolah FROM tenants WHERE tenant_id = ?', [detected_tenant_id]);
+    // Email notification for scanner attendance
+    try {
+      const [teacher] = await db.query('SELECT nama, no_wa, email FROM teachers WHERE id = ?', [req.user.guru_id]);
+      const [tenant] = await db.query('SELECT nama_sekolah FROM tenants WHERE tenant_id = ?', [detected_tenant_id]);
 
-        if (teacher && teacher.no_wa) {
-          const [datePart, timePart] = (waktu_scan || '').split(' ');
-          const tanggalSekarang = datePart || new Date().toISOString().split('T')[0];
-          const jamLokal = timePart ? timePart.slice(0, 5) : '';
+      if (teacher && teacher.no_wa) {
+        const waktuAbsenObj = new Date(waktu_absen);
+        const tanggalSekarang = waktuAbsenObj.toLocaleDateString('id-ID', { 
+          weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+          timeZone: userTimezone 
+        });
 
-          const waMessage = `*PRESENSI BERHASIL ✅*\n\nالسَّلامُ عَلَيْكُمْ وَرَحْمَةُ اللهِ وَبَرَكَاتُهُ\n(Assalamu'alaikum Warahmatullahi Wabarakatuh)\n\nHalo *${teacher.nama}*,\nAlhamdulillah, data presensi *${jenis.toUpperCase()}* Anda telah tersimpan dengan baik.\n\n📌 *Detail Presensi:*\n• Unit: ${tenant ? tenant.nama_sekolah : detected_tenant_id}\n• Tgl : ${tanggalSekarang}\n• Jam : ${jamLokal}\n\nTerima kasih atas dedikasi dan kedisiplinan Anda.`;
+        const waMessage = `*PRESENSI BERHASIL ✅*
 
-          if (typeof global.sendWhatsAppMessage === 'function') {
-            global.sendWhatsAppMessage(teacher.no_wa, waMessage).catch(err => console.warn('WA Error:', err.message));
-          }
+السَّلاَمُ عَلَيْكُمْ وَرَحْمَةُ اللهِ وَبَرَكَاتُهُ
+(Assalamu'alaikum Warahmatullahi Wabarakatuh)
+
+Halo *${teacher.nama}*, 
+Alhamdulillah, data presensi *${jenis.toUpperCase()}* Anda telah tersimpan dengan baik.
+
+📌 *Detail Presensi:*
+• Unit: ${tenant ? tenant.nama_sekolah : detected_tenant_id}
+• Tgl : ${tanggalSekarang}
+• Jam : ${waktu_scan}
+
+Terima kasih atas dedikasi dan kedisiplinan Anda. Semoga Allah SWT memberkahi setiap langkah dan tugas yang Anda kerjakan hari ini. Barakallahu fiikum. 🤲`;
+
+        if (typeof global.sendWhatsAppMessage === 'function') {
+          await global.sendWhatsAppMessage(teacher.no_wa, waMessage);
         }
+      }
 
-        if (teacher && teacher.email) {
-          const [datePart, timePart] = (waktu_scan || '').split(' ');
-          const tanggalSekarang = datePart || new Date().toISOString().split('T')[0];
-          const jamLokal = timePart ? timePart.slice(0, 5) : '';
+      // Send email notification for attendance
+      if (teacher && teacher.email) {
+        const waktuAbsenObj = new Date(waktu_scan);
+        const tanggalSekarang = waktuAbsenObj.toLocaleDateString('id-ID', { 
+          weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+          timeZone: userTimezone 
+        });
+        const jamLokal = waktuAbsenObj.toLocaleTimeString('id-ID', { 
+          hour12: false, 
+          timeZone: userTimezone 
+        }).slice(0, 5);
 
-          const htmlMessage = `<!DOCTYPE html>
+        const htmlMessage = `<!DOCTYPE html>
 <html lang="id">
 <head>
   <meta charset="UTF-8">
@@ -235,7 +155,7 @@ const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
       <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
         <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee; color: #666;">Unit Sekolah:</td><td style="padding: 8px 0; border-bottom: 1px solid #eee; font-weight: 600;">${tenant ? tenant.nama_sekolah : detected_tenant_id}</td></tr>
         <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee; color: #666;">Tanggal:</td><td style="padding: 8px 0; border-bottom: 1px solid #eee; font-weight: 600;">${tanggalSekarang}</td></tr>
-        <tr><td style="padding: 8px 0; color: #666;">Waktu:</td><td style="padding: 8px 0; font-weight: 600;">${jamLokal} (WITA)</td></tr>
+        <tr><td style="padding: 8px 0; color: #666;">Waktu:</td><td style="padding: 8px 0; font-weight: 600;">${jamLokal} (${userTimezone})</td></tr>
       </table>
       <p style="margin: 20px 0 0 0; color: #888; font-size: 14px;">Email ini dikirim otomatis oleh sistem.</p>
     </div>
@@ -243,14 +163,13 @@ const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
 </body>
 </html>`;
 
-          if (typeof global.sendEmail === 'function') {
-            global.sendEmail(teacher.email, `Presensi ${jenis.toUpperCase()} Berhasil - YPWI Lutim`, htmlMessage).catch(err => console.warn('Email Error:', err.message));
-          }
+        if (typeof global.sendEmail === 'function') {
+          await global.sendEmail(teacher.email, `Presensi ${jenis.toUpperCase()} Berhasil - YPWI Lutim`, htmlMessage);
         }
-      } catch (waError) {
-        console.error('WA/Email Error:', waError.message);
       }
-    });
+    } catch (waError) {
+      console.error('WA/Email Error:', waError.message);
+    }
 
     return res.json({ success: true, message: 'Absensi berhasil' });
   } catch (error) {
@@ -263,60 +182,104 @@ const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
 
 router.get('/attendance-rules', authenticateToken, async (req, res) => {
   try {
-    const { tenant_id } = req.query;
+    const { lat, lng, tenant_id } = req.query;
     let targetTenantId = tenant_id;
     let useCentral = false;
 
-    if (!targetTenantId) {
-      const userAssignments = req.user?.assignments || [];
-      if (userAssignments.length > 0) {
-        targetTenantId = userAssignments[0].tenant_id;
-      } else if (req.user.tenant_id) {
-        targetTenantId = req.user.tenant_id;
+    // Jika ada lat/lng, deteksi tenant otomatis berdasarkan lokasi GPS
+    if (lat && lng && !targetTenantId) {
+      const userLat = parseFloat(lat);
+      const userLng = parseFloat(lng);
+
+      if (!isNaN(userLat) && !isNaN(userLng)) {
+        const tenants = await db.query(
+          `SELECT tenant_id, latitude, longitude, location_radius 
+           FROM tenants 
+           WHERE latitude IS NOT NULL AND longitude IS NOT NULL`
+        );
+
+        const subLocations = await db.query(
+          `SELECT tl.tenant_id, tl.latitude, tl.longitude, tl.location_radius
+           FROM tenant_locations tl
+           JOIN tenants t ON tl.tenant_id = t.tenant_id
+           WHERE tl.latitude IS NOT NULL AND tl.longitude IS NOT NULL AND tl.is_active = 1`
+        );
+
+        const allLocations = [...tenants, ...subLocations];
+
+        // Cari semua tenant assignment user yang dalam radius, urutkan berdasarkan jarak
+        const userAssignments = req.user?.assignments || [];
+        const userHomeTenantIds = [...new Set(userAssignments.map(a => a.tenant_id))];
+
+        const homeTenantsInRadius = userHomeTenantIds
+          .map(tenantId => {
+            const loc = allLocations.find(l => l.tenant_id === tenantId);
+            if (!loc) return null;
+
+            const dist = Math.sqrt(
+              Math.pow(parseFloat(loc.latitude) - userLat, 2) +
+              Math.pow(parseFloat(loc.longitude) - userLng, 2)
+            );
+            const radiusKm = (loc.location_radius || 200) / 111000;
+
+            return dist <= radiusKm ? { tenant_id: loc.tenant_id, distance: dist * 1000 } : null;
+          })
+          .filter(Boolean)
+          .sort((a, b) => a.distance - b.distance);
+
+        // Jika ada assignment dalam radius, pilih yang terdekat
+        // Jika tidak ada, cari tenant mana saja yang dalam radius (dinas luar)
+        targetTenantId = homeTenantsInRadius.length > 0
+          ? homeTenantsInRadius[0].tenant_id
+          : allLocations
+            .map(loc => {
+              const dist = Math.sqrt(
+                Math.pow(parseFloat(loc.latitude) - userLat, 2) +
+                Math.pow(parseFloat(loc.longitude) - userLng, 2)
+              );
+              const radiusKm = (loc.location_radius || 200) / 111000;
+
+              return dist <= radiusKm ? { tenant_id: loc.tenant_id, distance: dist * 1000 } : null;
+            })
+            .filter(Boolean)
+            .sort((a, b) => a.distance - b.distance)[0]?.tenant_id;
+
+        console.log('[ATTENDANCE-RULES] Home tenants in radius:', homeTenantsInRadius, 'Selected:', targetTenantId);
       }
     }
 
-    if (!targetTenantId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Tidak ada tenant_id yang ditugaskan untuk guru ini.'
-      });
+    // Cek apakah tenant menggunakan aturan pusat
+    if (targetTenantId) {
+      const [tenantInfo] = await db.query(
+        'SELECT use_central_rules FROM tenants WHERE tenant_id = ?',
+        [targetTenantId]
+      );
+
+      if (tenantInfo && tenantInfo.use_central_rules === 1) {
+        targetTenantId = 'YPWILUTIM';
+        useCentral = true;
+      }
     }
 
-    const tenantInfoArray = await db.query(
-      'SELECT use_central_rules FROM tenants WHERE tenant_id = ?',
-      [targetTenantId]
-    ).catch(err => {
-      console.error('[DEBUG] Tenant query error:', err.message);
-      return [];
-    });
-    const tenantInfo = Array.isArray(tenantInfoArray) && tenantInfoArray.length > 0 ? tenantInfoArray[0] : null;
+    // Query rules berdasarkan tenant_id
+    let query = 'SELECT id, tenant_id, tipe, jam_mulai, jam_selesai, status_log, hari FROM attendance_rules';
+    let params = [];
 
-    if (tenantInfo && tenantInfo.use_central_rules === 1) {
-      targetTenantId = 'YPWILUTIM';
-      useCentral = true;
+    if (targetTenantId) {
+      query += ' WHERE tenant_id = ?';
+      params.push(targetTenantId);
     }
 
-    const rules = await db.query(
-      `SELECT id, tenant_id, tipe, jam_mulai, jam_selesai, 
-              status_log, hari, keterangan 
-       FROM attendance_rules 
-       WHERE tenant_id = ?
-       ORDER BY jam_mulai`,
-      [targetTenantId]
-    ).catch(err => {
-      console.error('[DEBUG] Rules query error:', err.message);
-      return [];
-    });
+    query += ' ORDER BY tipe, jam_mulai';
 
-    console.log('[DEBUG] Rules query result:', targetTenantId, rules?.length || 0);
+    const rules = await db.query(query, params);
 
-    const dataRules = Array.isArray(rules) ? rules : [];
+    const dataRules = Array.isArray(rules) ? rules : (rules.rows || rules[0] || []);
 
     return res.status(200).json({
       success: true,
       rules: dataRules,
-      source_tenant: targetTenantId,
+      source_tenant: targetTenantId || 'universal',
       use_central: useCentral
     });
   } catch (error) {
@@ -421,29 +384,20 @@ router.get('/units/nearby', authenticateToken, async (req, res) => {
     const userLat = parseFloat(lat);
     const userLng = parseFloat(lng);
 
-    // Ambil hanya tenant_id yang di-assign ke guru ini
-    const allowedTenantIds = Array.isArray(req.user.assignments)
-      ? req.user.assignments.map(a => a.tenant_id)
-      : [];
-
-    // Ambil data dari tabel tenants utama - hanya yang di-assign
+    // Ambil data dari tabel tenants utama
     const tenantsData = await db.query(
       `SELECT tenant_id, nama_sekolah, latitude, longitude, location_radius, tipe_unit
        FROM tenants
-       WHERE latitude IS NOT NULL AND longitude IS NOT NULL
-       ${allowedTenantIds.length > 0 ? 'AND tenant_id IN (' + allowedTenantIds.map(() => '?').join(',') + ')' : ''}`,
-      allowedTenantIds.length > 0 ? allowedTenantIds : []
+       WHERE latitude IS NOT NULL AND longitude IS NOT NULL`
     );
 
-    // Ambil data dari tabel tenant_locations (cabang/sub-lokasi) - hanya yang di-assign
+    // Ambil data dari tabel tenant_locations (cabang/sub-lokasi)
     const subLocationsData = await db.query(
       `SELECT tl.tenant_id, t.nama_sekolah, tl.latitude, tl.longitude,
               tl.location_radius, t.tipe_unit
        FROM tenant_locations tl
        JOIN tenants t ON tl.tenant_id = t.tenant_id
-       WHERE tl.latitude IS NOT NULL AND tl.longitude IS NOT NULL AND tl.is_active = 1
-       ${allowedTenantIds.length > 0 ? 'AND tl.tenant_id IN (' + allowedTenantIds.map(() => '?').join(',') + ')' : ''}`,
-      allowedTenantIds.length > 0 ? [...allowedTenantIds] : []
+       WHERE tl.latitude IS NOT NULL AND tl.longitude IS NOT NULL AND tl.is_active = 1`
     );
 
     // Gabungkan kedua array
@@ -493,29 +447,20 @@ router.get('/units/nearby', authenticateToken, async (req, res) => {
 // GET /api/units/all - Get all units (tenants + tenant_locations sub-locations) with tipe_unit
 router.get('/units/all', authenticateToken, async (req, res) => {
   try {
-    // Ambil hanya tenant_id yang di-assign ke guru ini
-    const allowedTenantIds = Array.isArray(req.user.assignments)
-      ? req.user.assignments.map(a => a.tenant_id)
-      : [];
-
-    // Ambil data dari tabel tenants utama - hanya yang di-assign
+    // Ambil data dari tabel tenants utama
     const tenantsData = await db.query(
       `SELECT tenant_id, nama_sekolah, latitude, longitude, location_radius, tipe_unit
        FROM tenants
-       WHERE latitude IS NOT NULL AND longitude IS NOT NULL
-       ${allowedTenantIds.length > 0 ? 'AND tenant_id IN (' + allowedTenantIds.map(() => '?').join(',') + ')' : ''}`,
-      allowedTenantIds.length > 0 ? allowedTenantIds : []
+       WHERE latitude IS NOT NULL AND longitude IS NOT NULL`
     );
 
-    // Ambil data dari tabel tenant_locations (cabang/sub-lokasi) - hanya yang di-assign
+    // Ambil data dari tabel tenant_locations (cabang/sub-lokasi)
     const subLocationsData = await db.query(
       `SELECT tl.tenant_id, t.nama_sekolah, tl.latitude, tl.longitude,
               tl.location_radius, t.tipe_unit
        FROM tenant_locations tl
        JOIN tenants t ON tl.tenant_id = t.tenant_id
-       WHERE tl.latitude IS NOT NULL AND tl.longitude IS NOT NULL AND tl.is_active = 1
-       ${allowedTenantIds.length > 0 ? 'AND tl.tenant_id IN (' + allowedTenantIds.map(() => '?').join(',') + ')' : ''}`,
-      allowedTenantIds.length > 0 ? [...allowedTenantIds] : []
+       WHERE tl.latitude IS NOT NULL AND tl.longitude IS NOT NULL AND tl.is_active = 1`
     );
 
     // Gabungkan kedua array (jika ada tenant_id yang sama di kedua tabel, tetap tampilkan keduanya)
@@ -615,7 +560,7 @@ router.get('/tenants', async (req, res) => {
   }
 });
 
-// GET /api/tenants/:id - Get tenant by ID with full info (including sub-locations)
+// GET /api/tenants/:id - Get tenant by ID with full info
 router.get('/tenants/:id', authenticateToken, async (req, res) => {
   try {
     const [tenant] = await db.query(
@@ -623,18 +568,6 @@ router.get('/tenants/:id', authenticateToken, async (req, res) => {
       [req.params.id]
     );
     if (tenant) {
-      // Cek juga lokasi pecahan jika tidak ada di tabel tenants
-      if (!tenant.latitude || !tenant.longitude) {
-        const subLocations = await db.query(
-          'SELECT latitude, longitude, location_radius FROM tenant_locations WHERE tenant_id = ? AND is_active = 1 LIMIT 1',
-          [req.params.id]
-        );
-        if (subLocations && subLocations.length > 0) {
-          tenant.latitude = subLocations[0].latitude;
-          tenant.longitude = subLocations[0].longitude;
-          tenant.location_radius = subLocations[0].location_radius;
-        }
-      }
       res.json({ success: true, tenant: tenant });
     } else {
       res.status(404).json({ success: false, message: 'Tenant not found' });
@@ -767,25 +700,122 @@ Pesan akan otomatis terkirim ke admin untuk review.`;
   }
 });
 
+// GET /api/summary/all-units - Get attendance summary for all units (for ketua/admin at YPWILUTIM)
+router.get('/summary/all-units', authenticateToken, async (req, res) => {
+  try {
+    const targetDate = req.query.date || new Date().toISOString().split('T')[0];
+
+    const units = await db.query(`
+      SELECT tenant_id, nama_sekolah FROM tenants 
+      WHERE tenant_id IS NOT NULL ORDER BY nama_sekolah ASC
+    `);
+
+    let attendanceStats = [];
+    try {
+      attendanceStats = await db.query(`
+        SELECT 
+          tenant_id,
+          SUM(CASE WHEN status = 'tepat_waktu' THEN 1 ELSE 0 END) as hadir,
+          SUM(CASE WHEN status = 'terlambat' THEN 1 ELSE 0 END) as terlambat,
+          SUM(CASE WHEN status IN ('izin', 'cuti', 'sakit', 'dinas_luar') THEN 1 ELSE 0 END) as izin,
+          SUM(CASE WHEN status = 'alpha' OR status IS NULL THEN 1 ELSE 0 END) as alpha
+        FROM attendance_logs
+        WHERE DATE(waktu_scan) = ?
+        GROUP BY tenant_id
+      `, [targetDate]);
+    } catch (e) {
+      console.log('[SUMMARY_ALL_UNITS] Attendance stats query error (continuing with empty):', e.message);
+    }
+
+    let teacherCounts = [];
+    try {
+      teacherCounts = await db.query(`
+        SELECT tenant_id, COUNT(*) as jumlah_guru FROM teacher_assignments ta 
+        JOIN teachers t ON ta.teacher_id = t.id 
+        WHERE t.status_aktif = 1 GROUP BY tenant_id
+      `);
+    } catch (e) {
+      console.log('[SUMMARY_ALL_UNITS] Teacher counts query error (continuing with empty):', e.message);
+    }
+
+    const summary = units.map(unit => {
+      const stats = attendanceStats.find(s => s.tenant_id === unit.tenant_id) || {};
+      const teacherCount = teacherCounts.find(t => t.tenant_id === unit.tenant_id)?.jumlah_guru || 0;
+
+      return {
+        tenant_id: unit.tenant_id,
+        nama_sekolah: unit.nama_sekolah,
+        total_guru: teacherCount,
+        hadir: stats.hadir || 0,
+        terlambat: stats.terlambat || 0,
+        izin: stats.izin || 0,
+        alpha: Math.max(0, teacherCount - (stats.hadir || 0) - (stats.terlambat || 0) - (stats.izin || 0))
+      };
+    });
+
+res.json({ success: true, data: summary, date: targetDate });
+  } catch (error) {
+    console.error('All units summary error:', error.message, error.stack);
+    res.status(500).json({ success: false, message: 'Error fetching summary data: ' + error.message });
+  }
+});
+
+// GET /api/summary/unit-teachers - Get teachers in specific status for a unit
+router.get('/summary/unit-teachers', authenticateToken, async (req, res) => {
+  try {
+    const { tenant_id, status, date } = req.query;
+    const targetDate = date || new Date().toISOString().split('T')[0];
+
+    let query;
+    let params = [];
+    const statusParam = status;
+
+    if (status === 'alpha') {
+      // Belum absen = guru aktif yang tidak ada data absensi pada tanggal ini
+      query = `SELECT t.nama, t.nip, '' as waktu_scan, '' as metode
+        FROM teachers t
+        JOIN teacher_assignments ta ON t.id = ta.teacher_id
+        WHERE ta.tenant_id = ? AND t.status_aktif = 1
+        AND t.id NOT IN (
+          SELECT teacher_id FROM attendance_logs WHERE DATE(waktu_scan) = ?
+        )
+        ORDER BY t.nama ASC`;
+      params = [tenant_id, targetDate];
+    } else if (status === 'hadir') {
+      query = `SELECT t.nama, t.nip, al.waktu_scan, al.metode
+        FROM teachers t
+        JOIN attendance_logs al ON t.id = al.teacher_id
+        WHERE DATE(al.waktu_scan) = ? AND al.status = 'tepat_waktu' AND al.tenant_id = ?
+        ORDER BY t.nama ASC`;
+      params = [targetDate, tenant_id];
+    } else if (status === 'terlambat') {
+      query = `SELECT t.nama, t.nip, al.waktu_scan, al.metode
+        FROM teachers t
+        JOIN attendance_logs al ON t.id = al.teacher_id
+        WHERE DATE(al.waktu_scan) = ? AND al.status = 'terlambat' AND al.tenant_id = ?
+        ORDER BY t.nama ASC`;
+      params = [targetDate, tenant_id];
+    } else if (status === 'izin') {
+      query = `SELECT t.nama, t.nip, al.waktu_scan, al.metode
+        FROM teachers t
+        JOIN attendance_logs al ON t.id = al.teacher_id
+        WHERE DATE(al.waktu_scan) = ? AND al.status IN ('izin', 'cuti', 'sakit', 'dinas_luar') AND al.tenant_id = ?
+        ORDER BY t.nama ASC`;
+      params = [targetDate, tenant_id];
+    }
+
+    const teachers = await db.query(query, params);
+    res.json({ success: true, data: teachers, status: statusParam });
+  } catch (error) {
+    console.error('Unit teachers summary error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching teachers data' });
+  }
+});
+
 // GET /api/dashboard - Get dashboard summary for teacher
 router.get('/dashboard', authenticateToken, async (req, res) => {
   try {
-    console.log('[DEBUG_DASHBOARD] User data:', { id: req.user.id, guru_id: req.user.guru_id, role: req.user.role });
-    const guruId = req.user.guru_id || req.user.id;
-    
-    if (!req.user.guru_id) {
-      return res.json({
-        success: true,
-        data: {
-          totalAbsensi: 0,
-          absensiToday: 'Belum absen',
-          user: {
-            is_default_password: 0
-          }
-        }
-      });
-    }
-
+    const guruId = req.user.guru_id;
     const today = new Date().toISOString().split('T')[0];
 
     const totalResult = await db.query(
@@ -799,8 +829,8 @@ router.get('/dashboard', authenticateToken, async (req, res) => {
     );
 
     const userCheck = await db.query(
-      'SELECT is_default_password FROM users WHERE id = ?',
-      [req.user.id]
+      'SELECT is_default_password FROM teachers WHERE id = ?',
+      [guruId]
     );
 
     res.json({

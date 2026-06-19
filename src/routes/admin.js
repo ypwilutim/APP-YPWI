@@ -648,7 +648,7 @@ router.get('/admin/teachers', authenticateOperator, async (req, res) => {
     }
 
     let query = `
-      SELECT t.id, t.nama, t.nik, t.nip, t.email, t.status_kepegawaian, t.status_aktif, t.no_wa,
+      SELECT t.id, t.nama, t.nik, t.nip, t.email, t.status_kepegawaian, t.status_aktif, t.no_wa, t.scan_id, t.link_foto,
              GROUP_CONCAT(DISTINCT CONCAT(ta.tenant_id, ':', ta.jabatan_di_unit, ':', tn.nama_sekolah)) as assignments
       FROM teachers t
       LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id

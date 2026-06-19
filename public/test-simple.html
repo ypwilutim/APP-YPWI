@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Test Canvas Simple</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/4.6.0/fabric.min.js"></script>
+  <style>
+    body { font-family: sans-serif; padding: 20px; background: #f5f5f5; }
+    #c { border: 1px solid #ccc; cursor: crosshair; background: white; margin: 20px 0; }
+    .toolbar { margin: 10px 0; }
+    button { padding: 8px 12px; margin: 2px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    button:hover { background: #2563eb; }
+  </style>
+</head>
+<body>
+  <h2>Test Canvas Minimal</h2>
+  <div class="toolbar">
+    <button onclick="addText()">Add Text</button>
+    <button onclick="addRect()">Add Rect</button>
+    <button onclick="addPlaceholder('{{nama}}')">Add {{nama}}</button>
+    <button onclick="addPlaceholder('{{nip}}')">Add {{nip}}</button>
+  </div>
+  <canvas id="c" width="350" height="220"></canvas>
+
+  <script>
+    let canvas;
+    
+    // Wait for DOM ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
+    
+    function init() {
+      canvas = new fabric.Canvas('c', { 
+        backgroundColor: '#ffffff',
+        selection: true
+      });
+      console.log('Canvas initialized:', canvas);
+    }
+    
+    function addText() {
+      if (!canvas) return alert('Canvas belum siap');
+      const text = new fabric.Text('Test teks', { left: 50, top: 50, fontSize: 16, fill: '#000' });
+      canvas.add(text);
+      canvas.renderAll();
+    }
+    
+    function addRect() {
+      if (!canvas) return alert('Canvas belum siap');
+      const rect = new fabric.Rect({ left: 50, top: 100, width: 60, height: 40, fill: '#3b82f6' });
+      canvas.add(rect);
+      canvas.renderAll();
+    }
+    
+    function addPlaceholder(text) {
+      if (!canvas) return alert('Canvas belum siap');
+      const t = new fabric.Text(text, { left: 50, top: 50 + Math.random() * 50, fontSize: 14, fill: '#3b82f6' });
+      canvas.add(t);
+      canvas.renderAll();
+    }
+  </script>
+</body>
+</html>

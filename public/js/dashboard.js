@@ -1792,6 +1792,256 @@ async function uploadProfilePhoto(file) {
 // Initialize on load
 initializeDashboard();
 
+// Initialize Dashboard
+async function initializeDashboard() {
+     console.log('Initializing dashboard');
+     await setTeacherInfo();  // Wait for teacher info to load assignments
+     requestLocationPermission();
+     loadTodaySummary();
+     loadLeaveStatus();
+     checkActiveLeave();
+     updateConnectionStatus();
+     checkAndShowAllUnitsSummary(); // Check and load all units summary for ketua/admin (after assignments loaded)
+     // loadAttendanceRules() dan loadRecentAttendance() dipanggil dari requestLocationPermission setelah lokasi didapatkan
+     initQuranWidget(); // Initialize Quran widget
+
+     window.attendanceInterval = setInterval(function () {
+         checkActiveLeave(); // Cek izin setiap detik
+     }, 1000);
+
+     window.addEventListener('online', syncOfflineAttendance);
+window.addEventListener('offline', showOfflineMessage);
+ }
+
+// Check if user has ketua/admin role at YPWILUTIM and show all units summary
+function checkAndShowAllUnitsSummary() {
+    const assignments = window.userAssignments || [];
+    console.log('[DEBUG] checkAndShowAllUnitsSummary - assignments:', assignments);
+    
+    const hasKetuaOrAdminAtYpwilutim = assignments.some(a => {
+        const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
+        console.log('[DEBUG] Checking role:', a.tenant_id, jabatan);
+        return a.tenant_id === 'YPWILUTIM' && (jabatan.includes('ketua') || jabatan.includes('admin'));
+    });
+    
+    console.log('[DEBUG] hasKetuaOrAdminAtYpwilutim:', hasKetuaOrAdminAtYpwilutim);
+    
+    if (hasKetuaOrAdminAtYpwilutim) {
+        loadAllUnitsSummary();
+    }
+}
+
+// Load attendance summary for all units
+async function loadAllUnitsSummary(dateFilter = null) {
+    const widget = document.getElementById('allUnitsSummaryWidget');
+    const tbody = document.getElementById('allUnitsSummaryBody');
+    const periodEl = document.getElementById('allUnitsPeriod');
+    const dateInput = document.getElementById('allUnitsDateFilter');
+
+    if (!widget) return;
+
+    widget.style.display = 'block';
+
+    // Set default date to today if no filter
+    const targetDate = dateFilter || new Date().toISOString().split('T')[0];
+    if (dateInput) dateInput.value = targetDate;
+
+    try {
+        const response = await fetch(`/api/summary/all-units?date=${targetDate}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            if (result.success && result.data) {
+                periodEl.textContent = `Periode: ${result.date || targetDate}`;
+
+                if (result.data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" style="padding: 1rem; text-align: center; color: #94a3b8;">Tidak ada data unit</td></tr>';
+                } else {
+                    tbody.innerHTML = result.data.map(item => `
+                        <tr style="border-bottom: 1px solid #f1f5f9; cursor: pointer;" onclick="showTeachersModal('${item.tenant_id}', 'hadir', '${targetDate}')">
+                            <td style="padding: 0.5rem; font-weight: 500; color: #0f172a;">${item.nama_sekolah || item.tenant_id}</td>
+                            <td style="padding: 0.5rem; text-align: center; color: #475569;">${item.total_guru || 0}</td>
+                            <td style="padding: 0.5rem; text-align: center; color: #15803d; font-weight: 600; cursor: pointer;" onclick="event.stopPropagation(); showTeachersModal('${item.tenant_id}', 'hadir', '${targetDate}')">${item.hadir || 0}</td>
+                            <td style="padding: 0.5rem; text-align: center; color: #d97706; font-weight: 600; cursor: pointer;" onclick="event.stopPropagation(); showTeachersModal('${item.tenant_id}', 'terlambat', '${targetDate}')">${item.terlambat || 0}</td>
+                            <td style="padding: 0.5rem; text-align: center; color: #2563eb; font-weight: 600; cursor: pointer;" onclick="event.stopPropagation(); showTeachersModal('${item.tenant_id}', 'izin', '${targetDate}')">${item.izin || 0}</td>
+                            <td style="padding: 0.5rem; text-align: center; color: #dc2626; font-weight: 600; cursor: pointer;" onclick="event.stopPropagation(); showTeachersModal('${item.tenant_id}', 'alpha', '${targetDate}')">${item.alpha || 0}</td>
+                        </tr>
+                    `).join('');
+                }
+            } else if (result.message) {
+                tbody.innerHTML = `<tr><td colspan="6" style="padding: 1rem; text-align: center; color: #dc2626;">${result.message}</td></tr>`;
+            }
+        } else {
+            const errorText = await response.text().catch(() => 'Unknown error');
+            tbody.innerHTML = `<tr><td colspan="6" style="padding: 1rem; text-align: center; color: #dc2626;">Error: ${response.status} - ${errorText}</td></tr>`;
+        }
+    } catch (error) {
+        console.error('All units summary error:', error);
+        tbody.innerHTML = '<tr><td colspan="6" style="padding: 1rem; text-align: center; color: #dc2626;">Error memuat data</td></tr>';
+    }
+}
+
+function refreshAllUnitsSummaryWithDate() {
+    const dateInput = document.getElementById('allUnitsDateFilter');
+    if (dateInput) loadAllUnitsSummary(dateInput.value);
+}
+
+// Modal untuk menampilkan daftar guru
+let teachersModal, currentTenantId, currentStatus;
+function showTeachersModal(tenantId, status, dateFilter = null) {
+    currentTenantId = tenantId;
+    currentStatus = status;
+    const selectedDate = dateFilter || (document.getElementById('allUnitsDateFilter')?.value) || new Date().toISOString().split('T')[0];
+
+    if (!teachersModal || !document.contains(teachersModal)) {
+        teachersModal = document.createElement('div');
+        teachersModal.className = 'modal-overlay';
+        teachersModal.style.cssText = 'display:flex;position:fixed;inset:0;background:rgba(15,23,42,0.6);backdrop-filter:blur(4px);z-index:1000;align-items:center;justify-content:center;padding:1rem;';
+        teachersModal.innerHTML = `
+            <div style="background:white;border-radius:1rem;max-width:500px;width:100%;max-height:80vh;display:flex;flex-direction:column;">
+                <div style="padding:1rem;border-bottom:1px solid #e2e8f0;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;">
+                        <h3 id="teachersModalTitle" style="margin:0;font-size:1.1rem;font-weight:600;"></h3>
+                        <button onclick="closeTeachersModal()" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:1.25rem;">&times;</button>
+                    </div>
+                    <input type="date" id="teachersDateFilter" onchange="loadTeachersForDate()" style="width:100%;padding:0.5rem;border:1px solid #cbd5e1;border-radius:0.5rem;font-size:0.9rem;">
+                </div>
+                <div id="teachersModalBody" style="padding:1rem;overflow-y:auto;flex:1;"></div>
+            </div>
+        `;
+        document.body.appendChild(teachersModal);
+    } else {
+        teachersModal.style.display = 'flex';
+    }
+
+    document.getElementById('teachersDateFilter').value = selectedDate;
+
+    const statusLabels = { hadir: 'Hadir', terlambat: 'Terlambat', izin: 'Izin', alpha: 'Tidak Absen' };
+    document.getElementById('teachersModalTitle').textContent = `Daftar Guru - ${statusLabels[status] || status}`;
+    loadTeachersForDate(selectedDate);
+}
+
+async function loadTeachersForDate(date = null) {
+    const dateToUse = date || document.getElementById('teachersDateFilter')?.value || new Date().toISOString().split('T')[0];
+    const modalBody = document.getElementById('teachersModalBody');
+    modalBody.innerHTML = '<div style="padding:1rem;text-align:center;color:#94a3b8;"><i class="fas fa-spinner fa-spin"></i> Memuat...</div>';
+
+    try {
+        const response = await fetch(`/api/summary/unit-teachers?tenant_id=${currentTenantId}&status=${currentStatus}&date=${dateToUse}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await response.json();
+
+        if (data.success && data.data.length > 0) {
+            const isAlpha = currentStatus === 'alpha';
+            const headerBtn = isAlpha ? `
+                <button onclick="sendBulkMessage('${dateToUse}')" style="background:#2563eb;color:white;border:none;padding:0.4rem 0.8rem;border-radius:0.5rem;font-size:0.8rem;cursor:pointer;">
+                    <i class="fas fa-paper-plane"></i> Kirim Massal
+                </button>
+            ` : '';
+            
+            const teachersList = data.data.map(t => `
+                <div style="padding:0.5rem 0;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;">
+                    <div>
+                        <div style="font-weight:600;color:#0f172a;">${t.nama}</div>
+                        <div style="font-size:0.8rem;color:#64748b;">NIP: ${t.nip || '-'} | Waktu: ${t.waktu_scan ? new Date(t.waktu_scan).toLocaleTimeString('id-ID') : 'Belum absen'}</div>
+                    </div>
+                    ${isAlpha ? `<button onclick="sendMessageToTeacher('${t.nama}')" style="background:#ef4444;color:white;border:none;padding:0.3rem 0.6rem;border-radius:0.4rem;font-size:0.75rem;cursor:pointer;"><i class="fas fa-paper-plane"></i></button>` : ''}
+                </div>
+            `).join('');
+            
+            modalBody.innerHTML = `
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;padding-bottom:0.5rem;border-bottom:1px solid #e2e8f0;">
+                    <div style="font-weight:600;color:#0f172a;">
+                        <i class="fas fa-exclamation-triangle" style="color:#dc2626;margin-right:0.5rem;"></i>Guru Belum Absen
+                    </div>
+                    ${headerBtn}
+                </div>
+                ${teachersList}
+            `;
+        } else {
+            modalBody.innerHTML = '<div style="padding:2rem;text-align:center;color:#94a3b8;">Tidak ada guru dalam kategori ini</div>';
+        }
+    } catch (err) {
+        console.error('Teachers modal error:', err);
+        modalBody.innerHTML = '<div style="padding:2rem;text-align:center;color:#dc2626;">Error memuat data</div>';
+    }
+}
+
+async function sendBulkMessage(date) {
+    const teacherNames = [];
+    const items = document.querySelectorAll('#teachersModalBody > div > div > div:first-child');
+    items.forEach(d => teacherNames.push(d.textContent));
+
+    const { value: message } = await Swal.fire({
+        title: 'Kirim Pesan Massal',
+        html: `<textarea id="bulkMessage" class="swal2-textarea" placeholder="Tulis pesan tegur..." style="width:100%;min-height:100px;"></textarea>`,
+        showCancelButton: true,
+        confirmButtonText: 'Kirim ke Semua',
+        cancelButtonText: 'Batal',
+        preConfirm: () => document.getElementById('bulkMessage').value
+    });
+
+    if (!message) return;
+
+    const sendPromises = teacherNames.map(name =>
+        fetch('/api/chat/conversations', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ targetName: name, targetUserType: 'guru' })
+        }).then(r => r.json()).then(c => {
+            if (c.success) {
+                return fetch(`/api/chat/conversations/${c.conversationId}/messages`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: `[TEGUR] ${message}` })
+                });
+            }
+        })
+    );
+
+    await Promise.all(sendPromises);
+    Swal.fire('Berhasil', `Pesan terkirim ke ${teacherNames.length} guru`, 'success');
+}
+
+async function sendMessageToTeacher(teacherName) {
+    const { value: message } = await Swal.fire({
+        title: `Kirim Tegur ke ${teacherName}`,
+        html: `<textarea id="teacherMessage" class="swal2-textarea" placeholder="Tulis pesan..." style="width:100%;min-height:100px;"></textarea>`,
+        showCancelButton: true,
+        confirmButtonText: 'Kirim',
+        cancelButtonText: 'Batal',
+        preConfirm: () => document.getElementById('teacherMessage').value
+    });
+
+    if (!message) return;
+
+    try {
+        const conv = await fetch('/api/chat/conversations', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ targetName: teacherName, targetUserType: 'guru' })
+        }).then(r => r.json());
+
+        if (conv.success) {
+            await fetch(`/api/chat/conversations/${conv.conversationId}/messages`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: `[TEGUR] ${message}` })
+            });
+            Swal.fire('Berhasil', 'Pesan terkirim', 'success');
+        }
+    } catch (err) {
+        Swal.fire('Gagal', 'Tidak dapat mengirim pesan', 'error');
+    }
+}
+
+function closeTeachersModal() {
+    if (teachersModal) teachersModal.style.display = 'none';
+}
+
 // Setup global error handler for user photo (fallback if script loads before DOM)
 window.showFallbackAvatar = function(img) { 
     const fallback = document.getElementById('avatarFallback'); 
@@ -1805,25 +2055,6 @@ window.showUserPhoto = function() {
     const userPhoto = document.getElementById('userPhoto');
     if (userPhoto) userPhoto.style.display = 'block';
 };
-
-function initializeDashboard() {
-    console.log('Initializing dashboard');
-    setTeacherInfo();
-    requestLocationPermission();
-    loadTodaySummary();
-    loadLeaveStatus();
-    checkActiveLeave();
-    updateConnectionStatus();
-    // loadAttendanceRules() dan loadRecentAttendance() dipanggil dari requestLocationPermission setelah lokasi didapatkan
-    initQuranWidget(); // Initialize Quran widget
-
-    window.attendanceInterval = setInterval(function () {
-        checkActiveLeave(); // Cek izin setiap detik
-    }, 1000);
-
-    window.addEventListener('online', syncOfflineAttendance);
-    window.addEventListener('offline', showOfflineMessage);
-}
 
 // ========================================================
 // PWA INSTALL PROMPT

@@ -3,239 +3,1402 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ID Card Designer - YPWI Lutim</title>
+  <title>ID Card Designer Pro - YPWI Lutim</title>
+  <script src="https://cdn.jsdelivr.net/npm/fabric@4.6.0/dist/fabric.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0/css/all.min.css" rel="stylesheet">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <style>
-    body { font-family: 'Inter', sans-serif; background: #f3f4f6; }
-    #canvas-container { background: #e5e7eb; border-radius: 8px; }
-    #c { background: white; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-    .tool-panel { background: white; border-radius: 8px; }
-    .layer-item { border: 1px solid #e5e7eb; border-radius: 4px; cursor: move; }
-    .layer-item.active { border-color: #3b82f6; background: #eff6ff; }
-    .properties-panel { background: #f9fafb; border-radius: 8px; }
+    body { background: #f8fafc; font-family: 'Inter', system-ui, sans-serif; }
+    .header-gradient { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+    .panel { background: white; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,.08); }
+    .canvas-container { background: #f1f5f9; border-radius: 16px; padding: 24px; display: flex; justify-content: center; align-items: center; }
+    .canvas-wrapper { background: white; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,.15); position: relative; }
+    #idCanvas { cursor: crosshair; border-radius: 8px; }
+    .sidebar-item { transition: all 0.2s ease; border-radius: 10px; padding: 12px; cursor: pointer; margin-bottom: 8px; }
+    .sidebar-item:hover { background: #f1f5f9; transform: translateX(4px); }
+    .sidebar-item.active { background: #e0e7ff; color: #4f46e5; }
+    .properties-input { width: 100%; padding: 8px 10px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; }
+    .properties-input:focus { outline: none; border-color: #667eea; box-shadow: 0 0 0 3px rgba(102,123,234,.15); }
+    .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 10px; padding: 10px 16px; font-weight: 500; transition: all 0.2s; }
+    .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(102,123,234,.25); }
+    .btn-secondary { background: #f1f5f9; color: #475569; border-radius: 10px; padding: 8px 12px; font-size: 13px; transition: all 0.2s; }
+    .btn-secondary:hover { background: #e2e8f0; }
+    .layer-item { display: flex; align-items: center; justify-content: space-between; padding: 10px; background: #fafbfc; border: 1px solid #edf2f7; border-radius: 8px; margin-bottom: 6px; cursor: pointer; transition: all 0.2s; }
+    .layer-item:hover { background: #f1f5f9; }
+    .layer-item.locked { opacity: 0.5; }
+    .zoom-control { background: white; border-radius: 10px; padding: 6px; display: flex; align-items: center; gap: 8px; }
+    .badge { background: #e0e7ff; color: #4f46e5; border-radius: 6px; padding: 2px 8px; font-size: 11px; font-weight: 500; }
+    .preview-search { width: 180px; background: rgba(255,255,255,.16); color: white; border: 1px solid rgba(255,255,255,.32); border-radius: 10px; padding: 8px 10px; font-size: 13px; }
+    .preview-search::placeholder { color: rgba(255,255,255,.78); }
+    .preview-search:focus { outline: none; border-color: rgba(255,255,255,.72); background: rgba(255,255,255,.22); }
+    .preview-count { min-width: 54px; text-align: center; font-size: 12px; color: rgba(255,255,255,.88); }
   </style>
 </head>
 <body>
-  <div class="container mx-auto px-4 py-6">
-    <div class="flex justify-between items-center mb-4">
-      <h1 class="text-2xl font-bold text-gray-800">
-        <i class="fas fa-palette text-purple-600 mr-2"></i>ID Card Designer
-      </h1>
-      <button onclick="location.href='admin-dashboard.html'" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg">
-        <i class="fas fa-arrow-left mr-2"></i>Kembali ke Dashboard
-      </button>
-    </div>
-
-    <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
-      <!-- Tools Panel -->
-      <div class="tool-panel p-4 shadow">
-        <h3 class="font-semibold mb-3 text-gray-700">Tools</h3>
-        
-        <div class="mb-4">
-          <label class="block text-sm font-medium mb-2">Upload Template</label>
-          <input type="file" id="templateUpload" accept="image/*" class="w-full text-sm">
+  <div class="min-h-screen flex flex-col">
+    <!-- Header -->
+    <header class="header-gradient text-white p-4 shadow-lg">
+      <div class="container mx-auto flex justify-between items-center">
+        <div class="flex items-center gap-3">
+          <i class="fas fa-id-card text-2xl"></i>
+          <h1 class="text-2xl font-bold">ID Card Designer Pro</h1>
         </div>
-
-        <div class="mb-4">
-          <label class="block text-sm font-medium mb-2">Upload Foto (Auto Remove BG)</label>
-          <input type="file" id="photoUpload" accept="image/*" class="w-full text-sm">
-          <input type="file" id="bulkPhotoUpload" accept="image/*" multiple class="w-full text-sm mt-2">
-          <button id="bulkProcessBtn" class="w-full bg-purple-600 hover:bg-purple-700 text-white py-1 rounded-lg mt-2 text-sm hidden">
-            <i class="fas fa-magic mr-1"></i> Proses Semua (Remove BG)
+        <div class="flex items-center gap-2">
+          <select id="dataType" class="btn-secondary">
+            <option value="teachers">Guru</option>
+            <option value="students">Siswa</option>
+          </select>
+          <input id="previewSearch" oninput="renderEngine.searchPreview(this.value)" class="preview-search" placeholder="Cari nama/NIP/NIS">
+          <button onclick="renderEngine.previous()" class="btn-secondary px-3" title="Preview sebelumnya">
+            <i class="fas fa-chevron-left"></i>
           </button>
-        </div>
-
-        <div class="mb-4">
-          <button id="addTextBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg mb-2">
-            <i class="fas fa-font mr-2"></i>Tambah Teks
+          <span id="previewCounter" class="preview-count">0/0</span>
+          <button onclick="renderEngine.next()" class="btn-secondary px-3" title="Preview berikutnya">
+            <i class="fas fa-chevron-right"></i>
           </button>
-          <button id="saveTemplateBtn" class="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg">
-            <i class="fas fa-save mr-2"></i>Simpan Template
+          <button onclick="renderEngine.previewData()" class="btn-primary">
+            <i class="fas fa-eye mr-1"></i>Preview Data
           </button>
-        </div>
-
-        <div class="border-t pt-3">
-          <h4 class="text-sm font-medium mb-2">Layer</h4>
-          <div id="layersList" class="space-y-2 max-h-64 overflow-y-auto"></div>
+          <button onclick="templateManager.save()" class="btn-secondary">
+            <i class="fas fa-save mr-1"></i>Save Template
+          </button>
+          <button onclick="templateManager.load()" class="btn-secondary">
+            <i class="fas fa-folder-open mr-1"></i>Load Template
+          </button>
+<button onclick="bulkGenerator.openSettings()" class="btn-secondary">
+             <i class="fas fa-cog mr-1"></i>Layout Settings
+           </button>
+           <button onclick="bulkGenerator.generate()" class="btn-secondary">
+             <i class="fas fa-print mr-1"></i>Bulk Generate
+           </button>
+          <button onclick="exportEngine.png()" class="btn-secondary">
+            <i class="fas fa-download mr-1"></i>Export PNG
+          </button>
+          <button onclick="exportEngine.json()" class="btn-secondary">
+            <i class="fas fa-code mr-1"></i>Export JSON
+          </button>
+          <button onclick="location.href='admin-dashboard.html'" class="btn-secondary">
+            <i class="fas fa-arrow-left mr-1"></i>Kembali
+          </button>
         </div>
       </div>
+    </header>
 
-      <!-- Canvas Area -->
-      <div class="lg:col-span-2">
-        <div id="canvas-container" class="p-4">
-          <div class="flex justify-center">
-            <canvas id="c" width="350" height="220"></canvas>
+    <!-- Main Workspace -->
+    <main class="flex-1 flex gap-4 p-4 container mx-auto max-w-7xl">
+      <!-- Left Sidebar -->
+      <aside class="w-64 panel p-4 h-[calc(100vh-140px)] overflow-y-auto">
+        <div class="space-y-1">
+          <div class="sidebar-item active" onclick="elementManager.showCategory('elements')">
+            <i class="fas fa-shapes mr-2"></i><span>Elements</span>
+          </div>
+          <div class="sidebar-item" onclick="elementManager.showCategory('shapes')">
+            <i class="fas fa-square mr-2"></i><span>Shapes</span>
+          </div>
+          <div class="sidebar-item" onclick="elementManager.showCategory('placeholders')">
+            <i class="fas fa-tags mr-2"></i><span>Placeholders</span>
+          </div>
+          <div class="sidebar-item" onclick="elementManager.showCategory('qr')">
+            <i class="fas fa-qrcode mr-2"></i><span>QR Code</span>
+          </div>
+          <div class="sidebar-item" onclick="elementManager.showCategory('photo')">
+            <i class="fas fa-image mr-2"></i><span>Photo</span>
           </div>
         </div>
-        <div class="flex justify-center mt-3 space-x-2">
-          <button id="zoomOut" class="bg-gray-200 hover:bg-gray-300 px-3 py-1 rounded">-</button>
-          <span id="zoomLevel" class="px-3 py-1 bg-white rounded">100%</span>
-          <button id="zoomIn" class="bg-gray-200 hover:bg-gray-300 px-3 py-1 rounded">+</button>
+
+        <div id="elementsPanel" class="mt-6 space-y-3">
+          <h3 class="text-sm font-semibold text-gray-700 mb-2">Tambah Elemen</h3>
+          <div onclick="elementManager.addText()" class="sidebar-item flex items-center">
+            <i class="fas fa-font mr-3 text-blue-500"></i><span>Teks</span>
+          </div>
+          <div onclick="elementManager.addTextbox()" class="sidebar-item flex items-center">
+            <i class="fas fa-text-height mr-3 text-green-500"></i><span>Textbox</span>
+          </div>
+          <div onclick="elementManager.addRectangle()" class="sidebar-item flex items-center">
+            <i class="fas fa-square mr-3 text-purple-500"></i><span>Persegi</span>
+          </div>
+          <div onclick="elementManager.addCircle()" class="sidebar-item flex items-center">
+            <i class="fas fa-circle mr-3 text-pink-500"></i><span>Lingkaran</span>
+          </div>
+          <div onclick="elementManager.addLine()" class="sidebar-item flex items-center">
+            <i class="fas fa-grip-lines mr-3 text-orange-500"></i><span>Garis</span>
+          </div>
+        </div>
+
+        <div id="shapesPanel" class="mt-6 space-y-3 hidden">
+          <h3 class="text-sm font-semibold text-gray-700 mb-2">Shapes</h3>
+          <p class="text-xs text-gray-500">Pilih dari panel Elements</p>
+        </div>
+
+        <div id="placeholdersPanel" class="mt-6 space-y-3 hidden">
+          <h3 class="text-sm font-semibold text-gray-700 mb-2">Placeholders Guru</h3>
+          <div onclick="elementManager.addPlaceholder('{{nama}}')" class="sidebar-item text-xs">{{nama}} - Nama</div>
+          <div onclick="elementManager.addPlaceholder('{{nip}}')" class="sidebar-item text-xs">{{nip}} - NIP</div>
+          <div onclick="elementManager.addPlaceholder('{{nik}}')" class="sidebar-item text-xs">{{nik}} - NIK</div>
+          <div onclick="elementManager.addPlaceholder('{{no_wa}}')" class="sidebar-item text-xs">{{no_wa}} - WA</div>
+          <div onclick="elementManager.addPlaceholder('{{nama_sekolah}}')" class="sidebar-item text-xs">{{nama_sekolah}} - Sekolah</div>
+          <div onclick="elementManager.addPlaceholder('{{jabatan_di_unit}}')" class="sidebar-item text-xs">{{jabatan_di_unit}} - Jabatan</div>
+          <h3 class="text-sm font-semibold text-gray-700 mb-2 mt-4">Placeholders Siswa</h3>
+          <div onclick="elementManager.addPlaceholder('{{nama_siswa}}')" class="sidebar-item text-xs">{{nama_siswa}} - Nama</div>
+          <div onclick="elementManager.addPlaceholder('{{nis}}')" class="sidebar-item text-xs">{{nis}} - NIS</div>
+          <div onclick="elementManager.addPlaceholder('{{nisn}}')" class="sidebar-item text-xs">{{nisn}} - NISN</div>
+          <div onclick="elementManager.addPlaceholder('{{jenis_kelamin}}')" class="sidebar-item text-xs">{{jenis_kelamin}} - Gender</div>
+          <div onclick="elementManager.addPlaceholder('{{nama_kelas}}')" class="sidebar-item text-xs">{{nama_kelas}} - Kelas</div>
+        </div>
+
+        <div id="qrPanel" class="mt-6 space-y-3 hidden">
+          <h3 class="text-sm font-semibold text-gray-700 mb-2">QR Code</h3>
+          <div onclick="elementManager.addQrPlaceholder()" class="sidebar-item flex items-center">
+            <i class="fas fa-qrcode mr-3 text-indigo-500"></i><span>Tambah QR</span>
+          </div>
+          <div onclick="elementManager.addPlaceholder('{{scan_id}}')" class="sidebar-item text-xs">{{scan_id}} - QR by Scan ID</div>
+        </div>
+
+        <div id="photoPanel" class="mt-6 space-y-3 hidden">
+          <h3 class="text-sm font-semibold text-gray-700 mb-2">Photo</h3>
+          <div onclick="elementManager.addPhotoPlaceholder()" class="sidebar-item flex items-center">
+            <i class="fas fa-image mr-3 text-teal-500"></i><span>Photo Placeholder</span>
+          </div>
+          <div onclick="elementManager.addPlaceholder('{{foto}}')" class="sidebar-item text-xs">{{foto}} - Auto Foto</div>
+        </div>
+      </aside>
+
+      <!-- Canvas Area -->
+<section class="flex-1 flex flex-col">
+        <div class="flex items-center gap-2 self-end mb-3">
+          <label class="text-sm font-medium text-gray-600">Canvas:</label>
+          <input id="canvasWidth" type="number" value="350" onchange="canvasEngine.convertAndResize('width', this.value)" class="properties-input w-20 h-8 text-xs" min="1" max="2000">
+          <span class="text-xs text-gray-500">x</span>
+          <input id="canvasHeight" type="number" value="220" onchange="canvasEngine.convertAndResize('height', this.value)" class="properties-input w-20 h-8 text-xs" min="1" max="2000">
+          <select id="canvasUnit" onchange="canvasEngine.unitChanged()" class="properties-input w-20 h-8 text-xs">
+            <option value="px" selected>px</option>
+            <option value="cm">cm</option>
+            <option value="mm">mm</option>
+            <option value="inch">inch</option>
+          </select>
+          <div class="zoom-control">
+            <button onclick="canvasEngine.zoom(-0.1)" class="btn-secondary px-3 py-1"><i class="fas fa-minus"></i></button>
+            <span id="zoomLevel" class="text-sm font-medium">100%</span>
+            <button onclick="canvasEngine.zoom(0.1)" class="btn-secondary px-3 py-1"><i class="fas fa-plus"></i></button>
+          </div>
+        </div>
+        <div class="canvas-container flex-1">
+          <div class="canvas-wrapper">
+            <canvas id="idCanvas" width="350" height="220"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right Sidebar - Properties -->
+      <aside class="w-80 panel p-4 h-[calc(100vh-140px)] overflow-y-auto">
+        <h3 class="panel-header text-lg font-semibold mb-4">Properties</h3>
+        <div id="propertiesPanel">
+          <p class="text-gray-500 text-sm">Pilih elemen di canvas untuk mengatur properti</p>
+        </div>
+      </aside>
+    </main>
+
+    <!-- Bottom - Layers Panel -->
+    <footer class="bg-white border-t border-gray-200">
+      <div class="container mx-auto p-4">
+        <div class="panel">
+          <div class="flex justify-between items-center p-4 border-b">
+            <h3 class="font-semibold text-gray-700">Layers</h3>
+            <button onclick="layerManager.refresh()" class="btn-secondary px-3 py-1 text-xs">
+              <i class="fas fa-refresh"></i>
+            </button>
+          </div>
+          <div id="layersContainer" class="p-3 max-h-48 overflow-y-auto">
+            <p class="text-gray-400 text-sm">Tidak ada layer</p>
+          </div>
         </div>
       </div>
+    </footer>
+  </div>
 
-      <!-- Properties Panel -->
-      <div class="tool-panel p-4 shadow">
-        <h3 class="font-semibold mb-3 text-gray-700">Properties</h3>
-        <div id="propertiesPanel" class="properties-panel p-3 min-h-32">
-          <p class="text-gray-500 text-sm">Pilih layer untuk edit properti</p>
+  <script>
+    const SERIALIZED_PROPS = ['placeholderType', 'isPreviewMedia', 'templateText'];
+    // ==========================================
+    // Canvas Engine
+    // ==========================================
+    const canvasEngine = {
+      canvas: null,
+      zoomLevel: 1,
+      
+      init() {
+        console.log('Fabric:', typeof fabric, 'Canvas element:', document.getElementById('idCanvas'));
+        this.canvas = new fabric.Canvas('idCanvas', {
+          backgroundColor: '#ffffff',
+          selection: true,
+          preserveObjectStacking: true
+        });
+        console.log('Canvas initialized:', this.canvas);
+        this.setupGrid();
+        this.setupKeyboard();
+        this.loadAutosave();
+        setInterval(() => this.autosave(), 5000);
+      },
+
+      setupGrid() {
+        const gridSize = 20;
+        const canvas = this.canvas;
+        canvas.backgroundColor = '#ffffff';
+        this.renderWithGrid();
+      },
+
+      renderWithGrid() {
+        const canvas = this.canvas;
+        canvas.renderAll();
+      },
+
+      setupKeyboard() {
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Delete' || e.key === 'Backspace') {
+            const obj = this.canvas.getActiveObject();
+            if (obj) {
+              this.canvas.remove(obj);
+              this.canvas.renderAll();
+              historyManager.push(this.canvas.toJSON(SERIALIZED_PROPS));
+            }
+          }
+          if (e.ctrlKey && e.key === 'z') {
+            e.preventDefault();
+            historyManager.undo();
+          }
+          if (e.ctrlKey && e.key === 'y') {
+            e.preventDefault();
+            historyManager.redo();
+          }
+        });
+      },
+
+zoom(delta) {
+        this.zoomLevel = Math.max(0.2, Math.min(3, this.zoomLevel + delta));
+        this.canvas.setZoom(this.zoomLevel);
+        document.getElementById('zoomLevel').textContent = Math.round(this.zoomLevel * 100) + '%';
+      },
+
+      convertAndResize(dim, value) {
+        const unit = document.getElementById('canvasUnit').value;
+        const px = this.toPixels(value, unit);
+        this.setSize(dim, px);
+      },
+
+      toPixels(value, unit) {
+        const val = parseFloat(value);
+        const conversions = {
+          'px': val,
+          'cm': val * 37.8,
+          'mm': val * 3.78,
+          'inch': val * 96
+        };
+        return Math.round(conversions[unit] || val);
+      },
+
+      toUnit(px, unit) {
+        const conversions = {
+          'px': px,
+          'cm': px / 37.8,
+          'mm': px / 3.78,
+          'inch': px / 96
+        };
+        return conversions[unit] || px;
+      },
+
+      unitChanged() {
+        const unit = document.getElementById('canvasUnit').value;
+        const widthPx = this.canvas.width;
+        const heightPx = this.canvas.height;
+        
+        document.getElementById('canvasWidth').value = (this.toUnit(widthPx, unit)).toFixed(1);
+        document.getElementById('canvasHeight').value = (this.toUnit(heightPx, unit)).toFixed(1);
+      },
+
+      setSize(dim, value) {
+        const val = parseInt(value);
+        if (dim === 'width') {
+          this.canvas.setWidth(val);
+          document.getElementById('canvasWidth').value = val;
+        } else {
+          this.canvas.setHeight(val);
+          document.getElementById('canvasHeight').value = val;
+        }
+        this.canvas.renderAll();
+        historyManager.push(this.canvas.toJSON(SERIALIZED_PROPS));
+      },
+
+      autosave() {
+        if (this.canvas) {
+          localStorage.setItem('idcard_autosave', JSON.stringify(this.canvas.toJSON(SERIALIZED_PROPS)));
+        }
+      },
+
+      loadAutosave() {
+        const saved = localStorage.getItem('idcard_autosave');
+        if (saved) {
+          this.canvas.loadFromJSON(JSON.parse(saved), this.canvas.renderAll.bind(this.canvas));
+        }
+      }
+    };
+
+    // ==========================================
+    // History Manager
+    // ==========================================
+    const history = [];
+    const historyIndex = { current: -1 };
+    
+    const historyManager = {
+      push(state) {
+        history.splice(historyIndex.current + 1);
+        history.push(JSON.stringify(state));
+        historyIndex.current++;
+        if (history.length > 50) history.shift();
+      },
+
+      undo() {
+        if (historyIndex.current > 0) {
+          historyIndex.current--;
+          canvasEngine.canvas.loadFromJSON(JSON.parse(history[historyIndex.current]), canvasEngine.canvas.renderAll.bind(canvasEngine.canvas));
+        }
+      },
+
+      redo() {
+        if (historyIndex.current < history.length - 1) {
+          historyIndex.current++;
+          canvasEngine.canvas.loadFromJSON(JSON.parse(history[historyIndex.current]), canvasEngine.canvas.renderAll.bind(canvasEngine.canvas));
+        }
+      }
+    };
+
+    // ==========================================
+    // Element Manager
+    // ==========================================
+    const elementManager = {
+      showCategory(cat) {
+        document.querySelectorAll('[id$="Panel"]').forEach(p => p.classList.add('hidden'));
+        document.getElementById(cat + 'Panel').classList.remove('hidden');
+        document.querySelectorAll('.sidebar-item').forEach(item => item.classList.remove('active'));
+        event.target.closest('.sidebar-item').classList.add('active');
+      },
+
+      addText() {
+          if (!canvasEngine.canvas) { setTimeout(() => this.addText(), 100); return; }
+          const text = new fabric.Text('Teks di sini', { left: 80, top: 50, fontSize: 16, fill: '#000000' });
+          canvasEngine.canvas.add(text);
+          canvasEngine.canvas.setActiveObject(text);
+          historyManager.push(canvasEngine.canvas.toJSON(SERIALIZED_PROPS));
+          propertiesManager.update();
+          layerManager.refresh();
+        },
+
+        addTextbox() {
+          if (!canvasEngine.canvas) { setTimeout(() => this.addTextbox(), 100); return; }
+          const text = new fabric.Textbox('Teks di sini', { left: 80, top: 50, width: 200, fontSize: 14, fill: '#000000' });
+          canvasEngine.canvas.add(text);
+          canvasEngine.canvas.setActiveObject(text);
+          historyManager.push(canvasEngine.canvas.toJSON(SERIALIZED_PROPS));
+          propertiesManager.update();
+          layerManager.refresh();
+        },
+
+        addRectangle() {
+          if (!canvasEngine.canvas) { setTimeout(() => this.addRectangle(), 100); return; }
+          const rect = new fabric.Rect({ left: 50, top: 50, width: 80, height: 50, fill: '#3b82f6', stroke: '#1e40af', strokeWidth: 1 });
+          canvasEngine.canvas.add(rect);
+          canvasEngine.canvas.setActiveObject(rect);
+          historyManager.push(canvasEngine.canvas.toJSON(SERIALIZED_PROPS));
+          propertiesManager.update();
+          layerManager.refresh();
+        },
+
+        addCircle() {
+          if (!canvasEngine.canvas) { setTimeout(() => this.addCircle(), 100); return; }
+          const circle = new fabric.Circle({ left: 50, top: 50, radius: 30, fill: '#10b981', stroke: '#059669', strokeWidth: 1 });
+          canvasEngine.canvas.add(circle);
+          canvasEngine.canvas.setActiveObject(circle);
+          historyManager.push(canvasEngine.canvas.toJSON(SERIALIZED_PROPS));
+          propertiesManager.update();
+          layerManager.refresh();
+        },
+
+        addLine() {
+          if (!canvasEngine.canvas) { setTimeout(() => this.addLine(), 100); return; }
+          const line = new fabric.Line([0, 0, 100, 0], { left: 50, top: 50, stroke: '#64748b', strokeWidth: 2 });
+          canvasEngine.canvas.add(line);
+          canvasEngine.canvas.setActiveObject(line);
+          historyManager.push(canvasEngine.canvas.toJSON(SERIALIZED_PROPS));
+          propertiesManager.update();
+          layerManager.refresh();
+        },
+
+        addPlaceholder(text) {
+          if (!canvasEngine.canvas) { setTimeout(() => this.addPlaceholder(text), 100); return; }
+          const placeholder = new fabric.Textbox(text, { left: 80, top: 50, width: 200, fontSize: 14, fill: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)' });
+          canvasEngine.canvas.add(placeholder);
+          canvasEngine.canvas.setActiveObject(placeholder);
+          historyManager.push(canvasEngine.canvas.toJSON(SERIALIZED_PROPS));
+          propertiesManager.update();
+          layerManager.refresh();
+        },
+
+      addQrPlaceholder() {
+          if (!canvasEngine.canvas) { setTimeout(() => this.addQrPlaceholder(), 100); return; }
+          const rect = new fabric.Rect({ left: 240, top: 150, width: 55, height: 55, fill: '#f3f4f6', stroke: '#d1d5db', strokeWidth: 1, strokeDashArray: [3, 3] });
+          const text = new fabric.Text('QR', { left: 267, top: 177, fontSize: 12, fill: '#9ca3af', originX: 'center', originY: 'center' });
+          const group = new fabric.Group([rect, text], { left: 240, top: 150, placeholderType: 'qr' });
+          canvasEngine.canvas.add(group);
+          canvasEngine.canvas.setActiveObject(group);
+          historyManager.push(canvasEngine.canvas.toJSON(SERIALIZED_PROPS));
+          propertiesManager.update();
+          layerManager.refresh();
+        },
+
+        addPhotoPlaceholder() {
+          if (!canvasEngine.canvas) { setTimeout(() => this.addPhotoPlaceholder(), 100); return; }
+          const rect = new fabric.Rect({ left: 20, top: 50, width: 55, height: 70, fill: '#e5e7eb', stroke: '#9ca3af', strokeWidth: 1, strokeDashArray: [5, 5], placeholderType: 'photo' });
+          canvasEngine.canvas.add(rect);
+          canvasEngine.canvas.setActiveObject(rect);
+          historyManager.push(canvasEngine.canvas.toJSON(SERIALIZED_PROPS));
+          propertiesManager.update();
+          layerManager.refresh();
+        }
+    };
+
+    // ==========================================
+    // Properties Manager
+    // ==========================================
+const propertiesManager = {
+      update() {
+        const obj = canvasEngine.canvas.getActiveObject();
+        const container = document.getElementById('propertiesPanel');
+        
+        if (!obj) {
+          container.innerHTML = '<p class="text-gray-500 text-sm">Pilih elemen di canvas</p>';
+          return;
+        }
+
+        const getHexColor = (color) => {
+          if (!color) return '#000000';
+          if (color.startsWith('#')) return color;
+          const match = color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+          if (match) {
+            return '#' + ((1 << 24) + (parseInt(match[1]) << 16) + (parseInt(match[2]) << 8) + parseInt(match[3])).toString(16).slice(1);
+          }
+          return '#000000';
+        };
+
+        let html = '<div class="space-y-4">';
+
+        // Position
+        html += `
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="property-label">X</label>
+              <input type="number" value="${obj.left}" onchange="propertiesManager.setPosition('left', this.value)" class="properties-input">
+            </div>
+            <div>
+              <label class="property-label">Y</label>
+              <input type="number" value="${obj.top}" onchange="propertiesManager.setPosition('top', this.value)" class="properties-input">
+            </div>
+          </div>
+        `;
+
+        // Size
+        if ('width' in obj) {
+          html += `
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="property-label">Width</label>
+                <input type="number" value="${Math.round(obj.width * obj.scaleX)}" onchange="propertiesManager.setSize('width', this.value)" class="properties-input">
+              </div>
+              <div>
+                <label class="property-label">Height</label>
+                <input type="number" value="${Math.round(obj.height * obj.scaleY)}" onchange="propertiesManager.setSize('height', this.value)" class="properties-input">
+              </div>
+            </div>
+          `;
+        }
+
+        // Rotation
+        html += `
+          <div>
+            <label class="property-label">Rotation</label>
+            <input type="number" value="${obj.angle || 0}" onchange="propertiesManager.setRotation(this.value)" class="properties-input">
+          </div>
+        `;
+
+        // Opacity
+        html += `
+          <div>
+            <label class="property-label">Opacity</label>
+            <input type="range" min="0" max="100" value="${(obj.opacity || 1) * 100}" onchange="propertiesManager.setOpacity(this.value)" class="w-full">
+          </div>
+        `;
+
+// Fill Color
+        if ('fill' in obj) {
+          html += `
+            <div>
+              <label class="property-label">Fill Color</label>
+              <input type="color" value="${getHexColor(obj.fill)}" onchange="propertiesManager.setFill(this.value)" class="properties-input h-10">
+            </div>
+          `;
+        }
+
+        // Stroke Color
+        if ('stroke' in obj) {
+          html += `
+            <div>
+              <label class="property-label">Stroke Color</label>
+              <input type="color" value="${getHexColor(obj.stroke)}" onchange="propertiesManager.setStroke(this.value)" class="properties-input h-10">
+            </div>
+            <div>
+              <label class="property-label">Stroke Width</label>
+              <input type="number" value="${obj.strokeWidth || 1}" onchange="propertiesManager.setStrokeWidth(this.value)" class="properties-input">
+            </div>
+          `;
+        }
+
+        // Text Properties
+        if (obj.type === 'textbox' || obj.type === 'text') {
+          html += `
+            <div>
+              <label class="property-label">Font Family</label>
+              <select onchange="propertiesManager.setFontFamily(this.value)" class="properties-input">
+                <option value="Arial">Arial</option>
+                <option value="Helvetica">Helvetica</option>
+                <option value="Times New Roman">Times New Roman</option>
+                <option value="'Courier New'">Courier New</option>
+              </select>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="property-label">Font Size</label>
+                <input type="number" value="${obj.fontSize}" onchange="propertiesManager.setFontSize(this.value)" class="properties-input">
+              </div>
+              <div>
+                <label class="property-label">Font Color</label>
+                <input type="color" value="${getHexColor(obj.fill)}" onchange="propertiesManager.setFill(this.value)" class="properties-input h-10">
+              </div>
+            </div>
+          `;
+        }
+
+        // Stroke Color
+        if ('stroke' in obj) {
+          html += `
+            <div>
+              <label class="property-label">Stroke Color</label>
+              <input type="color" value="${obj.stroke || '#000000'}" onchange="propertiesManager.setStroke(this.value)" class="properties-input h-10">
+            </div>
+            <div>
+              <label class="property-label">Stroke Width</label>
+              <input type="number" value="${obj.strokeWidth || 1}" onchange="propertiesManager.setStrokeWidth(this.value)" class="properties-input">
+            </div>
+          `;
+        }
+
+        // Text Properties
+        if (obj.type === 'textbox' || obj.type === 'text') {
+          html += `
+            <div>
+              <label class="property-label">Font Family</label>
+              <select onchange="propertiesManager.setFontFamily(this.value)" class="properties-input">
+                <option value="Arial">Arial</option>
+                <option value="Helvetica">Helvetica</option>
+                <option value="Times New Roman">Times New Roman</option>
+                <option value="'Courier New'">Courier New</option>
+              </select>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="property-label">Font Size</label>
+                <input type="number" value="${obj.fontSize}" onchange="propertiesManager.setFontSize(this.value)" class="properties-input">
+              </div>
+              <div>
+                <label class="property-label">Font Color</label>
+                <input type="color" value="${obj.fill}" onchange="propertiesManager.setFill(this.value)" class="properties-input h-10">
+              </div>
+            </div>
+            <div>
+              <label class="property-label">Text Align</label>
+              <select onchange="propertiesManager.setTextAlign(this.value)" class="properties-input">
+                <option value="left">Left</option>
+                <option value="center">Center</option>
+                <option value="right">Right</option>
+              </select>
+            </div>
+          `;
+        }
+
+        // Actions
+        html += `
+          <div class="pt-4 border-t space-y-2">
+            <button onclick="propertiesManager.bringToFront()" class="btn-primary w-full"><i class="fas fa-arrow-up mr-1"></i>Bring Front</button>
+            <button onclick="propertiesManager.sendToBack()" class="btn-secondary w-full"><i class="fas fa-arrow-down mr-1"></i>Send Back</button>
+            <button onclick="propertiesManager.duplicate()" class="btn-secondary w-full"><i class="fas fa-copy mr-1"></i>Duplicate</button>
+            <button onclick="propertiesManager.delete()" class="btn-secondary w-full bg-red-50 text-red-600"><i class="fas fa-trash mr-1"></i>Delete</button>
+          </div>
+        `;
+
+        html += '</div>';
+        container.innerHTML = html;
+      },
+
+      setPosition(prop, val) {
+        const obj = canvasEngine.canvas.getActiveObject();
+        obj.set(prop, parseInt(val));
+        canvasEngine.canvas.renderAll();
+        historyManager.push(canvasEngine.canvas.toJSON(SERIALIZED_PROPS));
+      },
+
+      setSize(prop, val) {
+        const obj = canvasEngine.canvas.getActiveObject();
+        const scale = prop === 'width' ? parseInt(val) / obj.width : parseInt(val) / obj.height;
+        obj.set(prop === 'width' ? 'scaleX' : 'scaleY', scale);
+        canvasEngine.canvas.renderAll();
+        historyManager.push(canvasEngine.canvas.toJSON(SERIALIZED_PROPS));
+      },
+
+      setRotation(val) {
+        const obj = canvasEngine.canvas.getActiveObject();
+        obj.set('angle', parseInt(val));
+        canvasEngine.canvas.renderAll();
+        historyManager.push(canvasEngine.canvas.toJSON(SERIALIZED_PROPS));
+      },
+
+      setOpacity(val) {
+        const obj = canvasEngine.canvas.getActiveObject();
+        obj.set('opacity', parseInt(val) / 100);
+        canvasEngine.canvas.renderAll();
+        historyManager.push(canvasEngine.canvas.toJSON(SERIALIZED_PROPS));
+      },
+
+      setFill(val) {
+        const obj = canvasEngine.canvas.getActiveObject();
+        obj.set('fill', val);
+        canvasEngine.canvas.renderAll();
+        historyManager.push(canvasEngine.canvas.toJSON(SERIALIZED_PROPS));
+      },
+
+      setStroke(val) {
+        const obj = canvasEngine.canvas.getActiveObject();
+        obj.set('stroke', val);
+        canvasEngine.canvas.renderAll();
+        historyManager.push(canvasEngine.canvas.toJSON(SERIALIZED_PROPS));
+      },
+
+      setStrokeWidth(val) {
+        const obj = canvasEngine.canvas.getActiveObject();
+        obj.set('strokeWidth', parseInt(val));
+        canvasEngine.canvas.renderAll();
+        historyManager.push(canvasEngine.canvas.toJSON(SERIALIZED_PROPS));
+      },
+
+      setFontFamily(val) {
+        const obj = canvasEngine.canvas.getActiveObject();
+        obj.set('fontFamily', val);
+        canvasEngine.canvas.renderAll();
+        historyManager.push(canvasEngine.canvas.toJSON(SERIALIZED_PROPS));
+      },
+
+      setFontSize(val) {
+        const obj = canvasEngine.canvas.getActiveObject();
+        obj.set('fontSize', parseInt(val));
+        canvasEngine.canvas.renderAll();
+      },
+
+      setTextAlign(val) {
+        const obj = canvasEngine.canvas.getActiveObject();
+        obj.set('textAlign', val);
+        canvasEngine.canvas.renderAll();
+        historyManager.push(canvasEngine.canvas.toJSON(SERIALIZED_PROPS));
+      },
+
+      bringToFront() {
+        const obj = canvasEngine.canvas.getActiveObject();
+        obj.bringToFront();
+        canvasEngine.canvas.renderAll();
+        historyManager.push(canvasEngine.canvas.toJSON(SERIALIZED_PROPS));
+        layerManager.refresh();
+      },
+
+      sendToBack() {
+        const obj = canvasEngine.canvas.getActiveObject();
+        obj.sendToBack();
+        canvasEngine.canvas.renderAll();
+        historyManager.push(canvasEngine.canvas.toJSON(SERIALIZED_PROPS));
+        layerManager.refresh();
+      },
+
+      duplicate() {
+        const obj = fabric.util.object.clone(canvasEngine.canvas.getActiveObject());
+        obj.set({ left: obj.left + 10, top: obj.top + 10, selectable: true });
+        canvasEngine.canvas.add(obj);
+        canvasEngine.canvas.setActiveObject(obj);
+        canvasEngine.canvas.renderAll();
+        historyManager.push(canvasEngine.canvas.toJSON(SERIALIZED_PROPS));
+        this.update();
+      },
+
+      delete() {
+        canvasEngine.canvas.remove(canvasEngine.canvas.getActiveObject());
+        canvasEngine.canvas.renderAll();
+        historyManager.push(canvasEngine.canvas.toJSON(SERIALIZED_PROPS));
+        this.update();
+      }
+    };
+
+    // ==========================================
+    // Layer Manager
+    // ==========================================
+    const layerManager = {
+      refresh() {
+        const container = document.getElementById('layersContainer');
+        const objects = canvasEngine.canvas.getObjects();
+        
+        if (objects.length === 0) {
+          container.innerHTML = '<p class="text-gray-400 text-sm">Tidak ada layer</p>';
+          return;
+        }
+
+        let html = '';
+        objects.forEach((obj, index) => {
+          const type = obj.type.charAt(0).toUpperCase() + obj.type.slice(1);
+          html += `
+            <div class="layer-item" onclick="layerManager.select(${index})">
+              <span><i class="fas fa-${type === 'Textbox' || type === 'Text' ? 'font' : 'square'} mr-2"></i>${type} ${index + 1}</span>
+              <div>
+                <button onclick="layerManager.toggleLock(${index}, event)" class="btn-secondary px-2 py-1 mr-1"><i class="fas fa-unlock"></i></button>
+                <button onclick="layerManager.toggleVisibility(${index}, event)" class="btn-secondary px-2 py-1"><i class="fas fa-eye"></i></button>
+              </div>
+            </div>
+          `;
+        });
+        container.innerHTML = html;
+      },
+
+select(index) {
+        const obj = canvasEngine.canvas.item(index);
+        if (obj) {
+          canvasEngine.canvas.setActiveObject(obj);
+          canvasEngine.canvas.renderAll();
+          propertiesManager.update();
+        }
+      },
+
+      toggleLock(index, e) {
+        e.stopPropagation();
+        // Implementation for lock/unlock
+      },
+
+      toggleVisibility(index, e) {
+        e.stopPropagation();
+        // Implementation for hide/show
+      }
+    };
+
+    // ==========================================
+    // Render Engine
+    // ==========================================
+    const renderEngine = {
+      items: [],
+      filteredItems: [],
+      previewIndex: 0,
+      currentType: null,
+
+      async previewData() {
+        try {
+          const type = document.getElementById('dataType').value;
+          const search = document.getElementById('previewSearch').value.trim();
+          if (this.currentType !== type || this.items.length === 0) {
+            await this.loadPreviewData(type);
+          }
+          this.applySearch(search);
+          await this.renderCurrent();
+        } catch (error) {
+          console.error('Preview error:', error);
+          Swal.fire('Error', error.message || 'Gagal preview data', 'error');
+        }
+      },
+
+      async loadPreviewData(type) {
+        const token = localStorage.getItem('token');
+        const endpoint = type === 'teachers' ? '/api/idcard/teachers?limit=100' : '/api/idcard/students?limit=100';
+        const response = await fetch(endpoint, { headers: { 'Authorization': 'Bearer ' + token } });
+        const result = await response.json();
+
+        if (!result.success || result.data.length === 0) {
+          this.items = [];
+          this.filteredItems = [];
+          this.previewIndex = 0;
+          this.updateCounter();
+          throw new Error('Tidak ada data untuk preview');
+        }
+
+        this.currentType = type;
+        this.items = result.data;
+        this.filteredItems = result.data;
+        this.previewIndex = type === 'teachers'
+          ? Math.max(0, result.data.findIndex(item => item.link_foto || item.scan_id))
+          : 0;
+        this.updateCounter();
+      },
+
+      applySearch(query) {
+        const normalized = query.toLowerCase();
+        this.filteredItems = normalized
+          ? this.items.filter(item => this.searchText(item).includes(normalized))
+          : this.items;
+        this.previewIndex = Math.min(this.previewIndex, Math.max(0, this.filteredItems.length - 1));
+        this.updateCounter();
+      },
+
+      searchText(item) {
+        return [
+          item.nama,
+          item.nama_siswa,
+          item.nip,
+          item.nik,
+          item.nis,
+          item.nisn,
+          item.scan_id,
+          item.nama_sekolah,
+          item.nama_kelas
+        ].filter(Boolean).join(' ').toLowerCase();
+      },
+
+      async searchPreview(query) {
+        try {
+          const type = document.getElementById('dataType').value;
+          if (this.currentType !== type || this.items.length === 0) {
+            await this.loadPreviewData(type);
+          }
+          this.applySearch(query.trim());
+          if (this.filteredItems.length > 0) {
+            await this.renderCurrent(false);
+          } else {
+            this.clearPreviewMedia();
+            this.updateCounter();
+          }
+        } catch (error) {
+          console.error('Preview search error:', error);
+        }
+      },
+
+      async previous() {
+        if (!await this.ensurePreviewItems()) return;
+        this.previewIndex = (this.previewIndex - 1 + this.filteredItems.length) % this.filteredItems.length;
+        await this.renderCurrent(false);
+      },
+
+      async next() {
+        if (!await this.ensurePreviewItems()) return;
+        this.previewIndex = (this.previewIndex + 1) % this.filteredItems.length;
+        await this.renderCurrent(false);
+      },
+
+      async ensurePreviewItems() {
+        const type = document.getElementById('dataType').value;
+        try {
+          if (this.currentType !== type || this.items.length === 0) {
+            await this.loadPreviewData(type);
+            this.applySearch(document.getElementById('previewSearch').value.trim());
+          }
+          return this.filteredItems.length > 0;
+        } catch (error) {
+          console.error('Preview load error:', error);
+          Swal.fire('Error', error.message || 'Gagal mengambil data preview', 'error');
+          return false;
+        }
+      },
+
+      updateCounter() {
+        const counter = document.getElementById('previewCounter');
+        if (!counter) return;
+        counter.textContent = this.filteredItems.length
+          ? `${this.previewIndex + 1}/${this.filteredItems.length}`
+          : '0/0';
+      },
+
+      async renderCurrent(showSuccess = true) {
+        if (!this.filteredItems.length) {
+          Swal.fire('Info', 'Data preview tidak ditemukan', 'info');
+          this.updateCounter();
+          return;
+        }
+
+        const type = document.getElementById('dataType').value;
+        const token = localStorage.getItem('token');
+        const data = this.filteredItems[this.previewIndex];
+        const mediaTasks = [];
+        this.clearPreviewMedia();
+
+        canvasEngine.canvas.getObjects().forEach(obj => {
+          if (obj.isPreviewMedia) return;
+
+          if (this.isPhotoPlaceholder(obj)) {
+            mediaTasks.push(this.renderPhoto(obj, data));
+            return;
+          }
+
+          if (this.isQrPlaceholder(obj)) {
+            mediaTasks.push(this.renderQr(obj, data, type, token));
+            return;
+          }
+
+          if (obj.type === 'textbox') {
+            const sourceText = obj.templateText || obj.text;
+            if (sourceText.includes('{{')) obj.set('templateText', sourceText);
+            let text = sourceText;
+            const placeholders = type === 'teachers' ? 
+              { nama: data.nama, nip: data.nip, nik: data.nik, no_wa: data.no_wa, nama_sekolah: data.nama_sekolah, jabatan_di_unit: data.jabatan_di_unit } :
+              { nama_siswa: data.nama_siswa, nis: data.nis, nisn: data.nisn, jenis_kelamin: data.jenis_kelamin, nama_kelas: data.nama_kelas, nama_sekolah: data.nama_sekolah };
+            Object.keys(placeholders).forEach(key => {
+              text = text.replace(new RegExp('{{' + key + '}}', 'g'), placeholders[key] || '');
+            });
+            obj.set('text', text);
+          }
+        });
+
+        await Promise.all(mediaTasks);
+        canvasEngine.canvas.renderAll();
+        this.updateCounter();
+        if (showSuccess) Swal.fire('Berhasil', 'Preview data berhasil', 'success');
+      },
+
+      clearPreviewMedia() {
+        canvasEngine.canvas.getObjects()
+          .filter(obj => obj.isPreviewMedia)
+          .forEach(obj => canvasEngine.canvas.remove(obj));
+      },
+
+      isPhotoPlaceholder(obj) {
+        return obj.placeholderType === 'photo' || (obj.type === 'textbox' && obj.text && obj.text.includes('{{foto}}'));
+      },
+
+      isQrPlaceholder(obj) {
+        const hasQrText = obj.type === 'group' && obj.getObjects && obj.getObjects().some(child => child.text === 'QR');
+        const hasScanIdText = obj.type === 'textbox' && obj.text && obj.text.includes('{{scan_id}}');
+        return obj.placeholderType === 'qr' || hasQrText || hasScanIdText;
+      },
+
+      getBounds(obj, fallbackWidth = 60, fallbackHeight = 60) {
+        return {
+          left: obj.left || 0,
+          top: obj.top || 0,
+          width: Math.max(10, (obj.width || fallbackWidth) * (obj.scaleX || 1)),
+          height: Math.max(10, (obj.height || fallbackHeight) * (obj.scaleY || 1))
+        };
+      },
+
+      resolveImageUrl(url) {
+        if (!url) return '';
+        if (/^(data:|blob:|https?:\/\/)/i.test(url)) return url;
+        return new URL(url, window.location.origin).href;
+      },
+
+      loadImage(url) {
+        return new Promise((resolve, reject) => {
+          const imageUrl = this.resolveImageUrl(url);
+          if (!imageUrl) {
+            reject(new Error('URL gambar kosong'));
+            return;
+          }
+
+          fabric.Image.fromURL(imageUrl, img => {
+            if (!img) {
+              reject(new Error('Gagal memuat gambar'));
+              return;
+            }
+            resolve(img);
+          }, { crossOrigin: 'anonymous' });
+        });
+      },
+
+      async addImageAtPlaceholder(placeholder, imageUrl, fallbackWidth, fallbackHeight) {
+        const img = await this.loadImage(imageUrl);
+        const bounds = this.getBounds(placeholder, fallbackWidth, fallbackHeight);
+        img.set({
+          left: bounds.left,
+          top: bounds.top,
+          scaleX: bounds.width / img.width,
+          scaleY: bounds.height / img.height,
+          selectable: false,
+          evented: false,
+          isPreviewMedia: true
+        });
+        canvasEngine.canvas.add(img);
+        img.moveTo(canvasEngine.canvas.getObjects().indexOf(placeholder) + 1);
+      },
+
+      async renderPhoto(placeholder, data) {
+        if (!data.link_foto) return;
+        await this.addImageAtPlaceholder(placeholder, data.link_foto, 55, 70);
+      },
+
+      async renderQr(placeholder, data, type, token) {
+        const qrData = type === 'teachers' ? data.scan_id : data.nis;
+        if (!qrData) return;
+
+        let qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrData)}`;
+        if (data.id) {
+          try {
+            const response = await fetch(`/api/idcard/${type}/${data.id}/qr`, {
+              headers: { 'Authorization': 'Bearer ' + token }
+            });
+            const result = await response.json();
+            qrUrl = result.qr_code || result.fallback || qrUrl;
+          } catch (error) {
+            console.warn('QR endpoint fallback:', error);
+          }
+        }
+
+        await this.addImageAtPlaceholder(placeholder, qrUrl, 55, 55);
+      }
+    };
+
+    // ==========================================
+    // Template Manager
+    // ==========================================
+    const templateManager = {
+      async save() {
+        const name = prompt('Nama template:');
+        if (!name) return;
+        
+        const token = localStorage.getItem('token');
+        try {
+          const response = await fetch('/api/idcard/templates', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ template_name: name, template_data: canvasEngine.canvas.toJSON(SERIALIZED_PROPS) })
+          });
+          const result = await response.json();
+          if (result.success) layerManager.refresh();
+          Swal.fire('Berhasil', 'Template tersimpan', 'success');
+        } catch (error) {
+          Swal.fire('Error', 'Gagal menyimpan template', 'error');
+        }
+      },
+
+      async load() {
+        const select = document.getElementById('templateSelect');
+        const templateId = select.value;
+        if (!templateId) {
+          // Load list
+          const token = localStorage.getItem('token');
+          try {
+            const response = await fetch('/api/idcard/templates', { headers: { 'Authorization': 'Bearer ' + token } });
+            const result = await response.json();
+            if (result.success) {
+              const options = result.templates.map(t => `<option value="${t.id}">${t.template_name}</option>`).join('');
+              select.innerHTML = `<option value="">Pilih Template</option>${options}`;
+            }
+          } catch (error) {
+            console.error('Load templates error:', error);
+          }
+          return;
+        }
+        
+        const token = localStorage.getItem('token');
+        try {
+          const response = await fetch('/api/idcard/templates/' + templateId, { headers: { 'Authorization': 'Bearer ' + token } });
+          const result = await response.json();
+          if (result.success) {
+            canvasEngine.canvas.loadFromJSON(result.template, canvasEngine.canvas.renderAll.bind(canvasEngine.canvas));
+            layerManager.refresh();
+          }
+        } catch (error) {
+          console.error('Load template error:', error);
+        }
+      }
+    };
+
+    // ==========================================
+    // Bulk Generator
+    // ==========================================
+const bulkGenerator = {
+      settings: {
+        cardWidth: 350,
+        cardHeight: 220,
+        columns: 2,
+        margin: 10,
+        pageSize: 'A4'
+      },
+
+      openSettings() {
+        document.getElementById('bulkSettingsModal').classList.remove('hidden');
+        const unit = document.getElementById('bulkUnit').value;
+        document.getElementById('bulkCardWidth').value = (canvasEngine.toUnit(this.settings.cardWidth, unit) || 350).toFixed(1);
+        document.getElementById('bulkCardHeight').value = (canvasEngine.toUnit(this.settings.cardHeight, unit) || 220).toFixed(1);
+        document.getElementById('bulkUnit').value = unit;
+        document.getElementById('bulkColumns').value = this.settings.columns;
+        document.getElementById('bulkMargin').value = this.settings.margin;
+        document.getElementById('bulkPageSize').value = this.settings.pageSize;
+      },
+
+      saveSettings() {
+        const w = parseFloat(document.getElementById('bulkCardWidth').value) || 350;
+        const h = parseFloat(document.getElementById('bulkCardHeight').value) || 220;
+        const m = parseFloat(document.getElementById('bulkMargin').value) || 10;
+        const unit = document.getElementById('bulkUnit').value;
+        this.settings.cardWidth = canvasEngine.toPixels(w, unit);
+        this.settings.cardHeight = canvasEngine.toPixels(h, unit);
+        this.settings.columns = parseInt(document.getElementById('bulkColumns').value) || 2;
+        this.settings.margin = m;
+        this.settings.pageSize = document.getElementById('bulkPageSize').value;
+        document.getElementById('bulkSettingsModal').classList.add('hidden');
+      },
+
+      async generate() {
+        const type = document.getElementById('dataType').value;
+        const token = localStorage.getItem('token');
+        const endpoint = type === 'teachers' ? '/api/idcard/teachers?limit=1000' : '/api/idcard/students?limit=1000';
+        
+        try {
+          const dataResponse = await fetch(endpoint, { headers: { 'Authorization': 'Bearer ' + token } });
+          const dataResult = await dataResponse.json();
+          
+          if (!dataResult.success || dataResult.data.length === 0) {
+            throw new Error('Tidak ada data');
+          }
+
+const template = canvasEngine.canvas.toJSON(SERIALIZED_PROPS);
+          
+          if (!template || !template.objects || template.objects.length === 0) {
+            throw new Error('Canvas kosong, tambahkan elemen terlebih dahulu');
+          }
+          
+          const printWindow = window.open('', '_blank');
+          if (!printWindow) {
+            throw new Error('Popup diblokir, izinkan popup di browser');
+          }
+          
+          let cardsHtml = '';
+          let processed = 0;
+          const { cardWidth, cardHeight, columns, margin } = this.settings;
+
+          const processItem = (item) => {
+            const card = document.createElement('div');
+            card.style.cssText = `width: ${cardWidth}px; height: ${cardHeight}px; position: relative; margin: ${margin}px; border: 1px solid #ddd; box-sizing: border-box;`;
+            card.innerHTML = `<canvas width="${cardWidth}" height="${cardHeight}"></canvas>`;
+            
+            const c = new fabric.Canvas(card.querySelector('canvas'), { backgroundColor: '#ffffff' });
+            c.loadFromJSON(template, () => {
+              c.forEachObject(obj => {
+                if (obj.type === 'textbox' && obj.text) {
+                  let text = obj.text;
+                  if (type === 'teachers') {
+                    text = text.replace(/\{\{nama\}\}/g, item.nama || '')
+                             .replace(/\{\{nip\}\}/g, item.nip || item.nik || '')
+                             .replace(/\{\{nik\}\}/g, item.nik || '')
+                             .replace(/\{\{no_wa\}\}/g, item.no_wa || '')
+                             .replace(/\{\{nama_sekolah\}\}/g, item.nama_sekolah || '')
+                             .replace(/\{\{jabatan_di_unit\}\}/g, item.jabatan_di_unit || '')
+                             .replace(/\{\{scan_id\}\}/g, '')
+                             .replace(/\{\{foto\}\}/g, '');
+                  } else {
+                    text = text.replace(/\{\{nama_siswa\}\}/g, item.nama_siswa || '')
+                             .replace(/\{\{nis\}\}/g, item.nis || '')
+                             .replace(/\{\{nisn\}\}/g, item.nisn || '')
+                             .replace(/\{\{jenis_kelamin\}\}/g, item.jenis_kelamin || '')
+                             .replace(/\{\{nama_kelas\}\}/g, item.nama_kelas || '')
+                             .replace(/\{\{nama_sekolah\}\}/g, item.nama_sekolah || '');
+                  }
+                  obj.set('text', text);
+                }
+              });
+              
+              const addPhoto = async () => {
+                if (!item.link_foto) return;
+                try {
+                  const imgBlob = await (await fetch(item.link_foto)).blob();
+                  const imgSrc = URL.createObjectURL(imgBlob);
+                  await new Promise(r => fabric.Image.fromURL(imgSrc, img => {
+                    if (img) {
+                      img.set({ left: 20, top: 50, scaleX: 55/img.width, scaleY: 70/img.height });
+                      c.add(img);
+                    }
+                    r();
+                  }));
+                } catch(e) { console.warn('Photo load error:', e); }
+              };
+              
+              const addQr = () => {
+                return new Promise(async (resolve) => {
+                  const qrData = type === 'teachers' ? item.scan_id : item.nis;
+                  if (!qrData || !item.id) return resolve();
+                  
+                  try {
+                    const qrEndpoint = type === 'teachers' 
+                      ? `/api/idcard/teachers/${item.id}/qr`
+                      : `/api/idcard/students/${item.id}/qr`;
+                    const qrResponse = await fetch(qrEndpoint, { 
+                      headers: { 'Authorization': 'Bearer ' + token } 
+                    });
+                    const qrResult = await qrResponse.json();
+                    const qrUrl = qrResult.qr_code || qrResult.fallback || `https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=${encodeURIComponent(qrData)}`;
+                    
+                    const imgBlob = await (await fetch(qrUrl)).blob();
+                    const imgSrc = URL.createObjectURL(imgBlob);
+                    
+                    fabric.Image.fromURL(imgSrc, img => {
+                      if (img) {
+                        img.set({ left: cardWidth - 75, top: cardHeight - 75, scaleX: 0.5, scaleY: 0.5 });
+                        c.add(img);
+                      }
+                      resolve();
+                    });
+                  } catch (e) {
+                    console.warn('QR load error:', e);
+                    resolve();
+                  }
+                });
+              };
+              
+              Promise.all([addPhoto(), addQr()]).then(() => {
+                c.renderAll();
+                processed++;
+                const dataUrl = c.toDataURL({ format: 'png', quality: 0.9 });
+                console.log(`Generated card ${processed}/${dataResult.data.length}`);
+                cardsHtml += `<img src="${dataUrl}" style="width: ${cardWidth}px; height: ${cardHeight}px; margin: ${margin}px; border: 1px solid #ddd; display: inline-block; box-sizing: border-box;">`;
+                
+                if (processed === dataResult.data.length) {
+                  this.printWindow(cardsHtml, printWindow);
+                }
+              });
+            });
+          };
+          
+          dataResult.data.forEach(processItem);
+        } catch (error) {
+          console.error('Bulk generate error:', error);
+          Swal.fire('Error', 'Gagal generate bulk: ' + error.message, 'error');
+        }
+      },
+
+      printWindow(cardsHtml, printWindow) {
+        if (!cardsHtml) {
+          console.log('No cards generated');
+          return;
+        }
+        
+        const { cardWidth, cardHeight, columns, pageSize } = this.settings;
+        const pageSizes = {
+          'A4': { width: '21cm', height: '29.7cm' },
+          'letter': { width: '8.5in', height: '11in' }
+        };
+        const pw = pageSizes[pageSize] || pageSizes['A4'];
+        
+        printWindow.document.write(`
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>Bulk ID Card</title>
+            <style>
+              @page { size: ${pw.width} ${pw.height}; margin: 0; }
+              body { background: white; padding: 10px; margin: 0; }
+              .container { display: grid; grid-template-columns: repeat(${columns}, 1fr); gap: 10px; }
+            </style>
+          </head>
+          <body>
+            <div class="container">${cardsHtml}</div>
+            <script>setTimeout(() => window.print(), 2000);<\/script>
+          </body>
+          </html>
+`);
+        printWindow.document.close();
+      }
+    };
+
+    // ==========================================
+    // Export Engine
+    // ==========================================
+    const exportEngine = {
+      png() {
+        const dataURL = canvasEngine.canvas.toDataURL({ format: 'png', quality: 0.9 });
+        const link = document.createElement('a');
+        link.download = 'idcard-design.png';
+        link.href = dataURL;
+        link.click();
+      },
+
+      json() {
+        const data = canvasEngine.canvas.toJSON(SERIALIZED_PROPS);
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const link = document.createElement('a');
+        link.download = 'idcard-template.json';
+        link.href = URL.createObjectURL(blob);
+        link.click();
+      }
+    };
+
+    // ==========================================
+    // Initialize
+    // ==========================================
+document.addEventListener('DOMContentLoaded', () => {
+      canvasEngine.init();
+      
+      canvasEngine.canvas.on('selection:created', () => {
+        propertiesManager.update();
+        layerManager.refresh();
+      });
+      canvasEngine.canvas.on('selection:updated', () => propertiesManager.update());
+      canvasEngine.canvas.on('selection:cleared', () => propertiesManager.update());
+      canvasEngine.canvas.on('object:modified', () => {
+        historyManager.push(canvasEngine.canvas.toJSON(SERIALIZED_PROPS));
+        layerManager.refresh();
+      });
+    });
+  </script>
+
+  <!-- Bulk Layout Settings Modal -->
+  <div id="bulkSettingsModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="panel w-96 p-6">
+      <h3 class="text-lg font-semibold mb-4">Layout Bulk Generate</h3>
+      <div class="space-y-3">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="property-label">Lebar Kartu</label>
+            <input id="bulkCardWidth" type="number" class="properties-input" value="350" min="1" max="2000">
+          </div>
+          <div>
+            <label class="property-label">Tinggi Kartu</label>
+            <input id="bulkCardHeight" type="number" class="properties-input" value="220" min="1" max="2000">
+          </div>
+        </div>
+        <div>
+          <label class="property-label">Satuan</label>
+          <select id="bulkUnit" class="properties-input">
+            <option value="px" selected>px (pixel)</option>
+            <option value="cm">cm (centimeter)</option>
+            <option value="mm">mm (milimeter)</option>
+            <option value="inch">inch</option>
+          </select>
+        </div>
+        <div>
+          <label class="property-label">Jumlah Kolom</label>
+          <input id="bulkColumns" type="number" class="properties-input" value="2" min="1" max="10">
+        </div>
+        <div>
+          <label class="property-label">Margin (px)</label>
+          <input id="bulkMargin" type="number" class="properties-input" value="10" min="0" max="50">
+        </div>
+        <div>
+          <label class="property-label">Ukuran Kertas</label>
+          <select id="bulkPageSize" class="properties-input">
+            <option value="A4">A4</option>
+            <option value="letter">Letter</option>
+          </select>
+        </div>
+        <div class="flex gap-2 pt-4">
+          <button onclick="bulkGenerator.saveSettings()" class="btn-primary flex-1">Simpan</button>
+          <button onclick="document.getElementById('bulkSettingsModal').classList.add('hidden')" class="btn-secondary flex-1">Batal</button>
         </div>
       </div>
     </div>
   </div>
-
-  <script>
-    const canvas = new fabric.Canvas('c', {
-      backgroundColor: '#ffffff',
-      selection: true
-    });
-    let zoom = 1;
-    let selectedObject = null;
-
-    // Load saved template
-    function loadSavedTemplate() {
-      const saved = localStorage.getItem('idcardTemplate');
-      if (saved) {
-        canvas.loadFromJSON(saved, () => canvas.renderAll());
-      }
-    }
-
-    // Upload template
-    document.getElementById('templateUpload').addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        fabric.Image.fromURL(event.target.result, (img) => {
-          img.set({
-            scaleX: canvas.width / img.width,
-            scaleY: canvas.height / img.height,
-            selectable: false
-          });
-          canvas.add(img);
-          canvas.renderAll();
-          updateLayers();
-        });
-      };
-      reader.readAsDataURL(file);
-    });
-
-    // Upload photo with remove background (via API)
-    document.getElementById('photoUpload').addEventListener('change', async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const imageUrl = event.target.result;
-        
-        // Try remove background API
-        try {
-          const response = await fetch('/api/remove-bg', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer ' + localStorage.getItem('token')
-            },
-            body: JSON.stringify({ imageUrl })
-          });
-          
-          const result = await response.json();
-          const imgUrl = result.success ? result.image : imageUrl;
-          
-          fabric.Image.fromURL(imgUrl, (img) => {
-            img.set({
-              left: 20,
-              top: 40,
-              scaleX: 55 / img.width,
-              scaleY: 70 / img.height,
-              cornerColor: '#3b82f6',
-              cornerSize: 8
-            });
-            canvas.add(img);
-            canvas.setActiveObject(img);
-            updateLayers();
-          });
-        } catch (error) {
-          // Fallback: use original image
-          fabric.Image.fromURL(imageUrl, (img) => {
-            img.set({
-              left: 20,
-              top: 40,
-              scaleX: 55 / img.width,
-              scaleY: 70 / img.height,
-              cornerColor: '#3b82f6',
-              cornerSize: 8
-            });
-            canvas.add(img);
-            canvas.setActiveObject(img);
-            updateLayers();
-          });
-        }
-      };
-      reader.readAsDataURL(file);
-    });
-
-    // Add text
-    document.getElementById('addTextBtn').addEventListener('click', () => {
-      const text = new fabric.Textbox('Teks di sini', {
-        left: 80,
-        top: 50,
-        width: 200,
-        fontSize: 16,
-        fill: '#000000'
-      });
-      canvas.add(text);
-      canvas.setActiveObject(text);
-      updateLayers();
-    });
-
-    // Zoom controls
-    document.getElementById('zoomIn').addEventListener('click', () => {
-      zoom = Math.min(zoom + 0.1, 2);
-      canvas.setZoom(zoom);
-      document.getElementById('zoomLevel').textContent = Math.round(zoom * 100) + '%';
-    });
-
-    document.getElementById('zoomOut').addEventListener('click', () => {
-      zoom = Math.max(zoom - 0.1, 0.5);
-      canvas.setZoom(zoom);
-      document.getElementById('zoomLevel').textContent = Math.round(zoom * 100) + '%';
-    });
-
-    // Save template
-    document.getElementById('saveTemplateBtn').addEventListener('click', () => {
-      const json = canvas.toJSON();
-      localStorage.setItem('idcardTemplate', JSON.stringify(json));
-      alert('Template tersimpan!');
-    });
-
-    // Update layers list
-    function updateLayers() {
-      const layersList = document.getElementById('layersList');
-      layersList.innerHTML = '';
-      const objects = canvas.getObjects();
-      
-      objects.forEach((obj, index) => {
-        const layer = document.createElement('div');
-        layer.className = 'layer-item p-2 flex items-center justify-between';
-        layer.innerHTML = `
-          <span class="text-sm">${obj.type === 'textbox' ? '📝' : '🖼️'} Layer ${index + 1}</span>
-          <button onclick="deleteLayer(${index})"><i class="fas fa-trash text-red-500"></i></button>
-        `;
-        layersList.appendChild(layer);
-      });
-    }
-
-    function deleteLayer(index) {
-      const objects = canvas.getObjects();
-      canvas.remove(objects[index]);
-      updateLayers();
-    }
-
-    loadSavedTemplate();
-  </script>
 </body>
 </html>
+

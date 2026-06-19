@@ -1,22 +1,40 @@
 {
-  "name": "Absensi YPWI Admin",
-  "short_name": "YPWI Admin",
-  "id": "ypwi-admin",
-  "start_url": "master-dashboard.html",
-  "scope": "/",
+  "name": "YPWI Lutim",
+  "short_name": "YPWI",
+  "description": "Sistem Digital YPWI Lutim",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#000000",
+  "theme_color": "#066e3a",
+  "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "icon-192.png",
+      "src": "/assets/images/YPWI LOGO HITAM.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
       "src": "/assets/images/YPWI LOGO HITAM.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["education", "productivity"],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "url": "/dashboard.html",
+      "icons": [{ "src": "/assets/images/YPWI LOGO HITAM.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Chat",
+      "short_name": "Chat",
+      "url": "/chat.html",
+      "icons": [{ "src": "/assets/images/YPWI LOGO HITAM.png", "sizes": "96x96" }]
     }
   ]
 }
