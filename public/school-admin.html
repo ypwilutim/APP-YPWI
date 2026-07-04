@@ -208,11 +208,16 @@
           data-tab="teachers">
           <i class="fas fa-users w-5"></i><span>Data Guru</span>
         </button>
-        <button
-          class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-white/50 hover:text-gray-900 text-sm font-medium transition-all"
-          data-tab="students">
-          <i class="fas fa-user-graduate w-5"></i><span>Data Siswa</span>
-        </button>
+<button
+           class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-white/50 hover:text-gray-900 text-sm font-medium transition-all"
+           data-tab="students">
+           <i class="fas fa-user-graduate w-5"></i><span>Data Siswa</span>
+         </button>
+         <button
+           class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-white/50 hover:text-gray-900 text-sm font-medium transition-all"
+           data-tab="classes">
+           <i class="fas fa-chalkboard w-5"></i><span>Manajemen Kelas</span>
+         </button>
         <button
           class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-white/50 hover:text-gray-900 text-sm font-medium transition-all"
           data-tab="qr-scanner">
@@ -277,11 +282,16 @@
               style="font-size: 1.3rem; display: block; margin-bottom: 2px; color: #16a34a;"></i><span
               style="font-size: 0.65rem; font-weight: 600;">Guru</span>
           </button>
-          <button class="mobile-tab-btn flex-1 py-1 px-1 text-center text-gray-600 rounded-lg" data-tab="students">
-            <i class="fas fa-user-graduate"
-              style="font-size: 1.3rem; display: block; margin-bottom: 2px; color: #7c3aed;"></i><span
-              style="font-size: 0.65rem; font-weight: 600;">Siswa</span>
-          </button>
+<button class="mobile-tab-btn flex-1 py-1 px-1 text-center text-gray-600 rounded-lg" data-tab="students">
+             <i class="fas fa-user-graduate"
+               style="font-size: 1.3rem; display: block; margin-bottom: 2px; color: #7c3aed;"></i><span
+               style="font-size: 0.65rem; font-weight: 600;">Siswa</span>
+           </button>
+           <button class="mobile-tab-btn flex-1 py-1 px-1 text-center text-gray-600 rounded-lg" data-tab="classes">
+             <i class="fas fa-chalkboard"
+               style="font-size: 1.3rem; display: block; margin-bottom: 2px; color: #0891b2;"></i><span
+               style="font-size: 0.65rem; font-weight: 600;">Kelas</span>
+           </button>
           <button class="mobile-tab-btn flex-1 py-1 px-1 text-center text-gray-600 rounded-lg" data-tab="attendance">
             <i class="fas fa-clipboard-list"
               style="font-size: 1.3rem; display: block; margin-bottom: 2px; color: #93c3d2;"></i><span
@@ -496,48 +506,87 @@
               <button id="studentPrevPageBtn" onclick="changeStudentPage(currentStudentPage - 1)"
                 class="px-3 py-1.5 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
                 disabled><i class="fas fa-chevron-left mr-1"></i>Sebelumnya</button>
-              <span id="studentPageNumbers" class="flex items-center space-x-1"></span>
+<span id="studentPageNumbers" class="flex items-center space-x-1"></span>
               <button id="studentNextPageBtn" onclick="changeStudentPage(currentStudentPage + 1)"
                 class="px-3 py-1.5 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
                 disabled>Selanjutnya<i class="fas fa-chevron-right ml-1"></i></button>
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- Attendance Tab -->
-      <div id="attendanceTab" class="tab-content hidden">
-        <div class="main-card p-6">
-          <div class="flex justify-between items-center mb-4">
-            <div class="flex space-x-2">
-              <button id="schoolLogViewBtn" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium">Log
-                Harian</button>
-              <button id="schoolMonthlyViewBtn"
-                class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300">Rekap
-                Bulanan</button>
+        <!-- Classes Tab -->
+        <div id="classesTab" class="tab-content hidden">
+          <div class="main-card p-6">
+            <div class="flex justify-between items-center mb-6">
+              <h3 class="text-lg font-semibold text-gray-900">Manajemen Kelas</h3>
+              <button onclick="showAddClassModal()"
+                class="btn-primary text-white px-4 py-2 rounded-lg text-sm flex items-center"><i
+                  class="fas fa-plus mr-2"></i>Tambah Kelas</button>
             </div>
-            <div class="flex items-center space-x-2">
-              <select id="schoolRecapMonthSelect"
-                class="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500">
-                <option value="1">Januari</option>
-                <option value="2">Februari</option>
-                <option value="3">Maret</option>
-                <option value="4">April</option>
-                <option value="5">Mei</option>
-                <option value="6">Juni</option>
-                <option value="7">Juli</option>
-                <option value="8">Agustus</option>
-                <option value="9">September</option>
-                <option value="10">Oktober</option>
-                <option value="11">November</option>
-                <option value="12">Desember</option>
-              </select>
-              <select id="schoolRecapYearSelect"
-                class="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"></select>
+
+            <!-- Promote All Class Button -->
+            <div class="mb-4 flex justify-end">
+              <button onclick="showPromoteClassModal()"
+                class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">
+                <i class="fas fa-level-up-alt mr-2"></i>Naik Kelas Massal
+              </button>
+            </div>
+
+            <div class="overflow-x-auto">
+              <table class="w-full modern-table">
+                <thead class="border-b border-gray-200">
+                  <tr>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Nama Kelas</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Jumlah Siswa</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="classesTable" class="divide-y divide-gray-100">
+                  <tr>
+                    <td colspan="3" class="px-4 py-12 text-center text-gray-500"><i
+                        class="fas fa-spinner fa-spin text-xl mb-2"></i>
+                      <p>Memuat data...</p>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
+        </div>
 
-          <!-- Log Harian View -->
+        <!-- Attendance Tab -->
+        <div id="attendanceTab" class="tab-content hidden">
+          <div class="main-card p-6">
+            <div class="flex justify-between items-center mb-4">
+              <div class="flex space-x-2">
+                <button id="schoolLogViewBtn" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium">Log
+                  Harian</button>
+                <button id="schoolMonthlyViewBtn"
+                  class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300">Rekap
+                  Bulanan</button>
+              </div>
+              <div class="flex items-center space-x-2">
+                <select id="schoolRecapMonthSelect"
+                  class="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500">
+                  <option value="1">Januari</option>
+                  <option value="2">Februari</option>
+                  <option value="3">Maret</option>
+                  <option value="4">April</option>
+                  <option value="5">Mei</option>
+                  <option value="6">Juni</option>
+                  <option value="7">Juli</option>
+                  <option value="8">Agustus</option>
+                  <option value="9">September</option>
+                  <option value="10">Oktober</option>
+                  <option value="11">November</option>
+                  <option value="12">Desember</option>
+                </select>
+<select id="schoolRecapYearSelect"
+                   class="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"></select>
+              </div>
+            </div>
+
+            <!-- Log Harian View -->
           <div id="schoolLogViewSection">
             <div class="flex justify-between items-center mb-4">
               <h3 class="text-lg font-semibold text-gray-900">Log Kehadiran</h3>
@@ -705,7 +754,7 @@
                   </select><textarea id="singleMessage" rows="4"
                     class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
                     placeholder="Ketik pesan..." required></textarea></div>
-                <button type="submit"
+<button type="submit"
                   class="w-full btn-primary text-white py-2 px-4 rounded-md text-sm flex items-center justify-center"><i
                     class="fab fa-whatsapp mr-2"></i>Kirim Pesan</button>
               </form>
@@ -720,145 +769,66 @@
           </div>
         </div>
       </div>
-  </div>
-  </main>
-  </div>
 
-  <!-- Teacher Modal -->
-  <div id="teacherModal" class="modal fixed inset-0 bg-black bg-opacity-50 z-50 justify-center items-center">
-    <div class="main-card max-w-md w-full mx-4 bg-white">
-      <div class="p-6">
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="text-lg font-semibold" id="teacherModalTitle">Tambah Guru</h3><button onclick="hideTeacherModal()"
-            class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
-        </div>
-        <form id="teacherForm">
-          <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">Nama</label><input type="text"
-              name="nama"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
-              required></div>
-          <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">NIK</label><input type="text"
-              name="nik"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
-              required></div>
-          <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">NIP</label><input type="text"
-              name="nip"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"></div>
-          <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">Status Kepegawaian</label><input
-              type="text" name="status_kepegawaian"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
-              placeholder="Guru Tetap, Guru Honorer"></div>
-          <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">Email</label><input type="email"
-              name="email"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"></div>
-          <div class="flex justify-end space-x-3"><button type="button" onclick="hideTeacherModal()"
-              class="px-4 py-2 text-gray-600 hover:text-gray-800 text-sm">Batal</button><button type="submit"
-              class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm">Simpan</button></div>
-        </form>
-      </div>
-    </div>
-  </div>
-
-  <!-- Student Modal -->
-  <div id="studentModal" class="modal fixed inset-0 bg-black bg-opacity-50 z-50 justify-center items-center">
-    <div class="main-card max-w-md w-full mx-4 bg-white">
-      <div class="p-6">
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="text-lg font-semibold" id="studentModalTitle">Tambah Siswa</h3>
-          <button onclick="hideStudentModal()" class="text-gray-400 hover:text-gray-600"><i
-              class="fas fa-times text-xl"></i></button>
-        </div>
-        <form id="studentForm">
-          <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">Nama Siswa</label><input
-              type="text" name="nama_siswa"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
-              required></div>
-          <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">NISN</label><input type="text"
-              name="nisn"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"></div>
-          <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">NIS</label><input type="text"
-              name="nis"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
-              required></div>
-          <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">Kelas</label>
-            <select name="class_id" id="studentClassSelect"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
-              required>
-              <option value="">Pilih Kelas</option>
-            </select>
-          </div>
-          <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">Orang Tua</label><input
-              type="text" name="nama_orang_tua"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"></div>
-          <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">No WA Orang Tua</label><input
-              type="text" name="no_wa_ortu"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"></div>
-          <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">Iuran/Bulan</label><input
-              type="number" name="iuran_bulanan"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
-              min="0"></div>
-          <div class="flex justify-end space-x-3"><button type="button" onclick="hideStudentModal()"
-              class="px-4 py-2 text-gray-600 hover:text-gray-800 text-sm">Batal</button><button type="submit"
-              class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm">Simpan</button></div>
-        </form>
-      </div>
-    </div>
-  </div>
-
-  <!-- Rule Modal -->
-  <div id="ruleModal" class="modal fixed inset-0 bg-black bg-opacity-50 z-50 justify-center items-center">
-    <div class="main-card max-w-md w-full mx-4 bg-white">
-      <div class="p-6">
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="text-lg font-semibold" id="ruleModalTitle">Tambah Aturan</h3><button onclick="hideRuleModal()"
-            class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
-        </div>
-        <form id="ruleForm"><input type="hidden" name="tenant_id" id="ruleTenantId">
-          <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">Tipe</label><select name="tipe"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
-              required>
-              <option value="Datang">Datang</option>
-              <option value="Pulang">Pulang</option>
-            </select></div>
-          <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">Jam Mulai</label><input
-              type="time" name="jam_mulai"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
-              required></div>
-          <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">Jam Selesai</label><input
-              type="time" name="jam_selesai"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
-              required></div>
-          <div class="mb-4">
-            <label class="block text-sm font-medium text-gray-700 mb-2">Hari Aktif</label>
-            <div class="flex flex-wrap gap-3">
-              <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="hari" value="senin" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"> Senin</label>
-              <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="hari" value="selasa" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"> Selasa</label>
-              <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="hari" value="rabu" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"> Rabu</label>
-              <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="hari" value="kamis" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"> Kamis</label>
-              <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="hari" value="jumat" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"> Jumat</label>
-              <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="hari" value="sabtu" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"> Sabtu</label>
-              <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="hari" value="minggu" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"> Minggu</label>
+      <!-- Class Modal -->
+      <div id="classModal" class="modal fixed inset-0 bg-black bg-opacity-50 z-50 justify-center items-center">
+        <div class="main-card max-w-md w-full mx-4 bg-white">
+          <div class="p-6">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-lg font-semibold" id="classModalTitle">Tambah Kelas</h3>
+              <button onclick="hideClassModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
             </div>
-          </div>
-          <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">Keterangan</label><input
-              type="text" name="keterangan"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"></div>
-          <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">Status Log</label><select
-              name="status_log"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
-              required>
-              <option value="tepat_waktu">Tepat Waktu</option>
-              <option value="terlambat">Terlambat</option>
-            </select></div>
-          <div class="flex justify-end space-x-3"><button type="button" onclick="hideRuleModal()"
-              class="px-4 py-2 text-gray-600 hover:text-gray-800 text-sm">Batal</button><button type="submit"
-              class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm">Simpan</button></div>
-        </form>
-      </div>
-    </div>
-  </div>
+            <form id="classForm">
+           <input type="hidden" name="tenant_id" value="">
+           <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">Nama Kelas</label><input type="text"
+               name="nama_kelas"
+               class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"
+               placeholder="Contoh: 1A, 2B, dll" required></div>
+           <div class="flex justify-end space-x-3"><button type="button" onclick="hideClassModal()"
+               class="px-4 py-2 text-gray-600 hover:text-gray-800 text-sm">Batal</button><button type="submit"
+               class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm">Simpan</button></div>
+         </form>
+       </div>
+     </div>
+   </div>
 
-  <!-- Location Modal (sama seperti admin-dashboard.html) -->
+   <!-- Promote Class Modal -->
+   <div id="promoteClassModal" class="modal fixed inset-0 bg-black bg-opacity-50 z-50 justify-center items-center">
+     <div class="main-card max-w-lg w-full mx-4 bg-white">
+       <div class="p-6">
+         <div class="flex items-center justify-between mb-4">
+           <h3 class="text-lg font-semibold">Naik Kelas Massal</h3>
+           <button onclick="hidePromoteClassModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
+         </div>
+         <div class="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+           <p class="text-sm text-yellow-800"><i class="fas fa-exclamation-triangle mr-2"></i>Pastikan data kelas sudah terisi dengan benar sebelum melakukan naik kelas.</p>
+         </div>
+         <form id="promoteForm">
+           <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">Dari Kelas</label>
+             <select name="from_class_id" id="promoteFromClass" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500" required>
+               <option value="">Pilih Kelas Asal</option>
+             </select></div>
+           <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">Ke Kelas</label>
+             <select name="to_class_id" id="promoteToClass" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500" required>
+               <option value="">Pilih Kelas Tujuan</option>
+             </select>
+             <button type="button" onclick="createNewClassForPromote()" class="mt-2 text-xs text-blue-600 hover:text-blue-800">+ Buat Kelas Baru</button>
+           </div>
+           <div class="mb-4"><label class="block text-sm font-medium text-gray-700 mb-1">Aksi Setelah Naik Kelas</label>
+             <select name="action" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500">
+               <option value="move">Pindah ke kelas tujuan</option>
+               <option value="graduate">Luluskan (hapus dari daftar aktif)</option>
+             </select>
+           </div>
+           <div class="flex justify-end space-x-3"><button type="button" onclick="hidePromoteClassModal()"
+               class="px-4 py-2 text-gray-600 hover:text-gray-800 text-sm">Batal</button><button type="submit"
+               class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm">Proses Naik Kelas</button></div>
+         </form>
+       </div>
+     </div>
+   </div>
+
+   <!-- Location Modal (sama seperti admin-dashboard.html) -->
   <div id="locationModal" class="modal fixed inset-0 bg-black bg-opacity-50 z-50 justify-center items-center">
     <div class="main-card max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto bg-white">
       <div class="p-6">
@@ -1056,28 +1026,29 @@
       return false;
     }
 
-    function switchTab(tabName) {
-      document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
-      document.querySelectorAll('.nav-item').forEach(n => { n.classList.remove('nav-active', 'bg-blue-600', 'text-white'); n.classList.add('text-gray-600'); });
-      document.querySelectorAll('.mobile-tab-btn').forEach(btn => btn.classList.remove('active'));
-      const tab = document.getElementById(tabName + 'Tab');
-      if (tab) tab.classList.remove('hidden');
-      const btn = document.querySelector(`button[data-tab="${tabName}"]`);
-      if (btn) { btn.classList.add('nav-active', 'bg-blue-600', 'text-white'); btn.classList.remove('text-gray-600'); }
-      const mobileBtn = document.querySelector(`.mobile-tab-btn[data-tab="${tabName}"]`);
-      if (mobileBtn) mobileBtn.classList.add('active');
-const titles = { dashboard: 'Dashboard', teachers: 'Data Guru', students: 'Data Siswa', qr_scanner: 'QR Scanner Device', attendance: 'Log Kehadiran', locations: 'Lokasi Sekolah', rules: 'Aturan Absensi', whatsapp: 'WhatsApp' };
-       setEl('pageTitle', titles[tabName] || 'Dashboard');
-       document.getElementById('schoolTitleInline').textContent = schoolName || tenantId;
-       if (tabName === 'dashboard') loadDashboard();
-       else if (tabName === 'teachers') fetchTeachers(currentPage);
-       else if (tabName === 'students') { loadStudentClasses(); loadStudents(); }
-       else if (tabName === 'qr-scanner') loadScannerDevices();
-       else if (tabName === 'attendance') loadAttendanceLogs();
-       else if (tabName === 'locations') loadSchoolLocations();
-       else if (tabName === 'rules') fetchRules();
-       else if (tabName === 'whatsapp') loadTeachersForWhatsApp();
-    }
+function switchTab(tabName) {
+       document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
+       document.querySelectorAll('.nav-item').forEach(n => { n.classList.remove('nav-active', 'bg-blue-600', 'text-white'); n.classList.add('text-gray-600'); });
+       document.querySelectorAll('.mobile-tab-btn').forEach(btn => btn.classList.remove('active'));
+       const tab = document.getElementById(tabName + 'Tab');
+       if (tab) tab.classList.remove('hidden');
+       const btn = document.querySelector(`button[data-tab="${tabName}"]`);
+       if (btn) { btn.classList.add('nav-active', 'bg-blue-600', 'text-white'); btn.classList.remove('text-gray-600'); }
+       const mobileBtn = document.querySelector(`.mobile-tab-btn[data-tab="${tabName}"]`);
+       if (mobileBtn) mobileBtn.classList.add('active');
+       const titles = { dashboard: 'Dashboard', teachers: 'Data Guru', students: 'Data Siswa', classes: 'Manajemen Kelas', qr_scanner: 'QR Scanner Device', attendance: 'Log Kehadiran', locations: 'Lokasi Sekolah', rules: 'Aturan Absensi', whatsapp: 'WhatsApp' };
+        setEl('pageTitle', titles[tabName] || 'Dashboard');
+        document.getElementById('schoolTitleInline').textContent = schoolName || tenantId;
+        if (tabName === 'dashboard') loadDashboard();
+        else if (tabName === 'teachers') fetchTeachers(currentPage);
+        else if (tabName === 'students') { loadStudentClasses(); loadStudents(); }
+        else if (tabName === 'classes') loadClasses();
+        else if (tabName === 'qr-scanner') loadScannerDevices();
+        else if (tabName === 'attendance') loadAttendanceLogs();
+        else if (tabName === 'locations') loadSchoolLocations();
+        else if (tabName === 'rules') fetchRules();
+        else if (tabName === 'whatsapp') loadTeachersForWhatsApp();
+     }
 
     // Mobile tab handlers
     document.querySelectorAll('.mobile-tab-btn').forEach(btn => {
@@ -1220,12 +1191,215 @@ async function loadStudentClasses() {
         } else {
           console.warn('[DEBUG] d.success false atau d.data kosong');
         }
-      } catch (e) {
-        console.error('[CLASSES]', e);
-      }
-    }
+} catch (e) {
+         console.error('[CLASSES]', e);
+       }
+     }
 
-    window.loadStudents = async function (page = 1) {
+     // ===== CLASSES MANAGEMENT =====
+     async function loadClasses() {
+       try {
+         const r = await fetch(apiUrl('/admin/classes'), { headers: { 'Authorization': `Bearer ${authToken}` } });
+         if (checkAuth401403(r)) return;
+         const d = await r.json();
+         const tb = document.getElementById('classesTable');
+         if (d.success) {
+           const classes = d.data || [];
+           tb.innerHTML = classes.length === 0
+             ? '<tr><td colspan="3" class="px-4 py-12 text-center text-gray-500">Belum ada data kelas</td></tr>'
+             : classes.map(c => `
+               <tr class="hover:bg-gray-50">
+                 <td class="px-4 py-3 text-sm text-gray-900 font-medium">${c.nama_kelas || '-'}</td>
+                 <td class="px-4 py-3 text-sm text-gray-500" id="class-count-${c.id}">Memuat...</td>
+                 <td class="px-4 py-3 text-sm space-x-1">
+                   <button onclick="editClass(${c.id})" class="inline-flex items-center p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md" title="Edit"><i class="fas fa-edit text-xs"></i></button>
+                   <button onclick="deleteClass(${c.id})" class="inline-flex items-center p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md" title="Hapus"><i class="fas fa-trash text-xs"></i></button>
+                 </td>
+               </tr>
+             `).join('');
+           classes.forEach(c => loadClassStudentCount(c.id));
+         }
+       } catch (e) {
+         console.error('[CLASSES]', e);
+       }
+     }
+
+     async function loadClassStudentCount(classId) {
+       try {
+         const r = await fetch(apiUrl(`/admin/students?class_id=${classId}&all=1`), { headers: { 'Authorization': `Bearer ${authToken}` } });
+         if (!r.ok) return;
+         const d = await r.json();
+         const count = d.success ? (d.data?.length || 0) : 0;
+         setEl('class-count-' + classId, count + ' siswa');
+       } catch (e) {
+         setEl('class-count-' + classId, 'Error');
+       }
+     }
+
+window.showAddClassModal = function () {
+        const form = document.getElementById('classForm');
+        form.reset();
+        delete form.dataset.editId;
+        document.getElementById('classModalTitle').textContent = 'Tambah Kelas';
+        form.tenant_id.value = tenantId;
+        document.getElementById('classModal').classList.add('show');
+      };
+
+     function hideClassModal() {
+       document.getElementById('classModal').classList.remove('show');
+     }
+
+document.getElementById('classForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const data = Object.fromEntries(new FormData(e.target));
+        const editId = e.target.dataset.editId;
+
+        try {
+          const r = await fetch(editId ? apiUrl('/admin/classes/' + editId) : apiUrl('/admin/classes'), {
+            method: editId ? 'PUT' : 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+            body: JSON.stringify(data)
+          });
+          if (checkAuth401403(r)) return;
+          const d = await r.json();
+          if (d.success) { hideClassModal(); loadClasses(); loadStudentClasses(); showToast(editId ? 'Kelas diperbarui' : 'Kelas ditambahkan', 'success'); }
+          else showToast(d.message || 'Gagal', 'error');
+        } catch (err) { console.error('[CLASS FORM]', err); showToast('Terjadi kesalahan', 'error'); }
+      });
+
+async function editClass(id) {
+        try {
+          const r = await fetch(apiUrl('/admin/classes/' + id), { headers: { 'Authorization': `Bearer ${authToken}` } });
+          if (checkAuth401403(r)) return;
+          const d = await r.json();
+          if (d.success) {
+            const c = d.data;
+            document.getElementById('classModalTitle').textContent = 'Edit Kelas';
+            const f = document.getElementById('classForm');
+            f.nama_kelas.value = c.nama_kelas || '';
+            f.tenant_id.value = c.tenant_id || tenantId;
+            f.dataset.editId = id;
+            document.getElementById('classModal').classList.add('show');
+          }
+        } catch (e) { console.error('[EDIT CLASS]', e); }
+      }
+
+     async function deleteClass(id) {
+       if (!confirm('Yakin hapus kelas ini? Semua siswa akan terputus dari kelas ini.')) return;
+       try {
+         const r = await fetch(apiUrl('/admin/classes/' + id), { method: 'DELETE', headers: { 'Authorization': `Bearer ${authToken}` } });
+         if (checkAuth401403(r)) return;
+         const d = await r.json();
+         if (d.success) { loadClasses(); loadStudentClasses(); showToast('Kelas dihapus', 'success'); }
+         else showToast(d.message || 'Gagal', 'error');
+       } catch (e) { console.error('[DEL CLASS]', e); showToast('Terjadi kesalahan', 'error'); }
+     }
+
+     window.showPromoteClassModal = async function () {
+       const fromSelect = document.getElementById('promoteFromClass');
+       const toSelect = document.getElementById('promoteToClass');
+       fromSelect.innerHTML = '<option value="">Memuat...</option>';
+       toSelect.innerHTML = '<option value="">Memuat...</option>';
+
+       const r = await fetch(apiUrl('/admin/classes'), { headers: { 'Authorization': `Bearer ${authToken}` } });
+       if (!r.ok) return;
+       const d = await r.json();
+       if (d.success) {
+         const classes = d.data || [];
+         fromSelect.innerHTML = '<option value="">Pilih Kelas Asal</option>';
+         toSelect.innerHTML = '<option value="">Pilih Kelas Tujuan</option>';
+         classes.forEach(c => {
+           const opt1 = document.createElement('option');
+           opt1.value = c.id;
+           opt1.textContent = c.nama_kelas;
+           fromSelect.appendChild(opt1);
+
+           const opt2 = document.createElement('option');
+           opt2.value = c.id;
+           opt2.textContent = c.nama_kelas;
+           toSelect.appendChild(opt2);
+         });
+       }
+       document.getElementById('promoteClassModal').classList.add('show');
+     };
+
+     function hidePromoteClassModal() {
+       document.getElementById('promoteClassModal').classList.remove('show');
+     }
+
+     async function createNewClassForPromote() {
+       const { value: namaKelas } = await Swal.fire({
+         title: 'Buat Kelas Baru',
+         input: 'text',
+         inputLabel: 'Nama Kelas',
+         inputPlaceholder: 'Contoh: 2A, 3B, dst',
+         showCancelButton: true
+       });
+       if (!namaKelas) return;
+
+       try {
+         const r = await fetch(apiUrl('/admin/classes'), {
+           method: 'POST',
+           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+           body: JSON.stringify({ tenant_id: tenantId, nama_kelas: namaKelas })
+         });
+         const d = await r.json();
+         if (d.success) {
+           showPromoteClassModal();
+           showToast('Kelas baru dibuat', 'success');
+         } else {
+           showToast(d.message || 'Gagal', 'error');
+         }
+       } catch (e) {
+         showToast('Terjadi kesalahan', 'error');
+       }
+     }
+
+     document.getElementById('promoteForm').addEventListener('submit', async (e) => {
+       e.preventDefault();
+       const { from_class_id, to_class_id, action } = Object.fromEntries(new FormData(e.target));
+
+       if (!from_class_id || !to_class_id) {
+         return showToast('Pilih kelas asal dan tujuan', 'error');
+       }
+
+       if (from_class_id === to_class_id) {
+         return showToast('Kelas asal dan tujuan tidak boleh sama', 'error');
+       }
+
+       const confirmResult = await Swal.fire({
+         title: 'Konfirmasi Naik Kelas',
+         text: action === 'graduate' ? 'Siswa akan diluluskan dan dihapus dari daftar aktif.' : 'Siswa akan dipindahkan ke kelas tujuan.',
+         icon: 'warning',
+         showCancelButton: true,
+         confirmButtonText: 'Ya, Lanjutkan',
+         cancelButtonText: 'Batal'
+       });
+
+       if (!confirmResult.isConfirmed) return;
+
+       try {
+         const r = await fetch(apiUrl(`/admin/students/bulk-promote`), {
+           method: 'PUT',
+           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+           body: JSON.stringify({ from_class_id, to_class_id, action })
+         });
+         const d = await r.json();
+         if (d.success) {
+           hidePromoteClassModal();
+           loadStudents(currentStudentPage);
+           loadClasses();
+           showToast(d.message || 'Berhasil', 'success');
+         } else {
+           showToast(d.message || 'Gagal', 'error');
+         }
+       } catch (e) {
+         console.error('[PROMOTE]', e);
+         showToast('Terjadi kesalahan', 'error');
+       }
+});
+
+     window.loadStudents = async function (page = 1) {
       currentStudentPage = page;
       const tbody = document.getElementById('studentsTable');
       const classFilter = document.getElementById('studentClassFilter')?.value || '';
@@ -2378,14 +2552,22 @@ document.getElementById('ruleForm').addEventListener('submit', async (e) => {
             <div class="flex space-x-3 pt-4 border-t border-gray-200">
               <button type="button" onclick="hideScannerDeviceModal()"
                 class="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">Batal</button>
-              <button type="button" onclick="submitScannerDeviceForm()"
+<button type="button" onclick="submitScannerDeviceForm()"
                 id="addScannerDeviceSubmitBtn"
                 class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">Rilis Otorisasi</button>
             </div>
           </form>
         </div>
       </div>
-    </div>
-  </body>
+
+      <script src="js/admin-dashboard.js"></script>
+      <script>
+        if (document.getElementById('whatsappStatus')) {
+          loadBillStatus();
+        }
+      </script>
+    </body>
+
+  </html>
 
 </html>

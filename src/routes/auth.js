@@ -148,8 +148,18 @@ router.post('/auth/login', async (req, res) => {
       });
     }
 
-    // Simple role-based redirect: admin -> admin-dashboard, guru -> dashboard
-    const redirectPage = user.role === 'admin' ? 'admin-dashboard.html' : 'dashboard.html';
+    // Check if user has bendahara role in assignments
+    const isBendahara = tokenPayload.assignments?.some(a =>
+      (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '') === 'bendahara'
+    );
+
+    // Determine redirect: admin -> admin, bendahara -> treasurer, guru -> dashboard
+    let redirectPage = 'dashboard.html';
+    if (user.role === 'admin') {
+      redirectPage = 'admin-dashboard.html';
+    } else if (isBendahara) {
+      redirectPage = 'treasurer-dashboard.html';
+    }
 
     return res.json({
       success: true,

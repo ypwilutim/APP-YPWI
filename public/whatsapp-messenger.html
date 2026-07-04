@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhatsApp Messenger - YPWI Lutim</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <style>
+    .chat-container { height: calc(100vh - 120px); }
+    .messages-container { height: calc(100vh - 200px); overflow-y: auto; }
+  </style>
+</head>
+<body class="bg-gray-100">
+  <div class="flex h-screen">
+    <!-- QR Setup Screen -->
+    <div id="qrScreen" class="absolute inset-0 bg-white z-50 flex flex-col items-center justify-center">
+      <h2 class="text-xl font-bold mb-4">Hubungkan WhatsApp</h2>
+      <div id="qrCodeContainer" class="mb-4 p-4 bg-white rounded-lg shadow-lg"></div>
+      <p class="text-sm text-gray-600 mb-2">Buka WhatsApp > Setelan > Perangkat Tertaut > Tautkan Perangkat Baru</p>
+      <button onclick="refreshQR()" class="px-4 py-2 bg-blue-600 text-white rounded-lg">Segarkan QR</button>
+    </div>
+    
+    <!-- Sidebar - Contacts -->
+    <div class="w-80 bg-white border-r border-gray-200 flex flex-col">
+      <div class="p-4 border-b border-gray-200">
+        <h2 class="text-lg font-bold text-gray-800">WhatsApp Team</h2>
+        <p class="text-sm text-gray-500" id="connectionStatus">Memuat...</p>
+      </div>
+      
+      <div class="p-3">
+        <input type="text" id="searchContact" placeholder="Cari kontak..." 
+          class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+          onkeyup="filterContacts()">
+      </div>
+      
+      <div id="contactsList" class="flex-1 overflow-y-auto">
+        <p class="p-4 text-center text-gray-500">Memuat kontak...</p>
+      </div>
+      
+      <div class="p-3 border-t border-gray-200">
+        <button onclick="logoutWhatsApp()" class="w-full px-3 py-2 bg-red-100 text-red-700 rounded-md text-sm hover:bg-red-200">
+          <i class="fas fa-sign-out-alt mr-1"></i> Logout WhatsApp
+        </button>
+      </div>
+    </div>
+    
+    <!-- Main Chat Area -->
+    <div class="flex-1 flex flex-col">
+      <!-- Chat Header -->
+      <div class="bg-white border-b border-gray-200 p-4 flex items-center" id="chatHeader">
+        <div class="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center mr-3">
+          <i class="fas fa-user text-gray-600"></i>
+        </div>
+        <div>
+          <h3 class="font-medium text-gray-800" id="chatTitle">Pilih kontak</h3>
+          <p class="text-xs text-gray-500" id="chatSubtitle">-</p>
+        </div>
+      </div>
+      
+      <!-- Messages -->
+      <div class="messages-container bg-gray-50 p-4" id="messagesContainer">
+        <p class="text-center text-gray-400">Belum ada percakapan</p>
+      </div>
+      
+      <!-- Message Input -->
+      <div class="bg-white border-t border-gray-200 p-3" id="messageInputArea">
+        <div class="flex items-center space-x-2">
+          <input type="text" id="messageInput" placeholder="Ketik pesan..." 
+            class="flex-1 px-4 py-2 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+            onkeypress="if(event.key==='Enter') sendMessage()">
+          <button onclick="sendMessage()" class="px-4 py-2 bg-blue-600 text-white rounded-full hover:bg-blue-700">
+            <i class="fas fa-paper-plane"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    let qrInterval;
+    
+    async function checkConnection() {
+      try {
+        const res = await fetch('/api/waha/status');
+        const data = await res.json();
+        
+        if (data.connected) {
+          document.getElementById('qrScreen').style.display = 'none';
+          document.getElementById('connectionStatus').textContent = 'Terhubung';
+          document.getElementById('connectionStatus').className = 'text-sm text-green-500';
+          clearInterval(qrInterval);
+          loadContacts();
+        } else {
+          document.getElementById('connectionStatus').textContent = 'Scan QR untuk login';
+          document.getElementById('connectionStatus').className = 'text-sm text-yellow-500';
+          fetchQR();
+        }
+      } catch (e) {
+        document.getElementById('connectionStatus').textContent = 'Meta Business API (Alternatif)';
+        document.getElementById('connectionStatus').className = 'text-sm text-blue-500';
+      }
+    }
+    
+    async function fetchQR() {
+      try {
+        const res = await fetch('/api/waha/qr');
+        const data = await res.json();
+        if (data.success && data.qr) {
+          const qrImg = document.getElementById('qrCodeContainer');
+          qrImg.innerHTML = '<img src="' + data.qr + '" class="mx-auto max-w-[200px]" alt="WhatsApp QR">';
+        }
+      } catch (e) {
+        console.log('QR fetch error');
+      }
+    }
+    
+    function refreshQR() {
+      fetchQR();
+    }
+    
+    async function loadContacts() {
+      const contactsDiv = document.getElementById('contactsList');
+      contactsDiv.innerHTML = '<p class="p-4 text-center text-gray-500">Memuat kontak...</p>';
+      
+      try {
+        const res = await fetch('/api/admin/teachers?all=1');
+        const data = await res.json();
+        
+        if (data.success) {
+          contactsDiv.innerHTML = data.data.map(t => `
+            <div class="flex items-center p-3 hover:bg-gray-100 cursor-pointer border-b border-gray-100" 
+                 onclick="selectContact('${t.id}', '${t.nama}', '${t.no_wa}')">
+              <div class="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center mr-3">
+                <i class="fas fa-user text-green-600"></i>
+              </div>
+              <div>
+                <p class="font-medium text-gray-800">${t.nama}</p>
+                <p class="text-xs text-gray-500">${t.no_wa || 'Tidak ada WA'}</p>
+              </div>
+            </div>
+          `).join('');
+        }
+      } catch (e) {
+        contactsDiv.innerHTML = '<p class="p-4 text-center text-red-500">Gagal memuat kontak</p>';
+      }
+    }
+    
+    function selectContact(id, name, phone) {
+      document.getElementById('chatTitle').textContent = name;
+      document.getElementById('chatSubtitle').textContent = phone || 'Tidak ada WA';
+    }
+    
+    async function sendMessage() {
+      const input = document.getElementById('messageInput');
+      const msg = input.value.trim();
+      if (!msg) return;
+      
+      // Send via existing WhatsApp API
+      // ...
+      input.value = '';
+    }
+    
+    function filterContacts() {}
+    
+    async function logoutWhatsApp() {
+      await fetch('/api/whatsapp-broadcast/logout', { method: 'POST' });
+      location.reload();
+    }
+    
+checkConnection();
+    qrInterval = setInterval(checkConnection, 5000);
+    fetchQR();
+  </script>
+</body>
+</html>

@@ -700,19 +700,37 @@ Pesan akan otomatis terkirim ke admin untuk review.`;
   }
 });
 
-// GET /api/summary/all-units - Get attendance summary for all units (for ketua/admin at YPWILUTIM)
-router.get('/summary/all-units', authenticateToken, async (req, res) => {
+// GET /api/summary/all-units - Get attendance summary for units
+// YPWILUTIM + admin/operator: semua unit
+// Tenant lain + admin/operator: hanya unitnya
+router.get('/summary/all-units', authenticateOperator, async (req, res) => {
   try {
     const targetDate = req.query.date || new Date().toISOString().split('T')[0];
 
-    const units = await db.query(`
-      SELECT tenant_id, nama_sekolah FROM tenants 
-      WHERE tenant_id IS NOT NULL ORDER BY nama_sekolah ASC
-    `);
+    // Tentukan unit mana yang boleh dilihat user
+    const isYpwilutimAdmin = req.user.assignments?.some(a => a.tenant_id === 'YPWILUTIM');
+    const userAdminUnits = req.user.assignments
+      ?.filter(a => ['admin', 'operator', 'tu', 'tatausaha', 'ta', 'tata_usaha', 'ketua', 'kepala', 'pimpinan', 'kepalasekolah']
+        .includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '')))
+      .map(a => a.tenant_id) || [];
+
+    // Query units berdasarkan hak akses
+    let units;
+    if (isYpwilutimAdmin) {
+      units = await db.query(`
+        SELECT tenant_id, nama_sekolah FROM tenants 
+        WHERE tenant_id IS NOT NULL ORDER BY nama_sekolah ASC
+      `);
+    } else {
+      units = await db.query(`
+        SELECT t.tenant_id, t.nama_sekolah FROM tenants t
+        WHERE t.tenant_id IN (?) ORDER BY t.nama_sekolah ASC
+      `, [userAdminUnits]);
+    }
 
     let attendanceStats = [];
     try {
-      attendanceStats = await db.query(`
+      let statsQuery = `
         SELECT 
           tenant_id,
           SUM(CASE WHEN status = 'tepat_waktu' THEN 1 ELSE 0 END) as hadir,
@@ -720,20 +738,34 @@ router.get('/summary/all-units', authenticateToken, async (req, res) => {
           SUM(CASE WHEN status IN ('izin', 'cuti', 'sakit', 'dinas_luar') THEN 1 ELSE 0 END) as izin,
           SUM(CASE WHEN status = 'alpha' OR status IS NULL THEN 1 ELSE 0 END) as alpha
         FROM attendance_logs
-        WHERE DATE(waktu_scan) = ?
-        GROUP BY tenant_id
-      `, [targetDate]);
+        WHERE DATE(waktu_scan) = ?`;
+      let statsParams = [targetDate];
+
+      if (!isYpwilutimAdmin && userAdminUnits.length > 0) {
+        statsQuery += ' AND tenant_id IN (?)';
+        statsParams.push(userAdminUnits);
+      }
+
+      statsQuery += ' GROUP BY tenant_id';
+      attendanceStats = await db.query(statsQuery, statsParams);
     } catch (e) {
       console.log('[SUMMARY_ALL_UNITS] Attendance stats query error (continuing with empty):', e.message);
     }
 
     let teacherCounts = [];
     try {
-      teacherCounts = await db.query(`
-        SELECT tenant_id, COUNT(*) as jumlah_guru FROM teacher_assignments ta 
+      let countQuery = `SELECT tenant_id, COUNT(*) as jumlah_guru FROM teacher_assignments ta 
         JOIN teachers t ON ta.teacher_id = t.id 
-        WHERE t.status_aktif = 1 GROUP BY tenant_id
-      `);
+        WHERE t.status_aktif = 1`;
+      let countParams = [];
+
+      if (!isYpwilutimAdmin && userAdminUnits.length > 0) {
+        countQuery += ' AND ta.tenant_id IN (?)';
+        countParams.push(userAdminUnits);
+      }
+
+      countQuery += ' GROUP BY tenant_id';
+      teacherCounts = await db.query(countQuery, countParams);
     } catch (e) {
       console.log('[SUMMARY_ALL_UNITS] Teacher counts query error (continuing with empty):', e.message);
     }
@@ -761,18 +793,30 @@ res.json({ success: true, data: summary, date: targetDate });
 });
 
 // GET /api/summary/unit-teachers - Get teachers in specific status for a unit
-router.get('/summary/unit-teachers', authenticateToken, async (req, res) => {
+router.get('/summary/unit-teachers', authenticateOperator, async (req, res) => {
   try {
     const { tenant_id, status, date } = req.query;
+
+    // Verifikasi user berhak akses ke tenant ini
+    const isYpwilutimAdmin = req.user.assignments?.some(a => a.tenant_id === 'YPWILUTIM');
+    const userAdminUnits = req.user.assignments
+      ?.filter(a => ['admin', 'operator', 'tu', 'tatausaha', 'ta', 'tata_usaha', 'ketua', 'kepala', 'pimpinan', 'kepalasekolah']
+        .includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '')))
+      .map(a => a.tenant_id) || [];
+
+    if (!isYpwilutimAdmin && !userAdminUnits.includes(tenant_id)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak. Anda bukan admin unit ini.' });
+    }
+
     const targetDate = date || new Date().toISOString().split('T')[0];
 
     let query;
     let params = [];
     const statusParam = status;
 
-    if (status === 'alpha') {
-      // Belum absen = guru aktif yang tidak ada data absensi pada tanggal ini
-      query = `SELECT t.nama, t.nip, '' as waktu_scan, '' as metode
+if (status === 'alpha') {
+       // Belum absen = guru aktif yang tidak ada data absensi pada tanggal ini
+       query = `SELECT DISTINCT t.nama, t.nip, '' as waktu_scan, '' as metode
         FROM teachers t
         JOIN teacher_assignments ta ON t.id = ta.teacher_id
         WHERE ta.tenant_id = ? AND t.status_aktif = 1
@@ -782,21 +826,21 @@ router.get('/summary/unit-teachers', authenticateToken, async (req, res) => {
         ORDER BY t.nama ASC`;
       params = [tenant_id, targetDate];
     } else if (status === 'hadir') {
-      query = `SELECT t.nama, t.nip, al.waktu_scan, al.metode
+      query = `SELECT DISTINCT t.nama, t.nip, al.waktu_scan, al.metode
         FROM teachers t
         JOIN attendance_logs al ON t.id = al.teacher_id
         WHERE DATE(al.waktu_scan) = ? AND al.status = 'tepat_waktu' AND al.tenant_id = ?
         ORDER BY t.nama ASC`;
       params = [targetDate, tenant_id];
     } else if (status === 'terlambat') {
-      query = `SELECT t.nama, t.nip, al.waktu_scan, al.metode
+      query = `SELECT DISTINCT t.nama, t.nip, al.waktu_scan, al.metode
         FROM teachers t
         JOIN attendance_logs al ON t.id = al.teacher_id
         WHERE DATE(al.waktu_scan) = ? AND al.status = 'terlambat' AND al.tenant_id = ?
         ORDER BY t.nama ASC`;
       params = [targetDate, tenant_id];
     } else if (status === 'izin') {
-      query = `SELECT t.nama, t.nip, al.waktu_scan, al.metode
+      query = `SELECT DISTINCT t.nama, t.nip, al.waktu_scan, al.metode
         FROM teachers t
         JOIN attendance_logs al ON t.id = al.teacher_id
         WHERE DATE(al.waktu_scan) = ? AND al.status IN ('izin', 'cuti', 'sakit', 'dinas_luar') AND al.tenant_id = ?
@@ -829,7 +873,7 @@ router.get('/dashboard', authenticateToken, async (req, res) => {
     );
 
     const userCheck = await db.query(
-      'SELECT is_default_password FROM teachers WHERE id = ?',
+      'SELECT id FROM teachers WHERE id = ?',
       [guruId]
     );
 
@@ -838,9 +882,7 @@ router.get('/dashboard', authenticateToken, async (req, res) => {
       data: {
         totalAbsensi: totalResult[0]?.total || 0,
         absensiToday: todayResult[0] ? (todayResult[0].jenis === 'masuk' ? 'Sudah Masuk' : 'Sudah Pulang') : 'Belum absen',
-        user: {
-          is_default_password: userCheck[0]?.is_default_password || 0
-        }
+        user: { id: userCheck[0]?.id }
       }
     });
   } catch (error) {

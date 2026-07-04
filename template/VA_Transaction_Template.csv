@@ -1,0 +1,10 @@
+Type;Parent Account;Virtual Account Number (Prefix VA + Number);Virtual Account Name;Virtual Account Scheme;Limit Debit;Limit Credit;Limit Transaction;Physical Card;Auto Renewal Limit;;Expire Date;KYC;;;;;Additional Info
+;;;;;;;;;Every;Date / Day;15/06/2024;Name;Mobile Phone;ID Type;ID Number;Address;Label1
+Debit;1,0291E+11;8,33333E+15;VA SATU;Open Limit;5000000;;;Yes;Weekly;Monday;;;;;;;
+Debit;1,0291E+11;8,33334E+15;VA DUA;Close Limit;2000000;;;;Monthly;17;02/03/2024;Ana;6,28739E+12;KTP;2,80302E+15;Jl Progo no 1;NPWP
+Debit;1,0291E+11;8,33334E+15;VA TIGA;One Time;7500000;;;Yes;;;15/06/2024;Budi;6,28174E+12;KTP;8,23294E+15;Jl Tebet 123;NPWP
+Credit;2,10302E+11;8,33333E+15;VA EMPAT;Open Limit;;10000000;;;;;15/06/2024;Andi;6,28589E+12;KTP;8,39139E+15;Jl Sudirman 90;NPWP
+Credit;2,10302E+11;8,33334E+15;VA LIMA;Close Limit;;10000000;;;;;19/11/2023;Ana;6,28739E+12;KTP;4,29092E+15;Jl Progo no 1;NPWP
+Credit;2,10302E+11;8,33334E+15;VA ENAM;One Time;;15000000;;;;;30/12/2023;Tina;6,28129E+12;KTP;9,24921E+15;Jl ABC 123;NPWP
+Debit Credit;2,1903E+11;8,43334E+15;VA TUJUH;Dynamic;;;25000000;Yes;;;15/06/2024;Rina;6,2819E+12;KTP;8,49239E+15;Jl CFT 44;NPWP
+Debit Credit;2,9211E+11;8,43334E+15;VA DELAPAN;Static;15000000;;;;Custom;1;;;;;;;

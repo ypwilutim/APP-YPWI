@@ -51,7 +51,15 @@ const teacherUpload = multer({
 router.get('/admin/tenants', authenticateOperator, async (req, res) => {
   try {
     const tenantId = req.query.tenant_id;
-    let query = 'SELECT tenant_id, nama_sekolah, absensi_method, use_central_rules, latitude, longitude, COALESCE(location_radius, 100) as location_radius, location_name, tipe_unit FROM tenants';
+    let query = 'SELECT tenant_id, nama_sekolah, absensi_method, use_central_rules, latitude, longitude, COALESCE(location_radius, 100) as location_radius, location_name, tipe_unit';
+    // Add bank columns if they exist (graceful fallback)
+    try {
+      await db.query('SELECT bank_account_number, bank_account_name FROM tenants LIMIT 1');
+      query += ', bank_account_number, bank_account_name';
+    } catch (err) {
+      query += ", '' as bank_account_number, '' as bank_account_name";
+    }
+    query += ' FROM tenants';
     let params = [];
     if (tenantId) {
       query += ' WHERE tenant_id = ?';
@@ -674,7 +682,7 @@ router.get('/admin/teachers', authenticateOperator, async (req, res) => {
       params.push(`%${search}%`, `%${search}%`, `%${search}%`);
     }
 
-    query += ' GROUP BY t.id ORDER BY t.nama ASC LIMIT 100';
+    query += ' GROUP BY t.id ORDER BY t.nama ASC';
     const teachers = await db.query(query, params);
     const formattedTeachers = teachers.map(teacher => ({
       ...teacher,
@@ -1040,6 +1048,35 @@ router.get('/admin/students', authenticateOperator, async (req, res) => {
   }
 });
 
+// GET /api/admin/students/all - List all students (no pagination)
+router.get('/admin/students/all', authenticateOperator, async (req, res) => {
+  try {
+    let query = `
+      SELECT s.id, s.nama_siswa, s.nisn, s.nis, s.jenis_kelamin, s.iuran_bulanan,
+             c.nama_kelas, tn.nama_sekolah, p.no_wa as no_wa_ortu
+      FROM students s
+      LEFT JOIN classes c ON s.class_id = c.id
+      LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id
+      LEFT JOIN parents p ON s.parent_id = p.id
+      WHERE 1=1
+    `;
+    let params = [];
+    
+    if (req.query.tenant_id) {
+      query += ' AND s.tenant_id = ?';
+      params.push(req.query.tenant_id);
+    }
+    
+    query += ' ORDER BY tn.nama_sekolah ASC, s.nama_siswa ASC';
+    
+    const students = await db.query(query, params);
+    res.json({ success: true, data: students });
+  } catch (error) {
+    console.error('Admin students all error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching students' });
+  }
+});
+
 // GET /api/admin/students/:id - Get single student by ID
 router.get('/admin/students/:id', authenticateOperator, async (req, res) => {
   try {
@@ -1165,10 +1202,140 @@ router.post('/admin/classes', authenticateOperator, async (req, res) => {
       [tenant_id, nama_kelas]
     );
 
-    res.json({ success: true, message: 'Kelas berhasil ditambahkan', id: result.insertId });
+res.json({ success: true, message: 'Kelas berhasil ditambahkan', id: result.insertId });
+   } catch (error) {
+     console.error('Create class error:', error);
+     res.status(500).json({ success: false, message: 'Error creating class' });
+   }
+});
+
+// GET /api/admin/classes/:id - Get single class
+router.get('/admin/classes/:id', authenticateOperator, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [cls] = await db.query('SELECT * FROM classes WHERE id = ?', [id]);
+    if (!cls) {
+      return res.status(404).json({ success: false, message: 'Kelas tidak ditemukan' });
+    }
+    res.json({ success: true, data: cls });
   } catch (error) {
-    console.error('Create class error:', error);
-    res.status(500).json({ success: false, message: 'Error creating class' });
+    console.error('Get class error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching class' });
+  }
+});
+
+// PUT /api/admin/classes/:id - Update class
+router.put('/admin/classes/:id', authenticateOperator, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { nama_kelas } = req.body;
+
+    if (!nama_kelas) {
+      return res.status(400).json({ success: false, message: 'nama_kelas wajib diisi' });
+    }
+
+    const result = await db.query('UPDATE classes SET nama_kelas = ? WHERE id = ?', [nama_kelas, id]);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: 'Kelas tidak ditemukan' });
+    }
+
+    res.json({ success: true, message: 'Kelas berhasil diperbarui' });
+  } catch (error) {
+    console.error('Update class error:', error);
+    res.status(500).json({ success: false, message: 'Error updating class' });
+  }
+});
+
+// DELETE /api/admin/classes/:id - Delete class
+router.delete('/admin/classes/:id', authenticateOperator, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Check if any students are in this class
+    const students = await db.query('SELECT COUNT(*) as count FROM students WHERE class_id = ?', [id]);
+    if (students[0].count > 0) {
+      // Just remove class assignment from students instead of deleting
+      await db.query('UPDATE students SET class_id = NULL WHERE class_id = ?', [id]);
+    }
+
+    const result = await db.query('DELETE FROM classes WHERE id = ?', [id]);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: 'Kelas tidak ditemukan' });
+    }
+
+    res.json({ success: true, message: 'Kelas berhasil dihapus' });
+  } catch (error) {
+    console.error('Delete class error:', error);
+    res.status(500).json({ success: false, message: 'Error deleting class' });
+  }
+});
+
+// PUT /api/admin/students/bulk-promote - Bulk promote students to next class
+router.put('/admin/students/bulk-promote', authenticateOperator, async (req, res) => {
+  try {
+    let tenantId = req.query.tenant_id;
+    let { from_class_id, to_class_id, action } = req.body;
+
+    // Operator: force tenant_id from assignment if not provided
+    if (req.user.role !== 'admin' && !tenantId) {
+      const adminAssignments = (req.user.assignments || []).filter(a => {
+        const roles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin'];
+        return roles.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''));
+      });
+      if (adminAssignments.length === 1) {
+        tenantId = adminAssignments[0].tenant_id;
+      } else if (adminAssignments.length > 1) {
+        tenantId = adminAssignments[0].tenant_id;
+      }
+    }
+
+    // Verify tenant access
+    if (tenantId && !verifyTenantAccess(req, tenantId)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+
+    if (!from_class_id || !to_class_id) {
+      return res.status(400).json({ success: false, message: 'from_class_id dan to_class_id wajib diisi' });
+    }
+
+    // Verify both classes exist and belong to the tenant
+    const [fromClass] = await db.query('SELECT * FROM classes WHERE id = ? AND tenant_id = ?', [from_class_id, tenantId]);
+    const [toClass] = await db.query('SELECT * FROM classes WHERE id = ? AND tenant_id = ?', [to_class_id, tenantId]);
+
+    if (!fromClass) {
+      return res.status(404).json({ success: false, message: 'Kelas asal tidak ditemukan' });
+    }
+    if (!toClass) {
+      return res.status(404).json({ success: false, message: 'Kelas tujuan tidak ditemukan' });
+    }
+
+    if (action === 'graduate') {
+      // Remove students from active enrollment (graduate them)
+      try {
+        await db.query(
+          'UPDATE students SET class_id = NULL, status_lulus = 1, tanggal_lulus = NOW() WHERE class_id = ?',
+          [from_class_id]
+        );
+      } catch (colError) {
+        // Fallback: just remove class assignment if status_lulus/tanggal_lulus columns don't exist
+        await db.query(
+          'UPDATE students SET class_id = NULL WHERE class_id = ?',
+          [from_class_id]
+        );
+      }
+      res.json({ success: true, message: `Siswa kelas ${fromClass.nama_kelas} berhasil diluluskan` });
+    } else {
+      // Move students to target class
+      const result = await db.query(
+        'UPDATE students SET class_id = ? WHERE class_id = ?',
+        [to_class_id, from_class_id]
+      );
+      const count = result.affectedRows;
+      res.json({ success: true, message: `${count} siswa berhasil dipindahkan dari ${fromClass.nama_kelas} ke ${toClass.nama_kelas}` });
+    }
+  } catch (error) {
+    console.error('Bulk promote error:', error);
+    res.status(500).json({ success: false, message: 'Error promoting students' });
   }
 });
 
@@ -1279,16 +1446,15 @@ router.get('/search/teachers', async (req, res) => {
       FROM teachers t
       LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id
       LEFT JOIN tenants tn ON ta.tenant_id = tn.tenant_id
-      WHERE t.status_aktif = 1
     `;
     let params = [];
 
     if (searchTerm) {
-      query += ' AND (t.nama LIKE ? OR t.nik LIKE ? OR t.nip LIKE ?)';
+      query += ' WHERE (t.nama LIKE ? OR t.nik LIKE ? OR t.nip LIKE ?)';
       params.push(`%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`);
     }
 
-    query += ' GROUP BY t.id ORDER BY t.nama ASC LIMIT 100';
+    query += ' GROUP BY t.id ORDER BY t.nama ASC';
     const teachers = await db.query(query, params);
 
     // Format assignments
@@ -1793,27 +1959,79 @@ router.post('/admin/restore', authenticateToken, async (req, res) => {
 // PUT /api/public/teachers/:teacherId - Update teacher profile (no auth required, for complete-profile.html)
 router.put('/public/teachers/:teacherId', teacherUpload.single('foto'), async (req, res) => {
   try {
-    const { teacherId } = req.params;
-    const { nama, nik, nip, email, tempat_lahir, tanggal_lahir, jenis_kelamin, alamat, no_wa, status_kepegawaian, status_aktif, tmt, assignments_json } = req.body;
+    const teacherId = req.params.teacherId;
+    const { nama, nik, nip, email, tempat_lahir, tanggal_lahir, jenis_kelamin, alamat, no_wa, status_kepegawaian, status_aktif, tmt, pendidikan_terakhir, jurusan, nama_sekolah_pendidikan, tahun_angkatan, assignments_json } = req.body;
     const foto = req.file ? `/uploads/${req.file.filename}` : null;
+
+    // Get existing values if not provided (fields may be disabled in form)
+    const [existingTeacher] = await db.query('SELECT nama, nik, nip, email, tempat_lahir, tanggal_lahir, jenis_kelamin, alamat, no_wa, status_kepegawaian, status_aktif, tmt, pendidikan_terakhir FROM teachers WHERE id = ?', [teacherId]);
+
+    // Use existing values as fallback
+    const finalNama = nama || existingTeacher?.nama || null;
+    const finalNik = nik || existingTeacher?.nik || null;
+    const finalNip = nip || existingTeacher?.nip || null;
+    const finalEmail = email || existingTeacher?.email || null;
+    const finalTempatLahir = tempat_lahir || existingTeacher?.tempat_lahir || null;
+    const finalTanggalLahir = tanggal_lahir || existingTeacher?.tanggal_lahir || null;
+    const finalJenisKelamin = jenis_kelamin || existingTeacher?.jenis_kelamin || null;
+    const finalAlamat = alamat || existingTeacher?.alamat || null;
+    const finalNoWa = no_wa || existingTeacher?.no_wa || null;
+    const finalStatusKepegawaian = status_kepegawaian || existingTeacher?.status_kepegawaian || null;
+    const finalStatusAktif = status_aktif || existingTeacher?.status_aktif || null;
+    const finalTmt = tmt || existingTeacher?.tmt || null;
+
+    // Format pendidikan_terakhir string - handle all undefined
+    let pendidikanFormatted = pendidikan_terakhir || null;
+    if (pendidikan_terakhir && ['SMK', 'S1', 'S2', 'S3'].includes(pendidikan_terakhir)) {
+      const parts = [pendidikan_terakhir];
+      if (nama_sekolah_pendidikan) parts.push(nama_sekolah_pendidikan);
+      if (jurusan) parts.push(jurusan);
+      if (tahun_angkatan) parts.push(tahun_angkatan);
+      pendidikanFormatted = parts.join('/') || null;
+    } else if (pendidikan_terakhir && tahun_angkatan) {
+      pendidikanFormatted = `${pendidikan_terakhir}/${tahun_angkatan}` || null;
+    }
+
+    // Ensure all params are not undefined
+    const safeParams = {
+      nama: finalNama,
+      nik: finalNik,
+      nip: finalNip,
+      email: finalEmail,
+      tempat_lahir: finalTempatLahir,
+      tanggal_lahir: finalTanggalLahir,
+      jenis_kelamin: finalJenisKelamin,
+      alamat: finalAlamat,
+      no_wa: finalNoWa,
+      status_kepegawaian: finalStatusKepegawaian,
+      status_aktif: finalStatusAktif,
+      tmt: finalTmt,
+      pendidikan_terakhir: pendidikanFormatted
+    };
 
     // Update teacher data
     await db.query(
-      'UPDATE teachers SET nama=?, nik=?, nip=?, email=?, tempat_lahir=?, tanggal_lahir=?, jenis_kelamin=?, alamat=?, no_wa=?, status_kepegawaian=?, status_aktif=?, tmt=? ' + (foto ? ', link_foto=?' : '') + ' WHERE id=?',
-      foto ? [nama, nik, nip, email, tempat_lahir, tanggal_lahir, jenis_kelamin, alamat, no_wa, status_kepegawaian, status_aktif, tmt, foto, teacherId] : [nama, nik, nip, email, tempat_lahir, tanggal_lahir, jenis_kelamin, alamat, no_wa, status_kepegawaian, status_aktif, tmt, teacherId]
+      'UPDATE teachers SET nama=?, nik=?, nip=?, email=?, tempat_lahir=?, tanggal_lahir=?, jenis_kelamin=?, alamat=?, no_wa=?, status_kepegawaian=?, status_aktif=?, tmt=?, pendidikan_terakhir=? ' + (foto ? ', link_foto=?' : '') + ' WHERE id=?',
+      foto ? [safeParams.nama, safeParams.nik, safeParams.nip, safeParams.email, safeParams.tempat_lahir, safeParams.tanggal_lahir, safeParams.jenis_kelamin, safeParams.alamat, safeParams.no_wa, safeParams.status_kepegawaian, safeParams.status_aktif, safeParams.tmt, safeParams.pendidikan_terakhir, foto, teacherId] : [safeParams.nama, safeParams.nik, safeParams.nip, safeParams.email, safeParams.tempat_lahir, safeParams.tanggal_lahir, safeParams.jenis_kelamin, safeParams.alamat, safeParams.no_wa, safeParams.status_kepegawaian, safeParams.status_aktif, safeParams.tmt, safeParams.pendidikan_terakhir, teacherId]
     );
 
     // Clear existing assignments
     await db.query('DELETE FROM teacher_assignments WHERE teacher_id = ?', [teacherId]);
 
-    // Insert new assignments
-    if (assignments_json) {
-      const assignments = typeof assignments_json === 'string' ? JSON.parse(assignments_json) : assignments_json;
-      for (const a of assignments) {
-        await db.query(
-          'INSERT INTO teacher_assignments (teacher_id, tenant_id, jabatan_di_unit) VALUES (?, ?, ?)',
-          [teacherId, a.tenant_id, a.jabatan_di_unit]
-        );
+    // Insert new assignments - only if assignments_json exists and has content
+    if (assignments_json && assignments_json !== '') {
+      try {
+        const assignments = typeof assignments_json === 'string' ? JSON.parse(assignments_json) : assignments_json;
+        if (Array.isArray(assignments)) {
+          for (const a of assignments) {
+            await db.query(
+              'INSERT INTO teacher_assignments (teacher_id, tenant_id, jabatan_di_unit) VALUES (?, ?, ?)',
+              [teacherId, a.tenant_id || null, a.jabatan_di_unit || null]
+            );
+          }
+        }
+      } catch (parseErr) {
+        console.error('Assignments parse error:', parseErr);
       }
     }
 
@@ -1920,15 +2138,199 @@ router.post('/send-whatsapp-public', async (req, res) => {
     if (!number || !message) {
       return res.status(400).json({ success: false, message: 'Number and message required' });
     }
-
+    
     if (typeof global.sendWhatsAppMessage === 'function') {
       await global.sendWhatsAppMessage(number, message);
     }
-
+    
     res.json({ success: true, message: 'WhatsApp sent' });
   } catch (error) {
     console.error('WhatsApp public error:', error);
     res.status(500).json({ success: false, message: 'Error sending WhatsApp' });
+  }
+});
+
+// PUT /api/admin/tenants/:tenantId/bank - Update bank account for tenant
+router.put('/admin/tenants/:tenantId/bank', authenticateOperator, async (req, res) => {
+  try {
+    const { tenantId } = req.params;
+    const { bank_account_number, bank_account_name } = req.body;
+    
+    // Verify tenant access for non-admin
+    if (!verifyTenantAccess(req, tenantId)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+    
+    await db.query(
+      'UPDATE tenants SET bank_account_number = ?, bank_account_name = ? WHERE tenant_id = ?',
+      [bank_account_number || null, bank_account_name || null, tenantId]
+    );
+    
+    res.json({ success: true, message: 'Rekening bank berhasil disimpan' });
+  } catch (error) {
+    console.error('Update bank error:', error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/admin/send-whatsapp-bill-bulk - Send bill template to all students in tenant
+router.post('/admin/send-whatsapp-bill-bulk/:tenantId', authenticateOperator, async (req, res) => {
+  try {
+    const { tenantId } = req.params;
+    const { bulan, tanggal_jatuh_tempo } = req.body;
+    
+    // Verify tenant access
+    if (!verifyTenantAccess(req, tenantId)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+    
+    // Get tenant bank info
+    const [tenant] = await db.query('SELECT bank_account_number, bank_account_name FROM tenants WHERE tenant_id = ?', [tenantId]);
+    
+    // Get students with parent WA
+    const students = await db.query(`
+      SELECT s.id, s.nama_siswa, s.iuran_bulanan, p.no_wa as parent_wa
+      FROM students s
+      LEFT JOIN parents p ON s.parent_id = p.id
+      WHERE s.tenant_id = ? AND p.no_wa IS NOT NULL AND p.no_wa != ''
+    `, [tenantId]);
+    
+    const { sendBillTemplate } = require('../utils/whatsappTemplate');
+    let success = 0, failed = 0;
+    
+    for (const student of students) {
+      try {
+        if (!student.parent_wa) continue;
+        
+        const result = await sendBillTemplate(student.parent_wa, {
+          nama_siswa: student.nama_siswa,
+          bulan: bulan || new Date().toLocaleString('id-ID', { month: 'long' }),
+          jumlah_tagihan: `Rp ${(student.iuran_bulanan || 0).toLocaleString('id-ID')}`,
+          tanggal_jatuh_tempo: tanggal_jatuh_tempo || '10',
+          nomor_rekening: tenant?.bank_account_number || '',
+          nama_penerima: tenant?.bank_account_name || ''
+        });
+        
+        success++;
+      } catch (err) {
+        console.error('Bill send failed for', student.nama_siswa, err.message);
+        failed++;
+      }
+    }
+    
+    res.json({ success: true, message: `Terkirim: ${success}, Gagal: ${failed}`, data: { success, failed } });
+  } catch (error) {
+    console.error('Bill bulk error:', error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/admin/send-whatsapp-bill-bulk - Send bill template to all students in tenant
+router.post('/admin/send-whatsapp-bill-bulk/:tenantId', authenticateOperator, async (req, res) => {
+  try {
+    const { tenantId } = req.params;
+    const { bulan, tanggal_jatuh_tempo } = req.body;
+    
+    // Verify tenant access
+    if (!verifyTenantAccess(req, tenantId)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+    
+    // Get tenant bank info
+    const [tenant] = await db.query('SELECT bank_account_number, bank_account_name FROM tenants WHERE tenant_id = ?', [tenantId]);
+    
+    // Get students with parent WA
+    const students = await db.query(`
+      SELECT s.id, s.nama_siswa, s.iuran_bulanan, p.no_wa as parent_wa
+      FROM students s
+      LEFT JOIN parents p ON s.parent_id = p.id
+      WHERE s.tenant_id = ? AND p.no_wa IS NOT NULL AND p.no_wa != ''
+    `, [tenantId]);
+    
+    const { sendBillTemplate } = require('../utils/whatsappTemplate');
+    let success = 0, failed = 0;
+    
+    for (const student of students) {
+      try {
+        if (!student.parent_wa) continue;
+        
+        const result = await sendBillTemplate(student.parent_wa, {
+          nama_siswa: student.nama_siswa,
+          bulan: bulan || new Date().toLocaleString('id-ID', { month: 'long' }),
+          jumlah_tagihan: `Rp ${(student.iuran_bulanan || 0).toLocaleString('id-ID')}`,
+          tanggal_jatuh_tempo: tanggal_jatuh_tempo || '10',
+          nomor_rekening: tenant?.bank_account_number || '',
+          nama_penerima: tenant?.bank_account_name || ''
+        });
+        
+        success++;
+      } catch (err) {
+        console.error('Bill send failed for', student.nama_siswa, err.message);
+        failed++;
+      }
+    }
+    
+    res.json({ success: true, message: `Terkirim: ${success}, Gagal: ${failed}`, data: { success, failed } });
+  } catch (error) {
+    console.error('Bill bulk error:', error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// GET /api/admin/bill-settings - Get bill notification settings
+router.get('/admin/bill-settings', authenticateOperator, async (req, res) => {
+  try {
+    const settings = await db.query('SELECT send_day, due_day, is_enabled FROM bill_settings LIMIT 1');
+    res.json({ success: true, data: settings[0] || { send_day: 1, due_day: 10, is_enabled: 0 } });
+  } catch (error) {
+    console.error('Bill settings error:', error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// PUT /api/admin/bill-settings - Update bill notification settings
+router.put('/admin/bill-settings', authenticateOperator, async (req, res) => {
+  try {
+    const { send_day, due_day, is_enabled } = req.body;
+    
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS bill_settings (
+        id INT PRIMARY KEY,
+        send_day INT DEFAULT 1,
+        due_day INT DEFAULT 10,
+        is_enabled TINYINT(1) DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+    
+    await db.query(
+      'INSERT INTO bill_settings (id, send_day, due_day, is_enabled) VALUES (1, ?, ?, ?) ON DUPLICATE KEY UPDATE send_day = VALUES(send_day), due_day = VALUES(due_day), is_enabled = VALUES(is_enabled)',
+      [send_day || 1, due_day || 10, is_enabled ? 1 : 0]
+    );
+    
+    res.json({ success: true, message: 'Pengaturan berhasil disimpan' });
+  } catch (error) {
+    console.error('Bill settings update error:', error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// WhatsApp Broadcast Messenger Routes
+// GET /api/whatsapp-broadcast/status - Check WhatsApp connection status
+router.get('/whatsapp-broadcast/status', authenticateOperator, async (req, res) => {
+  try {
+    // Check if Redis/MQ service exists
+    const redisUrl = process.env.REDIS_URL || process.env.WAHA_API_URL;
+    const connected = !!redisUrl;
+    
+    res.json({ 
+      success: true, 
+      connected: connected,
+      service: redisUrl ? 'Waha/MQ' : 'Meta API'
+    });
+  } catch (error) {
+    res.json({ success: true, connected: false, service: 'Meta API' });
   }
 });
 

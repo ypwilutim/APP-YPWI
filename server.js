@@ -231,15 +231,28 @@ const adminRoutes = require('./src/routes/admin');
 const idcardRoutes = require('./src/routes/idcard');
 const chatRoutes = require('./src/routes/chat');
 const notificationsRoutes = require('./src/routes/notifications');
+const skGuruRoutes = require('./src/routes/sk-guru');
+const wahaRoutes = require('./src/routes/waha');
 require('./src/notifications');
+
+// Start Baileys if enabled
+if (process.env.WAHA_BAILEYS_ENABLED === 'true') {
+  require('./src/utils/whatsappBaileys').initWhatsAppBaileys().catch(err => {
+    console.error('[WAHA] Failed to initialize:', err.message);
+  });
+}
 
 app.use('/api', absensiRoutes);
 app.use('/api', authRoutes);
 app.use('/api', scannerRoutes);
 app.use('/api', adminRoutes);
+app.use('/api', require('./src/routes/employment-rules'));
 app.use('/api/idcard', idcardRoutes);
 app.use('/api', chatRoutes);
 app.use('/api', notificationsRoutes);
+app.use('/api', skGuruRoutes);
+app.use('/api', wahaRoutes);
+app.use('/api', require('./src/routes/treasurer'));
 
 const logFilePath = path.join(__dirname, 'logs', 'app.log');
 // Ensure logs directory exists
@@ -356,9 +369,9 @@ const authenticateOperator = (req, res, next) => {
       req.user = user;
       return next();
     }
-    // Guru dengan assignment admin/TU/operator/ta: boleh akses
+    // Guru dengan assignment admin/TU/operator/ta/bendahara: boleh akses
     if (user.role === 'guru' && user.assignments) {
-      const adminRoles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin'];
+      const adminRoles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin', 'bendahara'];
       const hasAdminRole = user.assignments.some(a =>
         adminRoles.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''))
       );
@@ -1630,15 +1643,16 @@ async function startServer() {
     next();
   });
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log('🚀 Server YPWI Lutim berjalan di http://localhost:' + PORT);
-    console.log('🌐 Juga dapat diakses di http://0.0.0.0:' + PORT + ' atau IP lokal Anda');
-    console.log('🔐 Login endpoint: POST /api/auth/login');
-    console.log('📊 Dashboard endpoint: GET /api/dashboard (protected)');
-    console.log('📱 Scanner endpoints: POST /api/scanner/attendance, POST /api/scanner/register');
-    console.log('🔍 QR Generator: GET /api/scanner/qr/generate?scan_id=XXX');
-  });
-}
+app.listen(PORT, '0.0.0.0', () => {
+     console.log('🚀 Server YPWI Lutim berjalan di http://localhost:' + PORT);
+     console.log('🌐 Juga dapat diakses di http://0.0.0.0:' + PORT + ' atau IP lokal Anda');
+     console.log('🔐 Login endpoint: POST /api/auth/login');
+     console.log('📊 Dashboard endpoint: GET /api/dashboard (protected)');
+     console.log('📱 Scanner endpoints: POST /api/scanner/attendance, POST /api/scanner/register');
+     console.log('🔍 QR Generator: GET /api/scanner/qr/generate?scan_id=XXX');
+   });
+   require('./scheduler');
+ }
 
 startServer().catch(err => {
   console.error('Server start failed:', err.message);

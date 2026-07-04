@@ -151,7 +151,7 @@ const authenticateOperator = (req, res, next) => {
     }
     // Guru dengan assignment admin/TU/operator: boleh akses
     if (user.role === 'guru' && user.assignments) {
-      const adminRoles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin'];
+      const adminRoles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin', 'ketua', 'kepala', 'pimpinan', 'kepalasekolah', 'bendahara'];
       const hasAdminRole = user.assignments.some(a =>
         adminRoles.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''))
       );
@@ -165,16 +165,48 @@ const authenticateOperator = (req, res, next) => {
   });
 };
 
-// ============================================================
-// HELPER FUNCTIONS
-// ============================================================
+const authenticateKetua = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  if (!token) return res.status(401).json({ success: false, message: 'Access denied. Token not found.' });
+  jwt.verify(token, SECRET_KEY, async (err, user) => {
+    if (err) return res.status(403).json({ success: false, message: 'Access denied. Token not valid.' });
 
-function getTenantFilter(tenantId) {
-  if (tenantId) {
-    return { where: 'tenant_id = ?', params: [tenantId] };
-  }
-  return { where: '', params: [] };
-}
+    if (!user.assignments || user.assignments.length === 0) {
+      if (user.guru_id) {
+        try {
+          user.assignments = await db.query(
+            'SELECT ta.tenant_id, ta.jabatan_di_unit, t.nama_sekolah FROM teacher_assignments ta JOIN tenants t ON ta.tenant_id = t.tenant_id WHERE ta.teacher_id = ? AND ta.status_aktif = 1',
+            [user.guru_id]
+          );
+        } catch (error) {
+          user.assignments = [];
+        }
+      } else {
+        user.assignments = [];
+      }
+    }
+    req.user = user;
+
+    const ketuaRoles = ['ketua', 'kepala', 'pimpinan', 'kepalasekolah'];
+    const hasKetuaRole = user.role === 'admin' || (user.role === 'guru' && user.assignments &&
+      user.assignments.some(a => ketuaRoles.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '')))
+    );
+
+    if (!hasKetuaRole) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak. Peran ketua/kepala/pimpinan diperlukan.' });
+    }
+
+    // Additional check: must be at YPWILUTIM for summary endpoints
+    if (user.role !== 'admin') {
+      const hasYPWILUTIM = user.assignments?.some(a => a.tenant_id === 'YPWILUTIM');
+      if (!hasYPWILUTIM) {
+        return res.status(403).json({ success: false, message: 'Akses ditolak. Hanya untuk ketua/kepala di YPWILUTIM.' });
+      }
+    }
+    next();
+  });
+};
 
 function verifyTenantAccess(req, requestedTenantId) {
   if (!requestedTenantId) return true;
@@ -184,7 +216,7 @@ function verifyTenantAccess(req, requestedTenantId) {
   if (userRole === 'admin') return true;
 
   if (userRole === 'guru' && assignments.length > 0) {
-    const adminRoles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin'];
+    const adminRoles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin', 'ketua', 'kepala', 'pimpinan', 'kepalasekolah', 'bendahara'];
     const allowedTenants = assignments
       .filter(a => adminRoles.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '')))
       .map(a => a.tenant_id);
@@ -193,6 +225,13 @@ function verifyTenantAccess(req, requestedTenantId) {
   }
 
   return false;
+}
+
+function getTenantFilter(tenantId) {
+  if (tenantId) {
+    return { where: 'tenant_id = ?', params: [tenantId] };
+  }
+  return { where: '', params: [] };
 }
 
 // Check if current day matches rule days
@@ -239,6 +278,7 @@ module.exports = {
   authenticateToken,
   authenticateAdmin,
   authenticateOperator,
+  authenticateKetua,
   verifyTenantAccess,
   isDayMatch,
   calculateDistance,

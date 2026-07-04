@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard Bendahara - YPWI Lutim</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="css/admin-dashboard.css">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+
+    .nav-active {
+      background-color: #059669;
+      color: white;
+    }
+
+    .modal {
+      display: none;
+    }
+
+    .modal.show {
+      display: flex;
+    }
+
+    .financial-card {
+      transition: transform 0.2s;
+    }
+
+    .financial-card:hover {
+      transform: translateY(-2px);
+    }
+
+    .chart-container {
+      position: relative;
+      height: 200px;
+    }
+  </style>
+</head>
+
+<body class="bg-gray-50 min-h-screen">
+  <div class="flex min-h-screen">
+    <!-- Sidebar -->
+    <aside class="w-64 bg-white shadow-lg border-r">
+      <div class="p-6 border-b">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 bg-emerald-600 rounded-lg flex items-center justify-center">
+            <i class="fas fa-wallet text-white"></i>
+          </div>
+          <div>
+            <h1 class="text-xl font-bold text-gray-900">YPWI Lutim</h1>
+            <p class="text-sm text-gray-500">Dashboard Bendahara</p>
+          </div>
+        </div>
+      </div>
+
+      <nav class="p-4 space-y-2">
+        <button class="nav-item nav-active w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg hover:bg-gray-100"
+          data-tab="dashboard">
+          <i class="fas fa-chart-line"></i>
+          <span>Dashboard</span>
+        </button>
+        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+          data-tab="salary">
+          <i class="fas fa-money-check-alt"></i>
+          <span>Slip Gaji Guru</span>
+        </button>
+        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+          data-tab="spp">
+          <i class="fas fa-file-invoice-dollar"></i>
+          <span>SPP Siswa</span>
+        </button>
+        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+          data-tab="reports">
+          <i class="fas fa-chart-bar"></i>
+          <span>Laporan Keuangan</span>
+        </button>
+        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+          data-tab="reminders">
+          <i class="fas fa-bell"></i>
+          <span>Pengingat SPP</span>
+        </button>
+      </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 p-8">
+      <!-- Header -->
+      <div class="flex justify-between items-center mb-8">
+        <div>
+          <h2 id="pageTitle" class="text-3xl font-bold text-gray-900">Dashboard Bendahara</h2>
+          <p class="text-gray-600 mt-1">Selamat datang, <span id="treasurerName">Bendahara</span></p>
+        </div>
+        <div class="flex items-center space-x-4">
+          <span class="text-sm text-gray-500" id="currentDate"></span>
+          <div class="flex items-center space-x-2">
+            <div class="w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center">
+              <i class="fas fa-user text-white text-sm"></i>
+            </div>
+            <span class="text-sm font-medium" id="treasurerRole">Bendahara</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Dashboard Tab -->
+      <div id="dashboardTab" class="tab-content">
+        <!-- Financial Summary Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <div class="financial-card bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Pendapatan SPP</p>
+                <p class="text-3xl font-bold text-emerald-600 mt-2" id="totalIncome">Rp 0</p>
+              </div>
+              <div class="w-12 h-12 bg-emerald-100 rounded-lg flex items-center justify-center">
+                <i class="fas fa-arrow-down text-emerald-600"></i>
+              </div>
+            </div>
+          </div>
+
+          <div class="financial-card bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Gaji Guru</p>
+                <p class="text-3xl font-bold text-red-600 mt-2" id="totalExpense">Rp 0</p>
+              </div>
+              <div class="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
+                <i class="fas fa-arrow-up text-red-600"></i>
+              </div>
+            </div>
+          </div>
+
+          <div class="financial-card bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Saldo Kas</p>
+                <p class="text-3xl font-bold text-blue-600 mt-2" id="currentBalance">Rp 0</p>
+              </div>
+              <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                <i class="fas fa-wallet text-blue-600"></i>
+              </div>
+            </div>
+          </div>
+
+          <div class="financial-card bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Belum Bayar SPP</p>
+                <p class="text-3xl font-bold text-orange-600 mt-2" id="unpaidCount">0 Siswa</p>
+              </div>
+              <div class="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                <i class="fas fa-exclamation-triangle text-orange-600"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- School Filter -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-6">
+          <div class="flex items-center space-x-3">
+            <label class="text-sm font-medium text-gray-700">Filter Sekolah:</label>
+            <select id="dashboardTenantFilter"
+              class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
+              <option value="">Semua Sekolah</option>
+            </select>
+            <button onclick="loadDashboardData()"
+              class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
+              <i class="fas fa-sync-alt mr-2"></i>Refresh
+            </button>
+          </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Distribusi Pendapatan SPP</h3>
+            <div class="chart-container">
+              <canvas id="incomeChart"></canvas>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Distribusi Gaji Guru</h3>
+            <div class="chart-container">
+              <canvas id="expenseChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent Activity -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <h3 class="text-lg font-semibold text-gray-900 mb-4">Aktivitas Terbaru</h3>
+          <div id="recentActivity" class="space-y-3 max-h-64 overflow-y-auto">
+            <p class="text-center text-gray-500 py-8">Memuat aktivitas...</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Salary Tab -->
+      <div id="salaryTab" class="tab-content hidden">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div class="flex justify-between items-center mb-6">
+            <h3 class="text-lg font-semibold text-gray-900">Slip Gaji Guru</h3>
+            <div class="flex space-x-2">
+              <select id="salaryTenantFilter"
+                class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500">
+                <option value="">Semua Sekolah</option>
+              </select>
+              <input type="month" id="salaryMonthFilter"
+                class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                value="">
+              <button onclick="loadSalaryData()"
+                class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
+                <i class="fas fa-sync-alt mr-2"></i>Refresh
+              </button>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full">
+              <thead class="bg-gray-50 border-b border-gray-100">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Nama Guru</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Jabatan</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Gaji Pokok</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Tunjangan</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Honor</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Total</th>
+                  <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="salaryTable" class="divide-y divide-gray-100">
+                <tr>
+                  <td colspan="7" class="px-4 py-8 text-center text-gray-500">
+                    <i class="fas fa-spinner fa-spin text-xl mb-2"></i>
+                    <p>Memuat data...</p>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- SPP Tab -->
+      <div id="sppTab" class="tab-content hidden">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div class="flex justify-between items-center mb-6">
+            <h3 class="text-lg font-semibold text-gray-900">Ringkasan SPP Siswa</h3>
+            <div class="flex space-x-2">
+              <select id="sppTenantFilter"
+                class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500">
+                <option value="">Semua Sekolah</option>
+              </select>
+              <button onclick="loadSppData()"
+                class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
+                <i class="fas fa-sync-alt mr-2"></i>Refresh
+              </button>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full">
+              <thead class="bg-gray-50 border-b border-gray-100">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Sekolah</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Total Siswa</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Sudah Bayar</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Belum Bayar</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Total Pemasukan</th>
+                  <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Aksi</th>
+                </tr>
+              </thead>
+<tbody id="sppTable" class="divide-y divide-gray-100">
+                <tr>
+                  <td colspan="6" class="px-4 py-8 text-center text-gray-500">
+                    <i class="fas fa-spinner fa-spin text-xl mb-2"></i>
+                    <p>Memuat data...</p>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- CSV Upload Section -->
+          <div class="mt-6 border-t pt-4">
+            <h4 class="font-medium text-gray-900 mb-3">Import Pembayaran CSV (Rekening Koran BSI)</h4>
+            <div class="flex items-center space-x-3">
+              <input type="file" id="csvFileInput" accept=".csv"
+                class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500">
+              <button onclick="uploadPayments()"
+                class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                <i class="fas fa-upload mr-2"></i>Upload & Proses
+              </button>
+</div>
+             <p class="text-xs text-gray-500 mt-2">Format BSI Rekening Koran: Tanggal,No.Rek,VA,Nama,Keterangan,Debit,Kredit. <a href="/template/BSI_Statement_Template.csv" class="text-emerald-600 underline">Download template</a></p>
+
+             <hr class="my-4">
+
+             <h4 class="font-medium text-gray-900 mb-3">Export VA untuk Cuz BSI</h4>
+             <div class="flex items-center space-x-3">
+               <button onclick="exportVA()"
+                 class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
+                 <i class="fas fa-download mr-2"></i>Download VA CSV
+               </button>
+             </div>
+             <p class="text-xs text-gray-500 mt-2">Download data siswa untuk dibuat Virtual Account di Cuz BSI</p>
+           </div>
+        </div>
+      </div>
+
+      <!-- Reports Tab -->
+      <div id="reportsTab" class="tab-content hidden">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div class="flex justify-between items-center mb-6">
+            <h3 class="text-lg font-semibold text-gray-900">Laporan Keuangan</h3>
+            <div class="flex space-x-2">
+              <select id="reportTenantFilter"
+                class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500">
+                <option value="">Semua Sekolah</option>
+              </select>
+              <input type="month" id="reportMonthFilter"
+                class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+                value="">
+              <button onclick="loadFinancialReport()"
+                class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
+                <i class="fas fa-sync-alt mr-2"></i>Generate
+              </button>
+            </div>
+          </div>
+
+          <div id="financialReportContent" class="space-y-4">
+            <p class="text-center text-gray-500 py-8">Pilih filter dan klik Generate untuk melihat laporan</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Reminders Tab -->
+      <div id="remindersTab" class="tab-content hidden">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div class="flex justify-between items-center mb-6">
+            <h3 class="text-lg font-semibold text-gray-900">Pengingat SPP</h3>
+            <div class="flex space-x-2">
+              <select id="reminderTenantFilter"
+                class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500">
+                <option value="">Semua Sekolah</option>
+              </select>
+              <button onclick="loadPaymentDefaulters()"
+                class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
+                <i class="fas fa-sync-alt mr-2"></i>Refresh
+              </button>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full">
+              <thead class="bg-gray-50 border-b border-gray-100">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Nama Siswa</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">NISN</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Sekolah</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">No. WA Orang Tua</th>
+                  <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="reminderTable" class="divide-y divide-gray-100">
+                <tr>
+                  <td colspan="5" class="px-4 py-8 text-center text-gray-500">
+                    <i class="fas fa-spinner fa-spin text-xl mb-2"></i>
+                    <p>Memuat data...</p>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Salary Slip Modal -->
+  <div id="salarySlipModal" class="modal fixed inset-0 bg-black bg-opacity-50 z-50 justify-center items-center">
+    <div class="bg-white rounded-lg max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+      <div class="p-6">
+        <div class="flex justify-between items-center mb-4">
+          <h3 class="text-lg font-semibold text-gray-900">Slip Gaji Guru</h3>
+          <button onclick="hideSalarySlipModal()" class="text-gray-500 hover:text-gray-700">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div id="salarySlipContent" class="space-y-4">
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Nama</label>
+              <p id="slipNama" class="mt-1 text-gray-900 font-semibold">-</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700">Jabatan</label>
+              <p id="slipJabatan" class="mt-1 text-gray-900">-</p>
+            </div>
+          </div>
+
+          <div class="border-t pt-4">
+            <h4 class="font-medium text-gray-900 mb-3">Rincian Gaji</h4>
+            <div class="space-y-2 text-sm">
+              <div class="flex justify-between">
+                <span>Gaji Pokok</span>
+                <span id="slipGajiPokok" class="font-medium">Rp 0</span>
+              </div>
+              <div class="flex justify-between">
+                <span>Tunjangan Kinerja</span>
+                <span id="slipTunjangan" class="font-medium">Rp 0</span>
+              </div>
+              <div class="flex justify-between border-t pt-2">
+                <span class="font-bold">Total Gaji</span>
+                <span id="slipTotal" class="font-bold text-emerald-600">Rp 0</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="flex justify-end space-x-3 pt-6 border-t mt-6">
+          <button type="button" onclick="hideSalarySlipModal()"
+            class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100">Tutup</button>
+          <button type="button" onclick="downloadSalarySlip()"
+            class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
+            <i class="fas fa-download mr-2"></i>Download PDF
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    let currentTenantId = '';
+    let currentMonth = new Date().toISOString().slice(0, 7);
+    let incomeChart = null;
+    let expenseChart = null;
+
+document.addEventListener('DOMContentLoaded', function () {
+       loadTenantFilters();
+       loadDashboardData();
+
+       document.querySelectorAll('[data-tab]').forEach(btn => {
+         btn.addEventListener('click', function () {
+           switchTab(this.dataset.tab);
+         });
+       });
+     });
+
+    function switchTab(tabName) {
+      document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
+      document.querySelectorAll('[data-tab]').forEach(n => {
+        n.classList.remove('bg-emerald-600', 'text-white');
+        n.classList.add('text-gray-600');
+      });
+      document.getElementById(tabName + 'Tab').classList.remove('hidden');
+      const btn = document.querySelector(`[data-tab="${tabName}"]`);
+      btn.classList.add('bg-emerald-600', 'text-white');
+      btn.classList.remove('text-gray-600');
+      
+      // Auto-load data for each tab
+      if (tabName === 'salary') loadSalaryData();
+      if (tabName === 'spp') loadSppData();
+      if (tabName === 'reports') loadFinancialReport();
+      if (tabName === 'reminders') loadPaymentDefaulters();
+    }
+
+     function getAuthHeader() {
+      const token = localStorage.getItem('token');
+      return token ? { 'Authorization': 'Bearer ' + token } : {};
+    }
+
+    function formatCurrency(value) {
+      const num = parseFloat(value) || 0;
+      return `Rp ${num.toLocaleString('id-ID')}`;
+    }
+
+    async function loadDashboardData() {
+      const tenantId = document.getElementById('dashboardTenantFilter').value;
+
+      try {
+        const [incomeRes, expenseRes, defaulterRes] = await Promise.all([
+          fetch(`/api/treasurer/public/spp-summary?tenant_id=${tenantId}`),
+          fetch(`/api/treasurer/public/salary-summary?tenant_id=${tenantId}`),
+          fetch(`/api/treasurer/public/payment-defaulters?tenant_id=${tenantId}`)
+        ]);
+
+        const incomeData = await incomeRes.json();
+        const expenseData = await expenseRes.json();
+        const defaulterData = await defaulterRes.json();
+
+        let totalIncome = 0, totalExpense = 0;
+
+        if (incomeData.success) {
+          incomeData.data.forEach(item => {
+            totalIncome += parseFloat(item.total_pemasukan) || 0;
+          });
+          document.getElementById('totalIncome').textContent = formatCurrency(totalIncome);
+        }
+
+        if (expenseData.success) {
+          expenseData.data.forEach(item => {
+            totalExpense += parseFloat(item.total_gaji) || 0;
+          });
+          document.getElementById('totalExpense').textContent = formatCurrency(totalExpense);
+        }
+
+        if (defaulterData.success) {
+          document.getElementById('unpaidCount').textContent = `${defaulterData.data.length} Siswa`;
+        }
+
+        document.getElementById('currentBalance').textContent = formatCurrency(totalIncome - totalExpense);
+
+        renderCharts(incomeData.data || [], expenseData.data || []);
+      } catch (error) {
+        console.error('Dashboard load error:', error);
+      }
+    }
+
+    async function loadTenantFilters() {
+      try {
+        const response = await fetch('/api/tenants');
+        const data = await response.json();
+        if (data.success) {
+          const options = data.data.map(t => `<option value="${t.tenant_id}">${t.nama_sekolah}</option>`).join('');
+          document.querySelectorAll('[id$="TenantFilter"]').forEach(select => {
+            select.innerHTML = `<option value="">Semua Sekolah</option>` + options;
+          });
+        }
+      } catch (error) {
+        console.error('Load tenants error:', error);
+      }
+    }
+
+    function renderCharts(incomeData, expenseData) {
+      const incomeCtx = document.getElementById('incomeChart').getContext('2d');
+      if (incomeChart && typeof incomeChart.destroy === 'function') incomeChart.destroy();
+      incomeChart = new Chart(incomeCtx, {
+        type: 'doughnut',
+        data: {
+          labels: incomeData.map((item, idx) => item.nama_sekolah || `Sekolah ${idx + 1}`),
+          datasets: [{
+            data: incomeData.map(item => item.total_pemasukan || 0),
+            backgroundColor: ['#10b981', '#059669', '#047857', '#0f766e']
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false
+        }
+      });
+
+      const expenseCtx = document.getElementById('expenseChart').getContext('2d');
+      if (expenseChart && typeof expenseChart.destroy === 'function') expenseChart.destroy();
+      expenseChart = new Chart(expenseCtx, {
+        type: 'doughnut',
+        data: {
+          labels: expenseData.map((item, idx) => item.nama?.substring(0, 15) || `Guru ${idx + 1}`),
+          datasets: [{
+            data: expenseData.map(item => item.total_gaji || 0),
+            backgroundColor: ['#ef4444', '#f97316', '#eab308', '#84cc16']
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false
+        }
+      });
+    }
+
+    async function loadSalaryData() {
+      const tenantId = document.getElementById('salaryTenantFilter').value;
+
+      try {
+        const response = await fetch(`/api/treasurer/public/salary-summary?tenant_id=${tenantId}`);
+        const data = await response.json();
+
+        if (data.success) {
+          document.getElementById('salaryTable').innerHTML = data.data.map(item => `
+            <tr>
+              <td class="px-4 py-3">${item.nama}</td>
+              <td class="px-4 py-3">${item.jabatan}</td>
+              <td class="px-4 py-3">Rp ${(item.gaji_pokok || 0).toLocaleString('id-ID')}</td>
+              <td class="px-4 py-3">Rp ${(item.tunjangan || 0).toLocaleString('id-ID')}</td>
+              <td class="px-4 py-3">Rp ${(item.honor_bendahara || 0).toLocaleString('id-ID')}</td>
+              <td class="px-4 py-3 font-bold">Rp ${(item.total_gaji || 0).toLocaleString('id-ID')}</td>
+              <td class="px-4 py-3 text-center">
+                <button onclick="showSalarySlip('${item.teacher_id}')"
+                  class="px-3 py-1 bg-emerald-600 text-white rounded hover:bg-emerald-700 text-sm mr-1"
+                  title="Download PDF">
+                  <i class="fas fa-download mr-1"></i>PDF
+                </button>
+                <button onclick="sendEmailSlip('${item.teacher_id}')"
+                  class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                  title="Kirim Email">
+                  <i class="fas fa-envelope mr-1"></i>Email
+                </button>
+              </td>
+            </tr>
+          `).join('');
+        }
+      } catch (error) {
+        console.error('Salary load error:', error);
+      }
+    }
+
+    async function loadSppData() {
+      const tenantId = document.getElementById('sppTenantFilter').value;
+
+      try {
+        const response = await fetch(`/api/treasurer/public/spp-summary?tenant_id=${tenantId}`);
+        const data = await response.json();
+
+        if (data.success) {
+          document.getElementById('sppTable').innerHTML = data.data.map(item => `
+            <tr>
+              <td class="px-4 py-3">${item.nama_sekolah}</td>
+              <td class="px-4 py-3">${item.total_siswa}</td>
+              <td class="px-4 py-3">${item.sudah_bayar}</td>
+              <td class="px-4 py-3 text-red-600 font-medium">${item.belum_bayar}</td>
+              <td class="px-4 py-3">Rp ${parseFloat(item.total_pemasukan || 0).toLocaleString('id-ID')}</td>
+              <td class="px-4 py-3 text-center">
+                <button onclick="sendWarningToAll('${item.tenant_id}')"
+                  class="px-3 py-1 bg-orange-600 text-white rounded hover:bg-orange-700 text-sm">
+                  <i class="fab fa-whatsapp mr-1"></i>WA Reminder
+                </button>
+              </td>
+            </tr>
+          `).join('');
+        }
+      } catch (error) {
+        console.error('SPP load error:', error);
+      }
+    }
+
+async function loadFinancialReport() {
+       const tenantId = document.getElementById('reportTenantFilter').value;
+       const month = document.getElementById('reportMonthFilter').value || currentMonth;
+
+       try {
+         const response = await fetch(`/api/treasurer/public/spp-summary?tenant_id=${tenantId}`);
+         const incomeData = await response.json();
+         const expenseResponse = await fetch(`/api/treasurer/public/salary-summary?tenant_id=${tenantId}`);
+         const expenseData = await expenseResponse.json();
+
+         let totalIncome = 0, totalExpense = 0;
+
+         if (incomeData.success) {
+           incomeData.data.forEach(item => {
+             totalIncome += parseFloat(item.total_pemasukan) || 0;
+           });
+         }
+
+         if (expenseData.success) {
+           expenseData.data.forEach(item => {
+             totalExpense += parseFloat(item.total_gaji) || 0;
+           });
+         }
+
+         const report = {
+           total_pemasukan: totalIncome,
+           total_pengeluaran: totalExpense,
+           saldo: totalIncome - totalExpense
+         };
+
+         document.getElementById('financialReportContent').innerHTML = `
+           <div class="grid grid-cols-2 gap-6">
+             <div class="bg-emerald-50 p-4 rounded-lg">
+               <h4 class="font-semibold text-emerald-800 mb-2">Total Pemasukan</h4>
+               <p class="text-2xl font-bold text-emerald-600">${formatCurrency(report.total_pemasukan)}</p>
+             </div>
+             <div class="bg-red-50 p-4 rounded-lg">
+               <h4 class="font-semibold text-red-800 mb-2">Total Pengeluaran</h4>
+               <p class="text-2xl font-bold text-red-600">${formatCurrency(report.total_pengeluaran)}</p>
+             </div>
+           </div>
+           <div class="mt-6 bg-blue-50 p-4 rounded-lg">
+             <h4 class="font-semibold text-blue-800 mb-2">Saldo Kas</h4>
+             <p class="text-3xl font-bold text-blue-600">${formatCurrency(report.saldo)}</p>
+           </div>
+         `;
+       } catch (error) {
+         console.error('Report load error:', error);
+       }
+     }
+
+    async function loadPaymentDefaulters() {
+      const tenantId = document.getElementById('reminderTenantFilter').value;
+
+      try {
+        const response = await fetch(`/api/treasurer/public/payment-defaulters?tenant_id=${tenantId}`);
+        const data = await response.json();
+
+        if (data.success) {
+          document.getElementById('reminderTable').innerHTML = data.data.map(item => `
+            <tr>
+              <td class="px-4 py-3">${item.nama_siswa}</td>
+              <td class="px-4 py-3">${item.nisn}</td>
+              <td class="px-4 py-3">${item.nama_sekolah || '-'}</td>
+              <td class="px-4 py-3">${item.no_wa || '-'}</td>
+              <td class="px-4 py-3 text-center">
+                ${item.no_wa ? `
+                  <button onclick="sendReminder('${item.no_wa}', '${item.nama_siswa}')"
+                    class="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm">
+                    <i class="fab fa-whatsapp mr-1"></i>Kirim WA
+                  </button>
+                ` : '-'}
+              </td>
+            </tr>
+          `).join('');
+        }
+      } catch (error) {
+        console.error('Defaulter load error:', error);
+      }
+    }
+
+function showSalarySlip(teacherId) {
+      window.open(`/api/treasurer/public/salary-slip-pdf/${teacherId}?month=${currentMonth}`, '_blank');
+    }
+
+    function sendEmailSlip(teacherId) {
+      if (confirm('Kirim slip gaji ke email guru?')) {
+        fetch(`/api/treasurer/public/send-salary-slip-email`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ teacherId, month: currentMonth })
+        }).then(r => r.json()).then(data => {
+          if (data.success) {
+            alert('Email berhasil terkirim');
+          } else {
+            alert('Gagal: ' + data.message + '\nPastikan guru memiliki email di database');
+          }
+        });
+      }
+    }
+
+    function exportVA() {
+      const tenantId = document.getElementById('sppTenantFilter').value;
+      const url = `/api/treasurer/public/export-va?tenant_id=${tenantId}`;
+      window.location.href = url;
+    }
+
+    function sendWarningToAll(tenantId) {
+      alert('Fitur kirim reminder massal ke semua wali murid akan diimplementasikan');
+    }
+  </script>
+</body>
+
+</html>

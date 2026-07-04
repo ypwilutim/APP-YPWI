@@ -60,23 +60,235 @@ body.delete-mode .chat-header .delete-btn{display:block}
 </div>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
-(function(){const token=localStorage.getItem('token');if(!token){window.location.href='login.html';return}const currentUserId=(function(){try{const b=token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');return JSON.parse(atob(b)).id}catch(e){return null}})();function escapeHtml(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML}function authedFetch(u,i){i=i||{};i.headers=Object.assign({},i.headers,{Authorization:'Bearer '+token});return fetch(u,i)}let activeConversationId=null,searchMode='filter',allConversations=[],deleteMode=false,longPressTimer=null;async function loadConversations(){try{const r=await authedFetch('/api/chat/conversations'),d=await r.json();if(d.success&&d.conversations&&d.conversations.length){allConversations=d.conversations;renderConversations(d.conversations)}else{document.getElementById('conversationsContainer').innerHTML='<div style="text-align:center;color:#94a3b8;padding:2rem;">Belum ada percakapan</div>'}catch(e){document.getElementById('conversationsContainer').innerHTML='<div style="text-align:center;color:#dc2626;padding:1rem;">Error</div>'}}
-function handleSearch(){const q=document.getElementById('searchInput').value.trim();if(!q&&searchMode==='filter'){loadConversations();return}if(searchMode==='new')searchNewUser();else{const f=allConversations.filter(c=>(c.other_name||'').toLowerCase().includes(q.toLowerCase()));renderConversations(f)}}
-function showSearch(){document.getElementById('searchInput').value='';document.getElementById('searchInput').placeholder='Cari nama yang ingin di-chat...';document.getElementById('searchInput').focus();searchMode='new';document.getElementById('conversationsContainer').innerHTML=''}
-async function searchNewUser(){const q=document.getElementById('searchInput').value.trim();if(!q)return;try{const r=await authedFetch('/api/chat/users?search='+encodeURIComponent(q)),d=await r.json();if(d.success&&d.users){document.getElementById('conversationsContainer').innerHTML=d.users.map(u=>'<div class="conversation-item" onclick="checkExisting('+u.user_id+",'"+escapeHtml(u.name)+"')"><div class="conversation-name">'+escapeHtml(u.name)+'</div><div class="conversation-preview">Guru - '+u.tenant_id+'</div></div>').join('')}}catch(e){console.error(e)}}
-async function checkExisting(id,n){const e=allConversations.find(c=>c.other_name===n);if(e)openConversation(e.id,n);else selectUser(id,n)}
-async function selectUser(id,n){try{const r=await authedFetch('/api/chat/conversations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({targetUserId:id,targetUserType:'guru'})});const d=await r.json();if(d.success){activeConversationId=d.conversationId;document.getElementById('chatPanelHeader').textContent=n;document.getElementById('chatPanel').classList.add('active');document.getElementById('searchInput').value='';document.getElementById('conversationsList').classList.add('hide');document.getElementById('messagesContainer').innerHTML='<div style="text-align:center;color:#94a3b8;padding:2rem;"><i class="fas fa-spinner fa-spin"></i> Memuat...</div>'}else{Swal.fire('Error',d.message,'error')}}catch(e){console.error(e)}}
-function openConversation(c,n){if(deleteMode)return;activeConversationId=c;document.getElementById('chatPanelHeader').textContent=n||'Chat';document.getElementById('chatPanel').classList.add('active');document.getElementById('conversationsList').classList.add('hide');document.getElementById('messagesContainer').innerHTML='<div style="text-align:center;color:#94a3b8;padding:2rem;"><i class="fas fa-spinner fa-spin"></i> Memuat...</div>';loadMessages()}
-function showConversations(){document.getElementById('chatPanel').classList.remove('active');document.getElementById('conversationsList').classList.remove('hide');if(deleteMode)cancelDelete();else{searchMode='filter';document.getElementById('searchInput').value='';document.getElementById('searchInput').placeholder='Cari history percakapan...';handleSearch()}}
-async function loadMessages(){if(!activeConversationId)return;try{const r=await authedFetch('/api/chat/conversations/'+activeConversationId+'/messages'),d=await r.json();if(d.success){document.getElementById('messagesContainer').innerHTML=d.messages.length?d.messages.map(m=>'<div class="message '+(m.sender_id==currentUserId?'own':'other')+'"><div>'+escapeHtml(m.message)+'</div><div style="font-size:0.7rem;opacity:0.7;margin-top:0.25rem;">'+new Date(m.created_at).toLocaleTimeString('id-ID')+'</div></div>').join(''):'<div style="text-align:center;color:#64748b;padding:2rem;">Belum ada pesan</div>';document.getElementById('messagesContainer').scrollTop=document.getElementById('messagesContainer').scrollHeight}}catch(e){console.error(e)}}
-async function sendMessage(){const i=document.getElementById('messageInput'),m=i.value.trim();if(!m||!activeConversationId)return;try{const r=await authedFetch('/api/chat/conversations/'+activeConversationId+'/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:m})});const d=await r.json();if(d.success){i.value='';loadMessages();loadConversations()}}catch(e){console.error(e)}}
-function renderConversations(c){document.getElementById('conversationsContainer').innerHTML=c.length?c.map(v=>'<div class="conversation-item" onclick="openConversation('+v.id+",'"+escapeHtml(v.other_name)+"')"><input type=\\"checkbox\\" class=\\"conv-checkbox\\" onchange=\\"updateSelectedCount()\\" value=\\"'+v.id+'\\"><div><div class="conversation-name">'+escapeHtml(v.other_name||'Percakapan')+'</div><div class="conversation-preview">'+escapeHtml(v.last_message||'Belum ada pesan')+'</div></div></div>').join(''):'<div style="text-align:center;color:#94a3b8;padding:1rem;">Tidak ada percakapan ditemukan</div>'}
-document.addEventListener('touchstart',e=>{if(e.target.closest('.conversation-item')&&!deleteMode){longPressTimer=setTimeout(()=>{enterDeleteMode();const cb=e.target.closest('.conversation-item').querySelector('.conv-checkbox');if(cb){cb.checked=true;updateSelectedCount()}},500)}});document.addEventListener('touchend',()=>{clearTimeout(longPressTimer)})
-function enterDeleteMode(){deleteMode=true;document.body.classList.add('delete-mode');document.getElementById('deleteActions').style.display='flex'}
-function cancelDelete(){deleteMode=false;document.body.classList.remove('delete-mode');document.getElementById('deleteActions').style.display='none';document.querySelectorAll('.conv-checkbox').forEach(cb=>cb.checked=false)}
-function updateSelectedCount(){document.getElementById('selectedCount').textContent=document.querySelectorAll('.conv-checkbox:checked').length+' terpilih'}
-async function deleteSelected(){const c=document.querySelectorAll('.conv-checkbox:checked');if(!c.length)return;for(const cb of c)await authedFetch('/api/chat/conversations/'+cb.value,{method:'DELETE'});cancelDelete();loadConversations()}
-loadConversations();setInterval(loadConversations,10000)})()
+(function() {
+  const token = localStorage.getItem('token');
+  if (!token) {
+    window.location.href = 'login.html';
+    return;
+  }
+  const currentUserId = (function() {
+    try {
+      const b = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+      return JSON.parse(atob(b)).id;
+    } catch (e) {
+      return null;
+    }
+  })();
+
+  function escapeHtml(t) {
+    const d = document.createElement('div');
+    d.textContent = t;
+    return d.innerHTML;
+  }
+
+  function authedFetch(u, i) {
+    i = i || {};
+    i.headers = Object.assign({}, i.headers, { Authorization: 'Bearer ' + token });
+    return fetch(u, i);
+  }
+
+  let activeConversationId = null,
+      searchMode = 'filter',
+      allConversations = [],
+      deleteMode = false,
+      longPressTimer = null;
+
+  async function loadConversations() {
+    try {
+      const r = await authedFetch('/api/chat/conversations');
+      const d = await r.json();
+      if (d.success && d.conversations && d.conversations.length) {
+        allConversations = d.conversations;
+        renderConversations(d.conversations);
+      } else {
+        document.getElementById('conversationsContainer').innerHTML = '<div style="text-align:center;color:#94a3b8;padding:2rem;">Belum ada percakapan</div>';
+      }
+    } catch (e) {
+      document.getElementById('conversationsContainer').innerHTML = '<div style="text-align:center;color:#dc2626;padding:1rem;">Error</div>';
+    }
+  }
+
+  function handleSearch() {
+    const q = document.getElementById('searchInput').value.trim();
+    if (!q && searchMode === 'filter') {
+      loadConversations();
+      return;
+    }
+    if (searchMode === 'new') {
+      searchNewUser();
+    } else {
+      const f = allConversations.filter(c => (c.other_name || '').toLowerCase().includes(q.toLowerCase()));
+      renderConversations(f);
+    }
+  }
+
+  function showSearch() {
+    document.getElementById('searchInput').value = '';
+    document.getElementById('searchInput').placeholder = 'Cari nama yang ingin di-chat...';
+    document.getElementById('searchInput').focus();
+    searchMode = 'new';
+    document.getElementById('conversationsContainer').innerHTML = '';
+  }
+
+  async function searchNewUser() {
+    const q = document.getElementById('searchInput').value.trim();
+    if (!q) return;
+    try {
+      const r = await authedFetch('/api/chat/users?search=' + encodeURIComponent(q));
+      const d = await r.json();
+      if (d.success && d.users) {
+        document.getElementById('conversationsContainer').innerHTML = d.users.map(u =>
+          '<div class="conversation-item" onclick="checkExisting('+u.user_id+",'"+escapeHtml(u.name)+"')"><div class='conversation-name'>"+escapeHtml(u.name)+'</div><div class="conversation-preview">Guru - ' + u.tenant_id + '</div></div>'
+        ).join('');
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  async function checkExisting(id, n) {
+    const e = allConversations.find(c => c.other_name === n);
+    if (e) openConversation(e.id, n);
+    else selectUser(id, n);
+  }
+
+  async function selectUser(id, n) {
+    try {
+      const r = await authedFetch('/api/chat/conversations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetUserId: id, targetUserType: 'guru' })
+      });
+      const d = await r.json();
+      if (d.success) {
+        activeConversationId = d.conversationId;
+        document.getElementById('chatPanelHeader').textContent = n;
+        document.getElementById('chatPanel').classList.add('active');
+        document.getElementById('searchInput').value = '';
+        document.getElementById('conversationsList').classList.add('hide');
+        document.getElementById('messagesContainer').innerHTML = '<div style="text-align:center;color:#94a3b8;padding:2rem;"><i class="fas fa-spinner fa-spin"></i> Memuat...</div>';
+      } else {
+        Swal.fire('Error', d.message, 'error');
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  function openConversation(c, n) {
+    if (deleteMode) return;
+    activeConversationId = c;
+    document.getElementById('chatPanelHeader').textContent = n || 'Chat';
+    document.getElementById('chatPanel').classList.add('active');
+    document.getElementById('conversationsList').classList.add('hide');
+    document.getElementById('messagesContainer').innerHTML = '<div style="text-align:center;color:#94a3b8;padding:2rem;"><i class="fas fa-spinner fa-spin"></i> Memuat...</div>';
+    loadMessages();
+  }
+
+  function showConversations() {
+    document.getElementById('chatPanel').classList.remove('active');
+    document.getElementById('conversationsList').classList.remove('hide');
+    if (deleteMode) {
+      cancelDelete();
+    } else {
+      searchMode = 'filter';
+      document.getElementById('searchInput').value = '';
+      document.getElementById('searchInput').placeholder = 'Cari history percakapan...';
+      handleSearch();
+    }
+  }
+
+  async function loadMessages() {
+    if (!activeConversationId) return;
+    try {
+      const r = await authedFetch('/api/chat/conversations/' + activeConversationId + '/messages');
+      const d = await r.json();
+      if (d.success) {
+        document.getElementById('messagesContainer').innerHTML = d.messages.length
+          ? d.messages.map(m => '<div class="message ' + (m.sender_id == currentUserId ? 'own' : 'other') + '"><div>' + escapeHtml(m.message) + '</div><div style="font-size:0.7rem;opacity:0.7;margin-top:0.25rem;">' + new Date(m.created_at).toLocaleTimeString('id-ID') + '</div></div>').join('')
+          : '<div style="text-align:center;color:#64748b;padding:2rem;">Belum ada pesan</div>';
+        document.getElementById('messagesContainer').scrollTop = document.getElementById('messagesContainer').scrollHeight;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  async function sendMessage() {
+    const i = document.getElementById('messageInput');
+    const m = i.value.trim();
+    if (!m || !activeConversationId) return;
+    try {
+      const r = await authedFetch('/api/chat/conversations/' + activeConversationId + '/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: m })
+      });
+      const d = await r.json();
+      if (d.success) {
+        i.value = '';
+        loadMessages();
+        loadConversations();
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  function renderConversations(c) {
+    document.getElementById('conversationsContainer').innerHTML = c.length
+      ? c.map(v =>
+          '<div class="conversation-item" onclick="openConversation(' + v.id + ",'" + escapeHtml(v.other_name) + "')\"><input type=\"checkbox\" class=\"conv-checkbox\" onchange=\"updateSelectedCount()\" value=\"" + v.id + "\"><div><div class=\"conversation-name\">" + escapeHtml(v.other_name || 'Percakapan') + '</div><div class="conversation-preview">' + escapeHtml(v.last_message || 'Belum ada pesan') + '</div></div></div>'
+        ).join('')
+      : '<div style="text-align:center;color:#94a3b8;padding:1rem;">Tidak ada percakapan ditemukan</div>';
+  }
+
+  document.addEventListener('touchstart', e => {
+    if (e.target.closest('.conversation-item') && !deleteMode) {
+      longPressTimer = setTimeout(() => {
+        enterDeleteMode();
+        const cb = e.target.closest('.conversation-item').querySelector('.conv-checkbox');
+        if (cb) {
+          cb.checked = true;
+          updateSelectedCount();
+        }
+      }, 500);
+    }
+  });
+  document.addEventListener('touchend', () => {
+    clearTimeout(longPressTimer);
+  });
+
+  function enterDeleteMode() {
+    deleteMode = true;
+    document.body.classList.add('delete-mode');
+    document.getElementById('deleteActions').style.display = 'flex';
+  }
+
+  function cancelDelete() {
+    deleteMode = false;
+    document.body.classList.remove('delete-mode');
+    document.getElementById('deleteActions').style.display = 'none';
+    document.querySelectorAll('.conv-checkbox').forEach(cb => cb.checked = false);
+  }
+
+  function updateSelectedCount() {
+    document.getElementById('selectedCount').textContent = document.querySelectorAll('.conv-checkbox:checked').length + ' terpilih';
+  }
+
+  async function deleteSelected() {
+    const c = document.querySelectorAll('.conv-checkbox:checked');
+    if (!c.length) return;
+    for (const cb of c) {
+      await authedFetch('/api/chat/conversations/' + cb.value, { method: 'DELETE' });
+    }
+    cancelDelete();
+    loadConversations();
+  }
+
+  loadConversations();
+  setInterval(loadConversations, 10000);
+})();
 </script>
 </body>
 </html>

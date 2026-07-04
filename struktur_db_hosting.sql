@@ -3,9 +3,9 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: localhost:3306
--- Waktu pembuatan: 19 Jun 2026 pada 08.12
--- Versi server: 10.11.17-MariaDB-cll-lve
--- Versi PHP: 8.4.21
+-- Waktu pembuatan: 05 Jul 2026 pada 06.13
+-- Versi server: 10.11.18-MariaDB-cll-lve
+-- Versi PHP: 8.4.22
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 START TRANSACTION;
@@ -60,7 +60,7 @@ CREATE TABLE `attendance_rules` (
   `jam_mulai` time NOT NULL,
   `jam_selesai` time NOT NULL,
   `keterangan` varchar(255) DEFAULT NULL,
-  `status_log` enum('tepat_waktu','terlambat','lembur','pulang_cepat') NOT NULL,
+  `status_log` enum('tepat_waktu','terlambat') NOT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -86,6 +86,22 @@ CREATE TABLE `attendance_summary` (
 -- --------------------------------------------------------
 
 --
+-- Struktur dari tabel `chat_messages`
+--
+
+CREATE TABLE `chat_messages` (
+  `id` int(11) NOT NULL,
+  `conversation_id` int(11) NOT NULL,
+  `sender_id` int(11) NOT NULL,
+  `sender_name` varchar(100) NOT NULL,
+  `sender_type` enum('guru','parent') DEFAULT 'guru',
+  `message` text NOT NULL,
+  `created_at` timestamp NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Struktur dari tabel `classes`
 --
 
@@ -94,6 +110,34 @@ CREATE TABLE `classes` (
   `tenant_id` varchar(50) DEFAULT NULL,
   `nama_kelas` varchar(50) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `conversations`
+--
+
+CREATE TABLE `conversations` (
+  `id` int(11) NOT NULL,
+  `tenant_id` varchar(20) DEFAULT NULL,
+  `is_global` tinyint(1) DEFAULT 0,
+  `created_by` int(11) DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `conversation_participants`
+--
+
+CREATE TABLE `conversation_participants` (
+  `id` int(11) NOT NULL,
+  `conversation_id` int(11) NOT NULL,
+  `user_id` int(11) NOT NULL,
+  `user_type` enum('guru','parent') DEFAULT 'guru',
+  `joined_at` timestamp NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
 
@@ -108,10 +152,10 @@ CREATE TABLE `evaluations` (
   `tenant_id` varchar(20) NOT NULL,
   `score` int(11) NOT NULL CHECK (`score` >= 1 and `score` <= 5),
   `category` enum('kehadiran','disiplin','profesionalisme','komunikasi','kepemimpinan') DEFAULT 'kehadiran',
-  `notes` text DEFAULT NULL,
+  `notes` mediumtext DEFAULT NULL,
   `evaluation_date` date DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT current_timestamp()
-) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
 
@@ -385,7 +429,8 @@ ALTER TABLE `attendance_logs`
   ADD KEY `idx_teacher_id` (`teacher_id`),
   ADD KEY `idx_tenant_id` (`tenant_id`),
   ADD KEY `idx_waktu_scan` (`waktu_scan`),
-  ADD KEY `idx_jenis` (`jenis`);
+  ADD KEY `idx_jenis` (`jenis`),
+  ADD KEY `idx_rule_id` (`rule_id`);
 
 --
 -- Indeks untuk tabel `attendance_rules`
@@ -402,6 +447,14 @@ ALTER TABLE `attendance_summary`
   ADD UNIQUE KEY `tenant_date` (`tenant_id`,`date`);
 
 --
+-- Indeks untuk tabel `chat_messages`
+--
+ALTER TABLE `chat_messages`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_conversation` (`conversation_id`),
+  ADD KEY `idx_created_at` (`created_at`);
+
+--
 -- Indeks untuk tabel `classes`
 --
 ALTER TABLE `classes`
@@ -409,12 +462,27 @@ ALTER TABLE `classes`
   ADD KEY `fk_classes_tenant` (`tenant_id`);
 
 --
+-- Indeks untuk tabel `conversations`
+--
+ALTER TABLE `conversations`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_tenant` (`tenant_id`);
+
+--
+-- Indeks untuk tabel `conversation_participants`
+--
+ALTER TABLE `conversation_participants`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `unique_participant` (`conversation_id`,`user_id`),
+  ADD KEY `idx_user` (`user_id`);
+
+--
 -- Indeks untuk tabel `evaluations`
 --
 ALTER TABLE `evaluations`
   ADD PRIMARY KEY (`id`),
-  ADD KEY `teacher_id` (`teacher_id`),
-  ADD KEY `evaluator_id` (`evaluator_id`);
+  ADD KEY `idx_teacher_id` (`teacher_id`),
+  ADD KEY `idx_evaluator_id` (`evaluator_id`);
 
 --
 -- Indeks untuk tabel `leave_requests`
@@ -500,7 +568,8 @@ ALTER TABLE `tenants`
 --
 ALTER TABLE `tenant_locations`
   ADD PRIMARY KEY (`id`),
-  ADD KEY `tenant_id` (`tenant_id`);
+  ADD KEY `tenant_id` (`tenant_id`),
+  ADD KEY `idx_is_active` (`is_active`);
 
 --
 -- Indeks untuk tabel `users`
@@ -536,9 +605,27 @@ ALTER TABLE `attendance_summary`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
+-- AUTO_INCREMENT untuk tabel `chat_messages`
+--
+ALTER TABLE `chat_messages`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT untuk tabel `classes`
 --
 ALTER TABLE `classes`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `conversations`
+--
+ALTER TABLE `conversations`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `conversation_participants`
+--
+ALTER TABLE `conversation_participants`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
@@ -616,13 +703,26 @@ ALTER TABLE `users`
 --
 ALTER TABLE `attendance_logs`
   ADD CONSTRAINT `attendance_logs_ibfk_1` FOREIGN KEY (`teacher_id`) REFERENCES `teachers` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `attendance_logs_ibfk_2` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`tenant_id`) ON DELETE CASCADE;
+  ADD CONSTRAINT `attendance_logs_ibfk_2` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`tenant_id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `attendance_logs_ibfk_3` FOREIGN KEY (`rule_id`) REFERENCES `attendance_rules` (`id`) ON DELETE SET NULL;
+
+--
+-- Ketidakleluasaan untuk tabel `chat_messages`
+--
+ALTER TABLE `chat_messages`
+  ADD CONSTRAINT `chat_messages_ibfk_1` FOREIGN KEY (`conversation_id`) REFERENCES `conversations` (`id`) ON DELETE CASCADE;
 
 --
 -- Ketidakleluasaan untuk tabel `classes`
 --
 ALTER TABLE `classes`
   ADD CONSTRAINT `fk_classes_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`tenant_id`);
+
+--
+-- Ketidakleluasaan untuk tabel `conversation_participants`
+--
+ALTER TABLE `conversation_participants`
+  ADD CONSTRAINT `conversation_participants_ibfk_1` FOREIGN KEY (`conversation_id`) REFERENCES `conversations` (`id`) ON DELETE CASCADE;
 
 --
 -- Ketidakleluasaan untuk tabel `evaluations`

@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  waha:
+    image: evolution-api/evolution-api:latest
+    container_name: waha-whatsapp
+    ports:
+      - "3001:3000"
+    environment:
+      - SERVER_TYPE=http
+      - JWT_SECRET=${WHATSAPP_JWT_SECRET:-ypwi-waha-secret}
+      - CORS_ORIGIN=*
+      - POSTGRES_ENABLED=false
+      - REDIS_ENABLED=false
+    volumes:
+      - ./waha-data:/app/whaticket
+    restart: unless-stopped
+
+  # Optional: PostgreSQL for message history
+  postgres:
+    image: postgres:15-alpine
+    container_name: waha-postgres
+    environment:
+      - POSTGRES_DB=waha
+      - POSTGRES_USER=waha
+      - POSTGRES_PASSWORD=waha123
+    volumes:
+      - ./postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
