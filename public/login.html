@@ -10,7 +10,7 @@
   <meta property="og:title" content="Login - Sistem Absensi YPWI Lutim">
   <meta property="og:description"
     content="Masuk ke Sistem Absensi Guru YPWI Lutim untuk melakukan absensi lokasi dengan GPS dan QR Code">
-  <meta property="og:image" content="https://ypwilutim.com/assets/images/login.jpg">
+  <meta property="og:image" content="https://app.ypwilutim.com/assets/images/login.jpg">
   <meta property="og:url" content="">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="YPWI Lutim Absensi">
@@ -249,53 +249,53 @@
               const data = await response.json();
               console.log('📦 [LOGIN DEBUG] Parsed response data:', data);
 
-      if (data.success) {
-        console.log('✅ [LOGIN DEBUG] Login successful, token received');
+              if (data.success) {
+                console.log('✅ [LOGIN DEBUG] Login successful, token received');
 
-        const userData = {
-          id: data.user.id,
-          username: data.user.username,
-          role: data.user.role,
-          tenant_id: data.user.tenant_id,
-          guru_id: data.user.guru_id,
-          is_profile_complete: data.user.is_profile_complete,
-          is_default_password: data.user.is_default_password,
-          assignments: data.user.assignments || [],
-          redirect: data.redirect
-        };
+                const userData = {
+                  id: data.user.id,
+                  username: data.user.username,
+                  role: data.user.role,
+                  tenant_id: data.user.tenant_id,
+                  guru_id: data.user.guru_id,
+                  is_profile_complete: data.user.is_profile_complete,
+                  is_default_password: data.user.is_default_password,
+                  assignments: data.user.assignments || [],
+                  redirect: data.redirect
+                };
 
-                 localStorage.setItem('token', data.token);
-                 localStorage.setItem('user', JSON.stringify(userData));
+                localStorage.setItem('token', data.token);
+                localStorage.setItem('user', JSON.stringify(userData));
 
-                 if (window.ypwiSessionSave) {
-                   window.ypwiSessionSave(userData);
-                 }
+                if (window.ypwiSessionSave) {
+                  window.ypwiSessionSave(userData);
+                }
 
-                 if (window.ypwiSessionSave && window.ypwiPush) {
-                   const tryNotify = async () => {
-                     const permission = await window.ypwi.notifications?.request?.();
-                     if (permission === 'granted') {
-                       const sub = await window.ypwiPush.register?.();
-                       if (sub) await window.ypwiPush.sendSubscriptionToServer?.(sub, data.token);
-                     }
-                   };
-                   tryNotify();
-                 }
+                if (window.ypwiSessionSave && window.ypwiPush) {
+                  const tryNotify = async () => {
+                    const permission = await window.ypwi.notifications?.request?.();
+                    if (permission === 'granted') {
+                      const sub = await window.ypwiPush.register?.();
+                      if (sub) await window.ypwiPush.sendSubscriptionToServer?.(sub, data.token);
+                    }
+                  };
+                  tryNotify();
+                }
 
-        if (window.ypwiSessionSave) {
-          window.ypwiSessionSave(userData);
-        }
+                if (window.ypwiSessionSave) {
+                  window.ypwiSessionSave(userData);
+                }
 
-        if (window.ypwiSessionSave && window.ypwiPush) {
-          const tryNotify = async () => {
-            const permission = await window.ypwi.notifications?.request?.();
-            if (permission === 'granted') {
-              const sub = await window.ypwiPush.register?.();
-              if (sub) await window.ypwiPush.sendSubscriptionToServer?.(sub, data.token);
-            }
-          };
-          tryNotify();
-        }
+                if (window.ypwiSessionSave && window.ypwiPush) {
+                  const tryNotify = async () => {
+                    const permission = await window.ypwi.notifications?.request?.();
+                    if (permission === 'granted') {
+                      const sub = await window.ypwiPush.register?.();
+                      if (sub) await window.ypwiPush.sendSubscriptionToServer?.(sub, data.token);
+                    }
+                  };
+                  tryNotify();
+                }
 
                 console.log('💾 [LOGIN DEBUG] Stored token and user data:', { token: !!data.token, user: userData });
 
