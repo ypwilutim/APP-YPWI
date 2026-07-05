@@ -830,6 +830,80 @@ router.delete('/admin/teachers/:id', authenticateOperator, async (req, res) => {
   }
 });
 
+// ==========================================
+// ASSIGNMENT ROUTES - Pembagian Tugas Guru/Staf
+// ==========================================
+
+// GET /api/admin/assignments - List teachers with their assignments
+router.get('/admin/assignments', authenticateOperator, async (req, res) => {
+  try {
+    const tenantId = req.query.tenant_id;
+    const query = `
+      SELECT t.id, t.nama, t.nik, t.nip, t.email, t.no_wa,
+             ta.jabatan_di_unit, ta.class_id, c.nama_kelas as wali_kelas
+      FROM teachers t
+      JOIN teacher_assignments ta ON t.id = ta.teacher_id
+      LEFT JOIN classes c ON ta.class_id = c.id
+      WHERE t.status_aktif = 1
+      ${tenantId ? 'AND ta.tenant_id = ?' : ''}
+      ORDER BY t.nama ASC
+    `;
+    const params = tenantId ? [tenantId] : [];
+    const teachers = await db.query(query, params);
+    res.json({ success: true, data: teachers });
+  } catch (error) {
+    console.error('Admin assignments error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching assignments' });
+  }
+});
+
+// PUT /api/admin/teachers/:id/assignment - Update teacher assignment (jabatan + class_id)
+router.put('/admin/teachers/:id/assignment', authenticateOperator, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { jabatan_di_unit, class_id } = req.body;
+
+    // Verify teacher exists
+    const [teacher] = await db.query('SELECT id FROM teachers WHERE id = ? AND status_aktif = 1', [id]);
+    if (!teacher) {
+      return res.status(404).json({ success: false, message: 'Guru tidak ditemukan' });
+    }
+
+    // If class_id provided, verify it belongs to the teacher's tenant
+    if (class_id) {
+      const [assignment] = await db.query('SELECT tenant_id FROM teacher_assignments WHERE teacher_id = ?', [id]);
+      if (assignment) {
+        const [classCheck] = await db.query('SELECT id FROM classes WHERE id = ? AND tenant_id = ?', [class_id, assignment.tenant_id]);
+        if (!classCheck) {
+          return res.status(400).json({ success: false, message: 'Kelas tidak valid untuk tenant ini' });
+        }
+      }
+    }
+
+    // Update assignment
+    const existingAssignment = await db.query('SELECT id FROM teacher_assignments WHERE teacher_id = ?', [id]);
+    if (existingAssignment.length > 0) {
+      await db.query(
+        'UPDATE teacher_assignments SET jabatan_di_unit = ?, class_id = ? WHERE teacher_id = ?',
+        [jabatan_di_unit || 'Guru', class_id || null, id]
+      );
+    } else {
+      const [teacherInfo] = await db.query('SELECT tenant_id FROM teachers t JOIN teacher_assignments ta ON t.id = ta.teacher_id WHERE t.id = ?', [id]);
+      if (teacherInfo) {
+        await db.query(
+          'INSERT INTO teacher_assignments (teacher_id, tenant_id, jabatan_di_unit, class_id) VALUES (?, ?, ?, ?)',
+          [id, teacherInfo.tenant_id, jabatan_di_unit || 'Guru', class_id || null]
+        );
+      }
+    }
+
+    res.json({ success: true, message: 'Tugas guru berhasil diupdate' });
+  } catch (error) {
+    console.error('Update assignment error:', error);
+    res.status(500).json({ success: false, message: 'Error updating assignment' });
+  }
+});
+
 // });
 
 // ============================================================
@@ -1274,7 +1348,7 @@ router.delete('/admin/classes/:id', authenticateOperator, async (req, res) => {
 router.put('/admin/students/bulk-promote', authenticateOperator, async (req, res) => {
   try {
     let tenantId = req.query.tenant_id;
-    let { from_class_id, to_class_id, action } = req.body;
+    let { from_class_id, to_class_id, action, mappings } = req.body;
 
     // Operator: force tenant_id from assignment if not provided
     if (req.user.role !== 'admin' && !tenantId) {
@@ -1294,44 +1368,74 @@ router.put('/admin/students/bulk-promote', authenticateOperator, async (req, res
       return res.status(403).json({ success: false, message: 'Akses ditolak' });
     }
 
-    if (!from_class_id || !to_class_id) {
-      return res.status(400).json({ success: false, message: 'from_class_id dan to_class_id wajib diisi' });
-    }
-
-    // Verify both classes exist and belong to the tenant
-    const [fromClass] = await db.query('SELECT * FROM classes WHERE id = ? AND tenant_id = ?', [from_class_id, tenantId]);
-    const [toClass] = await db.query('SELECT * FROM classes WHERE id = ? AND tenant_id = ?', [to_class_id, tenantId]);
-
-    if (!fromClass) {
-      return res.status(404).json({ success: false, message: 'Kelas asal tidak ditemukan' });
-    }
-    if (!toClass) {
-      return res.status(404).json({ success: false, message: 'Kelas tujuan tidak ditemukan' });
-    }
-
-    if (action === 'graduate') {
-      // Remove students from active enrollment (graduate them)
-      try {
-        await db.query(
-          'UPDATE students SET class_id = NULL, status_lulus = 1, tanggal_lulus = NOW() WHERE class_id = ?',
-          [from_class_id]
-        );
-      } catch (colError) {
-        // Fallback: just remove class assignment if status_lulus/tanggal_lulus columns don't exist
-        await db.query(
-          'UPDATE students SET class_id = NULL WHERE class_id = ?',
-          [from_class_id]
-        );
-      }
-      res.json({ success: true, message: `Siswa kelas ${fromClass.nama_kelas} berhasil diluluskan` });
+    // Support both single mapping and array of mappings
+    let mappingList = [];
+    if (mappings && Array.isArray(mappings) && mappings.length > 0) {
+      mappingList = mappings;
+    } else if (from_class_id && to_class_id) {
+      mappingList = [{ from_class_id, to_class_id }];
     } else {
-      // Move students to target class
-      const result = await db.query(
-        'UPDATE students SET class_id = ? WHERE class_id = ?',
-        [to_class_id, from_class_id]
-      );
-      const count = result.affectedRows;
-      res.json({ success: true, message: `${count} siswa berhasil dipindahkan dari ${fromClass.nama_kelas} ke ${toClass.nama_kelas}` });
+      return res.status(400).json({ success: false, message: 'from_class_id dan to_class_id wajib diisi, atau mappings harus berupa array' });
+    }
+
+    const results = [];
+    for (const mapping of mappingList) {
+      const { from_class_id: fromId, to_class_id: toId, action: mapAction } = mapping;
+
+      if (!fromId) {
+        results.push({ success: false, message: 'from_class_id wajib diisi' });
+        continue;
+      }
+
+      // Verify source class belongs to the tenant
+      const [fromClass] = await db.query('SELECT * FROM classes WHERE id = ? AND tenant_id = ?', [fromId, tenantId]);
+      if (!fromClass) {
+        results.push({ success: false, message: `Kelas asal (ID: ${fromId}) tidak ditemukan` });
+        continue;
+      }
+
+      if (mapAction === 'graduate' || !toId) {
+        // Graduate students (remove from active enrollment)
+        try {
+          await db.query(
+            'UPDATE students SET class_id = NULL, status_lulus = 1, tanggal_lulus = NOW() WHERE class_id = ?',
+            [fromId]
+          );
+        } catch (colError) {
+          // Fallback: just remove class assignment
+          await db.query(
+            'UPDATE students SET class_id = NULL WHERE class_id = ?',
+            [fromId]
+          );
+        }
+        results.push({ success: true, message: `${fromClass.nama_kelas} berhasil diluluskan` });
+      } else {
+        // Verify target class belongs to the tenant
+        const [toClass] = await db.query('SELECT * FROM classes WHERE id = ? AND tenant_id = ?', [toId, tenantId]);
+        if (!toClass) {
+          results.push({ success: false, message: `Kelas tujuan (ID: ${toId}) tidak ditemukan` });
+          continue;
+        }
+        // Move students to target class
+        const result = await db.query(
+          'UPDATE students SET class_id = ? WHERE class_id = ?',
+          [toId, fromId]
+        );
+        const count = result.affectedRows;
+        results.push({ success: true, message: `${count} siswa dipindahkan ${fromClass.nama_kelas} → ${toClass.nama_kelas}` });
+      }
+    }
+
+    const successCount = results.filter(r => r.success).length;
+    const failCount = results.filter(r => !r.success).length;
+    const messages = results.map(r => r.message).join('; ');
+
+    if (failCount === 0) {
+      res.json({ success: true, message: messages });
+    } else if (successCount > 0) {
+      res.json({ success: true, message: `Sebagian berhasil: ${messages}` });
+    } else {
+      res.status(400).json({ success: false, message: messages });
     }
   } catch (error) {
     console.error('Bulk promote error:', error);

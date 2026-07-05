@@ -435,6 +435,7 @@ CREATE TABLE `teacher_assignments` (
   `teacher_id` int(11) NOT NULL,
   `tenant_id` varchar(20) NOT NULL,
   `jabatan_di_unit` varchar(100) DEFAULT NULL,
+  `class_id` int(11) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

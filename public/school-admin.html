@@ -213,12 +213,17 @@
            data-tab="students">
            <i class="fas fa-user-graduate w-5"></i><span>Data Siswa</span>
          </button>
+<button
+            class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-white/50 hover:text-gray-900 text-sm font-medium transition-all"
+            data-tab="classes">
+            <i class="fas fa-chalkboard w-5"></i><span>Manajemen Kelas</span>
+          </button>
+          <button
+            class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-white/50 hover:text-gray-900 text-sm font-medium transition-all"
+            data-tab="assignments">
+            <i class="fas fa-user-tie w-5"></i><span>Pembagian Tugas</span>
+          </button>
          <button
-           class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-white/50 hover:text-gray-900 text-sm font-medium transition-all"
-           data-tab="classes">
-           <i class="fas fa-chalkboard w-5"></i><span>Manajemen Kelas</span>
-         </button>
-        <button
           class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-white/50 hover:text-gray-900 text-sm font-medium transition-all"
           data-tab="qr-scanner">
           <i class="fas fa-qrcode w-5"></i><span>QR Scanner</span>
@@ -795,54 +800,42 @@
 
     <!-- Promote Class Modal -->
     <div id="promoteClassModal" class="modal fixed inset-0 bg-black bg-opacity-50 z-50 justify-center items-center">
-      <div class="main-card max-w-4xl w-full mx-4 bg-white">
+      <div class="main-card max-w-5xl w-full mx-4 bg-white">
         <div class="p-6">
           <div class="flex items-center justify-between mb-4">
             <h3 class="text-lg font-semibold">Naik Kelas Massal</h3>
             <button onclick="hidePromoteClassModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
           </div>
+
           <div class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-            <p class="text-sm text-blue-800"><i class="fas fa-info-circle mr-2"></i>Pilih kelas asal dan kelas tujuan untuk memindahkan seluruh siswa. Anda juga dapat membuat kelas baru jika diperlukan.</p>
+            <p class="text-sm text-blue-800"><i class="fas fa-info-circle mr-2"></i>Pilih kelas tujuan untuk setiap kelas. Atau pilih "Luluskan" untuk mengangkat kelas angkatan tahun ini.</p>
           </div>
 
-          <div class="grid grid-cols-2 gap-4 mb-4">
-            <div>
-              <div class="flex items-center justify-between mb-2">
-                <label class="block text-sm font-medium text-gray-700">Kelas Asal</label>
-                <span id="promoteFromInfo" class="text-xs text-gray-500"></span>
-              </div>
-              <div id="promoteFromList" class="border border-gray-200 rounded-lg max-h-[300px] overflow-y-auto">
-                <div class="p-4 text-center text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>Memuat kelas...</div>
-              </div>
-            </div>
-            <div>
-              <div class="flex items-center justify-between mb-2">
-                <label class="block text-sm font-medium text-gray-700">Kelas Tujuan</label>
-                <button type="button" onclick="createNewClassForPromote()" class="text-xs text-blue-600 hover:text-blue-800 font-medium">+ Buat Kelas Baru</button>
-              </div>
-              <div id="promoteToList" class="border border-gray-200 rounded-lg max-h-[300px] overflow-y-auto">
-                <div class="p-4 text-center text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>Memuat kelas...</div>
-              </div>
-            </div>
+          <div id="promoteClassesContainer" class="max-h-[400px] overflow-y-auto mb-4">
+            <table class="w-full" id="promoteClassesTable">
+              <thead class="border-b border-gray-200">
+                <tr>
+                  <th class="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Kelas Asal</th>
+                  <th class="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Jumlah Siswa</th>
+                  <th class="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Kelas Tujuan</th>
+                  <th class="px-4 py-2 text-left text-xs font-semibold text-gray-600 uppercase">Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="promoteClassesBody">
+                <tr><td colspan="4" class="px-4 py-12 text-center text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>Memuat kelas...</td></tr>
+              </tbody>
+            </table>
           </div>
 
           <form id="promoteForm">
-            <input type="hidden" name="from_class_id" id="promoteFromClass">
-            <input type="hidden" name="to_class_id" id="promoteToClass">
-            <div class="mb-4">
-              <label class="block text-sm font-medium text-gray-700 mb-1">Aksi Setelah Naik Kelas</label>
-              <select name="action" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500">
-                <option value="move">Pindah ke kelas tujuan</option>
-                <option value="graduate">Luluskan (hapus dari daftar aktif)</option>
-              </select>
+            <div class="flex justify-end space-x-3">
+              <button type="button" onclick="hidePromoteClassModal()"
+                class="px-4 py-2 text-gray-600 hover:text-gray-800 text-sm">Batal</button>
+              <button type="submit"
+                class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm" id="promoteSubmitBtn" disabled>
+                <i class="fas fa-rocket mr-2"></i>Proses Naik Kelas
+              </button>
             </div>
-            <div class="mb-4 p-3 bg-gray-50 rounded-lg hidden" id="promoteSummary">
-              <p class="text-sm text-gray-700"><i class="fas fa-check-circle mr-1 text-green-600"></i>Kelas asal: <strong id="summaryFrom"></strong></p>
-              <p class="text-sm text-gray-700 mt-1"><i class="fas fa-check-circle mr-1 text-green-600"></i>Kelas tujuan: <strong id="summaryTo"></strong></p>
-            </div>
-            <div class="flex justify-end space-x-3"><button type="button" onclick="hidePromoteClassModal()"
-                class="px-4 py-2 text-gray-600 hover:text-gray-800 text-sm">Batal</button><button type="submit"
-                class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm">Proses Naik Kelas</button></div>
           </form>
         </div>
       </div>
@@ -1057,13 +1050,14 @@ function switchTab(tabName) {
        if (btn) { btn.classList.add('nav-active', 'bg-blue-600', 'text-white'); btn.classList.remove('text-gray-600'); }
        const mobileBtn = document.querySelector(`.mobile-tab-btn[data-tab="${tabName}"]`);
        if (mobileBtn) mobileBtn.classList.add('active');
-       const titles = { dashboard: 'Dashboard', teachers: 'Data Guru', students: 'Data Siswa', classes: 'Manajemen Kelas', qr_scanner: 'QR Scanner Device', attendance: 'Log Kehadiran', locations: 'Lokasi Sekolah', rules: 'Aturan Absensi', whatsapp: 'WhatsApp' };
+       const titles = { dashboard: 'Dashboard', teachers: 'Data Guru', students: 'Data Siswa', classes: 'Manajemen Kelas', assignments: 'Pembagian Tugas', qr_scanner: 'QR Scanner Device', attendance: 'Log Kehadiran', locations: 'Lokasi Sekolah', rules: 'Aturan Absensi', whatsapp: 'WhatsApp' };
         setEl('pageTitle', titles[tabName] || 'Dashboard');
         document.getElementById('schoolTitleInline').textContent = schoolName || tenantId;
         if (tabName === 'dashboard') loadDashboard();
         else if (tabName === 'teachers') fetchTeachers(currentPage);
         else if (tabName === 'students') { loadStudentClasses(); loadStudents(); }
         else if (tabName === 'classes') loadClasses();
+        else if (tabName === 'assignments') loadAssignments();
         else if (tabName === 'qr-scanner') loadScannerDevices();
         else if (tabName === 'attendance') loadAttendanceLogs();
         else if (tabName === 'locations') loadSchoolLocations();
@@ -1262,21 +1256,108 @@ if (d.success) {
        } catch (e) {
          console.error('[CLASSES]', e);
        }
-     }
+}
 
-     async function loadClassStudentCount(classId) {
-       try {
-         const r = await fetch(apiUrl(`/admin/students?class_id=${classId}&all=1`), { headers: { 'Authorization': `Bearer ${authToken}` } });
-         if (!r.ok) return;
-         const d = await r.json();
-         const count = d.success ? (d.data?.length || 0) : 0;
-         setEl('class-count-' + classId, count + ' siswa');
-       } catch (e) {
-         setEl('class-count-' + classId, 'Error');
-       }
-     }
+      async function loadAssignments() {
+        const tbody = document.getElementById('assignmentsTable');
+        tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-12 text-center text-gray-500"><i class="fas fa-spinner fa-spin text-xl mb-2"></i><p>Memuat data guru...</p></td></tr>';
 
-window.showAddClassModal = function () {
+        try {
+          const r = await fetch(apiUrl('/admin/assignments'), { headers: { 'Authorization': `Bearer ${authToken}` } });
+          if (checkAuth401403(r)) return;
+          const d = await r.json();
+
+          if (d.success) {
+            const teachers = d.data || [];
+            tbody.innerHTML = teachers.length === 0
+              ? '<tr><td colspan="5" class="px-4 py-12 text-center text-gray-500">Belum ada data guru</td></tr>'
+              : teachers.map(t => `
+                <tr class="hover:bg-gray-50">
+                  <td class="px-4 py-3 text-sm text-gray-900 font-medium">${t.nama || '-'}</td>
+                  <td class="px-4 py-3 text-sm text-gray-500">${t.nik || '-'} / ${t.nip || '-'}</td>
+                  <td class="px-4 py-3 text-sm text-gray-500">${t.jabatan_di_unit || 'Guru'}</td>
+                  <td class="px-4 py-3 text-sm text-gray-500">${t.wali_kelas || '-'}</td>
+                  <td class="px-4 py-3 text-sm space-x-1">
+                    <button onclick="editAssignment(${t.id}, '${t.jabatan_di_unit || 'Guru'}', ${t.class_id || 'null'})" class="inline-flex items-center p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md" title="Edit">
+                      <i class="fas fa-edit text-xs"></i>
+                    </button>
+                  </td>
+                </tr>
+              `).join('');
+          } else {
+            tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-12 text-center text-red-500">Gagal memuat data</td></tr>';
+          }
+        } catch (e) {
+          console.error('[ASSIGNMENTS]', e);
+          tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-12 text-center text-red-500">Error</td></tr>';
+        }
+      }
+
+      function editAssignment(teacherId, currentPosition, classId) {
+        document.getElementById('assignmentTeacherId').value = teacherId;
+        document.getElementById('assignmentPosition').value = currentPosition || 'Guru';
+        document.getElementById('assignmentClassId').value = classId || '';
+
+        const showClass = currentPosition === 'Wali Kelas';
+        document.getElementById('assignmentClassSection').classList.toggle('hidden', !showClass);
+
+        // Load classes for dropdown
+        loadClassesForAssignment();
+
+        document.getElementById('assignmentModal').classList.add('show');
+      }
+
+      async function loadClassesForAssignment() {
+        const select = document.getElementById('assignmentClassId');
+        const currentValue = select.value;
+        select.innerHTML = '<option value="">Memuat...</option>';
+
+        try {
+          const r = await fetch(apiUrl('/admin/classes'), { headers: { 'Authorization': `Bearer ${authToken}` } });
+          if (!r.ok) return;
+          const d = await r.json();
+
+          if (d.success) {
+            const classes = d.data || [];
+            select.innerHTML = '<option value="">Pilih Kelas</option>';
+            classes.forEach(c => {
+              const opt = document.createElement('option');
+              opt.value = c.id;
+              opt.textContent = c.nama_kelas;
+              select.appendChild(opt);
+            });
+            if (currentValue) select.value = currentValue;
+          }
+        } catch (e) {
+          console.error('[CLASSES FOR ASSIGNMENT]', e);
+          select.innerHTML = '<option value="">Error memuat kelas</option>';
+        }
+      }
+
+function hideAssignmentModal() {
+        document.getElementById('assignmentModal').classList.remove('show');
+      }
+
+      document.getElementById('assignmentForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const teacherId = document.getElementById('assignmentTeacherId').value;
+        const position = document.getElementById('assignmentPosition').value;
+        const classId = document.getElementById('assignmentClassId').value || null;
+
+        try {
+          const r = await fetch(apiUrl('/admin/teachers/' + teacherId + '/assignment'), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+            body: JSON.stringify({ jabatan_di_unit: position, class_id: classId })
+          });
+          if (checkAuth401403(r)) return;
+          const d = await r.json();
+          if (d.success) { hideAssignmentModal(); loadAssignments(); showToast('Tugas guru diupdate', 'success'); }
+          else showToast(d.message || 'Gagal', 'error');
+        } catch (err) { console.error('[ASSIGNMENT FORM]', err); showToast('Terjadi kesalahan', 'error'); }
+      });
+
+      window.showAddClassModal = function () {
         const form = document.getElementById('classForm');
         form.reset();
         delete form.dataset.editId;
@@ -1324,25 +1405,24 @@ async function editClass(id) {
         } catch (e) { console.error('[EDIT CLASS]', e); }
       }
 
-     async function deleteClass(id) {
-       if (!confirm('Yakin hapus kelas ini? Semua siswa akan terputus dari kelas ini.')) return;
-       try {
-         const r = await fetch(apiUrl('/admin/classes/' + id), { method: 'DELETE', headers: { 'Authorization': `Bearer ${authToken}` } });
-         if (checkAuth401403(r)) return;
-         const d = await r.json();
-         if (d.success) { loadClasses(); loadStudentClasses(); showToast('Kelas dihapus', 'success'); }
-         else showToast(d.message || 'Gagal', 'error');
-       } catch (e) { console.error('[DEL CLASS]', e); showToast('Terjadi kesalahan', 'error'); }
-     }
+async function deleteClass(id) {
+        if (!confirm('Yakin hapus kelas ini? Semua siswa akan terputus dari kelas ini.')) return;
+        try {
+          const r = await fetch(apiUrl('/admin/classes/' + id), { method: 'DELETE', headers: { 'Authorization': `Bearer ${authToken}` } });
+          if (checkAuth401403(r)) return;
+          const d = await r.json();
+          if (d.success) { loadClasses(); loadStudentClasses(); showToast('Kelas dihapus', 'success'); }
+          else showToast(d.message || 'Gagal', 'error');
+        } catch (e) { console.error('[DEL CLASS]', e); showToast('Terjadi kesalahan', 'error'); }
+      }
+
+      window.promoteMappings = {};
 
       window.showPromoteClassModal = async function () {
-        const fromList = document.getElementById('promoteFromList');
-        const toList = document.getElementById('promoteToList');
-        fromList.innerHTML = '<div class="p-4 text-center text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>Memuat kelas...</div>';
-        toList.innerHTML = '<div class="p-4 text-center text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>Memuat kelas...</div>';
-        document.getElementById('promoteSummary').classList.add('hidden');
-        document.getElementById('promoteFromClass').value = '';
-        document.getElementById('promoteToClass').value = '';
+        const tbody = document.getElementById('promoteClassesBody');
+        tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-12 text-center text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>Memuat kelas...</td></tr>';
+        document.getElementById('promoteSubmitBtn').disabled = true;
+        window.promoteMappings = {};
 
         try {
           const [classesRes, studentsRes] = await Promise.all([
@@ -1365,82 +1445,73 @@ async function editClass(id) {
             });
           }
 
-          const renderCard = (c, type) => {
-            const count = studentCounts[c.id] || 0;
-            return `<div class="p-3 border-b border-gray-100 cursor-pointer hover:bg-gray-50 flex items-center justify-between promote-class-card" data-id="${c.id}" data-name="${c.nama_kelas}" data-count="${count}" data-type="${type}">
-              <div>
-                <div class="font-medium text-sm text-gray-900">${c.nama_kelas}</div>
-                <div class="text-xs text-gray-500">${count} siswa</div>
-              </div>
-              <i class="fas fa-check-circle text-gray-300"></i>
-            </div>`;
-          };
+          window.allPromotionClasses = classes;
 
-          fromList.innerHTML = classes.length === 0
-            ? '<div class="p-4 text-center text-gray-500">Belum ada kelas</div>'
-            : classes.map(c => renderCard(c, 'from')).join('');
+          const toOptions = classes.map(c => `<option value="${c.id}">${c.nama_kelas}</option>`).join('');
+          const currentYear = new Date().getFullYear();
 
-          toList.innerHTML = classes.length === 0
-            ? '<div class="p-4 text-center text-gray-500">Belum ada kelas</div>'
-            : classes.map(c => renderCard(c, 'to')).join('');
+          tbody.innerHTML = classes.length === 0
+            ? '<tr><td colspan="4" class="px-4 py-12 text-center text-gray-500">Belum ada kelas</td></tr>'
+            : classes.map(c => {
+              const count = studentCounts[c.id] || 0;
+              return `
+                <tr data-class-id="${c.id}" data-class-name="${c.nama_kelas}">
+                  <td class="px-4 py-3 text-sm text-gray-900 font-medium">${c.nama_kelas}</td>
+                  <td class="px-4 py-3 text-sm text-gray-500">${count} siswa</td>
+                  <td class="px-4 py-3">
+                    <select class="promote-to-select w-full px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500" data-from-id="${c.id}">
+                      <option value="">Pilih tujuan</option>
+                      ${toOptions}
+                      <option value="graduate_${currentYear}">Luluskan (Angkatan ${currentYear})</option>
+                    </select>
+                  </td>
+                  <td class="px-4 py-3 text-sm text-gray-400" id="status-${c.id}">-</td>
+                </tr>
+              `;
+            }).join('');
 
-          fromList.querySelectorAll('.promote-class-card').forEach(card => {
-            card.addEventListener('click', function () {
-              fromList.querySelectorAll('.promote-class-card').forEach(c => {
-                c.classList.remove('bg-blue-50', 'border-blue-300');
-                c.querySelector('.fa-check-circle').classList.remove('text-blue-600');
-                c.querySelector('.fa-check-circle').classList.add('text-gray-300');
-              });
-              this.classList.add('bg-blue-50', 'border-blue-300');
-              this.querySelector('.fa-check-circle').classList.remove('text-gray-300');
-              this.querySelector('.fa-check-circle').classList.add('text-blue-600');
-              document.getElementById('promoteFromClass').value = this.dataset.id;
-              document.getElementById('promoteFromInfo').textContent = this.dataset.name + ' (' + this.dataset.count + ' siswa)';
-              updatePromoteSummary();
+          document.querySelectorAll('.promote-to-select').forEach(select => {
+            select.addEventListener('change', function() {
+              const fromId = this.dataset.fromId;
+              const toValue = this.value;
+              if (toValue) {
+                if (toValue === fromId) {
+                  this.value = '';
+                  showToast('Kelas asal dan tujuan tidak boleh sama', 'error');
+                  return;
+                }
+                if (toValue.startsWith('graduate_')) {
+                  window.promoteMappings[fromId] = { action: 'graduate' };
+                  document.getElementById('status-' + fromId).innerHTML = '<span class="text-green-600"><i class="fas fa-check"></i> Luluskan</span>';
+                } else {
+                  window.promoteMappings[fromId] = { to_class_id: toValue, action: 'move' };
+                  document.getElementById('status-' + fromId).innerHTML = '<span class="text-green-600"><i class="fas fa-check"></i> Dipilih</span>';
+                }
+              } else {
+                delete window.promoteMappings[fromId];
+                document.getElementById('status-' + fromId).textContent = '-';
+              }
+              updatePromoteSubmitState();
             });
           });
 
-          toList.querySelectorAll('.promote-class-card').forEach(card => {
-            card.addEventListener('click', function () {
-              toList.querySelectorAll('.promote-class-card').forEach(c => {
-                c.classList.remove('bg-green-50', 'border-green-300');
-                c.querySelector('.fa-check-circle').classList.remove('text-green-600');
-                c.querySelector('.fa-check-circle').classList.add('text-gray-300');
-              });
-              this.classList.add('bg-green-50', 'border-green-300');
-              this.querySelector('.fa-check-circle').classList.remove('text-gray-300');
-              this.querySelector('.fa-check-circle').classList.add('text-green-600');
-              document.getElementById('promoteToClass').value = this.dataset.id;
-              updatePromoteSummary();
-            });
-          });
         } catch (e) {
           console.error('[PROMOTE MODAL]', e);
-          fromList.innerHTML = '<div class="p-4 text-center text-red-500">Gagal memuat data</div>';
-          toList.innerHTML = '<div class="p-4 text-center text-red-500">Gagal memuat data</div>';
+          tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-12 text-center text-red-500">Gagal memuat data</td></tr>';
         }
 
         document.getElementById('promoteClassModal').classList.add('show');
       };
 
-      function updatePromoteSummary() {
-        const fromId = document.getElementById('promoteFromClass').value;
-        const toId = document.getElementById('promoteToClass').value;
-        const summary = document.getElementById('promoteSummary');
-        if (fromId && toId) {
-          const fromName = document.querySelector('#promoteFromList .promote-class-card[data-id="' + fromId + '"]')?.dataset.name || '';
-          const toName = document.querySelector('#promoteToList .promote-class-card[data-id="' + toId + '"]')?.dataset.name || '';
-          document.getElementById('summaryFrom').textContent = fromName;
-          document.getElementById('summaryTo').textContent = toName;
-          summary.classList.remove('hidden');
-        } else {
-          summary.classList.add('hidden');
-        }
+function updatePromoteSubmitState() {
+        const hasMappings = Object.keys(window.promoteMappings).length > 0;
+        document.getElementById('promoteSubmitBtn').disabled = !hasMappings;
       }
 
-     function hidePromoteClassModal() {
-       document.getElementById('promoteClassModal').classList.remove('show');
-     }
+      function hidePromoteClassModal() {
+        document.getElementById('promoteClassModal').classList.remove('show');
+        window.promoteMappings = {};
+      }
 
      async function createNewClassForPromote() {
        const { value: namaKelas } = await Swal.fire({
@@ -1470,35 +1541,35 @@ async function editClass(id) {
        }
      }
 
-     document.getElementById('promoteForm').addEventListener('submit', async (e) => {
-       e.preventDefault();
-       const { from_class_id, to_class_id, action } = Object.fromEntries(new FormData(e.target));
+document.getElementById('promoteForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
 
-       if (!from_class_id || !to_class_id) {
-         return showToast('Pilih kelas asal dan tujuan', 'error');
-       }
+        if (Object.keys(window.promoteMappings).length === 0) {
+          return showToast('Pilih minimal satu kelas', 'error');
+        }
 
-       if (from_class_id === to_class_id) {
-         return showToast('Kelas asal dan tujuan tidak boleh sama', 'error');
-       }
+        const confirmResult = await Swal.fire({
+          title: 'Konfirmasi Naik Kelas',
+          text: 'Siswa akan dipindahkan ke kelas tujuan atau diluluskan sesuai pemilihan.',
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonText: 'Ya, Lanjutkan',
+          cancelButtonText: 'Batal'
+        });
 
-       const confirmResult = await Swal.fire({
-         title: 'Konfirmasi Naik Kelas',
-         text: action === 'graduate' ? 'Siswa akan diluluskan dan dihapus dari daftar aktif.' : 'Siswa akan dipindahkan ke kelas tujuan.',
-         icon: 'warning',
-         showCancelButton: true,
-         confirmButtonText: 'Ya, Lanjutkan',
-         cancelButtonText: 'Batal'
-       });
+        if (!confirmResult.isConfirmed) return;
 
-       if (!confirmResult.isConfirmed) return;
-
-       try {
-         const r = await fetch(apiUrl(`/admin/students/bulk-promote`), {
-           method: 'PUT',
-           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
-           body: JSON.stringify({ from_class_id, to_class_id, action })
-         });
+        try {
+          const mappings = Object.entries(window.promoteMappings).map(([from_class_id, m]) => ({
+            from_class_id: Number(from_class_id),
+            to_class_id: m.action === 'graduate' ? null : Number(m.to_class_id),
+            action: m.action || 'move'
+          }));
+          const r = await fetch(apiUrl(`/admin/students/bulk-promote`), {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+            body: JSON.stringify({ mappings })
+          });
          const d = await r.json();
          if (d.success) {
            hidePromoteClassModal();
@@ -1508,8 +1579,8 @@ async function editClass(id) {
          } else {
            showToast(d.message || 'Gagal', 'error');
          }
-       } catch (e) {
-console.error('[PROMOTE]', e);
+} catch (e) {
+          console.error('[PROMOTE]', e);
           showToast('Terjadi kesalahan', 'error');
         }
       });
@@ -2854,6 +2925,76 @@ document.getElementById('ruleForm')?.addEventListener('submit', async (e) => {
               <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Simpan</button>
             </div>
           </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Assignments Tab -->
+    <div id="assignmentsTab" class="tab-content hidden">
+      <div class="main-card p-6">
+        <div class="flex justify-between items-center mb-6">
+          <h3 class="text-lg font-semibold text-gray-900">Pembagian Tugas Guru/Staf</h3>
+          <button onclick="loadAssignments()" class="btn-primary text-white px-4 py-2 rounded-lg text-sm flex items-center">
+            <i class="fas fa-sync-alt mr-2"></i>Refresh
+          </button>
+        </div>
+
+        <div class="mb-4">
+          <p class="text-gray-600 text-sm">Kelola jabatan guru dan penugasan kelas walikelas di sini.</p>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full modern-table">
+            <thead class="border-b border-gray-200">
+              <tr>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Nama Guru</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">NIK/NIP</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Jabatan</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Kelas (Wali Kelas)</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="assignmentsTable" class="divide-y divide-gray-100">
+              <tr>
+                <td colspan="5" class="px-4 py-12 text-center text-gray-500"><i class="fas fa-spinner fa-spin text-xl mb-2"></i>
+                  <p>Memuat data guru...</p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Assignment Edit Modal -->
+      <div id="assignmentModal" class="modal fixed inset-0 bg-black bg-opacity-50 z-50 justify-center items-center">
+        <div class="bg-white rounded-lg max-w-md w-full mx-4">
+          <div class="p-6">
+            <h3 class="text-lg font-semibold mb-4">Edit Tugas Guru</h3>
+            <form id="assignmentForm">
+              <input type="hidden" id="assignmentTeacherId">
+              <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Jabatan</label>
+                <select id="assignmentPosition" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent" required>
+                  <option value="Guru">Guru</option>
+                  <option value="Wali Kelas">Wali Kelas</option>
+                  <option value="TU">TU</option>
+                  <option value="Tata Usaha">Tata Usaha</option>
+                  <option value="Operator">Operator</option>
+                  <option value="Kepala Sekolah">Kepala Sekolah</option>
+                </select>
+              </div>
+              <div class="mb-4 hidden" id="assignmentClassSection">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Kelas Wali</label>
+                <select id="assignmentClassId" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                  <option value="">Pilih Kelas</option>
+                </select>
+              </div>
+              <div class="flex justify-end space-x-3">
+                <button type="button" onclick="hideAssignmentModal()" class="px-4 py-2 text-gray-600 hover:text-gray-800">Batal</button>
+                <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Simpan</button>
+              </div>
+            </form>
+          </div>
         </div>
       </div>
     </div>

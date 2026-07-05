@@ -150,6 +150,11 @@ ALTER TABLE `conversation_participants` ADD COLUMN IF NOT EXISTS `last_seen_at` 
 -- teachers.pendidikan_terakhir
 ALTER TABLE `teachers` ADD COLUMN IF NOT EXISTS `pendidikan_terakhir` varchar(100) DEFAULT NULL AFTER `updated_at`;
 
+-- teacher_assignments.class_id (untuk walikelas)
+ALTER TABLE `teacher_assignments` ADD COLUMN IF NOT EXISTS `class_id` int(11) DEFAULT NULL AFTER `jabatan_di_unit`;
+ALTER TABLE `teacher_assignments` ADD KEY IF NOT EXISTS `idx_class_id` (`class_id`);
+ALTER TABLE `teacher_assignments` ADD CONSTRAINT IF NOT EXISTS `teacher_assignments_ibfk_3` FOREIGN KEY (`class_id`) REFERENCES `classes` (`id`) ON DELETE SET NULL;
+
 -- ==========================================
 -- SECTION 3: FIX DATA AND ADD FOREIGN KEYS
 -- ==========================================
