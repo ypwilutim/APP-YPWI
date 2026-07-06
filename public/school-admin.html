@@ -38,49 +38,28 @@
       display: flex;
     }
 
-    #addTeacherModal,
-    #addRuleModal,
-    #studentModal,
-    #assignmentModal,
-    #classModal,
-    #promoteClassModal,
-    #locationModal,
-    #scannerDeviceModal {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.5);
-      z-index: 50;
-      justify-content: center;
-      align-items: center;
-      padding: 1rem;
+    #addTeacherModal {
+      position: fixed !important;
+      inset: 0 !important;
+      background: rgba(0, 0, 0, 0.5) !important;
+      z-index: 9999 !important;
+      justify-content: center !important;
+      align-items: center !important;
+      padding: 1rem !important;
     }
 
-    #addTeacherModal > div,
-    #addRuleModal > div,
-    #studentModal > div,
-    #assignmentModal > div,
-    #classModal > div,
-    #promoteClassModal > div,
-    #locationModal > div,
-    #scannerDeviceModal > div {
-      background: #ffffff;
-      border-radius: 0.5rem;
-      max-width: 28rem;
-      width: 100%;
-      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-      max-height: 90vh;
-      overflow-y: auto;
+    #addTeacherModal > div {
+      background: #ffffff !important;
+      border-radius: 0.5rem !important;
+      max-width: 28rem !important;
+      width: 100% !important;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
+      max-height: 90vh !important;
+      overflow-y: auto !important;
     }
 
-    #addTeacherModal > div > div,
-    #addRuleModal > div > div,
-    #studentModal > div > div,
-    #assignmentModal > div > div,
-    #classModal > div > div,
-    #promoteClassModal > div > div,
-    #locationModal > div > div,
-    #scannerDeviceModal > div > div {
-      padding: 1.5rem;
+    #addTeacherModal > div > div {
+      padding: 1.5rem !important;
     }
 
     .skeleton-loader {
@@ -1279,7 +1258,7 @@ async function loadStudentClasses() {
           console.log('[DEBUG] loadClasses data:', d);
           const tb = document.getElementById('classesTable');
           console.log('[DEBUG] classesTable elem:', tb);
-if (d.success) {
+ if (d.success) {
             const classes = d.data || [];
             console.log('[DEBUG] classes:', classes.length);
             const html = classes.length === 0
@@ -1295,13 +1274,27 @@ if (d.success) {
                 </tr>
               `).join('');
             console.log('[DEBUG] html length:', html.length);
-            tb.innerHTML = html;
-            classes.forEach(c => loadClassStudentCount(c.id));
+             tb.innerHTML = html;
+             classes.forEach(c => loadClassStudentCount(c.id));
           }
        } catch (e) {
-         console.error('[CLASSES]', e);
-       }
-}
+          console.error('[CLASSES]', e);
+        }
+    }
+
+    async function loadClassStudentCount(classId) {
+      const cell = document.getElementById('class-count-' + classId);
+      if (!cell) return;
+      try {
+        const r = await fetch(apiUrl('/admin/students') + '&class_id=' + encodeURIComponent(classId), { headers: { 'Authorization': 'Bearer ' + authToken }});
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const d = await r.json();
+        const count = (d.success && Array.isArray(d.data)) ? d.data.length : 0;
+        cell.textContent = count + ' siswa';
+      } catch (e) {
+        cell.textContent = '-';
+      }
+    }
 
       async function loadAssignments() {
         const tbody = document.getElementById('assignmentsTable');
@@ -1323,7 +1316,7 @@ if (d.success) {
                   <td class="px-4 py-3 text-sm text-gray-500">${t.jabatan_di_unit || 'Guru'}</td>
                   <td class="px-4 py-3 text-sm text-gray-500">${t.wali_kelas || '-'}</td>
                   <td class="px-4 py-3 text-sm space-x-1">
-                    <button onclick="editAssignment(${t.id}, '${t.jabatan_di_unit || 'Guru'}', ${t.class_id || 'null'})" class="inline-flex items-center p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md" title="Edit">
+                     <button onclick="editAssignment(${t.id})" class="inline-flex items-center p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md" title="Edit">
                       <i class="fas fa-edit text-xs"></i>
                     </button>
                   </td>
@@ -1338,18 +1331,100 @@ if (d.success) {
         }
       }
 
-      function editAssignment(teacherId, currentPosition, classId) {
-        document.getElementById('assignmentTeacherId').value = teacherId;
-        document.getElementById('assignmentPosition').value = currentPosition || 'Guru';
-        document.getElementById('assignmentClassId').value = classId || '';
+      function editAssignment(teacherId) {
+        showAssignmentModal(teacherId);
+      }
 
-        const showClass = currentPosition === 'Wali Kelas';
-        document.getElementById('assignmentClassSection').classList.toggle('hidden', !showClass);
+      async function showAssignmentModal(editTeacherId) {
+        const modal = document.getElementById('assignmentModal');
+        const form = document.getElementById('assignmentForm');
+        const title = document.getElementById('assignmentModalTitle');
+        const teacherSelect = document.getElementById('assignmentTeacherSelect');
+        const teacherIdInput = document.getElementById('assignmentTeacherId');
+        const positionSelect = document.getElementById('assignmentPosition');
+        const classSection = document.getElementById('assignmentClassSection');
+        const classSelect = document.getElementById('assignmentClassId');
 
-        // Load classes for dropdown
-        loadClassesForAssignment();
+        form.reset();
+        teacherIdInput.value = '';
+        classSelect.innerHTML = '<option value="">Pilih Kelas</option>';
+        classSection.classList.add('hidden');
 
-        document.getElementById('assignmentModal').classList.add('show');
+        // Load teachers for dropdown
+        teacherSelect.innerHTML = '<option value="">Memuat...</option>';
+        try {
+          const r = await fetch(apiUrl('/admin/teachers'), { headers: { 'Authorization': `Bearer ${authToken}` } });
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          const d = await r.json();
+          if (d.success) {
+            teacherSelect.innerHTML = '<option value="">Pilih Guru</option>';
+            (d.data || []).forEach(t => {
+              const opt = document.createElement('option');
+              opt.value = t.id;
+              opt.textContent = t.nama || ('Guru #' + t.id);
+              teacherSelect.appendChild(opt);
+            });
+          }
+        } catch (e) {
+          console.error('[LOAD TEACHERS FOR ASSIGNMENT]', e);
+          teacherSelect.innerHTML = '<option value="">Error memuat guru</option>';
+        }
+
+        if (editTeacherId) {
+          title.textContent = 'Edit Tugas Guru';
+          teacherSelect.disabled = true;
+          teacherIdInput.value = editTeacherId;
+          // Find teacher name and select it
+          const options = Array.from(teacherSelect.options);
+          const found = options.find(o => o.value == editTeacherId);
+          if (found) found.selected = true;
+          // Load existing assignment data
+          try {
+            const r = await fetch(apiUrl('/admin/assignments'), { headers: { 'Authorization': `Bearer ${authToken}` } });
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            const d = await r.json();
+            if (d.success) {
+              const teacher = (d.data || []).find(t => t.id == editTeacherId);
+              if (teacher) {
+                positionSelect.value = teacher.jabatan_di_unit || 'Guru';
+                if (teacher.jabatan_di_unit === 'Wali Kelas') {
+                  await loadClassesForAssignment();
+                  if (teacher.wali_kelas) {
+                    // Try to select by text
+                    const classOpts = Array.from(classSelect.options);
+                    const classFound = classOpts.find(o => o.textContent === teacher.wali_kelas);
+                    if (classFound) classFound.selected = true;
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            console.error('[LOAD ASSIGNMENT DATA]', e);
+          }
+        } else {
+          title.textContent = 'Tambah Tugas Guru';
+          teacherSelect.disabled = false;
+          positionSelect.value = 'Guru';
+        }
+
+        // Show/hide class dropdown based on position
+        const showClass = positionSelect.value === 'Wali Kelas';
+        classSection.classList.toggle('hidden', !showClass);
+        if (showClass && !classSelect.querySelector('option[value=""]:not([value=""])')) {
+          await loadClassesForAssignment();
+        }
+
+        // Update class section visibility on position change
+        const positionOnChange = async function() {
+          const show = positionSelect.value === 'Wali Kelas';
+          classSection.classList.toggle('hidden', !show);
+          if (show && classSelect.options.length <= 1) {
+            await loadClassesForAssignment();
+          }
+        };
+        positionSelect.onchange = positionOnChange;
+
+        modal.classList.add('show');
       }
 
       async function loadClassesForAssignment() {
@@ -1385,22 +1460,33 @@ function hideAssignmentModal() {
 
       if (document.getElementById('assignmentForm')) {
         document.getElementById('assignmentForm').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const teacherId = document.getElementById('assignmentTeacherId').value;
-        const position = document.getElementById('assignmentPosition').value;
-        const classId = document.getElementById('assignmentClassId').value || null;
+          e.preventDefault();
+          const teacherId = document.getElementById('assignmentTeacherId').value || document.getElementById('assignmentTeacherSelect').value;
+          const position = document.getElementById('assignmentPosition').value;
+          const classId = document.getElementById('assignmentClassId').value || null;
 
-        try {
-          const r = await fetch(apiUrl('/admin/teachers/' + teacherId + '/assignment'), {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
-            body: JSON.stringify({ jabatan_di_unit: position, class_id: classId })
-          });
-          if (checkAuth401403(r)) return;
-          const d = await r.json();
-          if (d.success) { hideAssignmentModal(); loadAssignments(); showToast('Tugas guru diupdate', 'success'); }
-          else showToast(d.message || 'Gagal', 'error');
-        } catch (err) { console.error('[ASSIGNMENT FORM]', err); showToast('Terjadi kesalahan', 'error'); }
+          if (!teacherId) {
+            showToast('Pilih guru terlebih dahulu', 'error');
+            return;
+          }
+
+          try {
+            const r = await fetch(apiUrl('/admin/teachers/' + teacherId + '/assignment'), {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+              body: JSON.stringify({ jabatan_di_unit: position, class_id: classId })
+            });
+            if (checkAuth401403(r)) return;
+            if (!r.ok) {
+              let msg = 'Gagal';
+              try { const err = await r.json(); msg = err.message || msg; } catch(_) {}
+              showToast(msg, 'error');
+              return;
+            }
+            const d = await r.json();
+            if (d.success) { hideAssignmentModal(); loadAssignments(); showToast('Tugas guru berhasil disimpan', 'success'); }
+            else showToast(d.message || 'Gagal', 'error');
+          } catch (err) { console.error('[ASSIGNMENT FORM]', err); showToast('Terjadi kesalahan', 'error'); }
         });
       }
 
@@ -1824,10 +1910,11 @@ document.getElementById('promoteForm').addEventListener('submit', async (e) => {
       }
       const title = document.getElementById('teacherModalTitle');
       if (title) title.textContent = 'Tambah Guru';
-      const tenantInput = document.getElementById('teacherTenantId');
-      if (tenantInput) tenantInput.value = tenantId;
       const modal = document.getElementById('addTeacherModal');
       if (modal) {
+        if (modal.parentElement !== document.body) {
+          document.body.appendChild(modal);
+        }
         modal.classList.add('show');
         modal.style.display = 'flex';
       }
@@ -1843,9 +1930,7 @@ document.getElementById('promoteForm').addEventListener('submit', async (e) => {
           document.getElementById('teacherModalTitle').textContent = 'Edit Guru';
           const f = document.getElementById('teacherForm');
           if (f) {
-            f.nama.value = t.nama || ''; f.nik.value = t.nik || ''; f.nip.value = t.nip || '';
-            f.status_kepegawaian.value = t.status_kepegawaian || ''; f.email.value = t.email || '';
-            f.tenant_id.value = tenantId;
+            f.nama.value = t.nama || ''; f.nik.value = t.nik || '';
             f.dataset.editId = id;
           }
           const modal = document.getElementById('addTeacherModal');
@@ -1967,6 +2052,11 @@ document.getElementById('promoteForm').addEventListener('submit', async (e) => {
       try {
         const r = await fetch(apiUrl('/admin/tenant-locations/' + id), { method: 'DELETE', headers: { 'Authorization': `Bearer ${authToken}` } });
         if (checkAuth401403(r)) return;
+        const contentType = r.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+          showToast('Gagal menghapus: respons server tidak valid', 'error');
+          return;
+        }
         const d = await r.json();
         if (d.success) { loadSchoolLocations(); showToast('Lokasi dihapus', 'success'); }
         else showToast(d.message || 'Gagal', 'error');
@@ -2826,6 +2916,7 @@ document.getElementById('ruleForm')?.addEventListener('submit', async (e) => {
             </div>
           </form>
         </div>
+      </div>
     </div>
   </div>
 
@@ -2834,32 +2925,16 @@ document.getElementById('ruleForm')?.addEventListener('submit', async (e) => {
       <div class="bg-white rounded-lg max-w-md w-full mx-4">
         <div class="p-6">
           <h3 class="text-lg font-semibold mb-4" id="teacherModalTitle">Tambah Guru</h3>
-          <form id="teacherForm">
-            <input type="hidden" name="tenant_id" id="teacherTenantId" value="">
-            <div class="mb-4">
+           <form id="teacherForm">
+             <div class="mb-4">
               <label class="block text-sm font-medium text-gray-700 mb-1">Nama</label>
               <input type="text" name="nama"
                 class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 required>
             </div>
-            <div class="mb-4">
+             <div class="mb-4">
               <label class="block text-sm font-medium text-gray-700 mb-1">NIK</label>
               <input type="text" name="nik"
-                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-            </div>
-            <div class="mb-4">
-              <label class="block text-sm font-medium text-gray-700 mb-1">NIP</label>
-              <input type="text" name="nip"
-                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-            </div>
-            <div class="mb-4">
-              <label class="block text-sm font-medium text-gray-700 mb-1">Status Kepegawaian</label>
-              <input type="text" name="status_kepegawaian"
-                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-            </div>
-            <div class="mb-4">
-              <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
-              <input type="email" name="email"
                 class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
             </div>
             <div class="flex justify-end space-x-3">
@@ -3003,9 +3078,14 @@ document.getElementById('ruleForm')?.addEventListener('submit', async (e) => {
       <div class="main-card p-6">
         <div class="flex justify-between items-center mb-6">
           <h3 class="text-lg font-semibold text-gray-900">Pembagian Tugas Guru/Staf</h3>
-          <button onclick="loadAssignments()" class="btn-primary text-white px-4 py-2 rounded-lg text-sm flex items-center">
-            <i class="fas fa-sync-alt mr-2"></i>Refresh
-          </button>
+          <div class="flex space-x-2">
+            <button onclick="showAssignmentModal()" class="btn-primary text-white px-4 py-2 rounded-lg text-sm flex items-center">
+              <i class="fas fa-plus mr-2"></i>Tambah Tugas
+            </button>
+            <button onclick="loadAssignments()" class="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 bg-white hover:bg-gray-50 flex items-center">
+              <i class="fas fa-sync-alt mr-2"></i>Refresh
+            </button>
+          </div>
         </div>
 
         <div class="mb-4">
@@ -3034,13 +3114,19 @@ document.getElementById('ruleForm')?.addEventListener('submit', async (e) => {
         </div>
       </div>
 
-      <!-- Assignment Edit Modal -->
+      <!-- Assignment Modal -->
       <div id="assignmentModal" class="modal fixed inset-0 bg-black bg-opacity-50 z-50 justify-center items-center">
         <div class="bg-white rounded-lg max-w-md w-full mx-4">
           <div class="p-6">
-            <h3 class="text-lg font-semibold mb-4">Edit Tugas Guru</h3>
+            <h3 class="text-lg font-semibold mb-4" id="assignmentModalTitle">Tambah Tugas Guru</h3>
             <form id="assignmentForm">
               <input type="hidden" id="assignmentTeacherId">
+              <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Guru</label>
+                <select id="assignmentTeacherSelect" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent" required>
+                  <option value="">Pilih Guru</option>
+                </select>
+              </div>
               <div class="mb-4">
                 <label class="block text-sm font-medium text-gray-700 mb-1">Jabatan</label>
                 <select id="assignmentPosition" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent" required>
@@ -3083,6 +3169,28 @@ document.getElementById('ruleForm')?.addEventListener('submit', async (e) => {
       }
 
       function attachDeferredFormListeners() {
+        var teacherForm = document.getElementById('teacherForm');
+        if (teacherForm && !teacherForm.dataset.listenerAttached) {
+          teacherForm.dataset.listenerAttached = 'true';
+          teacherForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            var data = Object.fromEntries(new FormData(e.target));
+            data.tenant_id = data.tenant_id || tenantId;
+            var editId = e.target.dataset.editId;
+            try {
+              var r = await fetch((editId ? apiUrl('/admin/teachers/' + editId) : apiUrl('/admin/teachers')), {
+                method: editId ? 'PUT' : 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+                body: JSON.stringify(data)
+              });
+              if (checkAuth401403(r)) return;
+              var d = await r.json();
+              if (d.success) { hideTeacherModal(); fetchTeachers(currentPage); showToast(editId ? 'Guru diperbarui' : 'Guru ditambahkan', 'success'); }
+              else showToast(d.message || 'Gagal menyimpan', 'error');
+            } catch (err) { console.error('[TEACHER FORM]', err); showToast('Terjadi kesalahan', 'error'); }
+          });
+        }
+
         var btnAddTeacher = document.getElementById('btnAddTeacher');
         if (btnAddTeacher && !btnAddTeacher.dataset.listenerAttached) {
           btnAddTeacher.dataset.listenerAttached = 'true';
@@ -3123,6 +3231,7 @@ document.getElementById('ruleForm')?.addEventListener('submit', async (e) => {
             var hariList = Array.from(e.target.querySelectorAll('input[name="hari"]:checked')).map(function(cb) { return cb.value; }).join(',');
             formData.set('hari', hariList);
             var data = Object.fromEntries(formData);
+            data.tenant_id = tenantId;
             var editId = e.target.dataset.editId;
             try {
               var r = await fetch((editId ? apiUrl('/admin/rules/' + editId) : apiUrl('/admin/rules')), {
@@ -3131,6 +3240,12 @@ document.getElementById('ruleForm')?.addEventListener('submit', async (e) => {
                 body: JSON.stringify(data)
               });
               if (checkAuth401403(r)) return;
+              if (!r.ok) {
+                let msg = 'Gagal';
+                try { const err = await r.json(); msg = err.message || msg; } catch(_) {}
+                showToast(msg, 'error');
+                return;
+              }
               var d = await r.json();
               if (d.success) { hideRuleModal(); fetchRules(); showToast(editId ? 'Aturan diperbarui' : 'Aturan ditambahkan', 'success'); }
               else showToast(d.message || 'Gagal', 'error');

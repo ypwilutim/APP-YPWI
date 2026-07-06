@@ -521,6 +521,30 @@ router.post('/admin/tenant-locations', authenticateOperator, async (req, res) =>
   }
 });
 
+// DELETE /api/admin/tenant-locations/:id - Delete location
+router.delete('/admin/tenant-locations/:id', authenticateOperator, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const tenantId = req.query.tenant_id;
+    const [location] = await db.query('SELECT tenant_id FROM tenant_locations WHERE id = ?', [id]);
+    if (!location) {
+      return res.status(404).json({ success: false, message: 'Lokasi tidak ditemukan' });
+    }
+    if (tenantId && !verifyTenantAccess(req, location.tenant_id)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+    if (tenantId && location.tenant_id !== tenantId) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+
+    await db.query('DELETE FROM tenant_locations WHERE id = ?', [id]);
+    res.json({ success: true, message: 'Lokasi berhasil dihapus' });
+  } catch (error) {
+    console.error('Delete location error:', error);
+    res.status(500).json({ success: false, message: 'Error deleting location' });
+  }
+});
+
 // ============================================================
 // SCANNER DEVICES ROUTES (for school admin/operator)
 // ============================================================
@@ -840,9 +864,11 @@ router.get('/admin/assignments', authenticateOperator, async (req, res) => {
     const tenantId = req.query.tenant_id;
     const query = `
       SELECT t.id, t.nama, t.nik, t.nip, t.email, t.no_wa,
-             ta.jabatan_di_unit
+             ta.jabatan_di_unit,
+             c.nama_kelas as wali_kelas
       FROM teachers t
       JOIN teacher_assignments ta ON t.id = ta.teacher_id
+      LEFT JOIN classes c ON ta.class_id = c.id
       WHERE t.status_aktif = 1
       ${tenantId ? 'AND ta.tenant_id = ?' : ''}
       ORDER BY t.nama ASC
