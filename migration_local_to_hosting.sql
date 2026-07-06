@@ -155,6 +155,10 @@ ALTER TABLE `teacher_assignments` ADD COLUMN IF NOT EXISTS `class_id` int(11) DE
 ALTER TABLE `teacher_assignments` ADD KEY IF NOT EXISTS `idx_class_id` (`class_id`);
 ALTER TABLE `teacher_assignments` ADD CONSTRAINT IF NOT EXISTS `teacher_assignments_ibfk_3` FOREIGN KEY (`class_id`) REFERENCES `classes` (`id`) ON DELETE SET NULL;
 
+-- students.status_lulus, tanggal_lulus (untuk kelulusan)
+ALTER TABLE `students` ADD COLUMN IF NOT EXISTS `status_lulus` tinyint(1) DEFAULT 0 AFTER `nis`;
+ALTER TABLE `students` ADD COLUMN IF NOT EXISTS `tanggal_lulus` date DEFAULT NULL AFTER `status_lulus`;
+
 -- ==========================================
 -- SECTION 3: FIX DATA AND ADD FOREIGN KEYS
 -- ==========================================

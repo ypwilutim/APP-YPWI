@@ -720,7 +720,7 @@ router.get('/admin/teachers', authenticateOperator, async (req, res) => {
 // POST /api/admin/teachers - Create teacher with assignment
 router.post('/admin/teachers', authenticateOperator, async (req, res) => {
   try {
-    const { nama, tenant_id, jabatan_di_unit } = req.body;
+    const { nama, tenant_id, jabatan_di_unit, nik, nip, status_kepegawaian, email } = req.body;
 
     if (!nama || !tenant_id) {
       return res.status(400).json({ success: false, message: 'Nama dan penempatan sekolah wajib diisi' });
@@ -734,8 +734,8 @@ router.post('/admin/teachers', authenticateOperator, async (req, res) => {
 
     // Create teacher
     const result = await db.query(
-      'INSERT INTO teachers (nama, status_aktif) VALUES (?, 1)',
-      [nama]
+      'INSERT INTO teachers (nama, nik, nip, status_kepegawaian, email, status_aktif) VALUES (?, ?, ?, ?, ?, 1)',
+      [nama, nik || null, nip || null, status_kepegawaian || null, email || null]
     );
 
     const teacherId = result.insertId;
@@ -776,7 +776,7 @@ router.get('/admin/teachers/:id', authenticateOperator, async (req, res) => {
 router.put('/admin/teachers/:id', authenticateOperator, async (req, res) => {
   try {
     const { id } = req.params;
-    const { nama, tenant_id, jabatan_di_unit } = req.body;
+    const { nama, tenant_id, jabatan_di_unit, nik, nip, status_kepegawaian, email } = req.body;
 
     if (!nama || !tenant_id) {
       return res.status(400).json({ success: false, message: 'Nama dan penempatan sekolah wajib diisi' });
@@ -789,7 +789,7 @@ router.put('/admin/teachers/:id', authenticateOperator, async (req, res) => {
     }
 
     // Update teacher
-    await db.query('UPDATE teachers SET nama = ? WHERE id = ?', [nama, id]);
+    await db.query('UPDATE teachers SET nama = ?, nik = ?, nip = ?, status_kepegawaian = ?, email = ? WHERE id = ?', [nama, nik || null, nip || null, status_kepegawaian || null, email || null, id]);
 
     // Update or create assignment
     const existingAssignment = await db.query('SELECT id FROM teacher_assignments WHERE teacher_id = ?', [id]);
@@ -840,10 +840,9 @@ router.get('/admin/assignments', authenticateOperator, async (req, res) => {
     const tenantId = req.query.tenant_id;
     const query = `
       SELECT t.id, t.nama, t.nik, t.nip, t.email, t.no_wa,
-             ta.jabatan_di_unit, ta.class_id, c.nama_kelas as wali_kelas
+             ta.jabatan_di_unit
       FROM teachers t
       JOIN teacher_assignments ta ON t.id = ta.teacher_id
-      LEFT JOIN classes c ON ta.class_id = c.id
       WHERE t.status_aktif = 1
       ${tenantId ? 'AND ta.tenant_id = ?' : ''}
       ORDER BY t.nama ASC
@@ -1125,17 +1124,18 @@ router.get('/admin/students', authenticateOperator, async (req, res) => {
 // GET /api/admin/students/all - List all students (no pagination)
 router.get('/admin/students/all', authenticateOperator, async (req, res) => {
   try {
+    const params = [];
+
     let query = `
       SELECT s.id, s.nama_siswa, s.nisn, s.nis, s.jenis_kelamin, s.iuran_bulanan,
-             c.nama_kelas, tn.nama_sekolah, p.no_wa as no_wa_ortu
+             s.class_id, c.nama_kelas, tn.nama_sekolah, p.no_wa as no_wa_ortu
       FROM students s
       LEFT JOIN classes c ON s.class_id = c.id
       LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id
       LEFT JOIN parents p ON s.parent_id = p.id
       WHERE 1=1
     `;
-    let params = [];
-    
+
     if (req.query.tenant_id) {
       query += ' AND s.tenant_id = ?';
       params.push(req.query.tenant_id);
@@ -2141,7 +2141,8 @@ router.put('/public/teachers/:teacherId', teacherUpload.single('foto'), async (r
 
     // Create user account if not exists
     const existingUser = await db.query('SELECT id FROM users WHERE guru_id = ?', [teacherId]);
-    if (existingUser.length === 0 && email) {
+    const isNewUser = existingUser.length === 0;
+    if (isNewUser && email) {
       const defaultPassword = 'ypwi123';
       const bcrypt = require('bcryptjs');
       const hashedPassword = await bcrypt.hash(defaultPassword, 10);
@@ -2157,6 +2158,7 @@ router.put('/public/teachers/:teacherId', teacherUpload.single('foto'), async (r
 
     // Send email notification for profile completion
     if (email) {
+      const passwordText = isNewUser ? 'ypwi123 (ganti segera)' : 'sesuai password sebelumnya';
       const htmlMessage = `<!DOCTYPE html>
 <html lang="id">
 <head>
@@ -2180,7 +2182,7 @@ router.put('/public/teachers/:teacherId', teacherUpload.single('foto'), async (r
       </p>
       <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
         <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee; color: #666;">Username:</td><td style="padding: 8px 0; border-bottom: 1px solid #eee; font-weight: 600;">${email}</td></tr>
-        <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee; color: #666;">Password:</td><td style="padding: 8px 0; border-bottom: 1px solid #eee; font-weight: 600;">ypwi123 (ganti segera)</td></tr>
+        <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee; color: #666;">Password:</td><td style="padding: 8px 0; border-bottom: 1px solid #eee; font-weight: 600;">${passwordText}</td></tr>
         <tr><td style="padding: 8px 0; color: #666;">Tanggal:</td><td style="padding: 8px 0; font-weight: 600;">${new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</td></tr>
       </table>
       <p style="margin: 20px 0 0 0; color: #888; font-size: 14px;">Email ini dikirim otomatis oleh sistem. Silakan login dengan password di atas.</p>

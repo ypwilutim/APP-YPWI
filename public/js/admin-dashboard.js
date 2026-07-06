@@ -11,34 +11,6 @@ let selectedStudents = [];
 let currentTeacherId = null;
 let currentRuleId = null;
 
-if (typeof window.showAddTeacherModal !== 'function') {
-  window.showAddTeacherModal = function() {
-    const modal = document.getElementById('addTeacherModal');
-    if (modal) modal.classList.remove('hidden');
-  };
-}
-
-if (typeof window.hideTeacherModal !== 'function') {
-  window.hideTeacherModal = function() {
-    const modal = document.getElementById('addTeacherModal');
-    if (modal) modal.classList.add('hidden');
-  };
-}
-
-if (typeof window.showAddRuleModal !== 'function') {
-  window.showAddRuleModal = function() {
-    const modal = document.getElementById('addRuleModal');
-    if (modal) modal.classList.remove('hidden');
-  };
-}
-
-if (typeof window.hideRuleModal !== 'function') {
-  window.hideRuleModal = function() {
-    const modal = document.getElementById('addRuleModal');
-    if (modal) modal.classList.add('hidden');
-  };
-}
-
 async function loadStudentsForBill() {
   const select = document.getElementById('billStudentSelect');
   if (!select) return;
