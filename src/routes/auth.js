@@ -153,10 +153,12 @@ router.post('/auth/login', async (req, res) => {
       (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '') === 'bendahara'
     );
 
-    // Determine redirect: admin -> admin, bendahara -> treasurer, guru -> dashboard
+    // Determine redirect: admin -> admin, guru -> dashboard (apapun assignmentnya)
     let redirectPage = 'dashboard.html';
     if (user.role === 'admin') {
       redirectPage = 'admin-dashboard.html';
+    } else if (user.role === 'guru') {
+      redirectPage = 'dashboard.html';
     } else if (isBendahara) {
       redirectPage = 'treasurer-dashboard.html';
     }

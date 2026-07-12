@@ -186,6 +186,12 @@
         </button>
         <button
           class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+          data-tab="documents">
+          <i class="fas fa-file-alt"></i>
+          <span>Dokumen SK Guru</span>
+        </button>
+        <button
+          class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
           data-tab="settings">
           <i class="fas fa-cog"></i>
           <span>Pengaturan</span>
@@ -482,7 +488,7 @@
           <div class="flex space-x-2">
             <button id="logViewBtn" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium">Log
               Harian</button>
-            <button id="monthlyViewBtn"
+            <button id="monthlyViewBtn" onclick="switchAttendanceView('monthly')"
               class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300">Rekap
               Bulanan</button>
           </div>
@@ -565,7 +571,7 @@
               </select>
               <select id="recapYearSelect"
                 class="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"></select>
-              <button id="searchRecapBtn"
+              <button id="searchRecapBtn" onclick="loadMonthlyRecap()"
                 class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm flex items-center">
                 <i class="fas fa-search mr-2"></i>Cari
               </button>
@@ -581,6 +587,10 @@
                 class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm flex items-center">
                 <i class="fas fa-file-pdf mr-2"></i>Export PDF
               </button>
+              <button onclick="exportMonthlyExcel()"
+                class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm flex items-center ml-2">
+                <i class="fas fa-file-excel mr-2"></i>Export Excel
+              </button>
             </div>
             <div id="monthlyRecapContent" class="overflow-x-auto max-h-[600px]">
               <p class="text-center text-gray-500 py-8">Pilih bulan, tahun, dan sekolah untuk menampilkan rekap</p>
@@ -589,1150 +599,1261 @@
         </div>
       </div>
 
-      <!-- WhatsApp Tab -->
+      <!-- SPP / Tagihan Tab via WhatsApp -->
       <div id="whatsappTab" class="tab-content hidden">
+        <div class="mt-6">
+          <h4 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+            <i class="fas fa-file-invoice-dollar text-orange-600 mr-2"></i>
+            Kirim Tagihan SPP via Template
+          </h4>
+
+          <!-- Period Selector (shared for single & bulk) -->
+          <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Bulan Tagihan</label>
+                <select id="billBulan"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
+                  <option value="">Pilih bulan...</option>
+                  <option value="Juli 2026">Juli 2026</option>
+                  <option value="Agustus 2026">Agustus 2026</option>
+                  <option value="September 2026">September 2026</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Tanggal Jatuh Tempo</label>
+                <input type="date" id="billTanggalJatuhTempo"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
+              </div>
+              <div class="flex items-end">
+                <button type="button" onclick="openBulkBillModal()"
+                  class="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 transition flex items-center justify-center">
+                  <i class="fas fa-broadcast-tower mr-2"></i>
+                  Kirim ke Semua Siswa
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Single Send Form -->
+          <div class="bg-orange-50 border border-orange-200 rounded-lg p-6">
+            <form id="billTemplateForm" onsubmit="event.preventDefault(); sendSingleBillTemplate();" class="space-y-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Template WhatsApp</label>
+                <select id="billTemplateSelect"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500">
+                  <option value="">Memuat template...</option>
+                </select>
+                <p class="text-xs text-gray-500 mt-1">Template diambil dari akun WhatsApp Business Anda.</p>
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Pilih Siswa</label>
+                  <select id="billStudentSelect" onchange="loadStudentBillData()"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500">
+                    <option value="">Pilih siswa...</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Nomor WhatsApp</label>
+                  <input type="tel" id="billPhoneNumber" readonly
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
+                    placeholder="Akan terisi otomatis">
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Nama Siswa</label>
+                  <input type="text" id="billNamaSiswa" readonly
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50">
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Jumlah Tagihan</label>
+                  <input type="number" id="billJumlahTagihan"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500"
+                    placeholder="Contoh: 150000">
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Nomor Rekening</label>
+                  <input type="text" id="billNomorRekening"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500"
+                    placeholder="Nomor rekening bank">
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Nama Penerima</label>
+                  <input type="text" id="billNamaPenerima"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500"
+                    placeholder="Nama pemilik rekening">
+                </div>
+              </div>
+
+              <button type="submit"
+                class="w-full bg-orange-600 text-white py-2 px-4 rounded-md hover:bg-orange-700 transition flex items-center justify-center">
+                <i class="fab fa-whatsapp mr-2"></i>
+                Kirim Template Tagihan SPP
+              </button>
+            </form>
+
+
+            <!-- Message History/Status -->
+            <div class="mt-8">
+              <h4 class="text-lg font-semibold text-gray-900 mb-4">Status Pengiriman</h4>
+              <div id="whatsappStatus" class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <p class="text-gray-600 text-sm">Belum ada pesan yang dikirim.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Kirim Pesan ke Guru -->
+        <div class="mt-6">
+          <h4 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+            <i class="fas fa-chalkboard-teacher text-blue-600 mr-2"></i>
+            Kirim Pesan WhatsApp ke Guru
+          </h4>
+
+          <div class="bg-blue-50 border border-blue-200 rounded-lg p-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Pilih Guru</label>
+                <select id="teacherMessageSelect" multiple size="6"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
+                  <option value="">Memuat guru...</option>
+                </select>
+                <p class="text-xs text-gray-500 mt-1">Tahan Ctrl/Cmd untuk pilih lebih dari satu. Hanya guru yang punya
+                  nomor WA yang ditampilkan.</p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Pesan</label>
+                <textarea id="teacherMessageText" rows="6"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                  placeholder="Tulis pesan untuk dikirim ke guru..."></textarea>
+              </div>
+            </div>
+
+            <div class="flex flex-wrap gap-3">
+              <button type="button" onclick="sendTeacherWhatsApp(false)"
+                class="bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition flex items-center justify-center">
+                <i class="fab fa-whatsapp mr-2"></i>
+                Kirim ke Guru Terpilih
+              </button>
+              <button type="button" onclick="sendTeacherWhatsApp(true)"
+                class="bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 transition flex items-center justify-center">
+                <i class="fas fa-broadcast-tower mr-2"></i>
+                Kirim ke Semua Guru
+              </button>
+            </div>
+
+            <div id="teacherWhatsAppStatus" class="mt-4 text-sm text-gray-600"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Payroll Tab -->
+      <div id="payrollTab" class="tab-content hidden">
         <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <div class="flex justify-between items-center mb-6">
-            <h3 class="text-lg font-semibold text-gray-900 flex items-center">
-              <i class="fab fa-whatsapp text-green-600 mr-2"></i>
-              Pengiriman Pesan WhatsApp
-            </h3>
-            <div class="flex space-x-2">
-              <button id="refreshWhatsApp"
-                class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
-                <i class="fas fa-sync-alt mr-2"></i>
-                Refresh
+          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+            <h3 class="text-lg font-semibold text-gray-900">Sistem Penggajian Guru</h3>
+            <div class="flex flex-wrap items-end gap-2">
+              <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Sekolah</label>
+                <select id="payrollTenantSelect"
+                  class="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500">
+                  <option value="">Semua Sekolah</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Bulan</label>
+                <select id="payrollBulan"
+                  class="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500">
+                  <option value="1">Januari</option>
+                  <option value="2">Februari</option>
+                  <option value="3">Maret</option>
+                  <option value="4">April</option>
+                  <option value="5">Mei</option>
+                  <option value="6">Juni</option>
+                  <option value="7" selected>Juli</option>
+                  <option value="8">Agustus</option>
+                  <option value="9">September</option>
+                  <option value="10">Oktober</option>
+                  <option value="11">November</option>
+                  <option value="12">Desember</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Tahun</label>
+                <select id="payrollTahun"
+                  class="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"></select>
+              </div>
+              <button onclick="loadPayroll()"
+                class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm">
+                <i class="fas fa-calculator mr-1"></i>Hitung
+              </button>
+              <button onclick="generatePayroll()"
+                class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm">
+                <i class="fas fa-save mr-1"></i>Simpan Slip
+              </button>
+              <button onclick="exportPayrollExcel()"
+                class="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 text-sm">
+                <i class="fas fa-file-excel mr-1"></i>Excel
+              </button>
+              <button onclick="exportPayrollPDF()"
+                class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 text-sm">
+                <i class="fas fa-file-pdf mr-1"></i>PDF
+              </button>
+              <button onclick="togglePayrollHistory()"
+                class="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 text-sm">
+                <i class="fas fa-history mr-1"></i>Riwayat
               </button>
             </div>
           </div>
 
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <!-- Bulk Message Form -->
-            <div class="bg-green-50 border border-green-200 rounded-lg p-6">
-              <h4 class="text-lg font-semibold text-green-800 mb-4 flex items-center">
-                <i class="fas fa-broadcast-tower mr-2"></i>
-                Kirim Pesan Massal
-              </h4>
-
-              <form id="bulkWhatsAppForm" class="space-y-4">
-                <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-2">Pilih Unit Sekolah</label>
-                  <select id="bulkTenantSelect"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                    required>
-                    <option value="">Pilih Unit...</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-2">Pesan WhatsApp</label>
-                  <select id="bulkMessageTemplate"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent mb-2">
-                    <option value="">Pilih template pesan...</option>
-                    <option value="reminder_absen">🔔 Pengingat Absensi</option>
-                    <option value="libur">🏖️ Pengumuman Libur</option>
-                    <option value="rapat">📋 Undangan Rapat</option>
-                    <option value="selamat_pagi">🌅 Salam Pagi</option>
-                    <option value="motivasi">💪 Motivasi Islami</option>
-                  </select>
-                  <textarea id="bulkMessage" rows="6"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                    placeholder="Ketik pesan yang akan dikirim..." required></textarea>
-                  <p class="text-xs text-gray-500 mt-1">Pesan akan dikirim ke semua guru aktif yang memiliki nomor
-                    WhatsApp di unit terpilih dengan salam islami.</p>
-                </div>
-
-                <button type="submit"
-                  class="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 transition flex items-center justify-center">
-                  <i class="fab fa-whatsapp mr-2"></i>
-                  Kirim Pesan Massal
-                </button>
-              </form>
+          <!-- Perhitungan View -->
+          <div id="payrollComputeView">
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead class="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">No</th>
+                    <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Nama</th>
+                    <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">NIK</th>
+                    <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
+                    <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Gaji Pokok</th>
+                    <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">T. Kinerja</th>
+                    <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">T. Umum</th>
+                    <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">T. Istri</th>
+                    <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">T. Anak</th>
+                    <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">T. KepSek</th>
+                    <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">T. WaliKelas</th>
+                    <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Honor Bendahara</th>
+                    <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Potongan</th>
+                    <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Total</th>
+                    <th class="px-3 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="payrollTable" class="divide-y divide-gray-100">
+                  <tr>
+                    <td colspan="15" class="px-3 py-12 text-center text-gray-500">Pilih periode lalu klik Hitung</td>
+                  </tr>
+                </tbody>
+                <tfoot id="payrollFooter" class="bg-gray-50 font-semibold hidden">
+                  <tr>
+                    <td colspan="13" class="px-3 py-3 text-right text-gray-700">Total Keseluruhan</td>
+                    <td id="payrollGrandTotal" class="px-3 py-3 text-right text-gray-900"></td>
+                    <td></td>
+                  </tr>
+                </tfoot>
+              </table>
             </div>
+            <p class="text-xs text-gray-500 mt-3">Total = Gaji Pokok + T. Kinerja + T. Umum + T. Istri + T. Anak + T.
+              KepSek + T. WaliKelas + Honor Bendahara − Potongan. Kehadiran hanya informasi.</p>
+          </div>
 
-            <!-- Single Message Form -->
-            <div class="bg-blue-50 border border-blue-200 rounded-lg p-6">
-              <h4 class="text-lg font-semibold text-blue-800 mb-4 flex items-center">
-                <i class="fas fa-user mr-2"></i>
-                Kirim Pesan Individual
-              </h4>
+          <!-- History View -->
+          <div id="payrollHistoryView" class="hidden">
+            <div class="flex items-center justify-between mb-4">
+              <h4 class="font-medium text-gray-900">Riwayat Slip Gaji Tersimpan</h4>
+              <button onclick="togglePayrollHistory()" class="text-sm text-blue-600 hover:underline">← Kembali ke
+                Perhitungan</button>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead class="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Periode</th>
+                    <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Nama</th>
+                    <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">NIK</th>
+                    <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Total Gaji</th>
+                    <th class="px-3 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="payrollHistoryTable" class="divide-y divide-gray-100">
+                  <tr>
+                    <td colspan="5" class="px-3 py-12 text-center text-gray-500">Belum ada riwayat</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
 
-              <form id="singleWhatsAppForm" class="space-y-4">
-                <div class="relative">
-                  <label class="block text-sm font-medium text-gray-700 mb-2">Pilih Guru</label>
-                  <div class="relative">
-                    <input type="text" id="singleTeacherInput"
-                      class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="Ketik nama guru untuk mencari..." required autocomplete="off">
-                    <input type="hidden" id="singleTeacherSelect" name="teacherId">
-                    <div id="teacherSearchResults"
-                      class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto hidden">
-                    </div>
-                  </div>
-                  <div id="teacherSelectedInfo" class="mt-1 text-xs text-gray-500"></div>
-                </div>
+        <!-- Modal Edit Komponen Gaji -->
+        <div id="salaryModal"
+          class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+          <div class="bg-white rounded-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="text-lg font-semibold text-gray-900" id="salaryModalTitle">Edit Komponen Gaji</h3>
+              <button onclick="hideSalaryModal()" class="text-gray-500 hover:text-gray-700"><i
+                  class="fas fa-times"></i></button>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div><label class="block text-xs text-gray-600 mb-1">Gaji Pokok</label><input type="number"
+                  id="salGajiPokok" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"></div>
+              <div><label class="block text-xs text-gray-600 mb-1">Tunjangan Kinerja</label><input type="number"
+                  id="salTunjKinerja" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"></div>
+              <div><label class="block text-xs text-gray-600 mb-1">Tunjangan Umum</label><input type="number"
+                  id="salTunjUmum" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"></div>
+              <div><label class="block text-xs text-gray-600 mb-1">Tunjangan Istri</label><input type="number"
+                  id="salTunjIstri" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"></div>
+              <div><label class="block text-xs text-gray-600 mb-1">Tunjangan Anak</label><input type="number"
+                  id="salTunjAnak" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"></div>
+              <div><label class="block text-xs text-gray-600 mb-1">Tunjangan Kepala Sekolah</label><input type="number"
+                  id="salTunjKepSek" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"></div>
+              <div><label class="block text-xs text-gray-600 mb-1">Tunjangan Wali Kelas</label><input type="number"
+                  id="salTunjWaliKelas" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"></div>
+              <div><label class="block text-xs text-gray-600 mb-1">Honor Bendahara</label><input type="number"
+                  id="salHonorBendahara" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"></div>
+              <div class="col-span-2"><label class="block text-xs text-gray-600 mb-1">Potongan</label><input
+                  type="number" id="salPotongan" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
+              </div>
+            </div>
+            <div class="flex justify-end space-x-3 pt-5">
+              <button onclick="hideSalaryModal()"
+                class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100">Batal</button>
+              <button onclick="saveSalary()"
+                class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Simpan</button>
+            </div>
+          </div>
+        </div>
+      </div>
 
-                <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-2">Pesan WhatsApp</label>
-                  <select id="singleMessageTemplate"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-2">
-                    <option value="">Pilih template pesan...</option>
-                    <option value="pribadi">💬 Pesan Pribadi</option>
-                    <option value="peringatan">⚠️ Peringatan</option>
-                    <option value="pujian">🌟 Pujian</option>
-                    <option value="permintaan">📝 Permintaan</option>
-                  </select>
-                  <textarea id="singleMessage" rows="6"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="Ketik pesan yang akan dikirim..." required></textarea>
-                </div>
+      <!-- Evaluations Tab - For Ketua Yayasan -->
+      <div id="evaluationsTab" class="tab-content hidden">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div class="flex justify-between items-center mb-6">
+            <div>
+              <h3 class="text-lg font-semibold text-gray-900">Penilaian Guru Otomatis</h3>
+              <p class="text-sm text-gray-600">Nilai otomatis berdasarkan kehadiran</p>
+            </div>
+            <button id="runAutoEvaluation" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">
+              <i class="fas fa-sync-alt mr-2"></i>Jalankan Auto-Evaluation
+            </button>
+          </div>
 
-                <button type="submit"
-                  class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition flex items-center justify-center">
-                  <i class="fab fa-whatsapp mr-2"></i>
-                  Kirim Pesan
-                </button>
-              </form>
+          <div class="mb-6">
+            <h4 class="font-medium text-gray-900 mb-3">Kriteria Penilaian Otomatis</h4>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+              <div class="bg-green-50 p-3 rounded">95-100%: <strong>5.0</strong></div>
+              <div class="bg-green-50 p-3 rounded">90-94%: <strong>4.5</strong></div>
+              <div class="bg-yellow-50 p-3 rounded">85-89%: <strong>4.0</strong></div>
+              <div class="bg-yellow-50 p-3 rounded">80-84%: <strong>3.5</strong></div>
+              <div class="bg-orange-50 p-3 rounded">75-79%: <strong>3.0</strong></div>
+              <div class="bg-orange-50 p-3 rounded">70-74%: <strong>2.5</strong></div>
+              <div class="bg-red-50 p-3 rounded">65-69%: <strong>2.0</strong></div>
+              <div class="bg-red-50 p-3 rounded">&lt;65%: <strong>1.0</strong></div>
             </div>
           </div>
 
-          <!-- Bill Template Form -->
-          <div class="mt-6">
-            <h4 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-              <i class="fas fa-file-invoice-dollar text-orange-600 mr-2"></i>
-              Kirim Tagihan SPP via Template
-            </h4>
-
-            <!-- Period Selector (shared for single & bulk) -->
-            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-              <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-2">Bulan Tagihan</label>
-                  <select id="billBulan"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
-                    <option value="">Pilih bulan...</option>
-                    <option value="Juli 2026">Juli 2026</option>
-                    <option value="Agustus 2026">Agustus 2026</option>
-                    <option value="September 2026">September 2026</option>
-                  </select>
-                </div>
-                <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-2">Tanggal Jatuh Tempo</label>
-                  <input type="date" id="billTanggalJatuhTempo"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
-                </div>
-                <div class="flex items-end">
-                  <button type="button" onclick="openBulkBillModal()"
-                    class="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 transition flex items-center justify-center">
-                    <i class="fas fa-broadcast-tower mr-2"></i>
-                    Kirim ke Semua Siswa
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <!-- Single Send Form -->
-            <div class="bg-orange-50 border border-orange-200 rounded-lg p-6">
-              <form id="billTemplateForm" onsubmit="event.preventDefault(); sendSingleBillTemplate();"
-                class="space-y-4">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Pilih Siswa</label>
-                    <select id="billStudentSelect" onchange="loadStudentBillData()"
-                      class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500">
-                      <option value="">Pilih siswa...</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Nomor WhatsApp</label>
-                    <input type="tel" id="billPhoneNumber" readonly
-                      class="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
-                      placeholder="Akan terisi otomatis">
-                  </div>
-                </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Nama Siswa</label>
-                    <input type="text" id="billNamaSiswa" readonly
-                      class="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50">
-                  </div>
-                  <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Jumlah Tagihan</label>
-                    <input type="number" id="billJumlahTagihan"
-                      class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500"
-                      placeholder="Contoh: 150000">
-                  </div>
-                </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Nomor Rekening</label>
-                    <input type="text" id="billNomorRekening"
-                      class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500"
-                      placeholder="Nomor rekening bank">
-                  </div>
-                  <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Nama Penerima</label>
-                    <input type="text" id="billNamaPenerima"
-                      class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-orange-500"
-                      placeholder="Nama pemilik rekening">
-                  </div>
-                </div>
-
-                <button type="submit"
-                  class="w-full bg-orange-600 text-white py-2 px-4 rounded-md hover:bg-orange-700 transition flex items-center justify-center">
-                  <i class="fab fa-whatsapp mr-2"></i>
-                  Kirim Template Tagihan SPP
-                </button>
-              </form>
-
-
-              <!-- Message History/Status -->
-              <div class="mt-8">
-                <h4 class="text-lg font-semibold text-gray-900 mb-4">Status Pengiriman</h4>
-                <div id="whatsappStatus" class="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                  <p class="text-gray-600 text-sm">Belum ada pesan yang dikirim.</p>
-                </div>
-              </div>
+          <div>
+            <h4 class="font-medium text-gray-900 mb-3">Hasil Penilaian Terbaru</h4>
+            <div id="evaluationsResults" class="max-h-96 overflow-y-auto">
+              <p class="text-center text-gray-500 py-8">Belum ada data penilaian</p>
             </div>
           </div>
+        </div>
+      </div>
 
-          <!-- Payroll Tab -->
-          <div id="payrollTab" class="tab-content hidden">
-            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-              <h3 class="text-lg font-semibold text-gray-900 mb-6">Sistem Penggajian</h3>
-              <div class="text-center py-12 text-gray-500">
-                <i class="fas fa-wallet text-4xl mb-4"></i>
-                <p>Fitur penggajian akan diimplementasikan</p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Evaluations Tab - For Ketua Yayasan -->
-          <div id="evaluationsTab" class="tab-content hidden">
-            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-              <div class="flex justify-between items-center mb-6">
-                <div>
-                  <h3 class="text-lg font-semibold text-gray-900">Penilaian Guru Otomatis</h3>
-                  <p class="text-sm text-gray-600">Nilai otomatis berdasarkan kehadiran</p>
-                </div>
-                <button id="runAutoEvaluation" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">
-                  <i class="fas fa-sync-alt mr-2"></i>Jalankan Auto-Evaluation
-                </button>
-              </div>
-
-              <div class="mb-6">
-                <h4 class="font-medium text-gray-900 mb-3">Kriteria Penilaian Otomatis</h4>
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                  <div class="bg-green-50 p-3 rounded">95-100%: <strong>5.0</strong></div>
-                  <div class="bg-green-50 p-3 rounded">90-94%: <strong>4.5</strong></div>
-                  <div class="bg-yellow-50 p-3 rounded">85-89%: <strong>4.0</strong></div>
-                  <div class="bg-yellow-50 p-3 rounded">80-84%: <strong>3.5</strong></div>
-                  <div class="bg-orange-50 p-3 rounded">75-79%: <strong>3.0</strong></div>
-                  <div class="bg-orange-50 p-3 rounded">70-74%: <strong>2.5</strong></div>
-                  <div class="bg-red-50 p-3 rounded">65-69%: <strong>2.0</strong></div>
-                  <div class="bg-red-50 p-3 rounded">&lt;65%: <strong>1.0</strong></div>
-                </div>
-              </div>
-
+      <!-- Documents Tab -->
+      <div id="documentsTab" class="tab-content hidden">
+        <div class="space-y-6">
+          <!-- Header -->
+          <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div class="flex justify-between items-center mb-6">
               <div>
-                <h4 class="font-medium text-gray-900 mb-3">Hasil Penilaian Terbaru</h4>
-                <div id="evaluationsResults" class="max-h-96 overflow-y-auto">
-                  <p class="text-center text-gray-500 py-8">Belum ada data penilaian</p>
-                </div>
+                <h3 class="text-lg font-semibold text-gray-900">Dokumen SK Guru Yayasan</h3>
+                <p class="text-gray-600">Buat dan kelola Surat Keputusan Pengangkatan Guru</p>
               </div>
+              <button onclick="showSkGuruModal()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+                <i class="fas fa-plus mr-2"></i>Buat SK Guru
+              </button>
+            </div>
+
+            <!-- SK Guru List -->
+            <div class="overflow-x-auto">
+              <table class="w-full">
+                <thead class="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">No. Surat</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nama Guru</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tentang</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">NIY</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">TMT</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tanggal Dibuat</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="skGuruTable" class="divide-y divide-gray-100">
+                  <tr>
+                    <td colspan="7" class="px-4 py-8 text-center text-gray-500">
+                      <i class="fas fa-file-alt text-3xl mb-2"></i>
+                      <p>Memuat data SK Guru...</p>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
 
-          <!-- Documents Tab -->
-          <div id="documentsTab" class="tab-content hidden">
-            <div class="space-y-6">
-              <!-- Header -->
-              <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                <div class="flex justify-between items-center mb-6">
-                  <div>
-                    <h3 class="text-lg font-semibold text-gray-900">Dokumen SK Guru Yayasan</h3>
-                    <p class="text-gray-600">Buat dan kelola Surat Keputusan Pengangkatan Guru</p>
-                  </div>
-                  <button onclick="showSkGuruModal()"
-                    class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
-                    <i class="fas fa-plus mr-2"></i>Buat SK Guru
-                  </button>
-                </div>
-
-                <!-- SK Guru List -->
-                <div class="overflow-x-auto">
-                  <table class="w-full">
-                    <thead class="bg-gray-50 border-b border-gray-100">
-                      <tr>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">No. Surat</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nama Guru</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tentang</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">NIY</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">TMT</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tanggal Dibuat</th>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Aksi</th>
-                      </tr>
-                    </thead>
-                    <tbody id="skGuruTable" class="divide-y divide-gray-100">
-                      <tr>
-                        <td colspan="7" class="px-4 py-8 text-center text-gray-500">
-                          <i class="fas fa-file-alt text-3xl mb-2"></i>
-                          <p>Memuat data SK Guru...</p>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <!-- SK Guru Modal -->
-              <div id="skGuruModal"
-                class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
-                <div class="bg-white rounded-xl p-6 w-full max-w-2xl mx-4">
-                  <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-lg font-semibold text-gray-900" id="skGuruModalTitle">Buat SK Guru</h3>
-                    <button onclick="hideSkGuruModal()" class="text-gray-500 hover:text-gray-700">
-                      <i class="fas fa-times"></i>
-                    </button>
-                  </div>
-                  <form id="skGuruForm" class="space-y-4">
-                    <div>
-                      <label class="block text-sm font-medium text-gray-700 mb-2">Cari Guru</label>
-                      <input type="text" id="skTeacherSearch" placeholder="Ketik nama atau NIK guru..."
-                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        autocomplete="off">
-                      <input type="hidden" id="skTeacherId">
-                      <div id="skTeacherSuggestions"
-                        class="absolute z-10 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto hidden mt-1">
-                      </div>
-                    </div>
-
-                    <div>
-                      <label class="block text-sm font-medium text-gray-700 mb-2">Jenis SK</label>
-                      <select id="skTentangType"
-                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                        <option value="baru">PENGANGKATAN GURU</option>
-                        <option value="kembali">PENGANGKATAN KEMBALI GURU</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label class="block text-sm font-medium text-gray-700 mb-2">Pendidikan Terakhir</label>
-                      <input type="text" id="skPT" placeholder="Contoh: S1/PEND. SOSIOLOGI/UNM/2019"
-                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                    </div>
-
-                    <div>
-                      <label class="block text-sm font-medium text-gray-700 mb-2">TMT (Tanggal Mulai Tugas)</label>
-                      <input type="month" id="skTmt"
-                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                    </div>
-
-                    <div class="flex justify-end space-x-3 pt-4">
-                      <button type="button" onclick="hideSkGuruModal()"
-                        class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100">Batal</button>
-                      <button type="button" onclick="previewSkGuru()"
-                        class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700">
-                        <i class="fas fa-eye mr-2"></i>Preview
-                      </button>
-                      <button type="button" onclick="bulkGenerateSkGuru()"
-                        class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
-                        <i class="fas fa-users mr-2"></i>Bulk Generate
-                      </button>
-                      <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                        <i class="fas fa-file-word mr-2"></i>Generate SK
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              </div>
-            </div>
-          </div>
-
-
-          <!-- SK Preview Modal -->
-          <div id="skPreviewModal"
+          <!-- SK Guru Modal -->
+          <div id="skGuruModal"
             class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
-            <div class="bg-white rounded-xl p-6 w-full max-w-lg mx-4">
+            <div class="bg-white rounded-xl p-6 w-full max-w-2xl mx-4">
               <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-semibold text-gray-900">Preview SK Guru</h3>
-                <button onclick="hideSkPreviewModal()" class="text-gray-500 hover:text-gray-700">
+                <h3 class="text-lg font-semibold text-gray-900" id="skGuruModalTitle">Buat SK Guru</h3>
+                <button onclick="hideSkGuruModal()" class="text-gray-500 hover:text-gray-700">
                   <i class="fas fa-times"></i>
                 </button>
               </div>
-              <div id="skPreviewContent" class="space-y-3 text-sm">
-                <div class="grid grid-cols-2 gap-2">
-                  <div class="font-medium">No. Surat:</div>
-                  <div id="previewNoSurat">-</div>
-                  <div class="font-medium">Perihal:</div>
-                  <div id="previewTentang" class="text-xs">-</div>
-                  <div class="font-medium">Nama:</div>
-                  <div id="previewNama">-</div>
-                  <div class="font-medium">TTL:</div>
-                  <div id="previewTtl">-</div>
-                  <div class="font-medium">TMT:</div>
-                  <div id="previewTmt">-</div>
-                  <div class="font-medium">Pendidikan:</div>
-                  <div id="previewPt" class="text-xs">-</div>
-                  <div class="font-medium">NIY:</div>
-                  <div id="previewNiy">-</div>
-                  <div class="font-medium">Unit Kerja:</div>
-                  <div id="previewUnit">-</div>
-                  <div class="font-medium">Jabatan:</div>
-                  <div id="previewJabatan">-</div>
-                  <div class="font-medium">Status:</div>
-                  <div id="previewStatus">-</div>
-                  <div class="font-medium">Tanggal Hijriyah:</div>
-                  <div id="previewBh">-</div>
-                  <div class="font-medium">Tanggal Masehi:</div>
-                  <div id="previewBm">-</div>
-                  <div class="font-medium">Masa Kontrak:</div>
-                  <div id="previewMasa" class="text-xs">-</div>
+              <form id="skGuruForm" class="space-y-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Cari Guru</label>
+                  <input type="text" id="skTeacherSearch" placeholder="Ketik nama atau NIK guru..."
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    autocomplete="off">
+                  <input type="hidden" id="skTeacherId">
+                  <div id="skTeacherSuggestions"
+                    class="absolute z-10 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto hidden mt-1">
+                  </div>
+                </div>
+
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Jenis SK</label>
+                  <select id="skTentangType"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                    <option value="baru">PENGANGKATAN GURU</option>
+                    <option value="kembali">PENGANGKATAN KEMBALI GURU</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Pendidikan Terakhir</label>
+                  <input type="text" id="skPT" placeholder="Contoh: S1/PEND. SOSIOLOGI/UNM/2019"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">TMT (Tanggal Mulai Tugas)</label>
+                  <input type="month" id="skTmt"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+
+                <div class="flex justify-end space-x-3 pt-4">
+                  <button type="button" onclick="hideSkGuruModal()"
+                    class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100">Batal</button>
+                  <button type="button" onclick="previewSkGuru()"
+                    class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700">
+                    <i class="fas fa-eye mr-2"></i>Preview
+                  </button>
+                  <button type="button" onclick="bulkGenerateSkGuru()"
+                    class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                    <i class="fas fa-users mr-2"></i>Bulk Generate
+                  </button>
+                  <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                    <i class="fas fa-file-word mr-2"></i>Generate SK
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- SK Preview Modal -->
+      <div id="skPreviewModal"
+        class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-xl p-6 w-full max-w-lg mx-4">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold text-gray-900">Preview SK Guru</h3>
+            <button onclick="hideSkPreviewModal()" class="text-gray-500 hover:text-gray-700">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+          <div id="skPreviewContent" class="space-y-3 text-sm">
+            <div class="grid grid-cols-2 gap-2">
+              <div class="font-medium">No. Surat:</div>
+              <div id="previewNoSurat">-</div>
+              <div class="font-medium">Perihal:</div>
+              <div id="previewTentang" class="text-xs">-</div>
+              <div class="font-medium">Nama:</div>
+              <div id="previewNama">-</div>
+              <div class="font-medium">TTL:</div>
+              <div id="previewTtl">-</div>
+              <div class="font-medium">TMT:</div>
+              <div id="previewTmt">-</div>
+              <div class="font-medium">Pendidikan:</div>
+              <div id="previewPt" class="text-xs">-</div>
+              <div class="font-medium">NIY:</div>
+              <div id="previewNiy">-</div>
+              <div class="font-medium">Unit Kerja:</div>
+              <div id="previewUnit">-</div>
+              <div class="font-medium">Jabatan:</div>
+              <div id="previewJabatan">-</div>
+              <div class="font-medium">Status:</div>
+              <div id="previewStatus">-</div>
+              <div class="font-medium">Tanggal Hijriyah:</div>
+              <div id="previewBh">-</div>
+              <div class="font-medium">Tanggal Masehi:</div>
+              <div id="previewBm">-</div>
+              <div class="font-medium">Masa Kontrak:</div>
+              <div id="previewMasa" class="text-xs">-</div>
+            </div>
+          </div>
+          <div class="flex justify-end space-x-3 pt-4 mt-4 border-t">
+            <button type="button" onclick="hideSkPreviewModal()"
+              class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100">Tutup</button>
+            <button type="button" onclick="confirmGenerateSk()"
+              class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+              <i class="fas fa-download mr-2"></i>Download SK
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- QR Generator Tab -->
+      <div id="qr-generatorTab" class="tab-content hidden">
+        <div class="space-y-6">
+          <!-- Header -->
+          <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="text-2xl font-bold text-gray-900">QR Code Scanner & Generator</h3>
+                <p class="text-gray-600 mt-1">Buat QR code untuk absensi offline dan pantau status scanner device
+                </p>
+              </div>
+              <div class="flex items-center space-x-2">
+                <a href="/scanner.html" target="_blank"
+                  class="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
+                  <i class="fas fa-external-link-alt mr-2"></i>
+                  Buka Scanner App
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <!-- Two Column Layout -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- QR Generator Panel -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+              <h4 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                <i class="fas fa-qrcode text-blue-600 mr-2"></i>
+                Generate QR Code untuk Guru
+              </h4>
+
+              <form id="qr-generate-form" class="space-y-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Cari Guru</label>
+                  <input type="text" id="qr-teacher-search"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Ketik nama atau NIK guru..." autocomplete="off">
+                  <input type="hidden" id="qr-teacher-id">
+                  <div id="qr-teacher-suggestions"
+                    class="absolute z-10 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto hidden mt-1">
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Scan ID</label>
+                    <input type="text" id="qr-scan-id"
+                      class="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50" readonly>
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Nama Guru</label>
+                    <input type="text" id="qr-teacher-name"
+                      class="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50" readonly>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Sekolah</label>
+                    <select id="qr-tenant-select"
+                      class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                      <option value="">Pilih Sekolah</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Expiry (jam)</label>
+                    <input type="number" id="qr-expiry-hours"
+                      class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      value="24" min="1" max="168">
+                  </div>
+                </div>
+
+                <button type="submit" id="generate-qr-btn"
+                  class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                  <i class="fas fa-qrcode mr-2"></i>Generate QR Code
+                </button>
+              </form>
+
+              <div id="qr-result" class="mt-6 hidden">
+                <h5 class="text-sm font-medium text-gray-700 mb-3">QR Code Preview</h5>
+                <div id="qr-image-container" class="flex justify-center mb-3"></div>
+                <p class="text-xs text-gray-500 mb-3">
+                  QR code berlaku sampai: <span id="qr-expiry-time" class="font-semibold"></span>
+                </p>
+                <div class="flex space-x-2">
+                  <button id="download-qr"
+                    class="flex-1 bg-green-600 text-white py-2 px-3 rounded text-sm hover:bg-green-700">
+                    <i class="fas fa-download mr-1"></i> Download
+                  </button>
+                  <button id="print-qr"
+                    class="flex-1 bg-gray-600 text-white py-2 px-3 rounded text-sm hover:bg-gray-700">
+                    <i class="fas fa-print mr-1"></i> Print
+                  </button>
+                </div>
+                <p class="text-xs text-red-600 mt-2">
+                  <i class="fas fa-exclamation-triangle mr-1"></i>
+                  Jangan bagikan QR code ini ke orang lain! Berlaku 1x penggunaan per guru per hari.
+                </p>
+              </div>
+            </div>
+
+            <!-- Scanner Device Status Panel -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+              <h4 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                <i class="fas fa-tablet-alt text-green-600 mr-2"></i>
+                Status Scanner Device
+              </h4>
+
+              <div class="mb-4">
+                <button id="refresh-devices" class="text-sm text-blue-600 hover:text-blue-800">
+                  <i class="fas fa-sync-alt mr-1"></i> Refresh
+                </button>
+              </div>
+
+              <div id="devices-list" class="space-y-3">
+                <div class="text-center py-8 text-gray-500">
+                  <i class="fas fa-spinner fa-spin text-xl mb-2"></i>
+                  <p>Memuat data device...</p>
                 </div>
               </div>
-              <div class="flex justify-end space-x-3 pt-4 mt-4 border-t">
-                <button type="button" onclick="hideSkPreviewModal()"
-                  class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100">Tutup</button>
-                <button type="button" onclick="confirmGenerateSk()"
-                  class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                  <i class="fas fa-download mr-2"></i>Download SK
+
+              <!-- Add Device Button -->
+              <div class="mt-6 pt-4 border-t border-gray-200">
+                <button id="add-device-modal-btn"
+                  class="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 transition flex items-center justify-center">
+                  <i class="fas fa-plus mr-2"></i>
+                  Tambah Scanner Device Baru
                 </button>
               </div>
             </div>
           </div>
 
-          <!-- QR Generator Tab -->
-          <div id="qr-generatorTab" class="tab-content hidden">
-            <div class="space-y-6">
-              <!-- Header -->
-              <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                <div class="flex items-center justify-between">
-                  <div>
-                    <h3 class="text-2xl font-bold text-gray-900">QR Code Scanner & Generator</h3>
-                    <p class="text-gray-600 mt-1">Buat QR code untuk absensi offline dan pantau status scanner device
-                    </p>
-                  </div>
-                  <div class="flex items-center space-x-2">
-                    <a href="/scanner.html" target="_blank"
-                      class="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
-                      <i class="fas fa-external-link-alt mr-2"></i>
-                      Buka Scanner App
-                    </a>
-                  </div>
+          <!-- QR Scan Logs -->
+          <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div class="flex justify-between items-center mb-4">
+              <h4 class="text-lg font-semibold text-gray-900 flex items-center">
+                <i class="fas fa-history text-purple-600 mr-2"></i>
+                Log Scan QR Terbaru
+              </h4>
+              <a href="#" onclick="switchTab('attendance'); return false;"
+                class="text-sm text-blue-600 hover:text-blue-800">
+                Lihat Semua
+              </a>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full">
+                <thead class="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Guru</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Sekolah</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Device</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Waktu</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
+                  </tr>
+                </thead>
+                <tbody id="qr-logs-table" class="divide-y divide-gray-100">
+                  <tr>
+                    <td colspan="5" class="px-4 py-8 text-center text-gray-500">
+                      <i class="fas fa-spinner fa-spin mr-2"></i>
+                      Memuat logs...
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ID Card Tab -->
+      <div id="idcardTab" class="tab-content hidden">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <h3 class="text-lg font-semibold text-gray-900 mb-6">Cetak ID Card</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-6 border border-green-200">
+              <div class="flex items-center mb-4">
+                <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mr-3">
+                  <i class="fas fa-id-badge text-green-600 text-xl"></i>
+                </div>
+                <div>
+                  <h4 class="text-md font-semibold text-gray-900">ID Card Guru</h4>
+                  <p class="text-sm text-gray-600">Cetak kartu identitas guru</p>
                 </div>
               </div>
-
-              <!-- Two Column Layout -->
-              <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <!-- QR Generator Panel -->
-                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                  <h4 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                    <i class="fas fa-qrcode text-blue-600 mr-2"></i>
-                    Generate QR Code untuk Guru
-                  </h4>
-
-                  <form id="qr-generate-form" class="space-y-4">
-                    <div>
-                      <label class="block text-sm font-medium text-gray-700 mb-2">Cari Guru</label>
-                      <input type="text" id="qr-teacher-search"
-                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="Ketik nama atau NIK guru..." autocomplete="off">
-                      <input type="hidden" id="qr-teacher-id">
-                      <div id="qr-teacher-suggestions"
-                        class="absolute z-10 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto hidden mt-1">
-                      </div>
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-4">
-                      <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Scan ID</label>
-                        <input type="text" id="qr-scan-id"
-                          class="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50" readonly>
-                      </div>
-                      <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Nama Guru</label>
-                        <input type="text" id="qr-teacher-name"
-                          class="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50" readonly>
-                      </div>
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-4">
-                      <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Sekolah</label>
-                        <select id="qr-tenant-select"
-                          class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                          <option value="">Pilih Sekolah</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Expiry (jam)</label>
-                        <input type="number" id="qr-expiry-hours"
-                          class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          value="24" min="1" max="168">
-                      </div>
-                    </div>
-
-                    <button type="submit" id="generate-qr-btn"
-                      class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
-                      <i class="fas fa-qrcode mr-2"></i>Generate QR Code
-                    </button>
-                  </form>
-
-                  <div id="qr-result" class="mt-6 hidden">
-                    <h5 class="text-sm font-medium text-gray-700 mb-3">QR Code Preview</h5>
-                    <div id="qr-image-container" class="flex justify-center mb-3"></div>
-                    <p class="text-xs text-gray-500 mb-3">
-                      QR code berlaku sampai: <span id="qr-expiry-time" class="font-semibold"></span>
-                    </p>
-                    <div class="flex space-x-2">
-                      <button id="download-qr"
-                        class="flex-1 bg-green-600 text-white py-2 px-3 rounded text-sm hover:bg-green-700">
-                        <i class="fas fa-download mr-1"></i> Download
-                      </button>
-                      <button id="print-qr"
-                        class="flex-1 bg-gray-600 text-white py-2 px-3 rounded text-sm hover:bg-gray-700">
-                        <i class="fas fa-print mr-1"></i> Print
-                      </button>
-                    </div>
-                    <p class="text-xs text-red-600 mt-2">
-                      <i class="fas fa-exclamation-triangle mr-1"></i>
-                      Jangan bagikan QR code ini ke orang lain! Berlaku 1x penggunaan per guru per hari.
-                    </p>
-                  </div>
+              <p class="text-sm text-gray-600 mb-4">Buat dan cetak kartu identitas untuk guru dengan QR code untuk
+                absensi.
+              </p>
+              <button onclick="location.href='idcard-designer.html'"
+                class="w-full bg-green-600 text-white px-4 py-2.5 rounded-lg hover:bg-green-700 transition flex items-center justify-center">
+                <i class="fas fa-palette mr-2"></i> Designer ID Card
+              </button>
+            </div>
+            <div class="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200">
+              <div class="flex items-center mb-4">
+                <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+                  <i class="fas fa-id-card text-blue-600 text-xl"></i>
                 </div>
-
-                <!-- Scanner Device Status Panel -->
-                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                  <h4 class="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                    <i class="fas fa-tablet-alt text-green-600 mr-2"></i>
-                    Status Scanner Device
-                  </h4>
-
-                  <div class="mb-4">
-                    <button id="refresh-devices" class="text-sm text-blue-600 hover:text-blue-800">
-                      <i class="fas fa-sync-alt mr-1"></i> Refresh
-                    </button>
-                  </div>
-
-                  <div id="devices-list" class="space-y-3">
-                    <div class="text-center py-8 text-gray-500">
-                      <i class="fas fa-spinner fa-spin text-xl mb-2"></i>
-                      <p>Memuat data device...</p>
-                    </div>
-                  </div>
-
-                  <!-- Add Device Button -->
-                  <div class="mt-6 pt-4 border-t border-gray-200">
-                    <button id="add-device-modal-btn"
-                      class="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 transition flex items-center justify-center">
-                      <i class="fas fa-plus mr-2"></i>
-                      Tambah Scanner Device Baru
-                    </button>
-                  </div>
+                <div>
+                  <h4 class="text-md font-semibold text-gray-900">ID Card Siswa</h4>
+                  <p class="text-sm text-gray-600">Cetak kartu identitas siswa</p>
                 </div>
               </div>
+              <p class="text-sm text-gray-600 mb-4">Buat dan cetak kartu identitas untuk siswa dengan QR code untuk
+                absensi.
+              </p>
+              <button onclick="location.href='idcard-designer.html'"
+                class="w-full bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 transition flex items-center justify-center">
+                <i class="fas fa-palette mr-2"></i> Buka Designer
+              </button>
+            </div>
+          </div>
+          <div class="mt-6 p-4 bg-gray-50 rounded-lg">
+            <h5 class="font-medium text-gray-900 mb-2">Petunjuk Cetak ID Card:</h5>
+            <ul class="text-sm text-gray-600 space-y-1 list-disc list-inside">
+              <li>Buka halaman ID Card guru/siswa</li>
+              <li>Pilih filter sekolah dan/atau pencarian nama</li>
+              <li>Tampilkan preview kartu</li>
+              <li>Klik "Cetak Semua" untuk mencetak semua kartu yang ditampilkan</li>
+              <li>Gunakan kertas kartu nama (8.5cm x 5.5cm) untuk hasil terbaik</li>
+            </ul>
+          </div>
+        </div>
+      </div>
 
-              <!-- QR Scan Logs -->
-              <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                <div class="flex justify-between items-center mb-4">
-                  <h4 class="text-lg font-semibold text-gray-900 flex items-center">
-                    <i class="fas fa-history text-purple-600 mr-2"></i>
-                    Log Scan QR Terbaru
-                  </h4>
-                  <a href="#" onclick="switchTab('attendance'); return false;"
-                    class="text-sm text-blue-600 hover:text-blue-800">
-                    Lihat Semua
-                  </a>
-                </div>
-                <div class="overflow-x-auto">
-                  <table class="w-full">
-                    <thead class="bg-gray-50 border-b border-gray-100">
-                      <tr>
-                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Guru</th>
-                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Sekolah</th>
-                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Device</th>
-                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Waktu</th>
-                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody id="qr-logs-table" class="divide-y divide-gray-100">
-                      <tr>
-                        <td colspan="5" class="px-4 py-8 text-center text-gray-500">
-                          <i class="fas fa-spinner fa-spin mr-2"></i>
-                          Memuat logs...
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
+      <!-- Settings Tab -->
+      <div id="settingsTab" class="tab-content hidden">
+        <div class="space-y-6">
+          <!-- Settings Header -->
+          <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="text-2xl font-bold text-gray-900">Pengaturan Sistem</h3>
+                <p class="text-gray-600 mt-1">Kelola konfigurasi aplikasi dan lokasi sekolah</p>
+              </div>
+              <div class="flex items-center space-x-2">
+                <div class="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                <span class="text-sm text-gray-600">Sistem Aktif</span>
               </div>
             </div>
           </div>
 
-          <!-- ID Card Tab -->
-          <div id="idcardTab" class="tab-content hidden">
-            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-              <h3 class="text-lg font-semibold text-gray-900 mb-6">Cetak ID Card</h3>
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div class="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-6 border border-green-200">
-                  <div class="flex items-center mb-4">
-                    <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mr-3">
-                      <i class="fas fa-id-badge text-green-600 text-xl"></i>
-                    </div>
-                    <div>
-                      <h4 class="text-md font-semibold text-gray-900">ID Card Guru</h4>
-                      <p class="text-sm text-gray-600">Cetak kartu identitas guru</p>
-                    </div>
-                  </div>
-                  <p class="text-sm text-gray-600 mb-4">Buat dan cetak kartu identitas untuk guru dengan QR code untuk
-                    absensi.
-                  </p>
-                  <button onclick="location.href='idcard-designer.html'"
-                    class="w-full bg-green-600 text-white px-4 py-2.5 rounded-lg hover:bg-green-700 transition flex items-center justify-center">
-                    <i class="fas fa-palette mr-2"></i> Designer ID Card
-                  </button>
+          <!-- Settings Navigation -->
+          <div class="bg-white rounded-xl shadow-sm border border-gray-100">
+            <div class="border-b border-gray-200">
+              <nav class="flex space-x-8 px-6" id="settingsNav">
+                <button
+                  class="settings-nav-item active py-4 px-1 border-b-2 border-blue-500 font-medium text-sm text-blue-600"
+                  data-setting="locations">
+                  <i class="fas fa-map-marker-alt mr-2"></i>
+                  Lokasi Sekolah
+                </button>
+                <button
+                  class="settings-nav-item py-4 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700"
+                  data-setting="locations-multi">
+                  <i class="fas fa-map-marked-alt mr-2"></i>
+                  Lokasi Multiple
+                </button>
+                <button
+                  class="settings-nav-item py-4 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700"
+                  data-setting="attendance">
+                  <i class="fas fa-clock mr-2"></i>
+                  Aturan Absensi
+                </button>
+                <button
+                  class="settings-nav-item py-4 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700"
+                  data-setting="sk-automation">
+                  <i class="fas fa-file-alt mr-2"></i>
+                  SK Otomatis
+                </button>
+                <button
+                  class="settings-nav-item py-4 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700"
+                  data-setting="system">
+                  <i class="fas fa-cog mr-2"></i>
+                  Sistem
+                </button>
+                <button
+                  class="settings-nav-item py-4 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700"
+                  data-setting="security">
+                  <i class="fas fa-shield-alt mr-2"></i>
+                  Keamanan
+                </button>
+                <button
+                  class="settings-nav-item py-4 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700"
+                  data-setting="bill">
+                  <i class="fas fa-file-invoice-dollar mr-2"></i>
+                  Tagihan Otomatis
+                </button>
+                <button
+                  class="settings-nav-item py-4 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700"
+                  data-setting="payments">
+                  <i class="fas fa-wallet mr-2"></i>
+                  Pembayaran Internal
+                </button>
+              </nav>
+            </div>
+
+            <!-- Locations Settings -->
+            <div id="locationsSetting" class="setting-content p-6">
+              <div class="flex items-center justify-between mb-6">
+                <div>
+                  <h4 class="text-lg font-semibold text-gray-900">Pengaturan Lokasi Sekolah</h4>
+                  <p class="text-gray-600 text-sm">Konfigurasi koordinat GPS untuk validasi absensi</p>
                 </div>
-                <div class="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200">
-                  <div class="flex items-center mb-4">
-                    <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
-                      <i class="fas fa-id-card text-blue-600 text-xl"></i>
-                    </div>
-                    <div>
-                      <h4 class="text-md font-semibold text-gray-900">ID Card Siswa</h4>
-                      <p class="text-sm text-gray-600">Cetak kartu identitas siswa</p>
-                    </div>
-                  </div>
-                  <p class="text-sm text-gray-600 mb-4">Buat dan cetak kartu identitas untuk siswa dengan QR code untuk
-                    absensi.
-                  </p>
-                  <button onclick="location.href='idcard-designer.html'"
-                    class="w-full bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 transition flex items-center justify-center">
-                    <i class="fas fa-palette mr-2"></i> Buka Designer
+                <div class="flex items-center space-x-2">
+                  <button onclick="showAddTenantModal()"
+                    class="inline-flex items-center px-4 py-2 bg-blue-600 border border-transparent rounded-lg text-sm font-medium text-white hover:bg-blue-700 focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    <i class="fas fa-plus mr-2"></i>
+                    Tambah Tenant
+                  </button>
+                  <button onclick="refreshTenantLocations()"
+                    class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    <i class="fas fa-sync-alt mr-2"></i>
+                    Refresh
                   </button>
                 </div>
               </div>
-              <div class="mt-6 p-4 bg-gray-50 rounded-lg">
-                <h5 class="font-medium text-gray-900 mb-2">Petunjuk Cetak ID Card:</h5>
-                <ul class="text-sm text-gray-600 space-y-1 list-disc list-inside">
-                  <li>Buka halaman ID Card guru/siswa</li>
-                  <li>Pilih filter sekolah dan/atau pencarian nama</li>
-                  <li>Tampilkan preview kartu</li>
-                  <li>Klik "Cetak Semua" untuk mencetak semua kartu yang ditampilkan</li>
-                  <li>Gunakan kertas kartu nama (8.5cm x 5.5cm) untuk hasil terbaik</li>
-                </ul>
+
+              <!-- Search Tenant -->
+              <div class="mb-4">
+                <div class="relative">
+                  <input type="text" id="locationTenantSearch" placeholder="Cari sekolah..."
+                    class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    onkeyup="filterTenantLocations()">
+                  <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                </div>
+              </div>
+
+              <!-- Quick Stats -->
+              <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div class="bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg p-4 text-white">
+                  <div class="flex items-center">
+                    <div class="p-2 bg-white bg-opacity-20 rounded-lg">
+                      <i class="fas fa-school text-xl"></i>
+                    </div>
+                    <div class="ml-3">
+                      <p class="text-blue-100 text-sm">Total Sekolah</p>
+                      <p class="text-2xl font-bold" id="totalSchools">0</p>
+                    </div>
+                  </div>
+                </div>
+                <div class="bg-gradient-to-r from-green-500 to-green-600 rounded-lg p-4 text-white">
+                  <div class="flex items-center">
+                    <div class="p-2 bg-white bg-opacity-20 rounded-lg">
+                      <i class="fas fa-map-marked-alt text-xl"></i>
+                    </div>
+                    <div class="ml-3">
+                      <p class="text-green-100 text-sm">Lokasi Dikonfigurasi</p>
+                      <p class="text-2xl font-bold" id="configuredLocations">0</p>
+                    </div>
+                  </div>
+                </div>
+                <div class="bg-gradient-to-r from-purple-500 to-purple-600 rounded-lg p-4 text-white">
+                  <div class="flex items-center">
+                    <div class="p-2 bg-white bg-opacity-20 rounded-lg">
+                      <i class="fas fa-crosshairs text-xl"></i>
+                    </div>
+                    <div class="ml-3">
+                      <p class="text-purple-100 text-sm">Radius Default</p>
+                      <p class="text-2xl font-bold">100m</p>
+                    </div>
+                  </div>
+                </div>
+                <div class="bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-lg p-4 text-white">
+                  <div class="flex items-center">
+                    <div class="p-2 bg-white bg-opacity-20 rounded-lg">
+                      <i class="fas fa-balance-scale text-xl"></i>
+                    </div>
+                    <div class="ml-3">
+                      <p class="text-indigo-100 text-sm">Menggunakan Aturan Pusat</p>
+                      <p class="text-2xl font-bold" id="usingCentralRules">0</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Location Cards -->
+              <div id="tenantLocations" class="space-y-4 max-h-[500px] overflow-y-auto">
+                <div class="text-center py-12">
+                  <div
+                    class="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mx-auto mb-4">
+                  </div>
+                  <p class="text-gray-600">Memuat data lokasi sekolah...</p>
+                </div>
               </div>
             </div>
-          </div>
 
-          <!-- Settings Tab -->
-          <div id="settingsTab" class="tab-content hidden">
-            <div class="space-y-6">
-              <!-- Settings Header -->
-              <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-                <div class="flex items-center justify-between">
+            <!-- Multiple Locations Settings -->
+            <div id="locations-multiSetting" class="setting-content hidden p-6">
+              <div class="flex items-center justify-between mb-6">
+                <div>
+                  <h4 class="text-lg font-semibold text-gray-900">Pengaturan Lokasi Multiple</h4>
+                  <p class="text-gray-600 text-sm">Kelola multiple lokasi untuk sekolah yang memiliki beberapa
+                    kampus
+                  </p>
+                </div>
+                <button onclick="loadTenantLocations()"
+                  class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                  <i class="fas fa-sync-alt mr-2"></i>
+                  Refresh
+                </button>
+              </div>
+
+              <!-- Tenant Locations List -->
+              <div id="tenantLocationsList" class="space-y-4 mb-6">
+                <div class="text-center py-12">
+                  <i class="fas fa-map-marked-alt text-4xl text-gray-400 mb-4"></i>
+                  <p class="text-gray-600">Memuat data lokasi...</p>
+                </div>
+              </div>
+
+              <!-- Add Location Button -->
+              <div class="flex justify-center">
+                <button onclick="showAddLocationModal()"
+                  class="inline-flex items-center px-6 py-3 bg-blue-600 border border-transparent rounded-lg text-sm font-medium text-white hover:bg-blue-700 focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                  <i class="fas fa-plus mr-2"></i>
+                  Tambah Lokasi Baru
+                </button>
+              </div>
+            </div>
+
+            <!-- Attendance Rules Settings -->
+            <div id="attendanceSetting" class="setting-content hidden p-6">
+              <div class="flex items-center justify-between mb-6">
+                <div>
+                  <h4 class="text-lg font-semibold text-gray-900">Aturan Absensi</h4>
+                  <p class="text-gray-600 text-sm">Kelola jadwal masuk dan pulang</p>
+                </div>
+                <button onclick="showAddRuleModal()"
+                  class="inline-flex items-center px-4 py-2 bg-blue-600 border border-transparent rounded-lg text-sm font-medium text-white hover:bg-blue-700 focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                  <i class="fas fa-plus mr-2"></i>
+                  Tambah Aturan
+                </button>
+              </div>
+
+              <div class="bg-gray-50 rounded-lg p-4 mb-6">
+                <div class="flex items-start space-x-3">
+                  <i class="fas fa-info-circle text-blue-500 mt-0.5"></i>
                   <div>
-                    <h3 class="text-2xl font-bold text-gray-900">Pengaturan Sistem</h3>
-                    <p class="text-gray-600 mt-1">Kelola konfigurasi aplikasi dan lokasi sekolah</p>
-                  </div>
-                  <div class="flex items-center space-x-2">
-                    <div class="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-                    <span class="text-sm text-gray-600">Sistem Aktif</span>
+                    <h5 class="font-medium text-gray-900">Informasi Aturan</h5>
+                    <p class="text-sm text-gray-600 mt-1">
+                      Ketika <strong>"Gunakan Aturan Pusat"</strong> aktif pada sebuah sekolah, maka <strong>aturan
+                        pusat (sistem)</strong> dan <strong>aturan sekolah</strong> keduanya berlaku.
+                      Aturan sekolah tetap dapat menimpa aturan pusat jika terjadi konflik pada jadwal yang sama.
+                      Pastikan tidak ada konflik jadwal antar aturan.
+                    </p>
                   </div>
                 </div>
               </div>
 
-              <!-- Settings Navigation -->
-              <div class="bg-white rounded-xl shadow-sm border border-gray-100">
-                <div class="border-b border-gray-200">
-                  <nav class="flex space-x-8 px-6" id="settingsNav">
-                    <button
-                      class="settings-nav-item active py-4 px-1 border-b-2 border-blue-500 font-medium text-sm text-blue-600"
-                      data-setting="locations">
-                      <i class="fas fa-map-marker-alt mr-2"></i>
-                      Lokasi Sekolah
-                    </button>
-                    <button
-                      class="settings-nav-item py-4 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700"
-                      data-setting="locations-multi">
-                      <i class="fas fa-map-marked-alt mr-2"></i>
-                      Lokasi Multiple
-                    </button>
-                    <button
-                      class="settings-nav-item py-4 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700"
-                      data-setting="attendance">
-                      <i class="fas fa-clock mr-2"></i>
-                      Aturan Absensi
-                    </button>
-                    <button
-                      class="settings-nav-item py-4 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700"
-                      data-setting="sk-automation">
-                      <i class="fas fa-file-alt mr-2"></i>
-                      SK Otomatis
-                    </button>
-                    <button
-                      class="settings-nav-item py-4 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700"
-                      data-setting="system">
-                      <i class="fas fa-cog mr-2"></i>
-                      Sistem
-                    </button>
-                    <button
-                      class="settings-nav-item py-4 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700"
-                      data-setting="security">
-                      <i class="fas fa-shield-alt mr-2"></i>
-                      Keamanan
-                    </button>
-                    <button
-                      class="settings-nav-item py-4 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700"
-                      data-setting="bill">
-                      <i class="fas fa-file-invoice-dollar mr-2"></i>
-                      Tagihan Otomatis
-                    </button>
-                  </nav>
+              <div id="attendanceRules" class="space-y-4">
+                <div class="text-center py-12">
+                  <i class="fas fa-clock text-4xl text-gray-400 mb-4"></i>
+                  <p class="text-gray-600">Memuat aturan absensi...</p>
                 </div>
+              </div>
+            </div>
 
-                <!-- Locations Settings -->
-                <div id="locationsSetting" class="setting-content p-6">
-                  <div class="flex items-center justify-between mb-6">
+            <!-- System Settings -->
+            <div id="systemSetting" class="setting-content hidden p-6">
+              <h4 class="text-lg font-semibold text-gray-900 mb-6">Pengaturan Sistem</h4>
+
+              <div class="space-y-6">
+                <div class="bg-white border border-gray-200 rounded-lg p-6">
+                  <h5 class="font-medium text-gray-900 mb-4">Konfigurasi Database</h5>
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <h4 class="text-lg font-semibold text-gray-900">Pengaturan Lokasi Sekolah</h4>
-                      <p class="text-gray-600 text-sm">Konfigurasi koordinat GPS untuk validasi absensi</p>
-                    </div>
-                    <div class="flex items-center space-x-2">
-                      <button onclick="showAddTenantModal()"
-                        class="inline-flex items-center px-4 py-2 bg-blue-600 border border-transparent rounded-lg text-sm font-medium text-white hover:bg-blue-700 focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-                        <i class="fas fa-plus mr-2"></i>
-                        Tambah Tenant
-                      </button>
-                      <button onclick="refreshTenantLocations()"
-                        class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-                        <i class="fas fa-sync-alt mr-2"></i>
-                        Refresh
-                      </button>
-                    </div>
-                  </div>
-
-                  <!-- Employment Rules Settings -->
-                  <div id="employment-rulesSetting" class="setting-content hidden p-6">
-                    <div class="mb-6">
-                      <h4 class="text-lg font-semibold text-gray-900">Aturan Status Kepegawaian</h4>
-                      <p class="text-gray-600 text-sm">PTY/PTTY/GTY/GTTY otomatis berdasarkan jabatan & masa kerja</p>
-                    </div>
-                    <div class="space-y-4">
-                      <div id="employment-rules-table">
-                        <table class="w-full text-sm">
-                          <thead class="bg-gray-100">
-                            <tr>
-                              <th class="px-3 py-2">Jabatan</th>
-                              <th class="px-3 py-2">Tipe</th>
-                              <th class="px-3 py-2">Min Thn</th>
-                              <th class="px-3 py-2">Max Thn</th>
-                            </tr>
-                          </thead>
-                          <tbody id="employment-rules-body"></tbody>
-                        </table>
-                      </div>
-                      <button type="button" onclick="loadEmploymentRules()"
-                        class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700">
-                        <i class="fas fa-sync-alt mr-2"></i>Muat Ulang
-                      </button>
-                    </div>
-                  </div>
-
-                  <!-- Search Tenant -->
-                  <div class="mb-4">
-                    <div class="relative">
-                      <input type="text" id="locationTenantSearch" placeholder="Cari sekolah..."
-                        class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        onkeyup="filterTenantLocations()">
-                      <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-                    </div>
-                  </div>
-
-                  <!-- Quick Stats -->
-                  <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                    <div class="bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg p-4 text-white">
+                      <label class="block text-sm font-medium text-gray-700 mb-2">Status Koneksi</label>
                       <div class="flex items-center">
-                        <div class="p-2 bg-white bg-opacity-20 rounded-lg">
-                          <i class="fas fa-school text-xl"></i>
-                        </div>
-                        <div class="ml-3">
-                          <p class="text-blue-100 text-sm">Total Sekolah</p>
-                          <p class="text-2xl font-bold" id="totalSchools">0</p>
-                        </div>
+                        <div class="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
+                        <span class="text-sm text-gray-600">Terhubung</span>
                       </div>
                     </div>
-                    <div class="bg-gradient-to-r from-green-500 to-green-600 rounded-lg p-4 text-white">
+                    <div>
+                      <label class="block text-sm font-medium text-gray-700 mb-2">Versi Database</label>
+                      <span class="text-sm text-gray-600">MySQL 8.0</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="bg-white border border-gray-200 rounded-lg p-6">
+                  <h5 class="font-medium text-gray-900 mb-4">Konfigurasi Server</h5>
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label class="block text-sm font-medium text-gray-700 mb-2">Status Server</label>
                       <div class="flex items-center">
-                        <div class="p-2 bg-white bg-opacity-20 rounded-lg">
-                          <i class="fas fa-map-marked-alt text-xl"></i>
-                        </div>
-                        <div class="ml-3">
-                          <p class="text-green-100 text-sm">Lokasi Dikonfigurasi</p>
-                          <p class="text-2xl font-bold" id="configuredLocations">0</p>
-                        </div>
+                        <div class="w-3 h-3 bg-green-500 rounded-full mr-2 animate-pulse"></div>
+                        <span class="text-sm text-gray-600">Running</span>
                       </div>
                     </div>
-                    <div class="bg-gradient-to-r from-purple-500 to-purple-600 rounded-lg p-4 text-white">
-                      <div class="flex items-center">
-                        <div class="p-2 bg-white bg-opacity-20 rounded-lg">
-                          <i class="fas fa-crosshairs text-xl"></i>
-                        </div>
-                        <div class="ml-3">
-                          <p class="text-purple-100 text-sm">Radius Default</p>
-                          <p class="text-2xl font-bold">100m</p>
-                        </div>
-                      </div>
-                    </div>
-                    <div class="bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-lg p-4 text-white">
-                      <div class="flex items-center">
-                        <div class="p-2 bg-white bg-opacity-20 rounded-lg">
-                          <i class="fas fa-balance-scale text-xl"></i>
-                        </div>
-                        <div class="ml-3">
-                          <p class="text-indigo-100 text-sm">Menggunakan Aturan Pusat</p>
-                          <p class="text-2xl font-bold" id="usingCentralRules">0</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Location Cards -->
-                  <div id="tenantLocations" class="space-y-4 max-h-[500px] overflow-y-auto">
-                    <div class="text-center py-12">
-                      <div
-                        class="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mx-auto mb-4">
-                      </div>
-                      <p class="text-gray-600">Memuat data lokasi sekolah...</p>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Multiple Locations Settings -->
-                <div id="locations-multiSetting" class="setting-content hidden p-6">
-                  <div class="flex items-center justify-between mb-6">
                     <div>
-                      <h4 class="text-lg font-semibold text-gray-900">Pengaturan Lokasi Multiple</h4>
-                      <p class="text-gray-600 text-sm">Kelola multiple lokasi untuk sekolah yang memiliki beberapa
-                        kampus
-                      </p>
+                      <label class="block text-sm font-medium text-gray-700 mb-2">Port</label>
+                      <span class="text-sm text-gray-600">3000</span>
                     </div>
-                    <button onclick="loadTenantLocations()"
-                      class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-                      <i class="fas fa-sync-alt mr-2"></i>
-                      Refresh
-                    </button>
-                  </div>
-
-                  <!-- Tenant Locations List -->
-                  <div id="tenantLocationsList" class="space-y-4 mb-6">
-                    <div class="text-center py-12">
-                      <i class="fas fa-map-marked-alt text-4xl text-gray-400 mb-4"></i>
-                      <p class="text-gray-600">Memuat data lokasi...</p>
-                    </div>
-                  </div>
-
-                  <!-- Add Location Button -->
-                  <div class="flex justify-center">
-                    <button onclick="showAddLocationModal()"
-                      class="inline-flex items-center px-6 py-3 bg-blue-600 border border-transparent rounded-lg text-sm font-medium text-white hover:bg-blue-700 focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-                      <i class="fas fa-plus mr-2"></i>
-                      Tambah Lokasi Baru
-                    </button>
-                  </div>
-                </div>
-
-                <!-- Attendance Rules Settings -->
-                <div id="attendanceSetting" class="setting-content hidden p-6">
-                  <div class="flex items-center justify-between mb-6">
-                    <div>
-                      <h4 class="text-lg font-semibold text-gray-900">Aturan Absensi</h4>
-                      <p class="text-gray-600 text-sm">Kelola jadwal masuk dan pulang</p>
-                    </div>
-                    <button onclick="showAddRuleModal()"
-                      class="inline-flex items-center px-4 py-2 bg-blue-600 border border-transparent rounded-lg text-sm font-medium text-white hover:bg-blue-700 focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
-                      <i class="fas fa-plus mr-2"></i>
-                      Tambah Aturan
-                    </button>
-                  </div>
-
-                  <div class="bg-gray-50 rounded-lg p-4 mb-6">
-                    <div class="flex items-start space-x-3">
-                      <i class="fas fa-info-circle text-blue-500 mt-0.5"></i>
-                      <div>
-                        <h5 class="font-medium text-gray-900">Informasi Aturan</h5>
-                        <p class="text-sm text-gray-600 mt-1">
-                          Ketika <strong>"Gunakan Aturan Pusat"</strong> aktif pada sebuah sekolah, maka <strong>aturan
-                            pusat (sistem)</strong> dan <strong>aturan sekolah</strong> keduanya berlaku.
-                          Aturan sekolah tetap dapat menimpa aturan pusat jika terjadi konflik pada jadwal yang sama.
-                          Pastikan tidak ada konflik jadwal antar aturan.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div id="attendanceRules" class="space-y-4">
-                    <div class="text-center py-12">
-                      <i class="fas fa-clock text-4xl text-gray-400 mb-4"></i>
-                      <p class="text-gray-600">Memuat aturan absensi...</p>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- System Settings -->
-                <div id="systemSetting" class="setting-content hidden p-6">
-                  <h4 class="text-lg font-semibold text-gray-900 mb-6">Pengaturan Sistem</h4>
-
-                  <div class="space-y-6">
-                    <div class="bg-white border border-gray-200 rounded-lg p-6">
-                      <h5 class="font-medium text-gray-900 mb-4">Konfigurasi Database</h5>
-                      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label class="block text-sm font-medium text-gray-700 mb-2">Status Koneksi</label>
-                          <div class="flex items-center">
-                            <div class="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
-                            <span class="text-sm text-gray-600">Terhubung</span>
-                          </div>
-                        </div>
-                        <div>
-                          <label class="block text-sm font-medium text-gray-700 mb-2">Versi Database</label>
-                          <span class="text-sm text-gray-600">MySQL 8.0</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div class="bg-white border border-gray-200 rounded-lg p-6">
-                      <h5 class="font-medium text-gray-900 mb-4">Konfigurasi Server</h5>
-                      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <label class="block text-sm font-medium text-gray-700 mb-2">Status Server</label>
-                          <div class="flex items-center">
-                            <div class="w-3 h-3 bg-green-500 rounded-full mr-2 animate-pulse"></div>
-                            <span class="text-sm text-gray-600">Running</span>
-                          </div>
-                        </div>
-                        <div>
-                          <label class="block text-sm font-medium text-gray-700 mb-2">Port</label>
-                          <span class="text-sm text-gray-600">3000</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-
-                <!-- SK Automation Settings -->
-                <div id="sk-automationSetting" class="setting-content hidden p-6">
-                  <div class="mb-6">
-                    <h4 class="text-lg font-semibold text-gray-900">Pengaturan SK Otomatis</h4>
-                    <p class="text-gray-600 text-sm">Konfigurasi otomatisasi pembuatan Surat Keputusan Guru</p>
-                  </div>
-                  <div class="space-y-4">
-                    <div>
-                      <label class="block text-sm font-medium text-gray-700 mb-2">Batas Minimal SK Boleh Terbit (Tahun
-                        Pengabdian)</label>
-                      <input type="number" id="minServiceYears" min="1" max="10" value="2"
-                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                    </div>
-                    <div>
-                      <label class="flex items-center">
-                        <input type="checkbox" id="autoGenerateEnabled" checked class="mr-2">
-                        <span class="text-sm font-medium text-gray-700">Aktifkan Pembuatan SK Otomatis</span>
-                      </label>
-                    </div>
-                    <div>
-                      <label class="block text-sm font-medium text-gray-700 mb-2">Tanggal Terbit Otomatis (Per Tahun,
-                        format
-                        MM-DD)</label>
-                      <input type="text" id="autoGenerateDate" placeholder="01-01" value="01-01" pattern="\d{2}-\d{2}"
-                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                    </div>
-                    <button type="button" onclick="saveSkAutomationSettings()"
-                      class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                      <i class="fas fa-save mr-2"></i>Simpan Pengaturan
-                    </button>
-                  </div>
-                </div>
-
-
-                <!-- SK Automation Settings -->
-                <div id="sk-automationSetting" class="setting-content hidden p-6">
-                  <div class="mb-6">
-                    <h4 class="text-lg font-semibold text-gray-900">Pengaturan SK Otomatis</h4>
-                    <p class="text-gray-600 text-sm">Konfigurasi otomatisasi pembuatan Surat Keputusan Guru</p>
-                  </div>
-                  <div class="space-y-4">
-                    <div>
-                      <label class="block text-sm font-medium text-gray-700 mb-2">Batas Minimal SK Boleh Terbit (Tahun
-                        Pengabdian)</label>
-                      <input type="number" id="minServiceYears" min="1" max="10" value="2"
-                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                    </div>
-                    <div>
-                      <label class="flex items-center">
-                        <input type="checkbox" id="autoGenerateEnabled" checked class="mr-2">
-                        <span class="text-sm font-medium text-gray-700">Aktifkan Pembuatan SK Otomatis</span>
-                      </label>
-                    </div>
-                    <div>
-                      <label class="block text-sm font-medium text-gray-700 mb-2">Tanggal Terbit Otomatis (Per Tahun,
-                        format
-                        MM-DD)</label>
-                      <input type="text" id="autoGenerateDate" placeholder="01-01" value="01-01" pattern="\d{2}-\d{2}"
-                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                    </div>
-                    <button type="button" onclick="saveSkAutomationSettings()"
-                      class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                      <i class="fas fa-save mr-2"></i>Simpan Pengaturan
-                    </button>
-                  </div>
-                </div>
-
-
-                <!-- SK Automation Settings -->
-                <div id="sk-automationSetting" class="setting-content hidden p-6">
-                  <div class="mb-6">
-                    <h4 class="text-lg font-semibold text-gray-900">Pengaturan SK Otomatis</h4>
-                    <p class="text-gray-600 text-sm">Konfigurasi otomatisasi pembuatan Surat Keputusan Guru</p>
-                  </div>
-                  <div class="space-y-4">
-                    <div>
-                      <label class="block text-sm font-medium text-gray-700 mb-2">Batas Minimal SK Boleh Terbit (Tahun
-                        Pengabdian)</label>
-                      <input type="number" id="minServiceYears" min="1" max="10" value="2"
-                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                    </div>
-                    <div>
-                      <label class="flex items-center">
-                        <input type="checkbox" id="autoGenerateEnabled" checked class="mr-2">
-                        <span class="text-sm font-medium text-gray-700">Aktifkan Pembuatan SK Otomatis</span>
-                      </label>
-                    </div>
-                    <div>
-                      <label class="block text-sm font-medium text-gray-700 mb-2">Tanggal Terbit Otomatis (Per Tahun,
-                        format
-                        MM-DD)</label>
-                      <input type="text" id="autoGenerateDate" placeholder="01-01" value="01-01" pattern="\d{2}-\d{2}"
-                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                    </div>
-                    <button type="button" onclick="saveSkAutomationSettings()"
-                      class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                      <i class="fas fa-save mr-2"></i>Simpan Pengaturan
-                    </button>
-                  </div>
-                </div>
-                <!-- Security Settings -->
-                <div id="securitySetting" class="setting-content hidden p-6">
-                  <h4 class="text-lg font-semibold text-gray-900 mb-6">Pengaturan Keamanan</h4>
-
-                  <div class="space-y-6">
-                    <div class="bg-white border border-gray-200 rounded-lg p-6">
-                      <h5 class="font-medium text-gray-900 mb-4">Autentikasi</h5>
-                      <div class="space-y-4">
-                        <div class="flex items-center justify-between">
-                          <div>
-                            <p class="font-medium text-gray-900">JWT Token Expiry</p>
-                            <p class="text-sm text-gray-600">Waktu kadaluarsa token login</p>
-                          </div>
-                          <span class="px-3 py-1 text-sm bg-blue-100 text-blue-800 rounded-full">8 Jam</span>
-                        </div>
-                        <div class="flex items-center justify-between">
-                          <div>
-                            <p class="font-medium text-gray-900">Session Timeout</p>
-                            <p class="text-sm text-gray-600">Waktu timeout sesi tidak aktif</p>
-                          </div>
-                          <span class="px-3 py-1 text-sm bg-green-100 text-green-800 rounded-full">30 Menit</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div class="bg-white border border-gray-200 rounded-lg p-6">
-                      <h5 class="font-medium text-gray-900 mb-4">Enkripsi Data</h5>
-                      <div class="space-y-4">
-                        <div class="flex items-center justify-between">
-                          <div>
-                            <p class="font-medium text-gray-900">Password Hashing</p>
-                            <p class="text-sm text-gray-600">Algoritma enkripsi password</p>
-                          </div>
-                          <span class="px-3 py-1 text-sm bg-purple-100 text-purple-800 rounded-full">bcrypt</span>
-                        </div>
-                        <div class="flex items-center justify-between">
-                          <div>
-                            <p class="font-medium text-gray-900">GPS Data Privacy</p>
-                            <p class="text-sm text-gray-600">Enkripsi data koordinat lokasi</p>
-                          </div>
-                          <span class="px-3 py-1 text-sm bg-green-100 text-green-800 rounded-full">Encrypted</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <!-- Bank Settings -->
-                <div id="bankSetting" class="setting-content hidden p-6">
-                  <div class="flex justify-between items-center mb-6">
-                    <div>
-                      <h4 class="text-lg font-semibold text-gray-900">Rekening Bank Per Tenant</h4>
-                      <p class="text-gray-600 text-sm">Kelola nomor rekening untuk pembayaran SPP di tiap unit</p>
-                    </div>
-                    <button onclick="refreshBankSettings()"
-                      class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                      <i class="fas fa-sync-alt mr-2"></i>Refresh
-                    </button>
-                  </div>
-
-                  <div id="bankSettingsList" class="space-y-4">
-                    <p class="text-gray-500 text-center py-8">Memuat data rekening...</p>
-                  </div>
-                </div>
-
-                <!-- Bill Automation Settings -->
-                <div id="billSetting" class="setting-content hidden p-6">
-                  <div class="flex justify-between items-center mb-6">
-                    <div>
-                      <h4 class="text-lg font-semibold text-gray-900">Pengaturan Tagihan Otomatis</h4>
-                      <p class="text-gray-600 text-sm">Atur tanggal pengiriman dan jatuh tempo tagihan SPP</p>
-                    </div>
-                    <button onclick="loadBillSettings()"
-                      class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                      <i class="fas fa-sync-alt mr-2"></i>Refresh
-                    </button>
-                  </div>
-
-                  <div id="billSettingsForm" class="space-y-4 max-w-md">
-                    <div>
-                      <label class="block text-sm font-medium text-gray-700 mb-2">Tanggal Pengiriman (Tiap
-                        Bulan)</label>
-                      <select id="billSendDay"
-                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
-                        ${[...Array(28)].map((_, i) => `<option value="${i+1}">Tanggal ${i+1}</option>`).join('')}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label class="block text-sm font-medium text-gray-700 mb-2">Tanggal Jatuh Tempo (Tiap
-                        Bulan)</label>
-                      <select id="billDueDay"
-                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
-                        ${[...Array(28)].map((_, i) => `<option value="${i+1}">Tanggal ${i+1}</option>`).join('')}
-                      </select>
-                    </div>
-
-                    <div class="flex items-center">
-                      <input type="checkbox" id="billIsEnabled" class="w-4 h-4 text-blue-600 border-gray-300 rounded">
-                      <label for="billIsEnabled" class="ml-2 text-sm font-medium text-gray-700">Aktifkan Pengiriman
-                        Otomatis</label>
-                    </div>
-
-                    <button type="button" onclick="saveBillSettings()"
-                      class="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700">
-                      <i class="fas fa-save mr-2"></i>Simpan Pengaturan
-                    </button>
                   </div>
                 </div>
               </div>
             </div>
+
+
+            <!-- SK Automation Settings -->
+            <div id="sk-automationSetting" class="setting-content hidden p-6">
+              <div class="mb-6">
+                <h4 class="text-lg font-semibold text-gray-900">Pengaturan SK Otomatis</h4>
+                <p class="text-gray-600 text-sm">Konfigurasi otomatisasi pembuatan Surat Keputusan Guru</p>
+              </div>
+              <div class="space-y-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Batas Minimal SK Boleh Terbit (Tahun
+                    Pengabdian)</label>
+                  <input type="number" id="minServiceYears" min="1" max="10" value="2"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+                <div>
+                  <label class="flex items-center">
+                    <input type="checkbox" id="autoGenerateEnabled" checked class="mr-2">
+                    <span class="text-sm font-medium text-gray-700">Aktifkan Pembuatan SK Otomatis</span>
+                  </label>
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Tanggal Terbit Otomatis (Per Tahun,
+                    format
+                    MM-DD)</label>
+                  <input type="text" id="autoGenerateDate" placeholder="01-01" value="01-01" pattern="\d{2}-\d{2}"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+                <button type="button" onclick="saveSkAutomationSettings()"
+                  class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                  <i class="fas fa-save mr-2"></i>Simpan Pengaturan
+                </button>
+              </div>
+            </div>
+
+            <!-- Security Settings -->
+            <div id="securitySetting" class="setting-content hidden p-6">
+              <h4 class="text-lg font-semibold text-gray-900 mb-6">Pengaturan Keamanan</h4>
+
+              <div class="space-y-6">
+                <div class="bg-white border border-gray-200 rounded-lg p-6">
+                  <h5 class="font-medium text-gray-900 mb-4">Autentikasi</h5>
+                  <div class="space-y-4">
+                    <div class="flex items-center justify-between">
+                      <div>
+                        <p class="font-medium text-gray-900">JWT Token Expiry</p>
+                        <p class="text-sm text-gray-600">Waktu kadaluarsa token login</p>
+                      </div>
+                      <span class="px-3 py-1 text-sm bg-blue-100 text-blue-800 rounded-full">8 Jam</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                      <div>
+                        <p class="font-medium text-gray-900">Session Timeout</p>
+                        <p class="text-sm text-gray-600">Waktu timeout sesi tidak aktif</p>
+                      </div>
+                      <span class="px-3 py-1 text-sm bg-green-100 text-green-800 rounded-full">30 Menit</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="bg-white border border-gray-200 rounded-lg p-6">
+                  <h5 class="font-medium text-gray-900 mb-4">Enkripsi Data</h5>
+                  <div class="space-y-4">
+                    <div class="flex items-center justify-between">
+                      <div>
+                        <p class="font-medium text-gray-900">Password Hashing</p>
+                        <p class="text-sm text-gray-600">Algoritma enkripsi password</p>
+                      </div>
+                      <span class="px-3 py-1 text-sm bg-purple-100 text-purple-800 rounded-full">bcrypt</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                      <div>
+                        <p class="font-medium text-gray-900">GPS Data Privacy</p>
+                        <p class="text-sm text-gray-600">Enkripsi data koordinat lokasi</p>
+                      </div>
+                      <span class="px-3 py-1 text-sm bg-green-100 text-green-800 rounded-full">Encrypted</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- Bank Settings -->
+            <div id="bankSetting" class="setting-content hidden p-6">
+              <div class="flex justify-between items-center mb-6">
+                <div>
+                  <h4 class="text-lg font-semibold text-gray-900">Rekening Bank Per Tenant</h4>
+                  <p class="text-gray-600 text-sm">Kelola nomor rekening untuk pembayaran SPP di tiap unit</p>
+                </div>
+                <button onclick="refreshBankSettings()"
+                  class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                  <i class="fas fa-sync-alt mr-2"></i>Refresh
+                </button>
+              </div>
+
+              <div id="bankSettingsList" class="space-y-4">
+                <p class="text-gray-500 text-center py-8">Memuat data rekening...</p>
+              </div>
+            </div>
+
+            <!-- Bill Automation Settings -->
+            <div id="billSetting" class="setting-content hidden p-6">
+              <div class="flex justify-between items-center mb-6">
+                <div>
+                  <h4 class="text-lg font-semibold text-gray-900">Pengaturan Tagihan Otomatis</h4>
+                  <p class="text-gray-600 text-sm">Atur tanggal pengiriman dan jatuh tempo tagihan SPP</p>
+                </div>
+                <button onclick="loadBillSettings()"
+                  class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                  <i class="fas fa-sync-alt mr-2"></i>Refresh
+                </button>
+              </div>
+
+              <div id="billSettingsForm" class="space-y-4 max-w-md">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Tanggal Pengiriman (Tiap
+                    Bulan)</label>
+                  <select id="billSendDay"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"></select>
+                </div>
+
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Tanggal Jatuh Tempo (Tiap
+                    Bulan)</label>
+                  <select id="billDueDay"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"></select>
+                  <script>
+                    (function () {
+                      var opts = '';
+                      for (var i = 1; i <= 28; i++) opts += '<option value="' + i + '">Tanggal ' + i + '</option>';
+                      ['billSendDay', 'billDueDay'].forEach(function (id) {
+                        var el = document.getElementById(id);
+                        if (el && el.options.length === 0) el.innerHTML = opts;
+                      });
+                    })();
+                  </script>
+                </div>
+
+                <div class="flex items-center">
+                  <input type="checkbox" id="billIsEnabled" class="w-4 h-4 text-blue-600 border-gray-300 rounded">
+                  <label for="billIsEnabled" class="ml-2 text-sm font-medium text-gray-700">Aktifkan Pengiriman
+                    Otomatis</label>
+                </div>
+
+                <button type="button" onclick="saveBillSettings()"
+                  class="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700">
+                  <i class="fas fa-save mr-2"></i>Simpan Pengaturan
+                </button>
+              </div>
+            </div>
+
+            <!-- Internal Payment Settings -->
+            <div id="paymentsSetting" class="setting-content hidden p-6">
+              <div class="flex justify-between items-center mb-6">
+                <div>
+                  <h4 class="text-lg font-semibold text-gray-900">Pengaturan Pembayaran Internal</h4>
+                  <p class="text-gray-600 text-sm">Konfigurasi nominal dan tenggatwa pembayaran SPP internal</p>
+                </div>
+                <button type="button" onclick="loadPaymentSettings()"
+                  class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                  <i class="fas fa-sync-alt mr-2"></i>Refresh
+                </button>
+              </div>
+
+              <div class="space-y-4 max-w-md">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Tenant</label>
+                  <select id="paymentTenantId"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
+                    <option value="">Pilih tenant...</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Nominal Tagihan Bulanan</label>
+                  <input type="number" id="monthlyAmount" placeholder="Contoh: 250000"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
+                </div>
+
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Tanggal Jatuh Tempo</label>
+                  <select id="dueDay"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
+                    <option value="5">Tanggal 5</option>
+                    <option value="10" selected>Tanggal 10</option>
+                    <option value="15">Tanggal 15</option>
+                    <option value="20">Tanggal 20</option>
+                    <option value="25">Tanggal 25</option>
+                  </select>
+                </div>
+
+                <div id="paymentStatus" class="text-sm text-gray-600">
+                  Belum dikonfigurasi
+                </div>
+
+                <div class="flex space-x-2">
+                  <button type="button" onclick="savePaymentSettings()"
+                    class="flex-1 bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700">
+                    <i class="fas fa-save mr-2"></i>Simpan Pengaturan
+                  </button>
+                  <button type="button" onclick="testPaymentConnection()"
+                    class="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700">
+                    <i class="fas fa-plug mr-2"></i>Test
+                  </button>
+                </div>
+
+                <div class="border-t pt-4">
+                  <button type="button" onclick="generateMonthlyInvoices()"
+                    class="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700">
+                    <i class="fas fa-calendar-alt mr-2"></i>Generate Tagihan Bulanan Sekarang
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
+        </div>
+      </div>
+      <!-- Employment Rules Tab -->
+      <div id="employment-rulesTab" class="tab-content hidden">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div class="mb-6">
+            <h4 class="text-lg font-semibold text-gray-900">Aturan Status Kepegawaian</h4>
+            <p class="text-gray-600 text-sm">PTY/PTTY/GTY/GTTY otomatis berdasarkan jabatan & masa kerja</p>
+          </div>
+          <div id="employment-rules-table" class="space-y-4">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-100">
+                <tr>
+                  <th class="px-3 py-2">Jabatan</th>
+                  <th class="px-3 py-2">Tipe</th>
+                  <th class="px-3 py-2">Min Thn</th>
+                  <th class="px-3 py-2">Max Thn</th>
+                </tr>
+              </thead>
+              <tbody id="employment-rules-body"></tbody>
+            </table>
+          </div>
+          <button type="button" onclick="loadEmploymentRules()"
+            class="mt-4 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700">
+            <i class="fas fa-sync-alt mr-2"></i>Muat Ulang
+          </button>
+        </div>
+      </div>
+
     </main>
   </div>
 
@@ -1881,23 +2002,24 @@
           </div>
           <div class="mb-4">
             <label class="block text-sm font-medium text-gray-700 mb-1">Keterangan</label>
-            <input type="text" name="keterangan"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-          </div>
-          <div class="mb-4">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Status Log</label>
-            <select name="status_log"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              required>
-              <option value="tepat_waktu">Tepat Waktu</option>
-              <option value="terlambat">Terlambat</option>
-            </select>
-          </div>
-          <div class="flex justify-end space-x-3">
-            <button type="button" onclick="hideRuleModal()"
-              class="px-4 py-2 text-gray-600 hover:text-gray-800">Batal</button>
-            <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Simpan</button>
-          </div>
+            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500
+            focus:border-transparent">
+            <input type="text" name="keterangan" </div>
+            <div class="mb-4">
+              <label class="block text-sm font-medium text-gray-700 mb-1">Status Log</label>
+              <select name="status_log"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                required>
+                <option value="tepat_waktu">Tepat Waktu</option>
+                <option value="terlambat">Terlambat</option>
+              </select>
+            </div>
+            <div class="flex justify-end space-x-3">
+              <button type="button" onclick="hideRuleModal()"
+                class="px-4 py-2 text-gray-600 hover:text-gray-800">Batal</button>
+              <button type="submit"
+                class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Simpan</button>
+            </div>
         </form>
       </div>
     </div>
@@ -2353,7 +2475,7 @@
             </div>
             <h3 class="text-lg font-semibold text-gray-900" id="deviceModalTitle">Tambah Scanner Device</h3>
           </div>
-          <!-- Tetap memanggil fungsi baris 4167 bawaan Anda -->
+          <!-- Tombol tutup modal device -->
           <button type="button" onclick="hideAddDeviceModal()" class="text-gray-400 hover:text-gray-600">
             <i class="fas fa-times text-xl"></i>
           </button>
@@ -2476,8 +2598,81 @@
     </div>
   </div>
 
-  <script src="js/employment-rules.js"></script>
+  <script>
+    window.loadDashboard = async function () {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      try {
+        const res = await fetch('/api/admin/summary', {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) {
+            document.getElementById('totalTeachers').textContent = data.data.totalTeachers || 0;
+            document.getElementById('todayAttendance').textContent = data.data.activeToday || 0;
+            document.getElementById('lateCount').textContent = data.data.lateToday || 0;
+          }
+        }
+      } catch (e) {
+        console.error('Dashboard load error:', e);
+      }
+    };
+
+    window.switchTab = function (tabName) {
+      document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('nav-active'));
+
+      const tab = document.getElementById(tabName + 'Tab');
+      if (tab) tab.classList.remove('hidden');
+
+      const btn = document.querySelector('button[data-tab="' + tabName + '"]');
+      if (btn) btn.classList.add('nav-active');
+
+      const titles = {
+        'dashboard': 'Dashboard',
+        'teachers': 'Manajemen Guru',
+        'students': 'Manajemen Siswa',
+        'evaluations': 'Penilaian Guru Otomatis',
+        'attendance': 'Log Kehadiran',
+        'whatsapp': 'Pesan WhatsApp',
+        'payroll': 'Penggajian',
+        'employment-rules': 'Aturan Kepegawaian',
+        'qr-generator': 'QR Scanner & Generator',
+        'idcard': 'Cetak ID Card',
+        'backup': 'Backup/Restore Database',
+        'documents': 'Dokumen SK Guru',
+        'settings': 'Pengaturan'
+      };
+      const pageTitle = document.getElementById('pageTitle');
+      if (pageTitle) pageTitle.textContent = titles[tabName] || 'Dashboard';
+
+      if (tabName === 'attendance') {
+        if (typeof loadTenantFilters === 'function') loadTenantFilters();
+        if (typeof loadAttendanceLogs === 'function') loadAttendanceLogs();
+      }
+      if (tabName === 'whatsapp') {
+        if (typeof loadWhatsAppTemplates === 'function') loadWhatsAppTemplates();
+        if (typeof loadStudentsForBill === 'function') loadStudentsForBill();
+        if (typeof loadTeachersForMessage === 'function') loadTeachersForMessage();
+      }
+
+      if (tabName === 'payroll') {
+        if (typeof loadPayrollSelectors === 'function') loadPayrollSelectors();
+        if (typeof loadPayroll === 'function') loadPayroll();
+      }
+    };
+
+    document.addEventListener('DOMContentLoaded', function () {
+      document.querySelectorAll('.nav-item[data-tab]').forEach(function (btn) {
+        btn.addEventListener('click', function () { window.switchTab(btn.dataset.tab); });
+      });
+      window.loadDashboard();
+    });
+  </script>
+
   <script src="js/admin-dashboard.js" defer></script>
+  <script src="js/payroll-admin.js" defer></script>
 </body>
 
 </html>

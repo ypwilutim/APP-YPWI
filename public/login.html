@@ -320,8 +320,13 @@
                     timer: 1500,
                     showConfirmButton: false
                   }).then(() => {
-                    console.log('🔄 [LOGIN DEBUG] Redirecting to:', data.redirect);
-                    window.location.href = data.redirect;
+                    // Semua role guru -> dashboard.html apapun assignmentnya
+                    let targetRedirect = data.redirect;
+                    if (data.user.role === 'guru') {
+                      targetRedirect = 'dashboard.html';
+                    }
+                    console.log('🔄 [LOGIN DEBUG] Redirecting to:', targetRedirect);
+                    window.location.href = targetRedirect;
                   });
                 }
               } else {
@@ -529,7 +534,11 @@
       if (window.ypwiSessionResume) {
         window.ypwiSessionResume().then((session) => {
           if (session?.token && session?.user?.redirect) {
-            window.location.href = session.user.redirect;
+            // Semua role guru -> dashboard.html apapun assignmentnya
+            const targetRedirect = session.user.role === 'guru'
+              ? 'dashboard.html'
+              : session.user.redirect;
+            window.location.href = targetRedirect;
           }
         });
       }

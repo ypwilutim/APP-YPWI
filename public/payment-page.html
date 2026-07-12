@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pembayaran SPP - YPWI Lutim</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f5f5f5;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 600px;
+      margin: 50px auto;
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    .header h1 {
+      color: #066e3a;
+      margin: 0;
+    }
+    .invoice-info {
+      background: #f9f9f9;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid #eee;
+    }
+    .info-row:last-child {
+      border-bottom: none;
+    }
+    .label {
+      color: #666;
+      font-weight: 600;
+    }
+    .value {
+      color: #333;
+      font-weight: bold;
+    }
+    .amount {
+      font-size: 24px;
+      color: #d97706;
+      font-weight: bold;
+    }
+    .status {
+      display: inline-block;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-weight: bold;
+      margin: 10px 0;
+    }
+    .status.pending {
+      background: #fff3cd;
+      color: #856404;
+    }
+    .status.paid {
+      background: #d4edda;
+      color: #155724;
+    }
+    .status.expired {
+      background: #f8d7da;
+      color: #721c24;
+    }
+    .status.cancelled {
+      background: #e2e3e5;
+      color: #383d41;
+    }
+    .btn {
+      display: inline-block;
+      padding: 12px 24px;
+      border: none;
+      border-radius: 5px;
+      font-size: 16px;
+      cursor: pointer;
+      text-decoration: none;
+      margin: 5px;
+    }
+    .btn-primary {
+      background: #066e3a;
+      color: white;
+    }
+    .btn-primary:hover {
+      background: #054e2b;
+    }
+    .btn-success {
+      background: #28a745;
+      color: white;
+    }
+    .btn-success:hover {
+      background: #1e7e34;
+    }
+    .btn-secondary {
+      background: #6c757d;
+      color: white;
+    }
+    .btn-secondary:hover {
+      background: #545b62;
+    }
+    .payment-methods {
+      margin: 20px 0;
+      padding: 20px;
+      background: #f8f9fa;
+      border-radius: 8px;
+    }
+    .payment-methods h3 {
+      margin-top: 0;
+      color: #333;
+    }
+    .payment-option {
+      display: flex;
+      align-items: center;
+      padding: 15px;
+      margin: 10px 0;
+      background: white;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    .payment-option:hover {
+      border-color: #066e3a;
+    }
+    .payment-option.selected {
+      border-color: #066e3a;
+      background: #f0f9f4;
+    }
+    .payment-option i {
+      font-size: 24px;
+      margin-right: 15px;
+      color: #066e3a;
+    }
+    .payment-option .details {
+      flex: 1;
+    }
+    .payment-option .title {
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+    .payment-option .desc {
+      color: #666;
+      font-size: 14px;
+    }
+    .alert {
+      padding: 15px;
+      border-radius: 5px;
+      margin: 20px 0;
+    }
+    .alert-info {
+      background: #d1ecf1;
+      color: #0c5460;
+      border: 1px solid #bee5eb;
+    }
+    .loader {
+      text-align: center;
+      padding: 20px;
+      color: #666;
+    }
+    @media (max-width: 600px) {
+      .container {
+        margin: 20px;
+        padding: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1><i class="fas fa-school"></i> YPWI Lutim</h1>
+      <p>Sistem Pembayaran SPP</p>
+    </div>
+
+    <div id="loading" class="loader">
+      <i class="fas fa-spinner fa-spin"></i> Memuat data...
+    </div>
+
+    <div id="content" style="display: none;">
+      <div id="invoiceDetails"></div>
+      
+      <div id="paymentSection" style="display: none;">
+        <div class="payment-methods">
+          <h3><i class="fas fa-wallet"></i> Metode Pembayaran</h3>
+          <div id="paymentOptions"></div>
+        </div>
+
+        <div id="bankTransfer" style="display: none; margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 8px;">
+          <h3><i class="fas fa-university"></i> Transfer Bank</h3>
+          <div class="info-row">
+            <span class="label">Bank:</span>
+            <span class="value">Bank Muamalat</span>
+          </div>
+          <div class="info-row">
+            <span class="label">No. Rekening:</span>
+            <span class="value">123-456-7890</span>
+          </div>
+          <div class="info-row">
+            <span class="label">Atas Nama:</span>
+            <span class="value">YPWI Lutim</span>
+          </div>
+          <div class="info-row">
+            <span class="label">Jumlah:</span>
+            <span class="value amount" id="bankAmount"></span>
+          </div>
+        </div>
+
+        <div id="formSection" style="display: none; margin: 20px 0; padding: 20px; background: #f8f9fa; border-radius: 8px;">
+          <h3><i class="fas fa-upload"></i> Upload Bukti Pembayaran</h3>
+          <form id="paymentForm">
+            <input type="hidden" id="paymentMethod">
+            <input type="hidden" id="paymentChannel">
+            
+            <div id="virtualAccountInfo" style="display: none; margin: 15px 0; padding: 15px; background: white; border-radius: 5px;">
+              <h4>Virtual Account</h4>
+              <p>Nomor VA akan ditampilkan setelah Anda memilih metode pembayaran</p>
+            </div>
+
+            <div id="qrisInfo" style="display: none; margin: 15px 0; padding: 15px; background: white; border-radius: 5px; text-align: center;">
+              <h4>QRIS</h4>
+              <div id="qrisCode" style="margin: 15px auto; width: 200px; height: 200px; background: #f0f0f0; display: flex; align-items: center; justify-content: center;">
+                <span style="color: #999;">QR Code akan muncul di sini</span>
+              </div>
+              <p>Scan QR code dengan aplikasi pembayaran Anda</p>
+            </div>
+
+            <div id="ewalletInfo" style="display: none; margin: 15px 0; padding: 15px; background: white; border-radius: 5px;">
+              <h4>E-Wallet</h4>
+              <p>Pilih e-wallet Anda dan lakukan pembayaran sesuai instruksi</p>
+            </div>
+
+            <div id="retailInfo" style="display: none; margin: 15px 0; padding: 15px; background: white; border-radius: 5px;">
+              <h4>Retail Outlet</h4>
+              <p>Bayar di outlet terdekat dan catut kode pembayaran Anda</p>
+            </div>
+
+            <div style="margin: 15px 0;">
+              <label for="proofFile" style="display: block; margin-bottom: 5px; font-weight: 600;">Bukti Pembayaran:</label>
+              <input type="file" id="proofFile" accept="image/*" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+              <small style="color: #666;">Upload foto/screenshot bukti transfer/pembayaran</small>
+            </div>
+
+            <div style="margin: 15px 0;">
+              <label for="notes" style="display: block; margin-bottom: 5px; font-weight: 600;">Catatan (opsional):</label>
+              <textarea id="notes" rows="3" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-family: Arial, sans-serif;"></textarea>
+            </div>
+
+            <button type="submit" class="btn btn-success">
+              <i class="fas fa-paper-plane"></i> Kirim Bukti Pembayaran
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <div class="alert alert-info">
+        <i class="fas fa-info-circle"></i>
+        <strong>Informasi:</strong> Setelah Anda mengirim bukti pembayaran, admin/bendahara akan memverifikasi dan mengkonfirmasi pembayaran Anda.
+      </div>
+
+      <div style="text-align: center; margin-top: 30px; color: #666; font-size: 14px;">
+        <p>&copy; 2026 YPWI Lutim. All rights reserved.</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentInvoice = null;
+
+    async function loadInvoice() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const externalId = urlParams.get('external_id');
+
+      if (!externalId) {
+        document.getElementById('loading').innerHTML = '<div class="alert alert-danger">Invoice tidak ditemukan</div>';
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/payments/public/invoice-status?external_id=${encodeURIComponent(externalId)}`);
+        const data = await res.json();
+
+        if (!data.success) {
+          document.getElementById('loading').innerHTML = `<div class="alert alert-danger">${data.message || 'Invoice tidak ditemukan'}</div>`;
+          return;
+        }
+
+        currentInvoice = data.data;
+        displayInvoice(currentInvoice);
+      } catch (err) {
+        document.getElementById('loading').innerHTML = `<div class="alert alert-danger">Error: ${err.message}</div>`;
+      }
+    }
+
+    function displayInvoice(invoice) {
+      const statusClass = invoice.status || 'pending';
+      const statusText = {
+        pending: 'Menunggu Pembayaran',
+        paid: 'Lunas',
+        approved: 'Disetujui',
+        expired: 'Kedaluwarsa',
+        cancelled: 'Dibatalkan'
+      }[statusClass] || statusClass;
+
+      document.getElementById('invoiceDetails').innerHTML = `
+        <div class="invoice-info">
+          <h2 style="margin-top: 0; color: #333;">Tagihan SPP</h2>
+          <div class="info-row">
+            <span class="label">No. Invoice:</span>
+            <span class="value">${invoice.invoice_number || '-'}</span>
+          </div>
+          <div class="info-row">
+            <span class="label">Siswa:</span>
+            <span class="value">${invoice.student_name || '-'}</span>
+          </div>
+          <div class="info-row">
+            <span class="label">Sekolah:</span>
+            <span class="value">${invoice.school_name || '-'}</span>
+          </div>
+          <div class="info-row">
+            <span class="label">Periode:</span>
+            <span class="value">${invoice.periode || '-'}</span>
+          </div>
+          <div class="info-row">
+            <span class="label">Deskripsi:</span>
+            <span class="value">${invoice.description || '-'}</span>
+          </div>
+          <div class="info-row">
+            <span class="label">Jumlah:</span>
+            <span class="value amount">Rp ${parseFloat(invoice.amount || 0).toLocaleString('id-ID')}</span>
+          </div>
+          <div class="info-row">
+            <span class="label">Jatuh Tempo:</span>
+            <span class="value">${invoice.due_date ? new Date(invoice.due_date).toLocaleDateString('id-ID') : '-'}</span>
+          </div>
+          <div style="text-align: center; margin-top: 15px;">
+            <span class="status ${statusClass}">${statusText}</span>
+          </div>
+        </div>
+      `;
+
+      if (invoice.status === 'paid') {
+        document.getElementById('paymentSection').style.display = 'none';
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('content').style.display = 'block';
+        return;
+      }
+
+      if (invoice.status === 'pending' || !invoice.status) {
+        document.getElementById('paymentSection').style.display = 'block';
+        renderPaymentOptions();
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('content').style.display = 'block';
+      }
+    }
+
+    function renderPaymentOptions() {
+      const options = [
+        { type: 'VIRTUAL_ACCOUNT', title: 'Virtual Account', desc: 'BCA, BNI, BRI, Mandiri, dll', icon: 'fa-university' },
+        { type: 'QRIS', title: 'QRIS', desc: 'Bayar dengan scan QR', icon: 'fa-qrcode' },
+        { type: 'EWALLET', title: 'E-Wallet', desc: 'GoPay, ShopeePay, Dana, OVO', icon: 'fa-mobile-alt' },
+        { type: 'RETAIL_OUTLET', title: 'Retail Outlet', desc: 'Alfamart, Indomaret', icon: 'fa-store' }
+      ];
+
+      document.getElementById('paymentOptions').innerHTML = options.map((opt, idx) => `
+        <div class="payment-option" onclick="selectPayment('${opt.type}', this)">
+          <i class="fas ${opt.icon}"></i>
+          <div class="details">
+            <div class="title">${opt.title}</div>
+            <div class="desc">${opt.desc}</div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    window.selectPayment = function(type, el) {
+      document.querySelectorAll('.payment-option').forEach(opt => opt.classList.remove('selected'));
+      el.classList.add('selected');
+      
+      document.getElementById('paymentMethod').value = type;
+      
+      // Hide all specific payment sections
+      document.getElementById('virtualAccountInfo').style.display = 'none';
+      document.getElementById('qrisInfo').style.display = 'none';
+      document.getElementById('ewalletInfo').style.display = 'none';
+      document.getElementById('retailInfo').style.display = 'none';
+      document.getElementById('formSection').style.display = 'none';
+
+      if (type === 'VIRTUAL_ACCOUNT') {
+        document.getElementById('virtualAccountInfo').style.display = 'block';
+      } else if (type === 'QRIS') {
+        document.getElementById('qrisInfo').style.display = 'block';
+      } else if (type === 'EWALLET') {
+        document.getElementById('ewalletInfo').style.display = 'block';
+      } else if (type === 'RETAIL_OUTLET') {
+        document.getElementById('retailInfo').style.display = 'block';
+      }
+
+      document.getElementById('formSection').style.display = 'block';
+      document.getElementById('paymentChannel').value = type;
+    };
+
+    document.getElementById('paymentForm')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!currentInvoice) return;
+
+      const method = document.getElementById('paymentMethod').value;
+      const channel = document.getElementById('paymentChannel').value;
+      const fileInput = document.getElementById('proofFile');
+      const notes = document.getElementById('notes').value;
+
+      if (!method) {
+        alert('Pilih metode pembayaran terlebih dahulu');
+        return;
+      }
+
+      let proofUrl = '';
+      if (fileInput.files.length > 0) {
+        const formData = new FormData();
+        formData.append('proof', fileInput.files[0]);
+        
+        try {
+          const uploadRes = await fetch('/api/payments/upload-proof', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + (localStorage.getItem('token') || '') },
+            body: formData
+          });
+          const uploadData = await uploadRes.json();
+          if (uploadData.success) {
+            proofUrl = uploadData.data.url;
+          }
+        } catch (err) {
+          console.error('Upload failed:', err);
+        }
+      }
+
+      try {
+        const res = await fetch(`/api/payments/invoices/${currentInvoice.id}/upload-proof`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + (localStorage.getItem('token') || '')
+          },
+          body: JSON.stringify({
+            payment_proof_url: proofUrl,
+            notes: notes
+          })
+        });
+
+        const data = await res.json();
+        if (data.success) {
+          alert('Bukti pembayaran berhasil dikirim. Menunggu verifikasi admin.');
+          loadInvoice();
+        } else {
+          alert(data.message || 'Gagal mengirim bukti pembayaran');
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    });
+
+    loadInvoice();
+  </script>
+</body>
+</html>

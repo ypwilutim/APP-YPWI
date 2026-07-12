@@ -2,6 +2,7 @@ const axios = require('axios');
 
 const WHATSAPP_BASE_URL = process.env.WHATSAPP_BASE_URL;
 const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
+const WHATSAPP_WABA_ID = process.env.WHATSAPP_WABA_ID;
 const WHATSAPP_GRAPH_API_TOKEN = process.env.WHATSAPP_GRAPH_API_TOKEN;
 
 function formatPhoneNumber(phoneNumber) {
@@ -23,7 +24,52 @@ function formatPhoneNumber(phoneNumber) {
   return cleaned;
 }
 
-async function sendBillTemplate(phoneNumber, { nama_siswa, bulan, jumlah_tagihan, tanggal_jatuh_tempo, nomor_rekening, nama_penerima }) {
+async function fetchMetaTemplates() {
+  if (!WHATSAPP_BASE_URL || !WHATSAPP_WABA_ID || !WHATSAPP_GRAPH_API_TOKEN) {
+    throw new Error('Konfigurasi WhatsApp belum lengkap. Pastikan WHATSAPP_BASE_URL, WHATSAPP_WABA_ID, dan WHATSAPP_GRAPH_API_TOKEN sudah diisi di .env');
+  }
+
+  // v25.0: template diakses via WABA ID, bukan phone number ID
+  const url = `${WHATSAPP_BASE_URL}/${WHATSAPP_WABA_ID}/message_templates?fields=name,status,language,category,components`;
+
+  const axiosConfig = {
+    headers: {
+      'Authorization': `Bearer ${WHATSAPP_GRAPH_API_TOKEN}`
+    },
+    timeout: 15000
+  };
+
+  if (process.env.WHATSAPP_HTTP_PROXY) {
+    const { HttpsProxyAgent } = require('https-proxy-agent');
+    axiosConfig.httpsAgent = new HttpsProxyAgent(process.env.WHATSAPP_HTTP_PROXY);
+  }
+
+  try {
+    const response = await axios.get(url, axiosConfig);
+
+    const templates = (response.data && response.data.data) || [];
+    const formatted = templates.map(t => ({
+      name: t.name,
+      language: t.language ? t.language.toLowerCase() : 'id',
+      status: t.status,
+      components: t.components || [],
+      category: t.category || ''
+    }));
+
+    return { success: true, data: formatted };
+  } catch (error) {
+    if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+      throw new Error('Gagal menghubungi Meta Graph API (timeout). Periksa koneksi internet server ke graph.facebook.com atau atur WHATSAPP_HTTP_PROXY jika server di balik proxy.');
+    }
+    const metaError = error.response?.data?.error?.message;
+    if (metaError) {
+      throw new Error(`Meta API error: ${metaError}`);
+    }
+    throw new Error(`Gagal mengambil template dari Meta: ${error.message}`);
+  }
+}
+
+async function sendBillTemplate(phoneNumber, { nama_siswa, bulan, jumlah_tagihan, tanggal_jatuh_tempo, nomor_rekening, nama_penerima, invoice_url, nama_pembayaran }, templateName = 'tagihan_spp') {
   if (!WHATSAPP_BASE_URL || !WHATSAPP_PHONE_NUMBER_ID || !WHATSAPP_GRAPH_API_TOKEN) {
     throw new Error('Konfigurasi WhatsApp belum lengkap. Pastikan WHATSAPP_BASE_URL, WHATSAPP_PHONE_NUMBER_ID, dan WHATSAPP_GRAPH_API_TOKEN sudah diisi di .env');
   }
@@ -40,21 +86,21 @@ async function sendBillTemplate(phoneNumber, { nama_siswa, bulan, jumlah_tagihan
     to: formattedPhone,
     type: 'template',
     template: {
-      name: 'tagihan_spp',
+      name: templateName,
       language: {
         code: 'id'
       },
       components: [
         {
           type: 'body',
-          parameters: [
-            { type: 'text', text: nama_siswa || '-' },
-            { type: 'text', text: bulan || '-' },
-            { type: 'text', text: jumlah_tagihan || '0' },
-            { type: 'text', text: tanggal_jatuh_tempo || '-' },
-            { type: 'text', text: nomor_rekening || '-' },
-            { type: 'text', text: nama_penerima || '-' }
-          ]
+parameters: [
+             { type: 'text', text: nama_siswa || '-' },
+             { type: 'text', text: bulan || '-' },
+             { type: 'text', text: jumlah_tagihan || '0' },
+             { type: 'text', text: tanggal_jatuh_tempo || '-' },
+             { type: 'text', text: invoice_url || nomor_rekening || '-' },
+             { type: 'text', text: nama_pembayaran || nama_penerima || '-' }
+           ]
         }
       ]
     }
@@ -102,5 +148,6 @@ async function sendBillTemplateBulk(students) {
 module.exports = {
   sendBillTemplate,
   sendBillTemplateBulk,
-  formatPhoneNumber
+  formatPhoneNumber,
+  fetchMetaTemplates
 };

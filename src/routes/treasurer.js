@@ -6,7 +6,7 @@ const { authenticateToken, authenticateOperator, verifyTenantAccess } = require(
 const router = express.Router();
 
 // Public endpoints for development/testing (no auth required)
-// GET /api/treasurer/public/spp-summary - Ringkasan pembayaran SPP
+// GET /api/treasurer/public/spp-summary - Ringkasan pembayaran SPP (Xendit)
 router.get('/treasurer/public/spp-summary', async (req, res) => {
   try {
     let tenantId = req.query.tenant_id;
@@ -16,11 +16,12 @@ router.get('/treasurer/public/spp-summary', async (req, res) => {
         tn.tenant_id,
         tn.nama_sekolah,
         COUNT(s.id) as total_siswa,
-        SUM(s.iuran_bulanan) as total_pemasukan,
-        SUM(CASE WHEN s.iuran_bulanan > 0 THEN 1 ELSE 0 END) as sudah_bayar,
-        SUM(CASE WHEN s.iuran_bulanan = 0 OR s.iuran_bulanan IS NULL THEN 1 ELSE 0 END) as belum_bayar
+        COALESCE(SUM(CASE WHEN xi.status = 'PAID' THEN xi.amount ELSE 0 END), 0) as total_pemasukan,
+        COUNT(CASE WHEN xi.status = 'PAID' THEN 1 END) as sudah_bayar,
+        COUNT(CASE WHEN xi.status != 'PAID' OR xi.status IS NULL THEN 1 END) as belum_bayar
       FROM tenants tn
       LEFT JOIN students s ON tn.tenant_id = s.tenant_id
+      LEFT JOIN xendit_invoices xi ON s.id = xi.student_id AND xi.status = 'PAID'
       WHERE 1=1
     `;
     let params = [];
@@ -142,11 +143,13 @@ router.get('/treasurer/public/payment-defaulters', async (req, res) => {
     let tenantId = req.query.tenant_id;
 
     let query = `
-      SELECT s.id, s.nama_siswa, s.nisn, s.iuran_bulanan, tn.nama_sekolah, p.no_wa
+      SELECT s.id, s.nama_siswa, s.nisn, s.iuran_bulanan, tn.nama_sekolah, p.no_wa,
+        (SELECT COALESCE(SUM(amount),0) FROM payment_invoices pi WHERE pi.student_id = s.id AND pi.status NOT IN ('paid','cancelled')) as arrears_pi,
+        (SELECT COALESCE(SUM(amount),0) FROM xendit_invoices xi WHERE xi.student_id = s.id AND xi.status NOT IN ('PAID','EXPIRED')) as arrears_xi
       FROM students s
       JOIN tenants tn ON s.tenant_id = tn.tenant_id
       LEFT JOIN parents p ON s.parent_id = p.id
-      WHERE s.iuran_bulanan = 0 OR s.iuran_bulanan IS NULL
+      WHERE s.iuran_bulanan IS NOT NULL
     `;
     let params = [];
 
@@ -158,9 +161,15 @@ router.get('/treasurer/public/payment-defaulters', async (req, res) => {
     query += ' ORDER BY tn.nama_sekolah ASC, s.nama_siswa ASC';
     const defaulters = await db.query(query, params);
 
+    const data = defaulters.map(s => ({
+      ...s,
+      total_arrears: parseFloat(s.arrears_pi || 0) + parseFloat(s.arrears_xi || 0),
+      arrears_months: s.total_arrears > 0 ? Math.ceil(s.total_arrears / parseFloat(s.iuran_bulanan || 1)) : 0
+    }));
+
     res.json({
       success: true,
-      data: defaulters
+      data: data
     });
   } catch (error) {
     console.error('Public payment defaulters error:', error);
@@ -169,20 +178,22 @@ router.get('/treasurer/public/payment-defaulters', async (req, res) => {
 });
 
 // Public endpoint to check BSI payment by virtual account
-router.get('/treasurer/public/check-bsi-payment', async (req, res) => {
-  try {
+router.get('/treasurer/public/check-bsi-payment', async (req, res) => {  try {
     const { va_number } = req.query;
     if (!va_number) {
       return res.json({ success: true, data: null });
     }
 
+    const bsiPrefix = process.env.BSI_VA_PREFIX || '832231';
+    const vaWithoutPrefix = va_number.replace(bsiPrefix, '');
+    
     const query = `
-      SELECT s.id, s.nama_siswa, s.nisn, s.iuran_bulanan, s.tenant_id, tn.nama_sekolah
+      SELECT s.id, s.nama_siswa, s.nisn, s.iuran_bulanan, s.tenant_id, tn.nama_sekolah, s.va_number, s.nis
       FROM students s
       JOIN tenants tn ON s.tenant_id = tn.tenant_id
-      WHERE s.virtual_account = ?
+      WHERE s.va_number = ? OR s.nis = ?
     `;
-    const [student] = await db.query(query, [va_number]);
+    const [student] = await db.query(query, [va_number, vaWithoutPrefix]);
 
     res.json({
       success: true,
@@ -191,6 +202,31 @@ router.get('/treasurer/public/check-bsi-payment', async (req, res) => {
   } catch (error) {
     console.error('Check BSI payment error:', error);
     res.status(500).json({ success: false, message: 'Error checking BSI payment' });
+  }
+});
+
+// Public endpoint to list students (for testing / invoice creation)
+router.get('/treasurer/public/students', async (req, res) => {
+  try {
+    let tenantId = req.query.tenant_id;
+    let query = `
+      SELECT s.id, s.nama_siswa, s.nisn, s.tenant_id, tn.nama_sekolah, p.no_wa as parent_wa, p.nama_orang_tua
+      FROM students s
+      JOIN tenants tn ON s.tenant_id = tn.tenant_id
+      LEFT JOIN parents p ON s.parent_id = p.id
+      WHERE 1=1
+    `;
+    let params = [];
+    if (tenantId) {
+      query += ' AND s.tenant_id = ?';
+      params.push(tenantId);
+    }
+    query += ' ORDER BY s.nama_siswa ASC';
+    const students = await db.query(query, params);
+    res.json({ success: true, data: students });
+  } catch (error) {
+    console.error('Public students error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching students' });
   }
 });
 
@@ -205,7 +241,7 @@ router.post('/treasurer/public/update-payment', async (req, res) => {
 
     const query = `
       UPDATE students 
-      SET iuran_bulanan = ?, updated_at = NOW()
+      SET iuran_bulanan = ?
       WHERE id = ?
     `;
     await db.query(query, [amount, student_id]);
@@ -234,8 +270,8 @@ router.post('/treasurer/public/upload-payments', async (req, res) => {
 
       const query = `
         UPDATE students 
-        SET iuran_bulanan = ?, updated_at = NOW()
-        WHERE virtual_account = ? OR nisn = ?
+        SET iuran_bulanan = ?
+        WHERE va_number = ? OR nisn = ?
       `;
       const result = await db.query(query, [amount, va_number, va_number]);
 
@@ -263,13 +299,14 @@ router.get('/treasurer/public/export-va', async (req, res) => {
   try {
     let tenantId = req.query.tenant_id;
     const parentAccount = req.query.parent_account || '1029129123';
+    const bsiPrefix = process.env.BSI_VA_PREFIX || '832231';
 
     const expiry = new Date();
     expiry.setFullYear(expiry.getFullYear() + 1);
     const expiryStr = expiry.toLocaleDateString('id-ID').replace(/\//g, '/');
 
     let query = `
-      SELECT s.id, s.nama_siswa, s.nisn, s.iuran_bulanan, tn.nama_sekolah, tn.nomor_rekening, p.no_wa
+      SELECT s.id, s.nama_siswa, s.nisn, s.iuran_bulanan, s.nis, tn.nama_sekolah, tn.nomor_rekening, p.no_wa
       FROM students s
       JOIN tenants tn ON s.tenant_id = tn.tenant_id
       LEFT JOIN parents p ON s.parent_id = p.id
@@ -285,14 +322,23 @@ router.get('/treasurer/public/export-va', async (req, res) => {
     query += ' ORDER BY tn.nama_sekolah ASC, s.nama_siswa ASC';
     const students = await db.query(query, params);
 
+    // Update va_number to students table (with BSI prefix), but export CSV uses NIS only
+    for (const s of students) {
+      const vaNumber = bsiPrefix + s.nis;
+      const vaName = `A/N ${s.nama_siswa}`;
+      await db.query(
+        'UPDATE students SET va_number = ?, va_name = ? WHERE id = ?',
+        [vaNumber, vaName, s.id]
+      );
+    }
+
     let csv = `Type;Parent Account;Virtual Account Number (Prefix VA + Number);Virtual Account Name;Virtual Account Scheme;Limit Debit;Limit Credit;Limit Transaction;Physical Card;Auto Renewal Limit;;Expire Date;KYC;;;;;Additional Info\n`;
     csv += `;;;;;;;;Every;Date / Day;15/06/2024;Name;Mobile Phone;ID Type;ID Number;Address;Label1\n`;
 
     students.forEach(s => {
-      const va = s.nis; // Gunakan NIS sebagai VA
       const limit = parseFloat(s.iuran_bulanan) || 150000;
       const wa = s.no_wa || '';
-      csv += `Debit;${parentAccount};${va};A/N ${s.nama_siswa};Open Limit;${limit};;;;No;;;${expiryStr};${s.nama_siswa};${wa};KTP;;;;;;;;\n`;
+      csv += `Debit;${parentAccount};${s.nis};A/N ${s.nama_siswa};Open Limit;${limit};;;;No;;;${expiryStr};${s.nama_siswa};${wa};KTP;;;;;;;;\n`;
     });
 
     res.setHeader('Content-Type', 'text/csv');
@@ -306,21 +352,21 @@ router.get('/treasurer/public/export-va', async (req, res) => {
 
 // Public endpoint to check BSI payment by virtual account
 
-// Public financial report endpoint
+// Public financial report endpoint - from Xendit invoices
 router.get('/treasurer/public/financial-report', async (req, res) => {
   try {
     let tenantId = req.query.tenant_id;
     const month = req.query.month || new Date().toISOString().slice(0, 7);
 
     let incomeQuery = `
-      SELECT SUM(s.iuran_bulanan) as total_income
-      FROM students s
-      WHERE 1=1
+      SELECT SUM(xi.amount) as total_income
+      FROM xendit_invoices xi
+      WHERE xi.status = 'PAID' AND DATE_FORMAT(xi.created_at, '%Y-%m') = ?
     `;
-    let incomeParams = [];
+    let incomeParams = [month];
 
     if (tenantId) {
-      incomeQuery += ' AND s.tenant_id = ?';
+      incomeQuery += ' AND xi.tenant_id = ?';
       incomeParams.push(tenantId);
     }
 
@@ -479,14 +525,10 @@ router.get('/treasurer/spp-summary', authenticateOperator, async (req, res) => {
   try {
     let tenantId = req.query.tenant_id;
 
-    if (req.user.role !== 'admin' && !tenantId) {
-      const treasurerAssignments = (req.user.assignments || []).filter(a => {
-        const roles = ['bendahara', 'tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin'];
-        return roles.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''));
-      });
-      if (treasurerAssignments.length === 1) {
-        tenantId = treasurerAssignments[0].tenant_id;
-      }
+    // User YPWILUTIM (bendahara/ketua) boleh lihat semua tenant
+    if (req.user.role === 'guru') {
+      const hasYPWILUTIM = req.user.assignments?.some(a => a.tenant_id === 'YPWILUTIM');
+      if (hasYPWILUTIM) tenantId = null; // Show all tenants
     }
 
     if (tenantId && !verifyTenantAccess(req, tenantId)) {
@@ -498,11 +540,12 @@ router.get('/treasurer/spp-summary', authenticateOperator, async (req, res) => {
         tn.tenant_id,
         tn.nama_sekolah,
         COUNT(s.id) as total_siswa,
-        SUM(s.iuran_bulanan) as total_pemasukan,
-        SUM(CASE WHEN s.iuran_bulanan > 0 THEN 1 ELSE 0 END) as sudah_bayar,
-        SUM(CASE WHEN s.iuran_bulanan = 0 OR s.iuran_bulanan IS NULL THEN 1 ELSE 0 END) as belum_bayar
+        COALESCE(SUM(CASE WHEN xi.status = 'PAID' THEN xi.amount ELSE 0 END), 0) as total_pemasukan,
+        COUNT(CASE WHEN xi.status = 'PAID' THEN 1 END) as sudah_bayar,
+        COUNT(CASE WHEN xi.status != 'PAID' OR xi.status IS NULL THEN 1 END) as belum_bayar
       FROM tenants tn
       LEFT JOIN students s ON tn.tenant_id = s.tenant_id
+      LEFT JOIN xendit_invoices xi ON s.id = xi.student_id
       WHERE 1=1
     `;
     let params = [];
@@ -553,14 +596,14 @@ router.get('/treasurer/financial-report', authenticateOperator, async (req, res)
     }
 
     let incomeQuery = `
-      SELECT SUM(s.iuran_bulanan) as total_income
-      FROM students s
-      WHERE 1=1
+      SELECT SUM(xi.amount) as total_income
+      FROM xendit_invoices xi
+      WHERE xi.status = 'PAID' AND DATE_FORMAT(xi.created_at, '%Y-%m') = ?
     `;
-    let incomeParams = [];
+    let incomeParams = [month];
 
     if (tenantId) {
-      incomeQuery += ' AND s.tenant_id = ?';
+      incomeQuery += ' AND xi.tenant_id = ?';
       incomeParams.push(tenantId);
     }
 
@@ -695,14 +738,10 @@ router.get('/treasurer/payment-defaulters', authenticateOperator, async (req, re
   try {
     let tenantId = req.query.tenant_id;
 
-    if (req.user.role !== 'admin' && !tenantId) {
-      const treasurerAssignments = (req.user.assignments || []).filter(a => {
-        const roles = ['bendahara', 'tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin'];
-        return roles.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''));
-      });
-      if (treasurerAssignments.length === 1) {
-        tenantId = treasurerAssignments[0].tenant_id;
-      }
+    // User YPWILUTIM boleh lihat semua tenant
+    if (req.user.role === 'guru') {
+      const hasYPWILUTIM = req.user.assignments?.some(a => a.tenant_id === 'YPWILUTIM');
+      if (hasYPWILUTIM) tenantId = null;
     }
 
     if (tenantId && !verifyTenantAccess(req, tenantId)) {

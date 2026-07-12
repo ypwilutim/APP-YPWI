@@ -2145,6 +2145,28 @@ function setupMobileAdminNav() {
     }
 }
 
+// Setup bendahara/treasurer nav button
+function setupTreasurerNav() {
+    const mobileNav = document.getElementById('mobileTreasurerNav');
+    const desktopBtn = document.getElementById('desktopTreasurerBtn');
+
+    const hasBendahara = (window.userAssignments || []).some(a => {
+        const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
+        return jabatan === 'bendahara';
+    });
+
+    if (hasBendahara) {
+        if (mobileNav) {
+            mobileNav.style.display = 'block';
+            mobileNav.onclick = () => { window.location.href = 'treasurer-dashboard.html'; };
+        }
+        if (desktopBtn) {
+            desktopBtn.style.display = 'block';
+            desktopBtn.onclick = () => { window.location.href = 'treasurer-dashboard.html'; };
+        }
+    }
+}
+
 // Menampilkan Modal
 function showAdminUnitModal(units) {
     const listEl = document.getElementById('adminUnitList');
@@ -2218,6 +2240,7 @@ function confirmAdminUnit() {
 // Inisialisasi
 document.addEventListener('DOMContentLoaded', () => {
     setTimeout(setupMobileAdminNav, 2000);
+    setTimeout(setupTreasurerNav, 2000);
 });
 
 // Permission Modal functions

@@ -1,15 +1,10 @@
-// Hidden filters for modal triggers
-const hiddenFilters = document.createElement('div');
-hiddenFilters.style.display = 'none';
-hiddenFilters.innerHTML = '<select id="teacherTenantFilter"><option value="">Semua Sekolah</option></select>';
-document.body.appendChild(hiddenFilters);
-
-let currentTeacherId = null;
-let currentRuleId = null;
-let currentPage = 1;
-let totalPages = 1;
-let pageLimit = 10;
-let currentMapContext = 'edit'; // 'edit' atau 'add' — menentukan field mana yang diupdate oleh map/deteksi
+// Hidden filters for modal triggers - wait for DOM ready
+document.addEventListener('DOMContentLoaded', function() {
+  const hiddenFilters = document.createElement('div');
+  hiddenFilters.style.display = 'none';
+  hiddenFilters.innerHTML = '<select id="teacherTenantFilter"><option value="">Semua Sekolah</option></select>';
+  document.body.appendChild(hiddenFilters);
+});
 
 const setEl = (id, val) => {
     const el = document.getElementById(id);
@@ -19,24 +14,14 @@ const setEl = (id, val) => {
     }
 };
 
+let currentTeacherId = null;
+let currentRuleId = null;
+let currentPage = 1;
+let totalPages = 1;
+let pageLimit = 10;
+let currentMapContext = 'edit'; // 'edit' atau 'add' — menentukan field mana yang diupdate oleh map/deteksi
+
 // Make functions globally available for onclick attributes
-window.showAddTeacherModal = showAddTeacherModal;
-window.showAddRuleModal = showAddRuleModal;
-window.refreshTenantLocations = refreshTenantLocations;
-window.hideTeacherModal = hideTeacherModal;
-window.hideRuleModal = hideRuleModal;
-window.hideLocationModal = hideLocationModal;
-window.editTeacher = editTeacher;
-window.deleteTeacher = deleteTeacher;
-window.toggleSelectAll = toggleSelectAll;
-window.updateSelectAll = updateSelectAll;
-window.deleteSelectedTeachers = deleteSelectedTeachers;
-window.createUsersForSelected = createUsersForSelected;
-window.createUser = createUser;
-window.editRule = editRule;
-window.deleteRule = deleteRule;
-window.showSettingsTab = showSettingsTab;
-window.autoDetectLocation = autoDetectLocation;
 window.editTenantLocation = editTenantLocation;
 window.autoDetectLocationModal = autoDetectLocationModal;
 
@@ -2399,4 +2384,33 @@ window.showTeacherFilterModal = function () {
 
 window.loadTeacherTenants = async function () {
     // Hidden tenant filter for teacher modal
+};
+
+// Make functions globally available for onclick attributes
+window.showAddTeacherModal = showAddTeacherModal;
+window.showAddRuleModal = showAddRuleModal;
+window.refreshTenantLocations = refreshTenantLocations;
+window.hideTeacherModal = hideTeacherModal;
+window.hideRuleModal = hideRuleModal;
+window.hideLocationModal = hideLocationModal;
+window.editTeacher = editTeacher;
+window.deleteTeacher = deleteTeacher;
+window.toggleSelectAll = toggleSelectAll;
+window.updateSelectAll = updateSelectAll;
+window.deleteSelectedTeachers = deleteSelectedTeachers;
+window.createUsersForSelected = createUsersForSelected;
+window.createUser = createUser;
+window.editRule = editRule;
+window.deleteRule = deleteRule;
+window.showSettingsTab = showSettingsTab;
+
+// Stub functions for admin dashboard
+window.loadStudents = async function () {
+    const tbody = document.getElementById('studentsTable');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-12 text-center text-gray-500">Belum ada data siswa</td></tr>';
+};
+
+window.loadAttendanceLogs = async function (page = 1) {
+    const tbody = document.getElementById('attendanceTable');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-12 text-center text-gray-500">Belum ada log absensi</td></tr>';
 };

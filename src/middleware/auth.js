@@ -221,6 +221,9 @@ function verifyTenantAccess(req, requestedTenantId) {
       .filter(a => adminRoles.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '')))
       .map(a => a.tenant_id);
 
+    // User YPWILUTIM bendahara boleh akses semua tenant
+    if (allowedTenants.includes('YPWILUTIM')) return true;
+
     if (allowedTenants.includes(requestedTenantId)) return true;
   }
 
@@ -274,6 +277,10 @@ function formatIslamicMessage(nama, jenis_kelamin, message) {
   return `Assalamu'alaikum ${panggilan} ${nama}\n\n${message}\n\nBarakallahu fiikum,\n*YPWI Lutim*`;
 }
 
+function isSuperAdminTenant(tenantId) {
+  return tenantId === 'YPWILUTIM';
+}
+
 module.exports = {
   authenticateToken,
   authenticateAdmin,
@@ -284,5 +291,6 @@ module.exports = {
   calculateDistance,
   formatIslamicMessage,
   getTenantFilter,
+  isSuperAdminTenant,
   SECRET_KEY
 };

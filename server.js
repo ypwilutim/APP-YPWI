@@ -1,8 +1,6 @@
 require('dotenv').config();
 
 console.log('Loading environment variables...');
-console.log('WHATSAPP_ENDPOINT:', process.env.WHATSAPP_ENDPOINT ? 'LOADED' : 'NOT FOUND');
-console.log('WHATSAPP_DEVICE_ID:', process.env.WHATSAPP_DEVICE_ID ? 'LOADED' : 'NOT FOUND');
 console.log('EMAIL_HOST:', process.env.EMAIL_HOST ? 'LOADED' : 'NOT FOUND');
 
 const express = require('express');
@@ -74,8 +72,6 @@ const selfieUpload = multer({ storage: selfieStorage });
 
 // Environment check
 console.log('🔧 Environment Configuration:');
-console.log('   WHATSAPP_ENDPOINT:', process.env.WHATSAPP_ENDPOINT ? '✅ LOADED' : '❌ MISSING');
-console.log('   WHATSAPP_DEVICE_ID:', process.env.WHATSAPP_DEVICE_ID ? '✅ LOADED' : '❌ MISSING');
 console.log('   JWT_SECRET:', process.env.JWT_SECRET ? '✅ LOADED' : '❌ MISSING');
 console.log('   DB_HOST:', process.env.DB_HOST ? '✅ LOADED' : '❌ MISSING');
 console.log('   PORT:', PORT);
@@ -232,11 +228,12 @@ const idcardRoutes = require('./src/routes/idcard');
 const chatRoutes = require('./src/routes/chat');
 const notificationsRoutes = require('./src/routes/notifications');
 const skGuruRoutes = require('./src/routes/sk-guru');
+const payrollRoutes = require('./src/routes/payroll');
 const wahaRoutes = require('./src/routes/waha');
 require('./src/notifications');
 
-// Start Baileys if enabled
-if (process.env.WAHA_BAILEYS_ENABLED === 'true') {
+// Start Baileys (WhatsApp Web) as the primary sender when WhatsApp is enabled
+if (process.env.WHATSAPP_ENABLED !== 'false') {
   require('./src/utils/whatsappBaileys').initWhatsAppBaileys().catch(err => {
     console.error('[WAHA] Failed to initialize:', err.message);
   });
@@ -251,8 +248,11 @@ app.use('/api/idcard', idcardRoutes);
 app.use('/api', chatRoutes);
 app.use('/api', notificationsRoutes);
 app.use('/api', skGuruRoutes);
+app.use('/api', payrollRoutes);
 app.use('/api', wahaRoutes);
 app.use('/api', require('./src/routes/treasurer'));
+app.use('/api', require('./src/routes/xendit'));
+app.use('/api', require('./src/routes/payments'));
 
 const logFilePath = path.join(__dirname, 'logs', 'app.log');
 // Ensure logs directory exists
@@ -414,20 +414,25 @@ function verifyTenantAccess(req, requestedTenantId) {
   return false;
 }
 
-// WhatsApp integration using Whacenter
+// WhatsApp integration using Baileys (WhatsApp Web protocol) - replaces Whacenter
 async function sendWhatsAppMessage(number, message) {
-  if (process.env.WHATSAPP_ENABLED !== 'true') {
+  if (process.env.WHATSAPP_ENABLED === 'false') {
     console.log('📤 WhatsApp disabled, skipping message to:', number);
     return { success: true, message: 'WhatsApp disabled' };
   }
 
-  console.log('📤 Sending WhatsApp message to:', number);
-
   try {
-    // Ensure number starts with country code (Indonesia)
-    let cleanNumber = number.replace(/\D/g, ''); // Remove non-digits
+    const baileys = require('./src/utils/whatsappBaileys');
 
-    // Add country code if not present
+    if (!baileys.isConnected()) {
+      return {
+        success: false,
+        message: 'WhatsApp belum terhubung. Buka fitur "WhatsApp Messenger" dan scan QR terlebih dahulu.'
+      };
+    }
+
+    // Ensure number starts with country code (Indonesia)
+    let cleanNumber = number.replace(/\D/g, '');
     if (!cleanNumber.startsWith('62')) {
       if (cleanNumber.startsWith('0')) {
         cleanNumber = '62' + cleanNumber.substring(1);
@@ -437,40 +442,11 @@ async function sendWhatsAppMessage(number, message) {
     }
 
     console.log(`[WHATSAPP] Sending to ${cleanNumber}: ${message.substring(0, 50)}...`);
-
-    const params = new URLSearchParams();
-    params.append('device_id', process.env.WHATSAPP_DEVICE_ID);
-    params.append('number', cleanNumber);
-    params.append('message', message);
-
-    const endpoint = process.env.WHATSAPP_ENDPOINT;
-    console.log('📤 Sending WhatsApp to:', endpoint);
-    console.log('📤 Params:', { device_id: process.env.WHATSAPP_DEVICE_ID, number: cleanNumber, message: message.substring(0, 100) + '...' });
-
-    const response = await axios.post(endpoint, params, {
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      timeout: 20000  // 5 second timeout
-    });
-
-    console.log('Response Status:', response.status);
-    console.log('Response Data:', response.data);
-
-    if (response.status === 200 && response.data.status === true) {
-      console.log('✅ SUCCESS: WhatsApp message sent!');
-      console.log('Message ID:', response.data.data?.id);
-      return { success: true, message: 'Message sent successfully', data: response.data };
-    } else {
-      console.log('❌ FAILED: WhatsApp message not sent');
-      console.log('Error details:', response.data);
-      return { success: false, message: 'Failed to send message: ' + (response.data.message || response.data.error || 'Unknown error'), data: response.data };
-    }
-
+    const result = await baileys.sendWhatsAppBaileys(cleanNumber, message);
+    return { success: true, message: 'Message sent successfully', messageId: result.messageId };
   } catch (error) {
-    console.error('❌ NETWORK ERROR:', error.message);
-    console.error('Full error:', error);
-    return { success: false, message: `Network error: ${error.message}` };
+    console.error('❌ WhatsApp send error:', error.message);
+    return { success: false, message: `Gagal mengirim pesan: ${error.message}` };
   }
 }
 
@@ -840,152 +816,6 @@ app.get('/api/admin/tenant-teachers/:tenantId', authenticateOperator, async (req
   } catch (error) {
     console.error('Tenant teachers error:', error);
     res.status(500).json({ success: false, message: 'Error fetching tenant teachers' });
-  }
-});
-
-// Send WhatsApp reminder for incomplete profiles (bulk)
-app.post('/api/admin/send-reminder-bulk', authenticateOperator, async (req, res) => {
-  try {
-    const { tenantId } = req.body;
-
-    if (!tenantId) {
-      return res.status(400).json({ success: false, message: 'Tenant ID required' });
-    }
-
-    // Verify tenant access
-    if (!verifyTenantAccess(req, tenantId)) {
-      return res.status(403).json({ success: false, message: 'Akses ditolak: Anda tidak berwenang mengirim pengingat untuk sekolah ini' });
-    }
-
-    // Get teachers with incomplete profiles
-    const teachers = await db.query(`
-      SELECT
-        t.id,
-        t.nama,
-        t.no_wa,
-        t.jenis_kelamin
-      FROM teacher_assignments ta
-      JOIN teachers t ON ta.teacher_id = t.id
-      LEFT JOIN users u ON t.id = u.guru_id
-      WHERE ta.tenant_id = ?
-        AND (u.is_profile_complete IS NULL OR u.is_profile_complete = 0)
-        AND t.no_wa IS NOT NULL
-        AND t.status_aktif = 1
-    `, [tenantId]);
-
-    if (teachers.length === 0) {
-      return res.status(404).json({ success: false, message: 'Tidak ada guru dengan profil belum lengkap' });
-    }
-
-    let successCount = 0;
-    let failCount = 0;
-
-    for (const teacher of teachers) {
-      try {
-        const message = `🔄 *PENGINGAT LENGKAPI PROFIL*
-
-Assalamu'alaikum ${teacher.nama}
-
-Profil Anda di Sistem YPWI Lutim belum lengkap. Silakan lengkapi data pribadi Anda untuk mengakses sistem absensi.
-
-Cara melengkapi:
-1. Login ke sistem dengan username: ${teacher.nama.split(' ')[0].toLowerCase()}
-2. Ikuti langkah-langkah pengisian profil
-3. Pastikan semua data terisi dengan benar
-
-*YPWI Lutim*`;
-
-        const result = await sendWhatsAppMessage(teacher.no_wa, message);
-        if (result.success) {
-          successCount++;
-        } else {
-          failCount++;
-        }
-      } catch (error) {
-        console.error(`Failed to send reminder to ${teacher.nama}:`, error);
-        failCount++;
-      }
-    }
-
-    res.json({
-      success: true,
-      message: `Pengiriman selesai. Berhasil: ${successCount}, Gagal: ${failCount}`,
-      data: {
-        total: teachers.length,
-        success: successCount,
-        failed: failCount
-      }
-    });
-
-  } catch (error) {
-    console.error('Send bulk reminder error:', error);
-    res.status(500).json({ success: false, message: 'Error sending bulk reminders' });
-  }
-});
-
-// Send WhatsApp reminder for incomplete profile (individual)
-app.post('/api/admin/send-reminder-individual', authenticateOperator, async (req, res) => {
-  try {
-    const { teacherId } = req.body;
-
-    if (!teacherId) {
-      return res.status(400).json({ success: false, message: 'Teacher ID required' });
-    }
-
-    // Get teacher data + tenant_id
-    const [teacher] = await db.query(`
-      SELECT
-        t.id, t.nama, t.no_wa, t.jenis_kelamin, t.tenant_id,
-        u.is_profile_complete
-      FROM teachers t
-      LEFT JOIN users u ON t.id = u.guru_id
-      WHERE t.id = ?
-    `, [teacherId]);
-
-    if (!teacher) {
-      return res.status(404).json({ success: false, message: 'Guru tidak ditemukan' });
-    }
-
-    // Verify tenant access
-    if (!verifyTenantAccess(req, teacher.tenant_id)) {
-      return res.status(403).json({ success: false, message: 'Akses ditolak: Anda tidak berwenang mengirim pengingat untuk guru di sekolah ini' });
-    }
-
-    if (!teacher.no_wa) {
-      return res.status(400).json({ success: false, message: 'Guru tidak memiliki nomor WhatsApp' });
-    }
-
-    if (teacher.is_profile_complete === 1) {
-      return res.status(400).json({ success: false, message: 'Profil guru sudah lengkap' });
-    }
-
-    const message = `🔄 *PENGINGAT LENGKAPI PROFIL*
-
-Assalamu'alaikum ${teacher.nama}
-
-Profil Anda di Sistem YPWI Lutim belum lengkap. Silakan lengkapi data pribadi Anda untuk mengakses sistem absensi.
-
-Cara melengkapi:
-1. Login ke sistem dengan username: ${teacher.nama.split(' ')[0].toLowerCase()}
-2. Ikuti langkah-langkah pengisian profil
-3. Pastikan semua data terisi dengan benar
-
-*YPWI Lutim*`;
-
-    const result = await sendWhatsAppMessage(teacher.no_wa, message);
-
-    if (result.success) {
-      res.json({
-        success: true,
-        message: 'Pesan pengingat berhasil dikirim'
-      });
-    } else {
-      res.status(500).json({ success: false, message: 'Gagal mengirim pesan pengingat' });
-    }
-
-  } catch (error) {
-    console.error('Send individual reminder error:', error);
-    res.status(500).json({ success: false, message: 'Error sending individual reminder' });
   }
 });
 

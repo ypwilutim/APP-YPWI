@@ -63,7 +63,7 @@ router.delete('/notifications/subscriptions/:id', authenticateToken, async (req,
 
 router.post('/notifications/whatsapp/bill-template', authenticateAdmin, async (req, res) => {
   try {
-    const { phoneNumber, nama_siswa, bulan, jumlah_tagihan, tanggal_jatuh_tempo, nomor_rekening, nama_penerima } = req.body;
+    const { phoneNumber, nama_siswa, bulan, jumlah_tagihan, tanggal_jatuh_tempo, nomor_rekening, nama_penerima, invoice_url, nama_pembayaran } = req.body;
     
     if (!phoneNumber) {
       return res.status(400).json({ success: false, message: 'Nomor telepon wajib diisi' });
@@ -75,7 +75,9 @@ router.post('/notifications/whatsapp/bill-template', authenticateAdmin, async (r
       jumlah_tagihan,
       tanggal_jatuh_tempo,
       nomor_rekening,
-      nama_penerima
+      nama_penerima,
+      invoice_url,
+      nama_pembayaran
     });
     
     res.json({
@@ -137,7 +139,7 @@ router.post('/notifications/whatsapp/bill-template/bulk', authenticateAdmin, asy
     const tenantId = req.query.tenant_id || req.body.tenant_id;
     
     let query = `
-      SELECT s.nama_siswa, s.iuran_bulanan, p.no_wa as parent_wa
+      SELECT s.id, s.nama_siswa, s.iuran_bulanan, p.no_wa as parent_wa
       FROM students s
       LEFT JOIN parents p ON s.parent_id = p.id
       WHERE p.no_wa IS NOT NULL AND p.no_wa != ""
@@ -155,11 +157,15 @@ router.post('/notifications/whatsapp/bill-template/bulk', authenticateAdmin, asy
       try {
         const wa = student.parent_wa || student.no_wa;
         if (!wa) continue;
+        // cari invoice Xendit pending
+        const [inv] = await db.query('SELECT external_id, invoice_url, description FROM xendit_invoices WHERE student_id = ? AND status = "PENDING" ORDER BY created_at DESC LIMIT 1', [student.id]);
         await sendBillTemplate(`62${wa.replace(/^0/, '')}`, {
           nama_siswa: student.nama_siswa,
           jumlah_tagihan: student.iuran_bulanan,
           bulan,
-          tanggal_jatuh_tempo
+          tanggal_jatuh_tempo,
+          invoice_url: inv?.invoice_url || '',
+          nama_pembayaran: inv?.description || ''
         });
         sentCount++;
       } catch (err) {

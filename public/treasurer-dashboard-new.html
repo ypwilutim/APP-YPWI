@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard Bendahara - YPWI Lutim</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="css/admin-dashboard.css">
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <div class="flex min-h-screen">
+    <aside class="w-64 bg-white shadow-lg border-r">
+      <div class="p-6 border-b">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 bg-emerald-600 rounded-lg flex items-center justify-center">
+            <i class="fas fa-wallet text-white"></i>
+          </div>
+          <div>
+            <h1 class="text-xl font-bold text-gray-900">YPWI Lutim</h1>
+            <p class="text-sm text-gray-500">Dashboard Bendahara</p>
+          </div>
+        </div>
+      </div>
+      <nav class="p-4 space-y-2">
+        <button class="nav-item nav-active w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg hover:bg-gray-100" data-tab="dashboard">
+          <i class="fas fa-chart-line"></i><span>Dashboard</span>
+        </button>
+        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="payroll">
+          <i class="fas fa-wallet"></i><span>Penggajian</span>
+        </button>
+        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="spp">
+          <i class="fas fa-file-invoice-dollar"></i><span>SPP Siswa</span>
+        </button>
+        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="attendanceRecap">
+          <i class="fas fa-calendar-check"></i><span>Rekap Absensi</span>
+        </button>
+      </nav>
+    </aside>
+    <main class="flex-1 p-8">
+      <h2 class="text-3xl font-bold text-gray-900 mb-8">Dashboard Bendahara</h2>
+      
+      <div id="dashboardTab" class="tab-content">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <p class="text-center py-8">Dashboard Bendahara - Ringkasan Keuangan</p>
+        </div>
+      </div>
+
+      <div id="payrollTab" class="tab-content hidden">
+        <div class="bg-white rounded-xl shadow-sm border-2 border-emerald-200 p-6 mb-4">
+          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+            <h3 class="text-lg font-semibold text-gray-900">Sistem Penggajian Guru</h3>
+            <div class="flex flex-wrap items-end gap-2">
+              <div><label class="block text-xs font-medium text-gray-600 mb-1">Sekolah</label>
+                <select id="payrollTenantSelect" class="px-3 py-2 border border-gray-300 rounded-md text-sm"><option value="">Semua Sekolah</option></select>
+              </div>
+              <div><label class="block text-xs font-medium text-gray-600 mb-1">Bulan</label>
+                <select id="payrollBulan" class="px-3 py-2 border border-gray-300 rounded-md text-sm">
+                  <option value="1">Januari</option><option value="2">Februari</option><option value="3">Maret</option><option value="4">April</option>
+                  <option value="5">Mei</option><option value="6">Juni</option><option value="7" selected>Juli</option><option value="8">Agustus</option>
+                  <option value="9">September</option><option value="10">Oktober</option><option value="11">November</option><option value="12">Desember</option>
+                </select>
+              </div>
+              <div><label class="block text-xs font-medium text-gray-600 mb-1">Tahun</label>
+                <select id="payrollTahun" class="px-3 py-2 border border-gray-300 rounded-md text-sm"></select>
+              </div>
+              <button onclick="loadPayroll()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm"><i class="fas fa-calculator mr-1"></i>Hitung</button>
+              <button onclick="generatePayroll()" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm"><i class="fas fa-save mr-1"></i>Simpan Slip</button>
+              <button onclick="exportPayrollExcel()" class="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm"><i class="fas fa-file-excel mr-1"></i>Excel</button>
+              <button onclick="exportPayrollPDF()" class="bg-red-600 text-white px-4 py-2 rounded-lg text-sm"><i class="fas fa-file-pdf mr-1"></i>PDF</button>
+              <button onclick="exportPayrollBsiCUZ()" class="bg-orange-600 text-white px-4 py-2 rounded-lg text-sm"><i class="fas fa-file-export mr-1"></i>BSI CUZ</button>
+              <button onclick="sendSelectedPayrollEmails()" class="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm"><i class="fas fa-envelope mr-1"></i>Email Terpilih</button>
+              <button onclick="sendBulkPayrollEmail()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm"><i class="fas fa-envelope mr-1"></i>Email Semua</button>
+              <button onclick="togglePayrollHistory()" class="bg-gray-600 text-white px-4 py-2 rounded-lg text-sm"><i class="fas fa-history mr-1"></i>Riwayat</button>
+            </div>
+          </div>
+          <div id="payrollComputeView">
+            <div class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-gray-50"><tr>
+              <th class="px-2 py-2" style="width:40px"><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)"></th>
+              <th class="px-3 py-3">No</th><th class="px-3 py-3">Nama</th><th class="px-3 py-3">NIK</th><th class="px-3 py-3">Status</th>
+              <th class="px-3 py-3">Gaji Pokok</th><th class="px-3 py-3">T. Kinerja</th><th class="px-3 py-3">T. Umum</th>
+              <th class="px-3 py-3">T. Istri</th><th class="px-3 py-3">T. Anak</th><th class="px-3 py-3">T. KepSek</th>
+              <th class="px-3 py-3">T. WaliKelas</th><th class="px-3 py-3">Honor</th><th class="px-3 py-3">Potongan</th><th class="px-3 py-3">Total</th><th class="px-3 py-3">Aksi</th>
+            </tr></thead><tbody id="payrollTable"><tr><td colspan="16" class="text-center py-4">Pilih periode lalu klik Hitung</td></tr></tbody></table></div>
+          </div>
+          <div id="payrollHistoryView" class="hidden">
+            <div class="flex justify-between mb-4"><h4>Riwayat Slip Gaji</h4><button onclick="togglePayrollHistory()" class="text-blue-600">← Kembali</button></div>
+            <div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr><th>Periode</th><th>Nama</th><th>NIK</th><th>Total</th><th>Aksi</th></tr></thead><tbody id="payrollHistoryTable"></tbody></table></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="sppTab" class="tab-content hidden">
+        <div class="bg-white rounded-xl shadow-sm border-2 border-blue-200 p-6 mb-4">
+          <h3 class="text-lg font-semibold mb-4">Ringkasan SPP Siswa</h3>
+          <div class="flex flex-wrap gap-2 mb-4">
+            <select id="sppMonthSelect" class="px-3 py-2 border">
+              <option value="1">Januari</option><option value="2">Februari</option><option value="3">Maret</option><option value="4">April</option>
+              <option value="5">Mei</option><option value="6">Juni</option><option value="7" selected>Juli</option><option value="8">Agustus</option>
+              <option value="9">September</option><option value="10">Oktober</option><option value="11">November</option><option value="12">Desember</option>
+            </select>
+            <select id="sppYearSelect" class="px-3 py-2 border"></select>
+            <button onclick="loadSppSummary()" class="bg-emerald-600 text-white px-4 py-2 rounded">Tampilkan</button>
+            <button onclick="loadStudentInvoices()" class="bg-blue-600 text-white px-4 py-2 rounded">List Invoice Siswa</button>
+            <button onclick="generateSppBatch()" class="bg-purple-600 text-white px-4 py-2 rounded">Buat Invoice Batch</button>
+            <button onclick="window.open('admin-dashboard.html#tagihan', '_blank')" class="bg-green-600 text-white px-4 py-2 rounded">Lihat Invoice</button>
+          </div>
+          <div id="invoicesSection" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
+            <div class="bg-white rounded-xl shadow-2xl max-w-6xl w-full mx-4 max-h-[90vh] overflow-auto">
+              <div class="flex justify-between items-center p-4 border-b sticky top-0 bg-white">
+                <h4 class="font-semibold text-lg">Daftar Invoice Siswa</h4>
+                <button onclick="document.getElementById('invoicesSection').classList.add('hidden')" class="text-gray-500 hover:text-gray-700 text-2xl leading-none">&times;</button>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm"><thead class="bg-gray-50"><tr>
+                  <th class="px-3 py-2">#</th><th class="px-3 py-2">Nama Siswa</th><th class="px-3 py-2">Sekolah</th><th class="px-3 py-2">Periode</th><th class="px-3 py-2">Jumlah</th><th class="px-3 py-2">Status</th><th class="px-3 py-2">Aksi</th>
+                </tr></thead><tbody id="studentInvoicesTable"></tbody></table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="attendanceRecapTab" class="tab-content hidden">
+        <div class="bg-white rounded-xl shadow-sm border-2 border-purple-200 p-6 mb-4">
+          <div class="flex justify-between mb-4">
+            <h3 class="text-lg font-semibold">Rekap Absensi Bulanan</h3>
+          </div>
+          <div class="flex flex-wrap gap-2 mb-4">
+            <select id="recapTenantSelect" class="px-3 py-2 border"><option value="">Memuat...</option></select>
+            <select id="recapMonthSelect" class="px-3 py-2 border">
+              <option value="1">Januari</option><option value="2">Februari</option><option value="3">Maret</option><option value="4">April</option>
+              <option value="5">Mei</option><option value="6">Juni</option><option value="7" selected>Juli</option><option value="8">Agustus</option>
+              <option value="9">September</option><option value="10">Oktober</option><option value="11">November</option><option value="12">Desember</option>
+            </select>
+            <select id="recapYearSelect" class="px-3 py-2 border"></select>
+            <button onclick="loadMonthlyRecap()" class="bg-emerald-600 text-white px-4 py-2 rounded">Tampilkan</button>
+            <button onclick="exportMonthlyPdfFromRecap()" class="bg-red-600 text-white px-4 py-2 rounded">Export PDF</button>
+          </div>
+          <div id="monthlyRecapContent"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="js/payroll-admin.js"></script>
+  <script>
+    document.querySelectorAll('[data-tab]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
+        document.querySelectorAll('[data-tab]').forEach(n => {
+          n.classList.remove('bg-emerald-600', 'text-white');
+          n.classList.add('text-gray-600');
+        });
+        const tab = btn.dataset.tab + 'Tab';
+        document.getElementById(tab)?.classList.remove('hidden');
+        btn.classList.add('bg-emerald-600', 'text-white');
+        if (btn.dataset.tab === 'payroll' || btn.dataset.tab === 'attendanceRecap' || btn.dataset.tab === 'spp') { loadTenantFilters(); if (btn.dataset.tab === 'spp') loadSppSummary(); }
+      });
+    });
+    loadTenantFilters();
+    
+    window.toggleSelectAll = function(checkbox) {
+      document.querySelectorAll('.email-checkbox').forEach(cb => cb.checked = checkbox.checked);
+    };
+  </script>
+</body>
+</html>

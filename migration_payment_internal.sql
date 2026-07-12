@@ -1,0 +1,41 @@
+CREATE TABLE IF NOT EXISTS `payment_invoices` (
+  `id` INT(11) NOT NULL AUTO_INCREMENT,
+  `tenant_id` VARCHAR(20) NOT NULL,
+  `student_id` INT(11) NOT NULL,
+  `invoice_number` VARCHAR(50) NOT NULL,
+  `amount` DECIMAL(12,2) NOT NULL,
+  `description` TEXT DEFAULT NULL,
+  `periode` VARCHAR(20) NOT NULL,
+  `status` ENUM('pending','approved','paid','expired','cancelled') DEFAULT 'pending',
+  `due_date` DATE DEFAULT NULL,
+  `paid_at` DATETIME DEFAULT NULL,
+  `paid_amount` DECIMAL(12,2) DEFAULT NULL,
+  `payment_method` VARCHAR(50) DEFAULT NULL,
+  `payment_channel` VARCHAR(50) DEFAULT NULL,
+  `approved_by` INT(11) DEFAULT NULL,
+  `approved_at` DATETIME DEFAULT NULL,
+  `payment_proof_url` VARCHAR(255) DEFAULT NULL,
+  `notes` TEXT DEFAULT NULL,
+  `metadata` JSON DEFAULT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_invoice_number` (`invoice_number`),
+  KEY `idx_tenant_id` (`tenant_id`),
+  KEY `idx_student_id` (`student_id`),
+  KEY `idx_periode` (`periode`),
+  KEY `idx_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `payment_status_history` (
+  `id` INT(11) NOT NULL AUTO_INCREMENT,
+  `invoice_id` INT(11) NOT NULL,
+  `old_status` VARCHAR(50) DEFAULT NULL,
+  `new_status` VARCHAR(50) NOT NULL,
+  `changed_by` INT(11) DEFAULT NULL,
+  `notes` TEXT DEFAULT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_invoice_id` (`invoice_id`),
+  CONSTRAINT `fk_payment_status_history_invoice` FOREIGN KEY (`invoice_id`) REFERENCES `payment_invoices` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

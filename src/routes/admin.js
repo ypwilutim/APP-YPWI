@@ -10,6 +10,7 @@ const multer = require('multer');
 const db = require('../../db');
 const { authenticateToken, authenticateOperator, verifyTenantAccess } = require('../middleware/auth');
 const { logToFile } = require('../middlewares/logger');
+const { fetchMetaTemplates } = require('../utils/whatsappTemplate');
 
 const router = express.Router();
 
@@ -40,6 +41,26 @@ const teacherUpload = multer({
       return cb(new Error('Format file tidak didukung. Gunakan JPG, PNG, atau GIF'));
     }
     cb(null, true);
+  }
+});
+
+// POST /api/upload-profile-photo - Upload profile photo for logged-in guru (dashboard)
+router.post('/upload-profile-photo', authenticateToken, teacherUpload.single('photo'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'Tidak ada file foto yang diupload.' });
+    }
+    if (!req.user.guru_id) {
+      return res.status(400).json({ success: false, message: 'User tidak valid.' });
+    }
+
+    const photoUrl = `/uploads/${req.file.filename}`;
+    await db.query('UPDATE teachers SET link_foto = ? WHERE id = ?', [photoUrl, req.user.guru_id]);
+
+    res.json({ success: true, photoUrl, message: 'Foto profil berhasil diperbarui' });
+  } catch (error) {
+    console.error('Upload profile photo error:', error);
+    res.status(500).json({ success: false, message: 'Gagal mengupload foto profil.' });
   }
 });
 
@@ -993,7 +1014,7 @@ router.get('/admin/summary', authenticateOperator, async (req, res) => {
       SELECT COUNT(DISTINCT a.teacher_id) as count
       FROM attendance_logs a
       JOIN teachers t ON a.teacher_id = t.id
-      JOIN teacher_assignments ta ON t.id = ta.teacher_id
+      ${tenantId ? 'JOIN teacher_assignments ta ON t.id = ta.teacher_id' : ''}
       WHERE DATE(COALESCE(a.waktu_absen, a.waktu_scan)) = UTC_DATE() ${tenantId ? 'AND (a.tenant_id = ? OR a.dinas_luar = 1)' : ''}
     `;
     let activeParams = [];
@@ -1006,7 +1027,7 @@ router.get('/admin/summary', authenticateOperator, async (req, res) => {
       SELECT COUNT(*) as count
       FROM attendance_logs a
       JOIN teachers t ON a.teacher_id = t.id
-      JOIN teacher_assignments ta ON t.id = ta.teacher_id
+      ${tenantId ? 'JOIN teacher_assignments ta ON t.id = ta.teacher_id' : ''}
       WHERE DATE(COALESCE(a.waktu_absen, a.waktu_scan)) = UTC_DATE() AND a.status = 'terlambat' ${tenantId ? 'AND (a.tenant_id = ? OR a.dinas_luar = 1)' : ''}
     `;
     let lateParams = [];
@@ -1603,6 +1624,65 @@ router.get('/search/teachers', async (req, res) => {
   }
 });
 
+// POST /api/search/teachers/:id/verify - Verify teacher identity before proceeding (public)
+const normalizePhoneVerify = (val) => {
+  if (!val) return '';
+  let n = String(val).replace(/[^0-9]/g, '');
+  if (n.startsWith('62')) n = '0' + n.slice(2);
+  else if (n.startsWith('8')) n = '0' + n;
+  return n;
+};
+router.post('/search/teachers/:id/verify', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { type, value } = req.body;
+
+    if (!type || !value) {
+      return res.status(400).json({ success: false, message: 'Pilih jenis dan isi data verifikasi.' });
+    }
+
+    const [teacher] = await db.query(
+      `SELECT t.id, t.nama, t.email, t.no_wa, t.nik, t.nip,
+              EXISTS(SELECT 1 FROM users u WHERE u.guru_id = t.id) as has_user,
+              (SELECT username FROM users u WHERE u.guru_id = t.id LIMIT 1) as user_email
+       FROM teachers t WHERE t.id = ?`,
+      [id]
+    );
+
+    if (!teacher) {
+      return res.status(404).json({ success: false, message: 'Guru tidak ditemukan.' });
+    }
+
+    const v = String(value).trim().toLowerCase();
+    let match = false;
+    if (type === 'email') {
+      match = !!teacher.email && String(teacher.email).toLowerCase() === v;
+    } else if (type === 'whatsapp') {
+      match = !!teacher.no_wa && normalizePhoneVerify(teacher.no_wa) === normalizePhoneVerify(value);
+    } else if (type === 'nik') {
+      match = !!teacher.nik && String(teacher.nik).toLowerCase() === v;
+    } else if (type === 'niy') {
+      match = !!teacher.nip && String(teacher.nip).toLowerCase() === v;
+    } else {
+      return res.status(400).json({ success: false, message: 'Jenis verifikasi tidak valid.' });
+    }
+
+    if (!match) {
+      return res.json({ success: false, message: 'Data yang Anda masukkan tidak cocok dengan data guru.' });
+    }
+
+    res.json({
+      success: true,
+      has_user: !!teacher.has_user,
+      email: teacher.user_email || teacher.email,
+      nama: teacher.nama
+    });
+  } catch (error) {
+    console.error('Verify teacher error:', error);
+    res.status(500).json({ success: false, message: 'Error verifikasi guru.' });
+  }
+});
+
 // PUT /api/admin/teachers/:id/transfer - Transfer teacher to different tenant (set to mutasi pool)
 router.put('/admin/teachers/:id/transfer', authenticateOperator, async (req, res) => {
   try {
@@ -2090,11 +2170,22 @@ router.post('/admin/restore', authenticateToken, async (req, res) => {
 router.put('/public/teachers/:teacherId', teacherUpload.single('foto'), async (req, res) => {
   try {
     const teacherId = req.params.teacherId;
-    const { nama, nik, nip, email, tempat_lahir, tanggal_lahir, jenis_kelamin, alamat, no_wa, status_kepegawaian, status_aktif, tmt, pendidikan_terakhir, jurusan, nama_sekolah_pendidikan, tahun_angkatan, assignments_json } = req.body;
+    const { nama, nik, nip, email, tempat_lahir, tanggal_lahir, jenis_kelamin, alamat, no_wa, status_kepegawaian, status_aktif, tmt, pendidikan_terakhir, jurusan, nama_sekolah_pendidikan, tahun_angkatan, assignments_json, bank, nomor_rekening } = req.body;
     const foto = req.file ? `/uploads/${req.file.filename}` : null;
 
     // Get existing values if not provided (fields may be disabled in form)
-    const [existingTeacher] = await db.query('SELECT nama, nik, nip, email, tempat_lahir, tanggal_lahir, jenis_kelamin, alamat, no_wa, status_kepegawaian, status_aktif, tmt, pendidikan_terakhir FROM teachers WHERE id = ?', [teacherId]);
+    // Use graceful fallback for bank/nomor_rekening columns in case they don't exist yet
+    let selectQuery = 'SELECT nama, nik, nip, email, tempat_lahir, tanggal_lahir, jenis_kelamin, alamat, no_wa, status_kepegawaian, status_aktif, tmt, pendidikan_terakhir';
+    const selectParams = [];
+    try {
+      await db.query('SELECT bank, nomor_rekening FROM teachers LIMIT 1');
+      selectQuery += ', bank, nomor_rekening';
+    } catch (err) {
+      // Columns don't exist, use fallback values
+    }
+    selectQuery += ' FROM teachers WHERE id = ?';
+    selectParams.push(teacherId);
+    const [existingTeacher] = await db.query(selectQuery, selectParams);
 
     // Use existing values as fallback
     const finalNama = nama || existingTeacher?.nama || null;
@@ -2109,6 +2200,8 @@ router.put('/public/teachers/:teacherId', teacherUpload.single('foto'), async (r
     const finalStatusKepegawaian = status_kepegawaian || existingTeacher?.status_kepegawaian || null;
     const finalStatusAktif = status_aktif || existingTeacher?.status_aktif || null;
     const finalTmt = tmt || existingTeacher?.tmt || null;
+    const finalBank = bank || existingTeacher?.bank || null;
+    const finalNomorRekening = nomor_rekening || existingTeacher?.nomor_rekening || null;
 
     // Format pendidikan_terakhir string - handle all undefined
     let pendidikanFormatted = pendidikan_terakhir || null;
@@ -2136,14 +2229,34 @@ router.put('/public/teachers/:teacherId', teacherUpload.single('foto'), async (r
       status_kepegawaian: finalStatusKepegawaian,
       status_aktif: finalStatusAktif,
       tmt: finalTmt,
-      pendidikan_terakhir: pendidikanFormatted
+      pendidikan_terakhir: pendidikanFormatted,
+      bank: finalBank,
+      nomor_rekening: finalNomorRekening
     };
 
-    // Update teacher data
-    await db.query(
-      'UPDATE teachers SET nama=?, nik=?, nip=?, email=?, tempat_lahir=?, tanggal_lahir=?, jenis_kelamin=?, alamat=?, no_wa=?, status_kepegawaian=?, status_aktif=?, tmt=?, pendidikan_terakhir=? ' + (foto ? ', link_foto=?' : '') + ' WHERE id=?',
-      foto ? [safeParams.nama, safeParams.nik, safeParams.nip, safeParams.email, safeParams.tempat_lahir, safeParams.tanggal_lahir, safeParams.jenis_kelamin, safeParams.alamat, safeParams.no_wa, safeParams.status_kepegawaian, safeParams.status_aktif, safeParams.tmt, safeParams.pendidikan_terakhir, foto, teacherId] : [safeParams.nama, safeParams.nik, safeParams.nip, safeParams.email, safeParams.tempat_lahir, safeParams.tanggal_lahir, safeParams.jenis_kelamin, safeParams.alamat, safeParams.no_wa, safeParams.status_kepegawaian, safeParams.status_aktif, safeParams.tmt, safeParams.pendidikan_terakhir, teacherId]
-    );
+    // Update teacher data - build query dynamically based on available columns
+    let updateQuery = 'UPDATE teachers SET nama=?, nik=?, nip=?, email=?, tempat_lahir=?, tanggal_lahir=?, jenis_kelamin=?, alamat=?, no_wa=?, status_kepegawaian=?, status_aktif=?, tmt=?, pendidikan_terakhir=?';
+    let updateParams = [safeParams.nama, safeParams.nik, safeParams.nip, safeParams.email, safeParams.tempat_lahir, safeParams.tanggal_lahir, safeParams.jenis_kelamin, safeParams.alamat, safeParams.no_wa, safeParams.status_kepegawaian, safeParams.status_aktif, safeParams.tmt, safeParams.pendidikan_terakhir];
+
+    // Add bank and nomor_rekening if columns exist
+    let bankExists = false;
+    try {
+      await db.query('SELECT bank FROM teachers LIMIT 1');
+      bankExists = true;
+      updateQuery += ', bank=?, nomor_rekening=?';
+      updateParams.push(safeParams.bank, safeParams.nomor_rekening);
+    } catch (err) {
+      // Columns don't exist, skip
+    }
+
+    if (foto) {
+      updateQuery += ', link_foto=?';
+      updateParams.push(foto);
+    }
+    updateQuery += ' WHERE id=?';
+    updateParams.push(teacherId);
+
+    await db.query(updateQuery, updateParams);
 
     // Clear existing assignments
     await db.query('DELETE FROM teacher_assignments WHERE teacher_id = ?', [teacherId]);
@@ -2449,6 +2562,159 @@ router.put('/admin/bill-settings', authenticateOperator, async (req, res) => {
 });
 
 // WhatsApp Broadcast Messenger Routes
+// POST /api/admin/send-bill-template - Send single bill template
+router.post('/admin/send-bill-template', authenticateOperator, async (req, res) => {
+  try {
+    const { student_id, template_name, bulan, tanggal_jatuh_tempo } = req.body;
+    
+    if (!student_id) {
+      return res.status(400).json({ success: false, message: 'Siswa wajib dipilih' });
+    }
+
+    const [student] = await db.query(`
+      SELECT s.nama_siswa, s.iuran_bulanan, p.no_wa as parent_wa, s.tenant_id
+      FROM students s
+      LEFT JOIN parents p ON s.parent_id = p.id
+      WHERE s.id = ?
+    `, [student_id]);
+
+    if (!student || !student.parent_wa) {
+      return res.status(404).json({ success: false, message: 'Siswa atau nomor WA orang tua tidak ditemukan' });
+    }
+
+    const [tenant] = await db.query('SELECT bank_account_number, bank_account_name FROM tenants WHERE tenant_id = ?', [student.tenant_id]);
+
+    // Cek invoice Xendit aktif untuk bulan ini
+    const periode = `${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}`;
+    const [invoice] = await db.query(
+      'SELECT external_id, invoice_url, description FROM xendit_invoices WHERE student_id = ? AND status = "PENDING" ORDER BY created_at DESC LIMIT 1',
+      [student_id]
+    );
+
+    const { sendBillTemplate } = require('../utils/whatsappTemplate');
+    const result = await sendBillTemplate(student.parent_wa, {
+      nama_siswa: student.nama_siswa,
+      bulan: bulan || new Date().toLocaleString('id-ID', { month: 'long' }),
+      jumlah_tagihan: `Rp ${(student.iuran_bulanan || 0).toLocaleString('id-ID')}`,
+      tanggal_jatuh_tempo: tanggal_jatuh_tempo || '10',
+      nomor_rekening: tenant?.bank_account_number || '',
+      nama_penerima: tenant?.bank_account_name || '',
+      invoice_url: invoice?.invoice_url || '',
+      nama_pembayaran: invoice?.description || ''
+    }, template_name);
+
+    res.json({ success: true, message: 'Tagihan terkirim', messageId: result.messageId });
+  } catch (error) {
+    console.error('Send bill template error:', error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/admin/bulk-bill - Send bill template to all students in tenant
+router.post('/admin/bulk-bill', authenticateOperator, async (req, res) => {
+  try {
+    const { bulan, tanggal_jatuh_tempo, tenant_ids, template_name } = req.body;
+    
+    let query = `
+      SELECT s.id, s.nama_siswa, s.iuran_bulanan, p.no_wa as parent_wa, s.tenant_id
+      FROM students s
+      LEFT JOIN parents p ON s.parent_id = p.id
+      WHERE p.no_wa IS NOT NULL AND p.no_wa != ''
+    `;
+    let params = [];
+    
+    if (tenant_ids && tenant_ids.length > 0) {
+      const placeholders = tenant_ids.map(() => '?').join(',');
+      query += ` AND s.tenant_id IN (${placeholders})`;
+      params = [...params, ...tenant_ids];
+    }
+
+    const students = await db.query(query, params);
+    
+    const { sendBillTemplate } = require('../utils/whatsappTemplate');
+    let success = 0, failed = 0;
+    
+    for (const student of students) {
+      try {
+        if (!student.parent_wa) continue;
+        
+        const [tenant] = await db.query('SELECT bank_account_number, bank_account_name FROM tenants WHERE tenant_id = ?', [student.tenant_id]);
+
+        // cari invoice Xendit pending untuk siswa ini
+        const [inv] = await db.query('SELECT external_id, invoice_url, description FROM xendit_invoices WHERE student_id = ? AND status = "PENDING" ORDER BY created_at DESC LIMIT 1', [student.id]);
+
+        const result = await sendBillTemplate(student.parent_wa, {
+          nama_siswa: student.nama_siswa,
+          bulan: bulan || new Date().toLocaleString('id-ID', { month: 'long' }),
+          jumlah_tagihan: `Rp ${(student.iuran_bulanan || 0).toLocaleString('id-ID')}`,
+          tanggal_jatuh_tempo: tanggal_jatuh_tempo || '10',
+          nomor_rekening: tenant?.bank_account_number || '',
+          nama_penerima: tenant?.bank_account_name || '',
+          invoice_url: inv?.invoice_url || '',
+          nama_pembayaran: inv?.description || ''
+        }, template_name);
+        
+        success++;
+      } catch (err) {
+        console.error('Bill send failed for', student.nama_siswa, err.message);
+        failed++;
+      }
+    }
+    
+    res.json({ success: true, message: `Terkirim: ${success}, Gagal: ${failed}`, data: { success, failed } });
+  } catch (error) {
+    console.error('Bill bulk error:', error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/admin/teachers/send-whatsapp - Send WhatsApp message to teachers (guru)
+router.post('/admin/teachers/send-whatsapp', authenticateOperator, async (req, res) => {
+  try {
+    const { message, teacher_ids, all } = req.body;
+    if (!message || !message.trim()) {
+      return res.status(400).json({ success: false, message: 'Pesan tidak boleh kosong' });
+    }
+
+    let teachers;
+    if (all) {
+      teachers = await db.query(
+        "SELECT t.id, t.nama, t.no_wa FROM teachers t WHERE t.status_aktif = 1 AND t.no_wa IS NOT NULL AND t.no_wa != ''"
+      );
+    } else if (Array.isArray(teacher_ids) && teacher_ids.length > 0) {
+      const placeholders = teacher_ids.map(() => '?').join(',');
+      teachers = await db.query(
+        `SELECT t.id, t.nama, t.no_wa FROM teachers t WHERE t.id IN (${placeholders}) AND t.no_wa IS NOT NULL AND t.no_wa != ''`,
+        teacher_ids
+      );
+    } else {
+      return res.status(400).json({ success: false, message: 'Pilih minimal satu guru' });
+    }
+
+    let success = 0, failed = 0, skipped = 0;
+    const errors = [];
+    for (const teacher of teachers) {
+      if (!teacher.no_wa) { skipped++; continue; }
+      try {
+        const result = await global.sendWhatsAppMessage(teacher.no_wa, message);
+        if (result && result.success) success++;
+        else { failed++; errors.push(`${teacher.nama}: ${result?.message || 'gagal'}`); }
+      } catch (err) {
+        failed++; errors.push(`${teacher.nama}: ${err.message}`);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Terkirim: ${success}, Gagal: ${failed}, Dilewati: ${skipped}`,
+      data: { success, failed, skipped, errors: errors.slice(0, 10) }
+    });
+  } catch (error) {
+    console.error('Teacher WhatsApp error:', error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // GET /api/whatsapp-broadcast/status - Check WhatsApp connection status
 router.get('/whatsapp-broadcast/status', authenticateOperator, async (req, res) => {
   try {
@@ -2463,6 +2729,109 @@ router.get('/whatsapp-broadcast/status', authenticateOperator, async (req, res) 
     });
   } catch (error) {
     res.json({ success: true, connected: false, service: 'Meta API' });
+  }
+});
+
+// GET /api/admin/whatsapp-meta-templates - Fetch WhatsApp templates from Meta API
+router.get('/admin/whatsapp-meta-templates', authenticateOperator, async (req, res) => {
+  try {
+    const result = await fetchMetaTemplates();
+    res.json(result);
+  } catch (error) {
+    console.error('Meta WhatsApp templates error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Gagal mengambil template dari Meta' });
+  }
+});
+
+// GET /api/admin/attendance-monthly - Monthly attendance recap (pivoted by date)
+router.get('/admin/attendance-monthly', authenticateOperator, async (req, res) => {
+  try {
+    let tenantId = req.query.tenant_id;
+    const bulan = parseInt(req.query.bulan || new Date().getMonth() + 1);
+    const tahun = parseInt(req.query.tahun || new Date().getFullYear());
+    if (!tenantId && req.user.role !== 'admin') {
+      const assignments = (req.user.assignments || []).filter(a =>
+        ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin'].includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''))
+      );
+      if (assignments.length >= 1) tenantId = assignments[0].tenant_id;
+    }
+    if (!tenantId) return res.json({ success: false, message: 'tenant_id diperlukan' });
+    
+    const teachers = await db.query(
+      'SELECT t.id, t.nama FROM teachers t WHERE t.id IN (SELECT teacher_id FROM teacher_assignments WHERE tenant_id = ?)',
+      [tenantId]
+    );
+    
+    const logs = await db.query(
+      'SELECT al.teacher_id, DAY(al.waktu_scan) as hari, al.status, al.dinas_luar, al.keterangan, al.waktu_scan FROM attendance_logs al WHERE MONTH(al.waktu_scan) = ? AND YEAR(al.waktu_scan) = ? AND al.teacher_id IN (SELECT teacher_id FROM teacher_assignments WHERE tenant_id = ?)',
+      [bulan, tahun, tenantId]
+    );
+    
+    const daysInMonth = new Date(tahun, bulan, 0).getDate();
+    const weekendDays = [];
+    for (let d = 1; d <= daysInMonth; d++) {
+      const date = new Date(tahun, bulan - 1, d);
+      if (date.getDay() === 0 || date.getDay() === 6) weekendDays.push(d);
+    }
+    
+    const result = teachers.map(t => {
+      const row = { id: t.id, nama: t.nama };
+      for (let d = 1; d <= daysInMonth; d++) row['tgl_' + d] = '';
+      let hadir = 0, terlambat = 0, izin = 0, cuti = 0, dinas_luar = 0, sakit = 0;
+      logs.filter(l => l.teacher_id === t.id).forEach(l => {
+        const day = parseInt(l.hari);
+        if (day >= 1 && day <= daysInMonth) {
+          const date = new Date(tahun, bulan - 1, day);
+          const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+          if (l.status === 'tepat_waktu') { row['tgl_' + day] = '<span class="text-green-600 font-bold">H</span>'; hadir++; }
+          else if (l.status === 'terlambat') { row['tgl_' + day] = '<span class="text-yellow-600 font-bold">T</span>'; terlambat++; }
+          else if (l.dinas_luar) { row['tgl_' + day] = '<span class="text-blue-600 font-bold">DL</span>'; dinas_luar++; }
+          else if (l.keterangan && l.keterangan.toLowerCase().includes('izin')) { row['tgl_' + day] = '<span class="text-purple-600 font-bold">I</span>'; izin++; }
+          else if (l.keterangan && l.keterangan.toLowerCase().includes('cuti')) { row['tgl_' + day] = '<span class="text-gray-600 font-bold">C</span>'; cuti++; }
+          else if (l.keterangan && l.keterangan.toLowerCase().includes('sakit')) { row['tgl_' + day] = '<span class="text-red-600 font-bold">S</span>'; sakit++; }
+          if (isWeekend && !row['tgl_' + day]) {
+            row['tgl_' + day] = '<span class="text-gray-400">-</span>';
+          }
+        }
+      });
+      row.hadir = hadir; row.terlambat = terlambat; row.izin = izin; row.cuti = cuti; row.dinas_luar = dinas_luar; row.sakit = sakit;
+      row.weekendDays = weekendDays;
+      const totalActiveDays = daysInMonth - weekendDays.length;
+      row.tanpa_keterangan = totalActiveDays - (hadir + terlambat + izin + cuti + dinas_luar + sakit);
+      return row;
+    });
+    
+    res.json({ success: true, data: result, daysInMonth });
+  } catch (error) {
+    console.error('Monthly attendance error:', error);
+  }
+});
+
+// GET /api/admin/tenant-principal - Get principal name for tenant
+router.get('/admin/tenant-principal', authenticateOperator, async (req, res) => {
+  try {
+    const tenantId = req.query.tenant_id;
+    if (!tenantId) return res.json({ success: false, message: 'tenant_id required' });
+    const principal = await db.query('SELECT t.nama, t.nik, ta.jabatan_di_unit FROM teachers t JOIN teacher_assignments ta ON t.id = ta.teacher_id WHERE ta.tenant_id = ? AND LOWER(ta.jabatan_di_unit) LIKE ?', [tenantId, '%kepala sekolah%']);
+    if (principal.length) return res.json({ success: true, nama: principal[0].nama, jabatan: principal[0].jabatan_di_unit, nik: principal[0].nik || '-' });
+    const ketua = await db.query('SELECT t.nama, t.nik, ta.jabatan_di_unit FROM teachers t JOIN teacher_assignments ta ON t.id = ta.teacher_id WHERE ta.tenant_id = ? AND LOWER(ta.jabatan_di_unit) LIKE ?', [tenantId, '%ketua%']);
+    if (ketua.length) return res.json({ success: true, nama: ketua[0].nama, jabatan: ketua[0].jabatan_di_unit, nik: ketua[0].nik || '-' });
+    return res.json({ success: true, nama: 'Pimpinan', jabatan: 'Pimpinan' });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+// GET /api/admin/bendahara - Get bendahara name for tenant
+router.get('/admin/bendahara', authenticateOperator, async (req, res) => {
+  try {
+    const tenantId = req.query.tenant_id;
+    if (!tenantId) return res.json({ success: false, message: 'tenant_id required' });
+    const bendahara = await db.query('SELECT t.nama, t.nik FROM teachers t JOIN teacher_assignments ta ON t.id = ta.teacher_id WHERE ta.tenant_id = ? AND LOWER(ta.jabatan_di_unit) LIKE ?', [tenantId, '%bendahara%']);
+    if (bendahara.length) return res.json({ success: true, nama: bendahara[0].nama, nik: bendahara[0].nik || '-' });
+    return res.json({ success: true, nama: '-', nik: '-' });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
   }
 });
 

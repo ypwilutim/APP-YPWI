@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="id">
 
 <head>
@@ -63,10 +63,10 @@
           <i class="fas fa-chart-line"></i>
           <span>Dashboard</span>
         </button>
-        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
-          data-tab="salary">
-          <i class="fas fa-money-check-alt"></i>
-          <span>Slip Gaji Guru</span>
+<button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+           data-tab="payroll">
+          <i class="fas fa-wallet"></i>
+           <span>Penggajian</span>
         </button>
         <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
           data-tab="spp">
@@ -78,10 +78,15 @@
           <i class="fas fa-chart-bar"></i>
           <span>Laporan Keuangan</span>
         </button>
-        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
-          data-tab="reminders">
+<button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+           data-tab="reminders">
           <i class="fas fa-bell"></i>
-          <span>Pengingat SPP</span>
+           <span>Pengingat SPP</span>
+        </button>
+        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+           data-tab="attendanceRecap">
+          <i class="fas fa-calendar-check"></i>
+           <span>Rekap Absensi</span>
         </button>
       </nav>
     </aside>
@@ -200,19 +205,19 @@
       </div>
 
       <!-- Salary Tab -->
-      <div id="salaryTab" class="tab-content hidden">
+      <div id="payrollTab" class="tab-content hidden">
         <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <div class="flex justify-between items-center mb-6">
             <h3 class="text-lg font-semibold text-gray-900">Slip Gaji Guru</h3>
             <div class="flex space-x-2">
-              <select id="salaryTenantFilter"
+              <select id="payrollTenantSelect"
                 class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500">
                 <option value="">Semua Sekolah</option>
               </select>
-              <input type="month" id="salaryMonthFilter"
+              <input type="month" id="payrollBulan"
                 class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
                 value="">
-              <button onclick="loadSalaryData()"
+              <button onclick="loadPayroll()"
                 class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
                 <i class="fas fa-sync-alt mr-2"></i>Refresh
               </button>
@@ -232,7 +237,7 @@
                   <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Aksi</th>
                 </tr>
               </thead>
-              <tbody id="salaryTable" class="divide-y divide-gray-100">
+              <tbody id="payrollTable" class="divide-y divide-gray-100">
                 <tr>
                   <td colspan="7" class="px-4 py-8 text-center text-gray-500">
                     <i class="fas fa-spinner fa-spin text-xl mb-2"></i>
@@ -335,6 +340,27 @@
           <div id="financialReportContent" class="space-y-4">
             <p class="text-center text-gray-500 py-8">Pilih filter dan klik Generate untuk melihat laporan</p>
           </div>
+        </div>
+      </div>
+
+      <!-- Attendance Recap Tab -->
+      <div id="attendanceRecapTab" class="tab-content hidden">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold text-gray-900">Rekap Absensi Bulanan</h3>
+            <div class="flex space-x-2">
+              <select id="recapTenantSelect" class="px-3 py-2 border border-gray-300 rounded-md"><option value="">Memuat...</option></select>
+              <select id="recapMonthSelect" class="px-3 py-2 border border-gray-300 rounded-md">
+                <option value="1">Januari</option><option value="2">Februari</option><option value="3">Maret</option><option value="4">April</option>
+                <option value="5">Mei</option><option value="6">Juni</option><option value="7" selected>Juli</option><option value="8">Agustus</option>
+                <option value="9">September</option><option value="10">Oktober</option><option value="11">November</option><option value="12">Desember</option>
+              </select>
+              <select id="recapYearSelect" class="px-3 py-2 border border-gray-300 rounded-md"></select>
+              <button onclick="loadMonthlyRecap()" class="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700">Tampilkan</button>
+              <button onclick="exportMonthlyPdfFromRecap()" class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700">Export PDF</button>
+            </div>
+          </div>
+          <div id="monthlyRecapContent"></div>
         </div>
       </div>
 
@@ -463,10 +489,11 @@ document.addEventListener('DOMContentLoaded', function () {
       btn.classList.remove('text-gray-600');
       
       // Auto-load data for each tab
-      if (tabName === 'salary') loadSalaryData();
+      if (tabName === 'payroll') loadPayroll();
       if (tabName === 'spp') loadSppData();
       if (tabName === 'reports') loadFinancialReport();
       if (tabName === 'reminders') loadPaymentDefaulters();
+      if (tabName === 'attendanceRecap') { loadTenantFilters(); }
     }
 
      function getAuthHeader() {
@@ -572,15 +599,15 @@ document.addEventListener('DOMContentLoaded', function () {
       });
     }
 
-    async function loadSalaryData() {
-      const tenantId = document.getElementById('salaryTenantFilter').value;
+    async function loadPayroll() {
+      const tenantId = document.getElementById('payrollTenantSelect').value;
 
       try {
         const response = await fetch(`/api/treasurer/public/salary-summary?tenant_id=${tenantId}`);
         const data = await response.json();
 
         if (data.success) {
-          document.getElementById('salaryTable').innerHTML = data.data.map(item => `
+          document.getElementById('payrollTable').innerHTML = data.data.map(item => `
             <tr>
               <td class="px-4 py-3">${item.nama}</td>
               <td class="px-4 py-3">${item.jabatan}</td>
@@ -747,6 +774,56 @@ function showSalarySlip(teacherId) {
     function sendWarningToAll(tenantId) {
       alert('Fitur kirim reminder massal ke semua wali murid akan diimplementasikan');
     }
+
+    // Attendance Recap Functions
+    window.switchAttendanceView = function(view) {
+        document.getElementById('recapLogView')?.classList.toggle('hidden', view === 'monthly');
+        document.getElementById('recapMonthlySection')?.classList.toggle('hidden', view !== 'monthly');
+    };
+
+    window.loadMonthlyRecap = async function() {
+        const monthNames = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+        const tenantId = document.getElementById('recapTenantSelect')?.value;
+        const month = document.getElementById('recapMonthSelect')?.value;
+        const year = document.getElementById('recapYearSelect')?.value;
+        const content = document.getElementById('monthlyRecapContent');
+        if (!tenantId || !month || !year) { showToast('Pilih sekolah, bulan, dan tahun', 'error'); return; }
+        content.innerHTML = '<p class="text-center py-8"><i class="fas fa-spinner fa-spin"></i> Memuat...</p>';
+        try {
+            const token = localStorage.getItem('token');
+            const res = await fetch('/api/admin/attendance-monthly?tenant_id=' + tenantId + '&bulan=' + month + '&tahun=' + year, { headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
+            const json = await res.json();
+            if (!json.success) { showToast('Gagal memuat data', 'error'); return; }
+            const data = json.data;
+            const daysInMonth = json.daysInMonth || 30;
+            let headerHtml = '<tr><th rowspan="2">No</th><th rowspan="2">Nama</th>';
+            for (let d = 1; d <= daysInMonth; d++) headerHtml += '<th>' + d + '</th>';
+            headerHtml += '<th colspan="7">Keterangan</th></tr><tr>';
+            for (let d = 1; d <= daysInMonth; d++) headerHtml += '<th></th>';
+            headerHtml += '<th>H</th><th>T</th><th>I</th><th>S</th><th>DL</th><th>C</th><th>TK</th></tr>';
+            let bodyHtml = '';
+            data.forEach((d, i) => {
+                bodyHtml += '<tr><td>' + (i + 1) + '</td><td>' + (d.nama || '') + '</td>';
+                for (let day = 1; day <= daysInMonth; day++) bodyHtml += '<td>' + (d['tgl_' + day] || '') + '</td>';
+                bodyHtml += '<td>' + (d.hadir || 0) + '</td><td>' + (d.terlambat || 0) + '</td><td>' + (d.izin || 0) + '</td><td>' + (d.sakit || 0) + '</td><td>' + (d.dinas_luar || 0) + '</td><td>' + (d.cuti || 0) + '</td><td>' + (d.tanpa_keterangan || 0) + '</td></tr>';
+            });
+            content.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:10pt">' + headerHtml + bodyHtml + '</table>';
+        } catch (e) { content.innerHTML = '<p class="text-red-500">Error: ' + e.message + '</p>'; }
+    };
+
+    window.exportMonthlyPdfFromRecap = async function() {
+        const tenantId = document.getElementById('recapTenantSelect')?.value;
+        const month = document.getElementById('recapMonthSelect')?.value;
+        const year = document.getElementById('recapYearSelect')?.value;
+        const monthNames = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+        const content = document.getElementById('monthlyRecapContent');
+        const table = content?.querySelector('table');
+        if (!table) { showToast('Data belum dimuat', 'error'); return; }
+        const tanggal = new Date().getDate() + ' ' + monthNames[new Date().getMonth() + 1] + ' ' + new Date().getFullYear();
+        const win = window.open('', '_blank');
+        win.document.write('<!DOCTYPE html><html><head><title>Rekap Absensi</title><style>@page{size:A4 landscape;margin:1cm}body{font-family:Arial;font-size:8pt}table{width:100%;border-collapse:collapse}th,td{border:1px solid #000;padding:2px;text-align:center;font-size:7pt}.sign-row{display:flex;justify-content:space-between;margin-top:40px}.sign-box{width:45%;text-align:center}</style></head><body><h2 style="text-align:center">Rekap Absensi</h2>' + table.outerHTML + '<script>window.onload=function(){window.print();}<\/script></body></html>');
+        win.document.close();
+    };
   </script>
 </body>
 
