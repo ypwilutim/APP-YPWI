@@ -422,6 +422,14 @@
         /* Tampilkan navigasi jempol di bawah HP */
       }
 
+      .desktop-all-units-table {
+        display: none !important;
+      }
+
+      #allUnitsPeriod {
+        display: none !important;
+      }
+
       .card-profile-header {
         background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%) !important;
         color: #ffffff !important;
@@ -726,11 +734,12 @@ style="font-size: 0.95rem; font-weight: 700; color: #0f172a; margin: 0 0 0.75rem
 <div id="allUnitsSummaryWidget" class="card" style="display: none; background: #ffffff; border-radius: 1.25rem; padding: 1.5rem; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.02); border: 1px solid #e2e8f0;">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
     <h3 style="font-size: 1rem; font-weight: 700; color: #0f172a; margin: 0; display: flex; align-items: center; gap: 0.5rem;">
-      <i class="fas fa-chart-bar" style="color: #2563eb;"></i> Ringkasan Absensi Semua Unit
+      <i class="fas fa-chart-bar" style="color: #2563eb;"></i> Ringkasan Absensi
     </h3>
-    <input type="date" id="allUnitsDateFilter" onchange="refreshAllUnitsSummaryWithDate()" style="padding:0.3rem 0.5rem;border:1px solid #cbd5e1;border-radius:0.5rem;font-size:0.85rem;">
+    <button onclick="showAllUnitsSummaryModal()" style="background:#2563eb;color:white;border:none;border-radius:0.5rem;padding:0.4rem 0.8rem;font-size:0.85rem;cursor:pointer;">Lihat Detail</button>
   </div>
-  <div style="overflow-x: auto; max-height: 300px;">
+  <!-- Desktop: Show table, Mobile: Hidden -->
+  <div style="overflow-x: auto; max-height: 300px;" class="desktop-all-units-table">
     <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
       <thead>
         <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
@@ -740,11 +749,13 @@ style="font-size: 0.95rem; font-weight: 700; color: #0f172a; margin: 0 0 0.75rem
           <th style="padding: 0.5rem; text-align: center; font-weight: 600; color: #d97706;">Terlambat</th>
           <th style="padding: 0.5rem; text-align: center; font-weight: 600; color: #2563eb;">Izin</th>
           <th style="padding: 0.5rem; text-align: center; font-weight: 600; color: #dc2626;">Tidak Absen</th>
+          <th style="padding: 0.5rem; text-align: center; font-weight: 600; color: #be185d;">Sakit</th>
+          <th style="padding: 0.5rem; text-align: center; font-weight: 600; color: #7c3aed;">Lainnya</th>
         </tr>
       </thead>
       <tbody id="allUnitsSummaryBody">
         <tr>
-          <td colspan="6" style="padding: 1rem; text-align: center; color: #94a3b8;">
+          <td colspan="8" style="padding: 1rem; text-align: center; color: #94a3b8;">
             <i class="fas fa-spinner spinner" style="font-size: 1rem; margin-bottom: 0.25rem;"></i>
             <p style="margin: 0;">Memuat ringkasan...</p>
           </td>
@@ -753,6 +764,45 @@ style="font-size: 0.95rem; font-weight: 700; color: #0f172a; margin: 0 0 0.75rem
     </table>
   </div>
   <p id="allUnitsPeriod" style="margin: 0.5rem 0 0; font-size: 0.75rem; color: #94a3b8; text-align: center;"></p>
+</div>
+
+<!-- All Units Summary Modal -->
+<div id="allUnitsSummaryModal" class="modal-overlay" style="display: none;">
+  <div class="modal-container" style="max-width: 900px; max-height: 90vh; overflow-y: auto;">
+    <div class="modal-header" style="background: linear-gradient(135deg, #2563eb, #1d4ed8); position: sticky; top: 0; z-index: 10;">
+      <div style="display: flex; align-items: center; justify-content: space-between;">
+        <h3 style="margin: 0; font-size: 1.25rem;">Ringkasan Absensi Semua Unit</h3>
+        <button onclick="closeAllUnitsSummaryModal()" style="background: none; border: none; color: white; cursor: pointer;">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+    </div>
+    <div style="padding: 1.5rem;">
+      <input type="date" id="allUnitsModalDateFilter" onchange="refreshAllUnitsSummaryWithDate()" style="padding:0.5rem 0.75rem;border:1px solid #cbd5e1;border-radius:0.5rem;font-size:0.9rem;margin-bottom:1rem;">
+      <div style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+          <thead>
+            <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+              <th style="padding: 0.75rem; text-align: left; font-weight: 600; color: #475569;">Unit Sekolah</th>
+              <th style="padding: 0.75rem; text-align: center; font-weight: 600; color: #475569;">Total Guru</th>
+              <th style="padding: 0.75rem; text-align: center; font-weight: 600; color: #15803d;">Hadir</th>
+              <th style="padding: 0.75rem; text-align: center; font-weight: 600; color: #d97706;">Terlambat</th>
+              <th style="padding: 0.75rem; text-align: center; font-weight: 600; color: #2563eb;">Izin</th>
+              <th style="padding: 0.75rem; text-align: center; font-weight: 600; color: #dc2626;">Tidak Absen</th>
+              <th style="padding: 0.75rem; text-align: center; font-weight: 600; color: #be185d;">Sakit</th>
+              <th style="padding: 0.75rem; text-align: center; font-weight: 600; color: #7c3aed;">Lainnya</th>
+            </tr>
+          </thead>
+          <tbody id="allUnitsSummaryModalBody">
+          </tbody>
+        </table>
+      </div>
+      <p id="allUnitsModalPeriod" style="margin: 0.5rem 0 0; font-size: 0.75rem; color: #94a3b8; text-align: center;"></p>
+    </div>
+    <div style="padding: 1rem; border-top: 1px solid #e2e8f0; text-align: right;">
+      <button onclick="closeAllUnitsSummaryModal()" class="btn-secondary">Tutup</button>
+    </div>
+  </div>
 </div>
 
 <!-- Widget Riwayat dengan Pembatasan Fleksibel -->
@@ -816,7 +866,12 @@ style="font-size: 0.95rem; font-weight: 700; color: #0f172a; margin: 0 0 0.75rem
       <i class="fas fa-wallet" style="font-size: 1.3rem; display: block; margin-bottom: 2px;"></i>
       <span style="font-size: 0.65rem; font-weight: 600;">Bendahara</span>
     </div>
-    
+
+    <div id="mobileAdminNav" style="text-align: center; color: #059669; cursor: pointer; display: none;">
+      <i class="fas fa-user-cog" style="font-size: 1.3rem; display: block; margin-bottom: 2px;"></i>
+      <span style="font-size: 0.65rem; font-weight: 600;">Admin Unit</span>
+    </div>
+
     <div onclick="logout();"
       style="text-align: center; color: #64748b; cursor: pointer; -webkit-tap-highlight-color: transparent;">
       <i class="fas fa-sign-out-alt" style="font-size: 1.3rem; display: block; margin-bottom: 2px;"></i>

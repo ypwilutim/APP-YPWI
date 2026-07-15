@@ -2165,10 +2165,17 @@ let selectedAdminUnitId = null;
 function setupTreasurerNav() {
     const mobileNav = document.getElementById('mobileTreasurerNav');
     const desktopBtn = document.getElementById('desktopTreasurerBtn');
+    const mobileAdminNav = document.getElementById('mobileAdminNav');
 
-    const hasBendahara = (window.userAssignments || []).some(a => {
+    const assignments = window.userAssignments || [];
+    const hasBendahara = assignments.some(a => {
         const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
         return jabatan === 'bendahara';
+    });
+
+    const hasAdminRoles = assignments.some(a => {
+        const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
+        return ['admin', 'operator', 'media', 'tu', 'tatausaha', 'kepala', 'pimpinan'].some(role => jabatan.includes(role));
     });
 
     if (hasBendahara) {
@@ -2181,23 +2188,35 @@ function setupTreasurerNav() {
             desktopBtn.onclick = () => { window.location.href = 'treasurer-dashboard.html'; };
         }
     }
+
+    if (hasAdminRoles) {
+        if (mobileAdminNav) {
+            mobileAdminNav.style.display = 'block';
+            mobileAdminNav.onclick = () => { showAdminUnitModal(assignments); };
+        }
+    }
 }
 
 // Menampilkan Modal
 let storedAdminUnits = [];
 
 function showAdminUnitModal(units) {
-    storedAdminUnits = units;
     const listEl = document.getElementById('adminUnitList');
     const modal = document.getElementById('adminUnitModal');
     const confirmBtn = document.getElementById('confirmAdminUnitBtn');
 
     if (!listEl || !modal) return;
 
-    currentAdminUnits = units;
+    const adminRoles = ['admin', 'operator', 'media', 'tu', 'tatausaha'];
+    const filteredUnits = units.filter(u => {
+        const jabatan = (u.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
+        return adminRoles.some(role => jabatan.includes(role));
+    });
+
+    currentAdminUnits = filteredUnits;
     selectedAdminUnitId = null;
 
-    listEl.innerHTML = units.map((unit) => `
+    listEl.innerHTML = filteredUnits.map((unit) => `
     <label class="unit-option">
         <div class="unit-icon">
             <i class="fas fa-school text-blue-600 text-lg"></i>
@@ -2442,4 +2461,26 @@ function openCompleteProfile() {
     const teacherId = document.getElementById('editTeacherId');
     const id = teacherId ? teacherId.value : '';
     window.location.href = 'complete-profile.html' + (id ? '?teacher_id=' + id : '');
+}
+
+function showAllUnitsSummaryModal() {
+    const modal = document.getElementById('allUnitsSummaryModal');
+    const tableBody = document.getElementById('allUnitsSummaryModalBody');
+    const widgetBody = document.getElementById('allUnitsSummaryBody');
+    const dateFilter = document.getElementById('allUnitsModalDateFilter');
+    
+    if (dateFilter && document.getElementById('allUnitsDateFilter')) {
+        dateFilter.value = document.getElementById('allUnitsDateFilter').value;
+    }
+    
+    if (tableBody && widgetBody) {
+        tableBody.innerHTML = widgetBody.innerHTML;
+    }
+    
+    if (modal) modal.style.display = 'flex';
+}
+
+function closeAllUnitsSummaryModal() {
+    const modal = document.getElementById('allUnitsSummaryModal');
+    if (modal) modal.style.display = 'none';
 }

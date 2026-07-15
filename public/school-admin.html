@@ -1045,11 +1045,13 @@
       ['kepala_sekolah', 'pimpinan_pondok'].includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''))
     );
     if (isEvaluator) {
-      const evalLink = document.getElementById('evaluationLink');
-      if (evalLink) {
-        evalLink.href = 'evaluation-dashboard.html?tenant=' + encodeURIComponent(tenantId) + '&school=' + encodeURIComponent(schoolName || '');
-        evalLink.style.display = 'flex';
-      }
+      // Kepala sekolah hanya bisa akses via evaluation-dashboard, bukan school-admin
+      console.log('[SCHOOL-ADMIN] Kepala sekolah terdeteksi, redirect ke evaluation-dashboard');
+    }
+    // Hapus juga link evaluasi di header karena kepala sekolah tidak usah akses school-admin
+    const evalLink = document.getElementById('evaluationLink');
+    if (evalLink && !isEvaluator) {
+      evalLink.style.display = 'none';
     }
 
     function apiUrl(path) {
