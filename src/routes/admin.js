@@ -83,7 +83,11 @@ router.post('/upload-profile-photo', authenticateToken, teacherUpload.single('ph
 // GET /api/admin/tenants - List all tenants with tipe_unit
 router.get('/admin/tenants', authenticateOperator, async (req, res) => {
   try {
-    const tenantId = req.query.tenant_id;
+    let tenantId = req.query.tenant_id;
+    // Jika tenant_id tidak diberikan, pakai dari user atau assignments
+    if (!tenantId) {
+      tenantId = req.user.tenant_id || (req.user.assignments && req.user.assignments[0] && req.user.assignments[0].tenant_id);
+    }
     let query = 'SELECT tenant_id, nama_sekolah, absensi_method, use_central_rules, latitude, longitude, COALESCE(location_radius, 100) as location_radius, location_name, tipe_unit';
     // Add bank columns if they exist (graceful fallback)
     try {
@@ -94,7 +98,8 @@ router.get('/admin/tenants', authenticateOperator, async (req, res) => {
     }
     query += ' FROM tenants';
     let params = [];
-    if (tenantId) {
+    // Admin bisa lihat semua, guru hanya lihat tenant mereka
+    if (tenantId && req.user.role !== 'admin') {
       query += ' WHERE tenant_id = ?';
       params.push(tenantId);
     }
@@ -221,7 +226,11 @@ router.put('/admin/tenants/:tenantId', authenticateOperator, async (req, res) =>
 // GET /api/admin/rules - List attendance rules
 router.get('/admin/rules', authenticateOperator, async (req, res) => {
   try {
-    const tenantId = req.query.tenant_id;
+    let tenantId = req.query.tenant_id;
+    // Jika tenant_id tidak diberikan, pakai dari user atau assignments
+    if (!tenantId) {
+      tenantId = req.user.tenant_id || (req.user.assignments && req.user.assignments[0] && req.user.assignments[0].tenant_id);
+    }
     let query = 'SELECT * FROM attendance_rules';
     let params = [];
     if (tenantId) {
@@ -419,7 +428,7 @@ router.post('/admin/rules', authenticateOperator, async (req, res) => {
     if (!['Datang', 'Pulang'].includes(tipe)) {
       return res.status(400).json({ success: false, message: 'Tipe harus Datang atau Pulang' });
     }
-    if (!['tepat_waktu', 'terlambat'].includes(status_log)) {
+    if (!['tepat_waktu', 'terlambat', 'pulang_cepat', 'lembur'].includes(status_log)) {
       return res.status(400).json({ success: false, message: 'Status log tidak valid' });
     }
 

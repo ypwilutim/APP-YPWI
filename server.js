@@ -212,7 +212,7 @@ const teacherUpload = multer({
 });
 
 app.use(cors());
-app.use(express.static('public'));
+app.use(express.static('public', { index: false }));
 
 // Redirect root: subdomain pembayaran -> landing publik, domain utama -> login admin
 app.get('/', (req, res) => {
@@ -258,6 +258,7 @@ app.use('/api', wahaRoutes);
 app.use('/api', require('./src/routes/treasurer'));
 app.use('/api', require('./src/routes/xendit'));
 app.use('/api', require('./src/routes/payments'));
+app.use('/api', require('./src/routes/midtrans'));
 app.use('/api', require('./src/routes/public'));
 
 const logFilePath = path.join(__dirname, 'logs', 'app.log');

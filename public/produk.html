@@ -70,18 +70,19 @@
   <script src="/js/site.js"></script>
   <script>
     (async function () {
+      const API_BASE = location.hostname.indexOf('payment.') === 0 ? 'https://app.ypwilutim.com' : '';
       const body = document.getElementById('catalog-body');
       const fmt = (n) => n ? 'Rp ' + n.toLocaleString('id-ID') : '<span class="empty">Menyesuaikan per siswa</span>';
       const labels = { yayasan: 'Yayasan', sekolah: 'Sekolah', pondok: 'Pondok Pesantren' };
       try {
-        const res = await fetch('/api/public/catalog');
+        const res = await fetch(API_BASE + '/api/public/catalog');
         const j = await res.json();
         if (j.success && j.data && j.data.length) {
           body.innerHTML = j.data.map(u => `
             <tr>
               <td>${u.nama}</td>
               <td><span class="tag">${labels[u.tipe_unit] || u.tipe_unit}</span></td>
-              <td>${fmt(u.iuran_bulanan)}</td>
+              <td><span class="empty">Menyesuaikan per siswa</span></td>
             </tr>`).join('');
         } else {
           body.innerHTML = '<tr><td colspan="3" class="empty">Data unit belum tersedia.</td></tr>';

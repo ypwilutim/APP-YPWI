@@ -3,27 +3,36 @@ const db = require('../../db');
 
 const router = express.Router();
 
-// GET /api/public/catalog - Public list of YPWI Lutim units and SPP prices
+// GET /api/public/catalog - Public list of YPWI Lutim units and SPP reference prices
 // Used by the public "Produk & Harga" page (Midtrans verification requirement)
 router.get('/public/catalog', async (req, res) => {
   try {
-    const rows = await db.query(
-      `SELECT tenant_id, tipe_unit, nama_sekolah, iuran_bulanan
-       FROM tenants
-       ORDER BY tipe_unit, nama_sekolah`
+    const units = await db.query(
+      `SELECT tenant_id, tipe_unit, nama_sekolah FROM tenants ORDER BY tipe_unit, nama_sekolah`
     );
 
-    const units = (rows || []).map(r => {
-      const raw = r.iuran_bulanan ? String(r.iuran_bulanan).replace(/[^0-9]/g, '') : '';
-      return {
-        tenant_id: r.tenant_id,
-        tipe_unit: r.tipe_unit,
-        nama: r.nama_sekolah,
-        iuran_bulanan: raw ? parseInt(raw, 10) : null
-      };
-    });
+    // Reference iuran diambil dari students (nilai bervariasi per siswa)
+    let iuranMap = {};
+    try {
+      const rows = await db.query(
+        `SELECT tenant_id, MIN(iuran_bulanan) as min_iuran FROM students WHERE iuran_bulanan > 0 GROUP BY tenant_id`
+      );
+      (rows || []).forEach(r => {
+        const v = r.min_iuran ? String(r.min_iuran).replace(/[^0-9]/g, '') : '';
+        iuranMap[r.tenant_id] = v ? parseInt(v, 10) : null;
+      });
+    } catch (e) {
+      console.warn('Catalog iuran lookup skipped:', e.message);
+    }
 
-    res.json({ success: true, data: units });
+    const data = (units || []).map(r => ({
+      tenant_id: r.tenant_id,
+      tipe_unit: r.tipe_unit,
+      nama: r.nama_sekolah,
+      iuran_bulanan: iuranMap[r.tenant_id] || null
+    }));
+
+    res.json({ success: true, data });
   } catch (e) {
     console.error('Public catalog error:', e);
     res.status(500).json({ success: false, message: 'Gagal memuat katalog' });

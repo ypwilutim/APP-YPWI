@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pembayaran SPP - YPWI Lutim</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <style> body { font-family: 'Inter', sans-serif; } </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <div class="max-w-2xl mx-auto px-4 py-12">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
+      <div class="text-center mb-8">
+        <div class="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <i class="fas fa-graduation-cap text-emerald-600 text-2xl"></i>
+        </div>
+        <h1 class="text-2xl font-bold text-gray-900">Pembayaran SPP</h1>
+        <p class="text-gray-600 mt-1">Yayasan Pesantren Wahdah Islamiyah Luwu Timur</p>
+      </div>
+
+      <div id="paymentStatus" class="space-y-4">
+        <div class="text-center py-8">
+          <i class="fas fa-spinner fa-spin text-3xl text-gray-400 mb-4"></i>
+          <p class="text-gray-600">Memuat...</p>
+        </div>
+      </div>
+    </div>
+    <div class="text-center mt-8">
+      <p class="text-sm text-gray-500">Butuh bantuan? Hubungi bendahara sekolah Anda</p>
+    </div>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const orderId = params.get('order_id');
+    const qTenant = params.get('tenant_id');
+    const qStudent = params.get('student_id');
+    let pollTimer = null;
+
+    const fmt = (n) => 'Rp ' + (parseFloat(n || 0).toLocaleString('id-ID'));
+    const norm = (s) => (s || '').toString().toUpperCase();
+    const box = () => document.getElementById('paymentStatus');
+
+    function startPolling(oid) {
+      stopPolling();
+      pollTimer = setInterval(async () => {
+        try {
+          const res = await fetch('/api/midtrans/public/status/' + encodeURIComponent(oid));
+          const data = await res.json();
+          if (data.success && norm(data.data.status) === 'PAID') {
+            renderStatus(data.data);
+          }
+        } catch (e) { /* abaikan */ }
+      }, 5000);
+    }
+    function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+
+    function renderStatus(d) {
+      const s = norm(d.status);
+      const badge = s === 'PAID'
+        ? '<span class="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">LUNAS</span>'
+        : s === 'EXPIRED'
+          ? '<span class="px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm font-medium">KEDALUWARSA</span>'
+          : s === 'FAILED'
+            ? '<span class="px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm font-medium">GAGAL</span>'
+            : '<span class="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm font-medium">MENUNGGU PEMBAYARAN</span>';
+
+      let html = `
+        <div class="space-y-4">
+          <div class="flex justify-between items-center">
+            <h3 class="text-lg font-semibold text-gray-900">Detail Tagihan</h3>${badge}
+          </div>
+          <div class="bg-gray-50 rounded-lg p-4 space-y-2">
+            <div class="flex justify-between"><span class="text-gray-600">No. Order</span><span class="text-gray-900 text-sm font-mono">${d.order_id || '-'}</span></div>
+            <div class="flex justify-between"><span class="text-gray-600">Jumlah</span><span class="text-gray-900 font-bold text-lg">${fmt(d.gross_amount)}</span></div>
+            ${d.payment_type ? `<div class="flex justify-between"><span class="text-gray-600">Metode</span><span class="text-gray-900">${d.payment_type}</span></div>` : ''}
+            ${d.paid_at ? `<div class="flex justify-between"><span class="text-gray-600">Dibayar</span><span class="text-gray-900">${new Date(d.paid_at).toLocaleString('id-ID')}</span></div>` : ''}
+          </div>`;
+
+      if (s === 'PAID') {
+        html += `<div class="text-center mt-6"><div class="inline-flex items-center px-6 py-3 bg-green-100 text-green-800 rounded-lg text-lg font-medium"><i class="fas fa-check-circle mr-2"></i> Pembayaran Berhasil</div></div>`;
+        stopPolling();
+      } else if (s === 'EXPIRED' || s === 'FAILED') {
+        html += `<div class="text-center mt-6"><div class="inline-flex items-center px-6 py-3 bg-red-100 text-red-800 rounded-lg text-lg font-medium"><i class="fas fa-times-circle mr-2"></i> ${s === 'EXPIRED' ? 'Order Kedaluwarsa' : 'Pembayaran Gagal'}</div></div>`;
+        stopPolling();
+      } else {
+        html += `<p class="text-center text-xs text-gray-400 mt-3">Status diperbarui otomatis. Selesaikan pembayaran di jendela Midtrans yang terbuka.</p>`;
+        startPolling(d.order_id);
+      }
+      box().innerHTML = html;
+    }
+
+    async function createAndPay(tenant, student, amount) {
+      box().innerHTML = '<div class="text-center py-8"><i class="fas fa-spinner fa-spin text-3xl text-gray-400 mb-4"></i><p>Membuat transaksi...</p></div>';
+      try {
+        const res = await fetch('/api/midtrans/public/create-transaction', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tenant_id: tenant, student_id: student, amount })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message || 'Gagal membuat transaksi');
+        openSnap(data.data);
+      } catch (err) {
+        box().innerHTML = `<div class="text-center py-8"><i class="fas fa-exclamation-circle text-4xl text-red-500 mb-4"></i><p class="text-gray-600">${err.message}</p></div>`;
+      }
+    }
+
+    function openSnap(d) {
+      box().innerHTML = `
+        <div class="text-center py-8">
+          <i class="fas fa-spinner fa-spin text-3xl text-gray-400 mb-4"></i>
+          <p class="text-gray-600">Menyiapkan halaman pembayaran Midtrans...</p>
+        </div>`;
+      const s = document.createElement('script');
+      s.src = d.snap_js_url + '?client-key=' + encodeURIComponent(d.client_key);
+      s.onerror = () => {
+        // Fallback: redirect to Midtrans hosted page
+        window.location.href = d.redirect_url;
+      };
+      s.onload = () => {
+        if (window.snap && typeof window.snap.pay === 'function') {
+          window.snap.pay(d.token, {
+            onSuccess: (r) => { updateUrl(d.order_id); renderStatus({ order_id: d.order_id, status: 'PAID', gross_amount: d.amount, payment_type: r.payment_type }); },
+            onPending: (r) => { updateUrl(d.order_id); renderStatus({ order_id: d.order_id, status: 'PENDING', gross_amount: d.amount, payment_type: r.payment_type }); },
+            onError: (r) => { box().innerHTML = `<div class="text-center py-8"><i class="fas fa-exclamation-circle text-4xl text-red-500 mb-4"></i><p>Terjadi kesalahan. Coba lagi.</p></div>`; },
+            onClose: () => { updateUrl(d.order_id); pollStatus(d.order_id); }
+          });
+        } else {
+          window.location.href = d.redirect_url;
+        }
+      };
+      document.head.appendChild(s);
+    }
+
+    function updateUrl(oid) {
+      const p = new URLSearchParams(window.location.search);
+      p.set('order_id', oid);
+      window.history.replaceState({}, '', `${location.pathname}?${p}`);
+    }
+
+    async function pollStatus(oid) {
+      try {
+        const res = await fetch('/api/midtrans/public/status/' + encodeURIComponent(oid));
+        const data = await res.json();
+        if (data.success) renderStatus(data.data);
+      } catch (e) { /* abaikan */ }
+    }
+
+    function showTestForm() {
+      box().innerHTML = `
+        <div class="space-y-4">
+          <p class="text-gray-600 text-center">Masukkan data tagihan untuk membuat pembayaran SPP.</p>
+          <div class="space-y-3">
+            <input id="tTenant" value="${qTenant || 'TKITWI04'}" placeholder="tenant_id" class="w-full px-3 py-2 border rounded-lg" />
+            <input id="tStudent" value="${qStudent || '120'}" placeholder="student_id" class="w-full px-3 py-2 border rounded-lg" />
+            <input id="tAmount" type="number" placeholder="Nominal (opsional)" class="w-full px-3 py-2 border rounded-lg" />
+          </div>
+          <button id="payBtn" class="w-full px-6 py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium">
+            <i class="fas fa-bolt mr-2"></i> Bayar SPP (Mode Test)
+          </button>
+        </div>`;
+      document.getElementById('payBtn').addEventListener('click', () => {
+        const t = document.getElementById('tTenant').value.trim();
+        const s = document.getElementById('tStudent').value.trim();
+        const a = document.getElementById('tAmount').value.trim();
+        if (!t || !s) return alert('tenant_id & student_id wajib diisi');
+        createAndPay(t, s, a || undefined);
+      });
+    }
+
+    // Entry point
+    if (orderId) {
+      pollStatus(orderId);
+    } else if (qTenant && qStudent) {
+      createAndPay(qTenant, qStudent, params.get('amount') || undefined);
+    } else {
+      showTestForm();
+    }
+  </script>
+</body>
+</html>

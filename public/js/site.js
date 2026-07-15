@@ -4,6 +4,9 @@
   const navEl = document.getElementById('site-nav');
   const footerEl = document.getElementById('site-footer');
 
+  // Subdomain pembayaran di-serve statis (tanpa Node), jadi API dipanggil dari domain utama.
+  const API_BASE = location.hostname.indexOf('payment.') === 0 ? 'https://app.ypwilutim.com' : '';
+
   const fallback = {
     name: 'YPWI Lutim',
     legal_name: 'Yayasan Pesantren Wahdah Islamiyah Luwu Timur',
@@ -15,7 +18,7 @@
 
   let info = fallback;
   try {
-    const res = await fetch('/api/public/info');
+    const res = await fetch(API_BASE + '/api/public/info');
     if (res.ok) {
       const j = await res.json();
       if (j.success && j.data) info = Object.assign({}, fallback, j.data);
