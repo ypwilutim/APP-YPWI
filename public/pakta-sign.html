@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pakta Integritas YPWILUTIM</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+
+  <style>
+    :root { --brand: #0f766e; --line: #cbd5e1; --bg: #f0f0f0; }
+    * { box-sizing: border-box; }
+    body { background: var(--bg); font-family: Arial, sans-serif; padding: 20px; margin: 0; }
+    #pdf-content {
+      width: 794px; margin: 0 auto; padding: 40px; background: white;
+      border: 1px solid #ccc; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      font-size: 12pt; line-height: 1.45;
+    }
+    .header-img { width: 100%; height: auto; }
+    .sanksi-box { border: 2px solid #d9534f; padding: 15px; background: #fdf7f7; margin: 20px 0; }
+    .sig-container { display: flex; justify-content: flex-end; margin-top: 40px; }
+    .sig-box { text-align: center; width: 250px; }
+    canvas { border-bottom: 1px solid #000; display: block; margin-top: 10px; background: #f8fafc; }
+    #sig-canvas { width: 250px; height: 100px; touch-action: none; background: #fff; }
+    .btn-group { text-align: center; margin-top: 20px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+    button {
+      font: inherit; padding: 10px 20px; border-radius: 10px; border: 1px solid var(--line);
+      background: #fff; cursor: pointer; font-weight: 600;
+    }
+    button.primary { background: var(--brand); color: #fff; border-color: var(--brand); }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    .status { max-width: 700px; margin: 14px auto 0; font-size: 14px; padding: 10px 12px; border-radius: 8px; display: none; }
+    .status.ok { display: block; background: #ecfdf5; color: #065f46; }
+    .status.err { display: block; background: #fef2f2; color: #991b1b; }
+    a.back { display: inline-block; max-width: 700px; margin: 0 auto 6px; color: var(--brand); text-decoration: none; font-size: 13px; }
+
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, .6); backdrop-filter: blur(6px); z-index: 1000; align-items: center; justify-content: center; padding: 1rem; }
+    .modal-container { max-width: 450px; width: 100%; background: #fff; border-radius: 1.5rem; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, .1); display: flex; flex-direction: column; }
+    .modal-header { background: linear-gradient(135deg, #0f766e, #0d9488); padding: 1.5rem; color: #fff; display: flex; align-items: center; gap: 12px; }
+    .btn-primary { background: linear-gradient(135deg, #0f766e, #0d9488); color: #fff; padding: .75rem 1rem; border-radius: .75rem; font-weight: 600; border: none; cursor: pointer; }
+  </style>
+</head>
+
+<body>
+  <a class="back" href="dashboard.html">&larr; Kembali ke Dashboard</a>
+
+  <div id="pdf-content">
+    <div style="border-bottom: 2px solid #000; margin-bottom: 30px;">
+      <img src="/assets/images/header-yayasan.png" class="header-img" alt="Header Yayasan">
+    </div>
+
+    <h2 style="text-align: center; text-decoration: underline; font-size: 14pt; margin-top: 0;">SURAT PERNYATAAN KOMITMEN</h2>
+    <p>Saya yang bertanda tangan di bawah ini:</p>
+    <table style="width: 100%; margin-bottom: 20px;">
+      <tr><td style="width: 140px;">Nama</td><td>: <span id="namaUser">-</span></td></tr>
+      <tr><td>Posisi/Jabatan</td><td>: <span id="jabatanUser">-</span></td></tr>
+      <tr><td>Sekolah</td><td>: <span id="unitUser">-</span></td></tr>
+    </table>
+
+    <div id="dynamic-content">
+      <p>Saya siap untuk mengikuti program coaching <b>THE INFLUENTIAL LEADER</b> bersama Coach Bambang Triyawan
+        dengan total 10 sesi pertemuan dengan sebaik-baiknya dari awal hingga akhir. Termasuk di dalamnya kesiapan
+        untuk mengerjakan tugas-tugas yang diberikan coach secara disiplin dan penuh tanggung jawab.</p>
+      <p>Saya siap untuk menerapkan hasil pembelajaran dalam pekerjaan saya sebagai pimpinan di sekolah.</p>
+      <p>Saya siap untuk menunjukkan loyalitas kepada sekolah tempat saya mengabdi dengan tidak mengundurkan diri dalam
+        waktu 1 tahun ke depan.</p>
+      <p>Saya menyatakan bersedia mengikuti seluruh rangkaian program dengan penuh komitmen. Apabila saya tidak
+        menghadiri secara penuh 10 (sepuluh) kali pertemuan dalam program ini dan/atau tidak mengerjakan tugas yang
+        telah ditetapkan tanpa alasan yang dapat dipertanggungjawabkan, maka saya bersedia mengganti biaya program
+        sebesar <b>Rp1.500.000,-</b> (satu juta lima ratus ribu rupiah).</p>
+      <p>Demikian pernyataan ini saya buat tanpa paksaan pihak manapun dan menjadi pedoman untuk menilai komitmen saya
+        berkaitan dengan program coaching yang akan saya ikuti.</p>
+    </div>
+
+    <div class="sig-container">
+      <div class="sig-box">
+        <p>Luwu Timur, <span id="tglDokumen">-</span></p>
+        <p>Yang Membuat Pernyataan,</p>
+        <canvas id="sig-canvas" width="250" height="100"></canvas>
+        <p style="font-weight: bold; margin-top: 10px;" id="namaUserBawah">-</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="status" id="statusBox"></div>
+
+  <div class="btn-group">
+    <button type="button" onclick="clearSignature()">Hapus Tanda Tangan</button>
+    <button type="button" class="primary" id="btnSign" onclick="generatePDF()">Submit &amp; Simpan PDF</button>
+  </div>
+
+  <!-- Modal Sukses -->
+  <div id="paktaSuccessModal" class="modal-overlay">
+    <div class="modal-container">
+      <div class="modal-header">
+        <i class="fas fa-check-circle" style="font-size: 1.5rem;"></i>
+        <h3 style="margin: 0; font-size: 1.25rem;">Berhasil</h3>
+      </div>
+      <div style="padding: 1.5rem; text-align: center;">
+          <p style="margin: 0; font-size: 0.95rem; line-height: 1.6; color: #334155;">
+            Surat Pernyataan Komitmen berhasil ditandatangani dan dokumen telah dikirim ke email Anda.
+          </p>
+      </div>
+      <div style="padding: 1rem; border-top: 1px solid #e2e8f0; display: flex; gap: 8px;">
+        <button onclick="goToDashboard()" class="btn-primary" style="flex: 1;">Kembali ke Dashboard</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/pakta-sign.js"></script>
+</body>
+
+</html>

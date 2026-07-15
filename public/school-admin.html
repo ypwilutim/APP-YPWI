@@ -478,11 +478,26 @@
       <!-- Students Tab -->
       <div id="studentsTab" class="tab-content hidden">
         <div class="main-card p-6">
-          <div class="flex justify-between items-center mb-6">
+<div class="flex justify-between items-center mb-6">
             <h3 class="text-lg font-semibold text-gray-900">Data Siswa</h3>
-            <button onclick="showAddStudentModal()"
-              class="btn-primary text-white px-4 py-2 rounded-lg text-sm flex items-center"><i
-                class="fas fa-plus mr-2"></i>Tambah Siswa</button>
+<div class="flex space-x-2">
+               <button onclick="showStudentMutasiModal()" class="px-3 py-2 bg-purple-600 text-white rounded-md text-sm hover:bg-purple-700" id="mutasiBtn" disabled>
+                 <i class="fas fa-exchange-alt mr-1"></i>Mutasi
+               </button>
+               <button onclick="showMutasiRecordsModal()" class="px-3 py-2 bg-indigo-600 text-white rounded-md text-sm hover:bg-indigo-700">
+                 <i class="fas fa-list mr-1"></i>List Mutasi
+               </button>
+               <button onclick="exportAllStudents()" class="px-3 py-2 bg-green-600 text-white rounded-md text-sm hover:bg-green-700">
+                 <i class="fas fa-file-excel mr-1"></i>Export Perbaikan
+               </button>
+              <label class="px-3 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 cursor-pointer">
+                <i class="fas fa-upload mr-1"></i>Import Perbaikan
+                <input type="file" id="studentImportInput" accept=".xlsx,.xls,.csv" class="hidden" onchange="importIncompleteStudents(this)">
+              </label>
+              <button onclick="showAddStudentModal()"
+                class="btn-primary text-white px-4 py-2 rounded-lg text-sm flex items-center"><i
+                  class="fas fa-plus mr-2"></i>Tambah Siswa</button>
+            </div>
           </div>
 
           <!-- Search -->
@@ -502,6 +517,9 @@
             <table class="w-full modern-table">
               <thead class="border-b border-gray-200">
                 <tr>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase w-10">
+                    <input type="checkbox" id="selectAllStudents" onchange="toggleSelectAllStudents()">
+                  </th>
                   <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Nama</th>
                   <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">NISN</th>
                   <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">NIS</th>
@@ -513,7 +531,7 @@
               </thead>
               <tbody id="studentsTable" class="divide-y divide-gray-100">
                 <tr>
-                  <td colspan="7" class="px-4 py-12 text-center text-gray-500"><i
+                  <td colspan="8" class="px-4 py-12 text-center text-gray-500"><i
                       class="fas fa-spinner fa-spin text-xl mb-2"></i>
                     <p>Memuat data...</p>
                   </td>
@@ -1040,15 +1058,12 @@
     }
 
     let authToken = token;
-    // currentPage dideklarasi di admin-dashboard.js - jangan dideklarasi ulang
-    if (typeof currentPage === 'undefined') { var currentPage = 1; }
-    var totalPages = 1, pageLimit = 10;
-    let currentMapContext = 'add';
+    // Globals berikut SUDAH dideklarasikan di js/admin-dashboard.js (file ini memuatnya).
+    // Jangan dideklarasi ulang di sini agar tidak terjadi "Identifier has already been declared".
+    // currentPage, totalPages, pageLimit, currentMapContext, currentStudentPage,
+    // studentLimit, totalStudents, totalStudentPages, studentSortBy, studentSortDir, setEl
     let schoolAdminMap = null, schoolAdminMarker = null;
-    let currentStudentPage = 1, studentLimit = 25, totalStudents = 0, totalStudentPages = 0;
     let studentClassList = [];
-
-    function setEl(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
 
     function updateToggleVisual(checkbox) {
       const track = checkbox.closest('.relative')?.querySelector('.toggle-track');
@@ -1739,46 +1754,54 @@ document.getElementById('promoteForm').addEventListener('submit', async (e) => {
         if (data.success) {
           totalStudents = data.pagination?.total || 0;
           totalStudentPages = data.pagination?.totalPages || 1;
-          // Sort data di frontend: kelas 1A,1B,2A,2B,... lalu nama A-Z
-          let sortedData = [...data.data];
-          sortedData.sort((a, b) => {
-            // Parse kelas: "1A" -> {num: 1, huruf: "A"}, "1B" -> {num: 1, huruf: "B"}
-            const parseKelas = (kelas) => {
-              const m = (kelas || '').match(/(\d+)([A-Za-z])/);
-              if (m) return { num: parseInt(m[1]), huruf: m[2].toUpperCase() };
-              const m2 = (kelas || '').match(/(\d+)/);
-              return m2 ? { num: parseInt(m2[1]), huruf: '' } : { num: 999, huruf: '' };
-            };
-            const ka = parseKelas(a.nama_kelas);
-            const kb = parseKelas(b.nama_kelas);
-            // Urut nomor kelas dulu
-            if (ka.num !== kb.num) return ka.num - kb.num;
-            // Baru urut huruf kelas (A, B, C...)
-            if (ka.huruf !== kb.huruf) return ka.huruf.localeCompare(kb.huruf);
-            // Terakhir urut nama siswa A-Z
-            return (a.nama_siswa || '').localeCompare(b.nama_siswa || '');
-          });
-          tbody.innerHTML = sortedData.map(s => `
-            <tr class="hover:bg-gray-50">
-              <td class="px-4 py-3 text-sm text-gray-900 font-medium">${s.nama_siswa || '-'}</td>
+// Sort data di frontend: siswa tanpa kelas dulu, lalu kelas 1A,1B,2A,2B,... lalu nama A-Z
+           let sortedData = [...data.data];
+           sortedData.sort((a, b) => {
+             // Siswa tanpa kelas muncul paling atas
+             const aNoClass = !a.nama_kelas || a.class_id === null;
+             const bNoClass = !b.nama_kelas || b.class_id === null;
+             if (aNoClass && !bNoClass) return -1;
+             if (!aNoClass && bNoClass) return 1;
+             
+             // Parse kelas: "1A" -> {num: 1, huruf: "A"}, "1B" -> {num: 1, huruf: "B"}
+             const parseKelas = (kelas) => {
+               const m = (kelas || '').match(/(\d+)([A-Za-z])/);
+               if (m) return { num: parseInt(m[1]), huruf: m[2].toUpperCase() };
+               const m2 = (kelas || '').match(/(\d+)/);
+               return m2 ? { num: parseInt(m2[1]), huruf: '' } : { num: 999, huruf: '' };
+             };
+             const ka = parseKelas(a.nama_kelas);
+             const kb = parseKelas(b.nama_kelas);
+             // Urut nomor kelas dulu
+             if (ka.num !== kb.num) return ka.num - kb.num;
+             // Baru urut huruf kelas (A, B, C...)
+             if (ka.huruf !== kb.huruf) return ka.huruf.localeCompare(kb.huruf);
+             // Terakhir urut nama siswa A-Z
+             return (a.nama_siswa || '').localeCompare(b.nama_siswa || '');
+           });
+tbody.innerHTML = sortedData.map(s => `
+            <tr class="hover:bg-gray-50 ${!s.nama_kelas || s.class_id === null ? 'bg-yellow-50' : ''}">
+              <td class="px-4 py-3 text-sm text-center">
+                <input type="checkbox" class="student-checkbox" value="${s.id}" onchange="updateMutasiBtnState()">
+              </td>
+              <td class="px-4 py-3 text-sm text-gray-900 font-medium">${s.nama_siswa || '-'} ${!s.nama_kelas || s.class_id === null ? '<span class="text-xs text-yellow-600 font-semibold">(Belum ada kelas)</span>' : ''}</td>
               <td class="px-4 py-3 text-sm text-gray-500">${s.nisn || '-'}</td>
               <td class="px-4 py-3 text-sm text-gray-500">${s.nis || '-'}</td>
               <td class="px-4 py-3 text-sm text-gray-500">${s.nama_kelas || '-'}</td>
               <td class="px-4 py-3 text-sm text-gray-500">${s.nama_orang_tua || '-'}<br><small>${s.no_wa_ortu || ''}</small></td>
               <td class="px-4 py-3 text-sm text-gray-500">Rp ${(s.iuran_bulanan || 0).toLocaleString('id-ID')}</td>
               <td class="px-4 py-3 text-sm space-x-1">
-                <button onclick="editStudent(${s.id})" class="inline-flex items-center p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md" title="Edit"><i class="fas fa-edit text-xs"></i></button>
-                <button onclick="updateStudentPayment(${s.id}, ${s.iuran_bulanan || 0})" class="inline-flex items-center p-1.5 text-green-600 hover:text-green-800 hover:bg-green-50 rounded-md" title="Update Iuran"><i class="fas fa-wallet text-xs"></i></button>
-                <button onclick="deleteStudent(${s.id})" class="inline-flex items-center p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md" title="Hapus"><i class="fas fa-trash text-xs"></i></button>
+                <button onclick="window.editStudent(${s.id})" class="inline-flex items-center p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md" title="Edit"><i class="fas fa-edit text-xs"></i></button>
+                <button onclick="showStudentMutasiModal(${s.id}, '${s.nama_siswa || ''}', '${s.nama_sekolah || ''}', '${s.tenant_id || ''}')" class="inline-flex items-center p-1.5 text-purple-600 hover:text-purple-800 hover:bg-purple-50 rounded-md" title="Mutasi"><i class="fas fa-exchange-alt text-xs"></i></button>
               </td>
             </tr>
-          `).join('') || '<tr><td colspan="7" class="px-4 py-12 text-center text-gray-500">Belum ada data siswa</td></tr>';
+          `).join('') || '<tr><td colspan="8" class="px-4 py-12 text-center text-gray-500">Belum ada data siswa</td></tr>';
           renderStudentPagination();
         } else {
-          tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-12 text-center text-red-500">Gagal memuat data</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-12 text-center text-red-500">Gagal memuat data</td></tr>';
         }
       } catch (error) {
-        tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-12 text-center text-red-500">Error: ' + error.message + '</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-12 text-center text-red-500">Error: ' + error.message + '</td></tr>';
       }
     };
 
@@ -1821,19 +1844,165 @@ document.getElementById('promoteForm').addEventListener('submit', async (e) => {
       }
     };
 
+    // ===== INCOMPLETE STUDENTS MODAL =====
+    async function fetchIncompleteStudents() {
+      try {
+        const r = await fetch(apiUrl('/admin/students/incomplete'), { headers: { 'Authorization': `Bearer ${authToken}` } });
+        if (checkAuth401403(r)) return null;
+        const d = await r.json();
+        if (!d.success) return null;
+        return d.data || [];
+      } catch (e) {
+        console.error('[INCOMPLETE]', e);
+        return null;
+      }
+    }
+
+    function renderIncompleteStudents(students) {
+      const countEl = document.getElementById('incompleteStudentsCount');
+      const listEl = document.getElementById('incompleteStudentsList');
+      if (!countEl || !listEl) return;
+
+      if (!students || students.length === 0) {
+        countEl.textContent = 'Semua data siswa sudah lengkap. 🎉';
+        listEl.innerHTML = '<div class="text-center py-8 text-green-600"><i class="fas fa-check-circle text-3xl mb-2"></i><p>Tidak ada siswa dengan data belum lengkap.</p></div>';
+        return;
+      }
+
+      countEl.textContent = `Terdapat ${students.length} siswa dengan data belum lengkap.`;
+      listEl.innerHTML = students.map(s => {
+        const parentMissing = s.missing.some(m => m.includes('Orang Tua') || m.includes('WA'));
+        const badges = s.missing.map(m =>
+          `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${m.includes('Orang Tua') || m.includes('WA') ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'}">${m}</span>`
+        ).join(' ');
+        return `
+          <div class="p-4 bg-gray-50 rounded-lg border ${parentMissing ? 'border-red-200' : 'border-gray-200'}">
+            <div class="flex items-start justify-between">
+              <div>
+                <h4 class="font-medium text-gray-900">${s.nama_siswa || '-'}</h4>
+                <p class="text-xs text-gray-500 mt-0.5">${s.nama_kelas || '-'} • NISN: ${s.nisn || '-'}</p>
+              </div>
+              <button onclick="switchTab('students'); closeIncompleteStudentsModal();" class="text-blue-600 hover:text-blue-800 text-sm font-medium">Lengkapi <i class="fas fa-arrow-right ml-1"></i></button>
+            </div>
+            <div class="mt-2 flex flex-wrap gap-1">${badges}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    window.openIncompleteStudentsModal = async function () {
+      const modal = document.getElementById('incompleteStudentsModal');
+      const listEl = document.getElementById('incompleteStudentsList');
+      if (modal) modal.classList.add('show');
+      if (listEl) listEl.innerHTML = '<div class="text-center py-8 text-gray-500"><i class="fas fa-spinner fa-spin text-xl mb-2"></i><p>Memuat data...</p></div>';
+      const students = await fetchIncompleteStudents();
+      renderIncompleteStudents(students);
+    };
+
+    window.closeIncompleteStudentsModal = function () {
+      const modal = document.getElementById('incompleteStudentsModal');
+      if (modal) modal.classList.remove('show');
+    };
+
+    // Auto-show only if there are incomplete students
+    window.autoShowIncompleteStudentsModal = async function () {
+      const students = await fetchIncompleteStudents();
+      if (students && students.length > 0) {
+        renderIncompleteStudents(students);
+        const modal = document.getElementById('incompleteStudentsModal');
+        if (modal) modal.classList.add('show');
+      }
+    };
+
+    // Export incomplete students to Excel (authenticated download)
+    window.exportIncompleteStudents = async function () {
+      try {
+        const url = apiUrl('/admin/students/incomplete/export');
+        const r = await fetch(url, { headers: { 'Authorization': `Bearer ${authToken}` } });
+        if (checkAuth401403(r)) return;
+        if (!r.ok) { Swal.fire('Gagal', 'Tidak dapat mengexport data', 'error'); return; }
+        const blob = await r.blob();
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = `siswa_belum_lengkap_${tenantId}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(downloadUrl);
+      } catch (e) {
+        console.error('[EXPORT]', e);
+        Swal.fire('Error', 'Terjadi kesalahan saat export', 'error');
+      }
+    };
+
+    // Export ALL students to Excel for bulk editing
+    window.exportAllStudents = async function () {
+      try {
+        const url = apiUrl('/admin/students/export');
+        const r = await fetch(url, { headers: { 'Authorization': `Bearer ${authToken}` } });
+        if (checkAuth401403(r)) return;
+        if (!r.ok) { Swal.fire('Gagal', 'Tidak dapat mengexport data', 'error'); return; }
+        const blob = await r.blob();
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = `data_siswa_${tenantId}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(downloadUrl);
+      } catch (e) {
+        console.error('[EXPORT ALL]', e);
+        Swal.fire('Error', 'Terjadi kesalahan saat export', 'error');
+      }
+    };
+
+    // Import edited Excel to update students
+    window.importIncompleteStudents = async function (input) {
+      const file = input.files && input.files[0];
+      if (!file) return;
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('tenant_id', tenantId);
+
+      Swal.fire({ title: 'Mengupload...', text: 'Memproses file excel', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+      try {
+        const r = await fetch(apiUrl('/admin/students/incomplete/import'), {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${authToken}` },
+          body: formData
+        });
+        const d = await r.json();
+        if (d.success) {
+          let msg = `${d.updated} siswa berhasil diperbarui.`;
+          if (d.errors && d.errors.length) msg += `\n${d.errors.length} baris gagal:\n` + d.errors.slice(0, 10).join('\n');
+          await Swal.fire('Selesai', msg, d.errors && d.errors.length ? 'warning' : 'success');
+          // Refresh student list
+          loadStudents(currentStudentPage);
+          // Also refresh incomplete modal if open
+          const modal = document.getElementById('incompleteStudentsModal');
+          if (modal && modal.classList.contains('show')) {
+            const students = await fetchIncompleteStudents();
+            renderIncompleteStudents(students);
+          }
+        } else {
+          Swal.fire('Gagal', d.message || 'Import gagal', 'error');
+        }
+      } catch (e) {
+        console.error('[IMPORT]', e);
+        Swal.fire('Error', 'Terjadi kesalahan saat import', 'error');
+      } finally {
+        input.value = '';
+      }
+    };
+
+    // Edit student - opens modal with all fields (delegates to window.editStudent from admin-dashboard.js)
     async function editStudent(id) {
-      const { value: newIuran } = await Swal.fire({
-        title: 'Update Iuran Bulanan',
-        input: 'number',
-        inputLabel: 'Iuran Bulanan Baru',
-        inputValue: 0,
-        inputAttributes: { min: 0, step: 1000 },
-        showCancelButton: true,
-        confirmButtonText: 'Update',
-        cancelButtonText: 'Batal'
-      });
-      if (newIuran !== undefined) {
-        updateStudentPayment(id, newIuran);
+      if (typeof window.editStudent === 'function') {
+        window.editStudent(id);
+      } else {
+        console.error('editStudent function not available');
       }
     }
 
@@ -1867,6 +2036,273 @@ document.getElementById('promoteForm').addEventListener('submit', async (e) => {
         else showToast(d.message || 'Gagal', 'error');
       } catch (e) { console.error('[DEL STUDENT]', e); showToast('Terjadi kesalahan', 'error'); }
     }
+
+    // Student Mutasi Functions
+    window.toggleSelectAllStudents = function () {
+      const selectAll = document.getElementById('selectAllStudents');
+      const checkboxes = document.querySelectorAll('.student-checkbox');
+      checkboxes.forEach(cb => cb.checked = selectAll.checked);
+      updateMutasiBtnState();
+    };
+
+    window.updateMutasiBtnState = function () {
+      const checked = document.querySelectorAll('.student-checkbox:checked');
+      const btn = document.getElementById('mutasiBtn');
+      if (btn) btn.disabled = checked.length === 0;
+    };
+
+    window.showStudentMutasiModal = async function (id, namaSiswa, oldSchool, oldTenant) {
+      const modal = document.getElementById('studentMutasiModal');
+      if (!modal) return;
+      
+      // If called from header button without args, get selected students
+      if (!id) {
+        const checked = Array.from(document.querySelectorAll('.student-checkbox:checked')).map(cb => cb.value);
+        if (checked.length === 0) return;
+        if (checked.length === 1) {
+          id = checked[0];
+        } else {
+          // For multiple selection, show bulk mutasi modal
+          openBulkMutasiModal(checked);
+          return;
+        }
+      }
+      
+      document.getElementById('mutasiStudentId').value = id;
+      document.getElementById('mutasiOldSchool').value = oldSchool || '-';
+      document.getElementById('mutasiReason').value = '';
+      
+      // Populate tenant dropdown
+      const targetSel = document.getElementById('mutasiTarget');
+      const tenantsRes = await fetch(apiUrl('/admin/tenants?limit=500'), { headers: { 'Authorization': `Bearer ${authToken}` } });
+      const tenantsData = await tenantsRes.json();
+      const tenants = tenantsData.success ? tenantsData.data : [];
+      targetSel.innerHTML = '<option value="">Pilih Sekolah Tujuan</option>' +
+        tenants.filter(t => t.tenant_id !== oldTenant).map(t => `<option value="${t.tenant_id}">${t.nama_sekolah}</option>`).join('') +
+        '<option value="other">Lainnya...</option>';
+      
+      document.getElementById('mutasiOtherInput').classList.add('hidden');
+      modal.classList.add('show');
+    };
+
+    window.toggleMutasiOtherInput = function () {
+      const target = document.getElementById('mutasiTarget').value;
+      const otherInput = document.getElementById('mutasiOtherInput');
+      otherInput.classList.toggle('hidden', target !== 'other');
+    };
+
+    window.closeStudentMutasiModal = function () {
+      const modal = document.getElementById('studentMutasiModal');
+      if (modal) modal.classList.remove('show');
+    };
+
+    // Bulk mutasi modal opener
+    window.openBulkMutasiModal = async function (ids) {
+      const modal = document.getElementById('studentMutasiModal');
+      if (!modal) return;
+      document.getElementById('mutasiStudentId').value = ids.join(',');
+      document.getElementById('mutasiOldSchool').value = ids.length + ' siswa dipilih';
+      document.getElementById('mutasiReason').value = '';
+
+      const targetSel = document.getElementById('mutasiTarget');
+      const tenantsRes = await fetch(apiUrl('/admin/tenants?limit=500'), { headers: { 'Authorization': `Bearer ${authToken}` } });
+      const tenantsData = await tenantsRes.json();
+      const tenants = tenantsData.success ? tenantsData.data : [];
+      targetSel.innerHTML = '<option value="">Pilih Sekolah Tujuan</option>' +
+        tenants.map(t => `<option value="${t.tenant_id}">${t.nama_sekolah}</option>`).join('') +
+        '<option value="other">Lainnya...</option>';
+
+      document.getElementById('mutasiOtherInput').classList.add('hidden');
+      modal.classList.add('show');
+    };
+
+    window.submitStudentMutasi = async function () {
+      const idInput = document.getElementById('mutasiStudentId').value;
+      const ids = idInput.includes(',') ? idInput.split(',').map(s => s.trim()) : [idInput];
+      const targetTenant = document.getElementById('mutasiTarget').value;
+      const otherSchoolName = document.getElementById('mutasiOtherSchoolName').value.trim();
+      const reason = document.getElementById('mutasiReason').value.trim();
+
+      if (!targetTenant) {
+        Swal.fire('Error', 'Pilih tujuan mutasi', 'error');
+        return;
+      }
+
+      try {
+        const promises = ids.map(sid =>
+          fetch(apiUrl('/admin/students/' + sid + '/mutasi'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+            body: JSON.stringify({ 
+              target_tenant_id: targetTenant, 
+              target_tenant_name: otherSchoolName || null,
+              reason 
+            })
+          }).then(r => r.json())
+        );
+        const results = await Promise.all(promises);
+        const success = results.filter(r => r.success).length;
+        closeStudentMutasiModal();
+        loadStudents(currentStudentPage);
+        showToast(`${success}/${ids.length} siswa berhasil dimutasi`, 'success');
+      } catch (e) {
+        console.error('[BULK MUTASI]', e);
+        showToast('Terjadi kesalahan', 'error');
+      }
+    };
+
+window.showMutasiRecordsModal = async function () {
+      const modal = document.getElementById('mutasiRecordsModal');
+      const list = document.getElementById('mutasiRecordsList');
+      if (modal) modal.classList.add('show');
+      if (list) list.innerHTML = '<div class="text-center py-8 text-gray-500"><i class="fas fa-spinner fa-spin text-xl mb-2"></i><p>Memuat data...</p>';
+      try {
+        const r = await fetch(apiUrl('/admin/mutasi/students'), { headers: { 'Authorization': `Bearer ${authToken}` } });
+        const d = await r.json();
+        if (d.success && d.data.length > 0) {
+          list.innerHTML = `
+            <div class="mb-4 flex justify-between items-center">
+              <div class="flex items-center gap-2">
+                <input type="checkbox" id="selectAllMutasi" onchange="toggleSelectAllMutasi()" class="w-4 h-4 text-blue-600">
+                <label for="selectAllMutasi" class="text-sm font-medium text-gray-700">Pilih Semua</label>
+              </div>
+              <button onclick="openBulkAssignClassModal()" class="px-3 py-1.5 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 disabled:opacity-50" id="bulkAssignClassBtn" disabled>
+                <i class="fas fa-chalkboard-teacher mr-1"></i>Set Kelas Massal
+              </button>
+            </div>
+            ${d.data.map(m => `
+              <div class="bg-gray-50 rounded-lg p-3 border border-gray-200 mb-2">
+                <div class="flex items-start justify-between">
+                  <div class="flex items-start gap-2">
+                    <input type="checkbox" class="mutasi-checkbox" value="${m.student_id}" onchange="updateMutasiClassBtnState()">
+                    <div>
+                      <div class="font-semibold text-gray-900">${m.nama_siswa}</div>
+                      <div class="text-sm text-gray-600 mt-0.5">NISN: ${m.nisn || '-'} • Dari: ${m.old_school || 'Tidak diketahui'} → Ke: ${m.new_school || m.new_tenant_id}</div>
+                      <div class="text-xs text-gray-500 mt-1">${m.reason || 'Tanpa alasan'}</div>
+                    </div>
+                  </div>
+                  <button onclick="assignClassToStudent(${m.student_id})" class="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700">Set Kelas</button>
+                </div>
+              </div>
+            `).join('')}
+          `;
+        } else {
+          list.innerHTML = '<div class="text-center py-8 text-gray-500">Belum ada siswa dalam mutasi pool untuk tenant ini</div>';
+        }
+      } catch (e) {
+        list.innerHTML = '<div class="text-center py-8 text-red-500">Error memuat data</div>';
+      }
+    };
+
+    window.toggleSelectAllMutasi = function () {
+      const selectAll = document.getElementById('selectAllMutasi');
+      const checkboxes = document.querySelectorAll('.mutasi-checkbox');
+      checkboxes.forEach(cb => cb.checked = selectAll.checked);
+      updateMutasiClassBtnState();
+    };
+
+    window.updateMutasiClassBtnState = function () {
+      const checked = document.querySelectorAll('.mutasi-checkbox:checked').length;
+      const btn = document.getElementById('bulkAssignClassBtn');
+      if (btn) btn.disabled = checked === 0;
+    };
+
+window.assignClassToStudent = async function (studentId) {
+       const classes = await fetch(apiUrl('/admin/classes?limit=1000'), { headers: { 'Authorization': `Bearer ${authToken}` } }).then(r => r.json());
+       const classOptions = (classes.data || []).map(c => `<option value="${c.id}">${c.tingkatan ? c.tingkatan + ' - ' : ''}${c.nama_kelas}</option>`).join('');
+       const { value: classId } = await Swal.fire({
+         title: 'Pilih Kelas',
+         html: `<select id="swalClass" class="w-full px-3 py-2 border border-gray-300 rounded-md">${classOptions}</select>`,
+         showCancelButton: true,
+         confirmButtonText: 'Set Kelas',
+         preConfirm: () => document.getElementById('swalClass').value
+       });
+      if (classId) {
+        const r = await fetch(apiUrl('/admin/students/' + studentId + '/class'), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+          body: JSON.stringify({ class_id: classId })
+        });
+        const d = await r.json();
+        if (d.success) {
+          showToast('Kelas berhasil diset', 'success');
+          loadStudents(currentStudentPage);
+          showMutasiRecordsModal();
+        } else {
+          showToast(d.message || 'Gagal set kelas', 'error');
+        }
+      }
+    };
+
+    window.openBulkAssignClassModal = async function () {
+      const checkedIds = Array.from(document.querySelectorAll('.mutasi-checkbox:checked')).map(cb => parseInt(cb.value));
+      if (checkedIds.length === 0) {
+        showToast('Pilih minimal satu siswa', 'warning');
+        return;
+      }
+      // Store for sequential assignment
+      window.bulkAssignStudentIds = checkedIds;
+      window.bulkAssignCurrentIndex = 0;
+      showBulkAssignClassModal();
+    };
+
+    window.showBulkAssignClassModal = async function () {
+      const ids = window.bulkAssignStudentIds || [];
+      const idx = window.bulkAssignCurrentIndex || 0;
+      if (idx >= ids.length) {
+        delete window.bulkAssignStudentIds;
+        delete window.bulkAssignCurrentIndex;
+        document.getElementById('bulkAssignClassModal')?.classList.remove('show');
+        showToast('Semua siswa berhasil di-assign kelas', 'success');
+        loadStudents(currentStudentPage);
+        showMutasiRecordsModal();
+        return;
+      }
+      const studentId = ids[idx];
+      const r = await fetch(apiUrl('/admin/students/' + studentId), { headers: { 'Authorization': `Bearer ${authToken}` } }).then(r => r.json());
+      const student = r.data;
+      const classes = await fetch(apiUrl('/admin/classes?limit=1000'), { headers: { 'Authorization': `Bearer ${authToken}` } }).then(r => r.json());
+      const classOptions = (classes.data || []).map(c => `<option value="${c.id}">${c.tingkatan ? c.tingkatan + ' - ' : ''}${c.nama_kelas}</option>`).join('');
+      const modal = document.getElementById('bulkAssignClassModal');
+      const content = document.getElementById('bulkAssignClassContent');
+      if (modal && content) {
+        content.innerHTML = `
+          <div class="mb-4">
+            <h4 class="font-semibold text-gray-900">${idx + 1}/${ids.length}: ${student.nama_siswa}</h4>
+            <p class="text-sm text-gray-500">NISN: ${student.nisn || '-'} • Dari: ${student.old_school || 'Tidak diketahui'}</p>
+          </div>
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Pilih Kelas</label>
+            <select id="bulkAssignClassSelect" class="w-full px-3 py-2 border border-gray-300 rounded-md">${classOptions}</select>
+          </div>
+        `;
+        modal.classList.add('show');
+        window.currentBulkStudentId = studentId;
+      }
+    };
+
+    window.confirmBulkAssignClass = async function () {
+      const classId = document.getElementById('bulkAssignClassSelect')?.value;
+      const studentId = window.currentBulkStudentId;
+      if (!classId) return;
+      const r = await fetch(apiUrl('/admin/students/' + studentId + '/class'), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+        body: JSON.stringify({ class_id: classId })
+      });
+      const d = await r.json();
+      if (d.success) {
+        window.bulkAssignCurrentIndex = (window.bulkAssignCurrentIndex || 0) + 1;
+        showBulkAssignClassModal();
+      } else {
+        showToast(d.message || 'Gagal', 'error');
+      }
+    };
+
+    window.closeMutasiRecordsModal = function () {
+      const modal = document.getElementById('mutasiRecordsModal');
+      if (modal) modal.classList.remove('show');
+    };
 
     window.showAddStudentModal = function () {
       const form = document.getElementById('studentForm');
@@ -3155,7 +3591,45 @@ document.getElementById('ruleForm')?.addEventListener('submit', async (e) => {
     </div>
 
     <script src="js/admin-dashboard.js"></script>
-    <script>
+   <!-- Incomplete Students Modal -->
+   <div id="incompleteStudentsModal" class="modal fixed inset-0 bg-black bg-opacity-50 z-[10000] justify-center items-center">
+     <div class="main-card w-full max-w-3xl mx-4 bg-white max-h-[90vh] flex flex-col">
+       <div class="p-5 border-b border-gray-100 flex items-center justify-between">
+         <div class="flex items-center">
+           <div class="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center mr-3">
+             <i class="fas fa-exclamation-triangle text-amber-600"></i>
+           </div>
+           <div>
+             <h3 class="text-lg font-semibold text-gray-900">Data Siswa Belum Lengkap</h3>
+             <p class="text-gray-600 text-sm">Siswa dengan data terutama orang tua yang belum diisi</p>
+           </div>
+         </div>
+         <button onclick="closeIncompleteStudentsModal()" class="text-gray-400 hover:text-gray-600">
+           <i class="fas fa-times text-xl"></i>
+         </button>
+       </div>
+       <div class="p-5 overflow-y-auto flex-1">
+         <div id="incompleteStudentsCount" class="mb-3 text-sm text-gray-600"></div>
+         <div id="incompleteStudentsList" class="space-y-3">
+           <div class="text-center py-8 text-gray-500"><i class="fas fa-spinner fa-spin text-xl mb-2"></i><p>Memuat data...</p></div>
+         </div>
+       </div>
+       <div class="p-4 border-t border-gray-100 flex flex-wrap items-center justify-between gap-2">
+         <div class="flex items-center space-x-2">
+           <button onclick="exportIncompleteStudents()" class="inline-flex items-center px-3 py-2 bg-green-600 text-white rounded-md text-sm font-medium hover:bg-green-700">
+             <i class="fas fa-file-excel mr-2"></i>Export Excel
+           </button>
+           <button onclick="document.getElementById('incompleteImportInput').click()" class="inline-flex items-center px-3 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700">
+             <i class="fas fa-upload mr-2"></i>Upload Excel
+           </button>
+           <input type="file" id="incompleteImportInput" accept=".xlsx,.xls,.csv" class="hidden" onchange="importIncompleteStudents(this)">
+         </div>
+         <button onclick="closeIncompleteStudentsModal()" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-md text-sm font-medium hover:bg-gray-200">Tutup</button>
+       </div>
+     </div>
+   </div>
+
+  <script>
       // Load bill status when WhatsApp tab is shown - will be called by showTab function
       // If element exists immediately (page loaded on whatsapp tab), load it
       if (document.getElementById('whatsappStatus')) {
@@ -3275,7 +3749,145 @@ document.getElementById('ruleForm')?.addEventListener('submit', async (e) => {
           });
         }
       }
+
+      // Auto-show modal for incomplete student data (esp. parent data)
+      autoShowIncompleteStudentsModal();
     </script>
-  </body>
+
+  <!-- Student Edit Modal (shared with admin-dashboard.js) -->
+  <div id="studentEditModal" class="modal fixed inset-0 bg-black bg-opacity-50 z-[10000] justify-center items-center">
+    <div class="main-card w-full max-w-2xl mx-4 bg-white max-h-[90vh] flex flex-col">
+      <div class="p-5 border-b border-gray-100 flex items-center justify-between">
+        <div class="flex items-center">
+          <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+            <i class="fas fa-user-graduate text-blue-600"></i>
+          </div>
+          <div>
+            <h3 class="text-lg font-semibold text-gray-900">Edit Data Siswa</h3>
+            <p class="text-gray-600 text-sm">Semua field dari tabel students &amp; parents</p>
+          </div>
+        </div>
+        <button onclick="closeStudentEditModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
+      </div>
+      <div class="p-5 overflow-y-auto flex-1">
+        <input type="hidden" id="editStudentId">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Sekolah (Tenant)</label>
+            <select id="editStudentTenant" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"></select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Kelas</label>
+            <select id="editStudentClass" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"></select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Nama Siswa</label>
+            <input type="text" id="editStudentNama" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">NIS</label>
+            <input type="text" id="editStudentNis" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">NISN</label>
+            <input type="text" id="editStudentNisn" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Jenis Kelamin</label>
+            <select id="editStudentJk" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600">
+              <option value="">--</option>
+              <option value="L">Laki-laki</option>
+              <option value="P">Perempuan</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Iuran Bulanan (Rp)</label>
+            <input type="number" id="editStudentIuran" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600" min="0" step="1000">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Nama Orang Tua</label>
+            <input type="text" id="editStudentParent" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">No. WA Orang Tua</label>
+            <input type="text" id="editStudentWa" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600">
+          </div>
+        </div>
+      </div>
+      <div class="p-4 border-t border-gray-100 flex justify-end space-x-2">
+        <button onclick="closeStudentEditModal()" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-md text-sm font-medium hover:bg-gray-200">Batal</button>
+        <button onclick="saveStudentEdit()" class="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700">Simpan</button>
+</div>
+    </div>
+  </div>
+
+<!-- Bulk Assign Class Modal -->
+   <div id="bulkAssignClassModal" class="modal fixed inset-0 bg-black bg-opacity-50 z-[20000] justify-center items-center">
+    <div class="main-card w-full max-w-md mx-4 bg-white">
+      <div class="p-5 border-b border-gray-100 flex items-center justify-between">
+        <h3 class="text-lg font-semibold text-gray-900">Set Kelas Siswa</h3>
+        <button onclick="document.getElementById('bulkAssignClassModal')?.classList.remove('show')" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
+      </div>
+      <div class="p-5" id="bulkAssignClassContent">
+        <div class="text-center py-4 text-gray-500"><i class="fas fa-spinner fa-spin"></i></div>
+      </div>
+      <div class="p-4 border-t border-gray-100 flex justify-end space-x-2">
+        <button onclick="document.getElementById('bulkAssignClassModal')?.classList.remove('show')" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-md text-sm hover:bg-gray-200">Batal</button>
+        <button onclick="confirmBulkAssignClass()" class="px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700">Set Kelas</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Student Mutasi Modal -->
+  <div id="studentMutasiModal" class="modal fixed inset-0 bg-black bg-opacity-50 z-[10001] justify-center items-center">
+    <div class="main-card w-full max-w-lg mx-4 bg-white">
+      <div class="p-5 border-b border-gray-100 flex items-center justify-between">
+        <h3 class="text-lg font-semibold text-gray-900">Mutasi Siswa</h3>
+        <button onclick="closeStudentMutasiModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
+      </div>
+      <div class="p-5">
+        <input type="hidden" id="mutasiStudentId">
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Sekolah Asal</label>
+          <input type="text" id="mutasiOldSchool" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm bg-gray-50" readonly>
+        </div>
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Tujuan Mutasi</label>
+          <select id="mutasiTarget" onchange="toggleMutasiOtherInput()" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500">
+            <option value="">Pilih Sekolah Tujuan</option>
+          </select>
+        </div>
+        <div id="mutasiOtherInput" class="mb-4 hidden">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Nama Sekolah Baru (boleh kosong)</label>
+          <input type="text" id="mutasiOtherSchoolName" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500" placeholder="Nama sekolah tujuan...">
+        </div>
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Alasan Mutasi</label>
+          <textarea id="mutasiReason" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500" rows="3" placeholder="Alasan mutasi..."></textarea>
+        </div>
+      </div>
+      <div class="p-4 border-t border-gray-100 flex justify-end space-x-2">
+        <button onclick="closeStudentMutasiModal()" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-md text-sm font-medium hover:bg-gray-200">Batal</button>
+        <button onclick="submitStudentMutasi()" class="px-4 py-2 bg-purple-600 text-white rounded-md text-sm font-medium hover:bg-purple-700">Mutasi Sekarang</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mutasi Records Modal -->
+<div id="mutasiRecordsModal" class="modal fixed inset-0 bg-black bg-opacity-50 z-[10001] justify-center items-center">
+     <div class="main-card w-full max-w-3xl mx-4 bg-white max-h-[80vh] flex flex-col">
+       <div class="p-5 border-b border-gray-100 flex items-center justify-between">
+         <h3 class="text-lg font-semibold text-gray-900">Siswa Mutasi (Belum Ada Kelas)</h3>
+         <button onclick="closeMutasiRecordsModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
+       </div>
+       <div class="p-5 overflow-y-auto flex-1">
+         <div id="mutasiRecordsList" class="space-y-3">
+           <div class="text-center py-8 text-gray-500"><i class="fas fa-spinner fa-spin text-xl mb-2"></i><p>Memuat data...</p></div>
+         </div>
+</div>
+    </div>
+  </div>
+
+    </body>
 
 </html>

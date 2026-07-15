@@ -13,9 +13,50 @@ const router = express.Router();
 
 const COMPONENTS = [
   'gaji_pokok', 'tunj_kinerja', 'tunj_umum', 'tunj_istri',
-  'tunj_anak', 'tunj_kepala_sekolah', 'tunj_wali_kelas', 'honor_bendahara'
+  'tunj_anak', 'tunj_kepala_sekolah', 'tunj_wali_kelas', 'honor_bendahara', 'tunj_kehadiran'
 ];
 const SALARY_FIELDS = [...COMPONENTS, 'potongan'];
+const MONTH_NAMES = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+
+// Kategori potongan absensi (global, diatur di tabel payroll_settings)
+const DEDUCTION_FIELDS = [
+  'potongan_terlambat', 'potongan_izin', 'potongan_sakit',
+  'potongan_tanpa_keterangan', 'potongan_tidak_hadir', 'tunj_kehadiran'
+];
+
+const DAY_MAP = { minggu: 0, senin: 1, selasa: 2, rabu: 3, kamis: 4, jumat: 5, sabtu: 6 };
+
+// Hitung jumlah hari kerja di bulan tsb berdasarkan attendance_rules tenant
+async function getWorkingDays(tenantId, bulan, tahun) {
+  const lastDay = new Date(tahun, bulan, 0).getDate();
+  let rules;
+  if (tenantId) {
+    rules = await db.query('SELECT hari_kerja FROM attendance_rules WHERE tenant_id = ? AND is_active = 1', [tenantId]);
+  } else {
+    rules = await db.query('SELECT hari_kerja FROM attendance_rules WHERE is_active = 1');
+  }
+  const workSet = new Set();
+  (rules || []).forEach(r => {
+    (r.hari_kerja || '').split(',').forEach(d => {
+      const key = (d || '').trim().toLowerCase();
+      if (DAY_MAP[key] !== undefined) workSet.add(DAY_MAP[key]);
+    });
+  });
+  if (workSet.size === 0) [1, 2, 3, 4, 5, 6].forEach(d => workSet.add(d)); // default sekolah
+  let count = 0;
+  for (let d = 1; d <= lastDay; d++) {
+    if (workSet.has(new Date(tahun, bulan - 1, d).getDay())) count++;
+  }
+  return count;
+}
+
+async function getDeductionSettings() {
+  const rows = await db.query('SELECT * FROM payroll_settings WHERE id = 1');
+  if (rows.length) return rows[0];
+  await db.query('INSERT INTO payroll_settings (id) VALUES (1) ON DUPLICATE KEY UPDATE id = id');
+  const created = await db.query('SELECT * FROM payroll_settings WHERE id = 1');
+  return created[0];
+}
 
 function resolveTenantId(req) {
   let tenantId = req.query.tenant_id;
@@ -45,13 +86,19 @@ async function getPayrollData(tenantId, bulan, tahun) {
   const lastDay = new Date(tahun, bulan, 0).getDate();
   const end = `${periode}-${String(lastDay).padStart(2, '0')} 23:59:59`;
 
-  let tQuery = `SELECT t.id, t.nama, t.nik, t.nip, t.status_kepegawaian, t.bank, t.nomor_rekening, (SELECT ta.tenant_id FROM teacher_assignments ta WHERE ta.teacher_id = t.id LIMIT 1) as tenant_id, t.gaji_pokok, t.tunj_kinerja, t.tunj_umum, t.tunj_istri, t.tunj_anak, t.tunj_kepala_sekolah, t.tunj_wali_kelas, t.honor_bendahara, t.potongan FROM teachers t`;
+  let tQuery = `SELECT t.id, t.nama, t.nik, t.nip, t.status_kepegawaian, t.bank, t.nomor_rekening, (SELECT ta.tenant_id FROM teacher_assignments ta WHERE ta.teacher_id = t.id LIMIT 1) as tenant_id, t.gaji_pokok, t.tunj_kinerja, t.tunj_umum, t.tunj_istri, t.tunj_anak, t.tunj_kepala_sekolah, t.tunj_wali_kelas, t.honor_bendahara, t.tunj_kehadiran, t.potongan FROM teachers t`;
   const tParams = [];
   if (tenantId) { tQuery += ' JOIN teacher_assignments ta ON t.id = ta.teacher_id AND ta.tenant_id = ?'; tParams.push(tenantId); }
   tQuery += ' WHERE t.status_aktif = 1';
   const teachers = await db.query(tQuery, tParams);
 
-  let aQuery = `SELECT teacher_id, COUNT(DISTINCT DATE(COALESCE(waktu_absen, waktu_scan))) as hadir, SUM(CASE WHEN status = 'terlambat' THEN 1 ELSE 0 END) as terlambat FROM attendance_logs WHERE jenis = 'masuk' AND COALESCE(waktu_absen, waktu_scan) >= ? AND COALESCE(waktu_absen, waktu_scan) <= ?`;
+  let aQuery = `SELECT teacher_id,
+    SUM(CASE WHEN status = 'tepat_waktu' THEN 1 ELSE 0 END) as hadir,
+    SUM(CASE WHEN status = 'terlambat' THEN 1 ELSE 0 END) as terlambat,
+    SUM(CASE WHEN status IN ('izin','cuti') THEN 1 ELSE 0 END) as izin,
+    SUM(CASE WHEN status = 'sakit' THEN 1 ELSE 0 END) as sakit,
+    SUM(CASE WHEN status = 'dinas_luar' OR dinas_luar = 1 THEN 1 ELSE 0 END) as dinas_luar
+    FROM attendance_logs WHERE COALESCE(waktu_absen, waktu_scan) >= ? AND COALESCE(waktu_absen, waktu_scan) <= ?`;
   const aParams = [start, end];
   if (tenantId) { aQuery += ' AND tenant_id = ?'; aParams.push(tenantId); }
   aQuery += ' GROUP BY teacher_id';
@@ -59,20 +106,48 @@ async function getPayrollData(tenantId, bulan, tahun) {
   const attMap = {};
   att.forEach(a => { attMap[a.teacher_id] = a; });
 
+  const settings = await getDeductionSettings();
+  const workingDays = await getWorkingDays(tenantId, bulan, tahun);
+
   return {
     periode,
+    deduction_settings: {
+      potongan_terlambat: num(settings.potongan_terlambat),
+      potongan_izin: num(settings.potongan_izin),
+      potongan_sakit: num(settings.potongan_sakit),
+      potongan_tanpa_keterangan: num(settings.potongan_tanpa_keterangan),
+      potongan_tidak_hadir: num(settings.potongan_tidak_hadir),
+      tunj_kehadiran: num(settings.tunj_kehadiran),
+      working_days: workingDays
+    },
     data: teachers.map(t => {
-      const a = attMap[t.id] || { hadir: 0, terlambat: 0 };
-      return {
+      const a = attMap[t.id] || { hadir: 0, terlambat: 0, izin: 0, sakit: 0, dinas_luar: 0 };
+      const hadir = num(a.hadir), terlambat = num(a.terlambat), izin = num(a.izin),
+        sakit = num(a.sakit), dinas_luar = num(a.dinas_luar);
+      const tanpa_keterangan = Math.max(0, workingDays - (hadir + terlambat + izin + sakit + dinas_luar));
+      const tidak_hadir = tanpa_keterangan; // hari alpha (tanpa kehadiran & bukan izin/sakit)
+      const potonganAbsen = (terlambat * num(settings.potongan_terlambat))
+        + (izin * num(settings.potongan_izin))
+        + (sakit * num(settings.potongan_sakit))
+        + (tanpa_keterangan * num(settings.potongan_tanpa_keterangan))
+        + (tidak_hadir * num(settings.potongan_tidak_hadir));
+      const tunj_kehadiran = num(settings.tunj_kehadiran);
+      const row = {
         id: t.id, nama: t.nama, nik: t.nik, nip: t.nip,
         status_kepegawaian: t.status_kepegawaian, tenant_id: t.tenant_id,
         bank: t.bank, nomor_rekening: t.nomor_rekening,
         gaji_pokok: num(t.gaji_pokok), tunj_kinerja: num(t.tunj_kinerja), tunj_umum: num(t.tunj_umum),
         tunj_istri: num(t.tunj_istri), tunj_anak: num(t.tunj_anak),
         tunj_kepala_sekolah: num(t.tunj_kepala_sekolah), tunj_wali_kelas: num(t.tunj_wali_kelas),
-        honor_bendahara: num(t.honor_bendahara), potongan: num(t.potongan),
-        hadir: num(a.hadir), terlambat: num(a.terlambat), total_gaji: computeTotal(t)
+        honor_bendahara: num(t.honor_bendahara), tunj_kehadiran,
+        potongan: potonganAbsen, potongan_manual: num(t.potongan),
+        hadir, terlambat, izin, sakit, dinas_luar,
+        tanpa_keterangan, tidak_hadir,
+        potongan_absensi: potonganAbsen,
+        total_gaji: 0
       };
+      row.total_gaji = computeTotal(row);
+      return row;
     })
   };
 }
@@ -87,6 +162,42 @@ router.get('/admin/payroll/settings', authenticateOperator, async (req, res) => 
   } catch (error) {
     console.error('Payroll settings error:', error);
     res.status(500).json({ success: false, message: 'Error fetching payroll' });
+  }
+});
+
+// GET pengaturan potongan absensi & T. Kehadiran (GLOBAL)
+router.get('/admin/payroll/deduction-settings', authenticateOperator, async (req, res) => {
+  try {
+    const settings = await getDeductionSettings();
+    res.json({
+      success: true,
+      data: {
+        potongan_terlambat: num(settings.potongan_terlambat),
+        potongan_izin: num(settings.potongan_izin),
+        potongan_sakit: num(settings.potongan_sakit),
+        potongan_tanpa_keterangan: num(settings.potongan_tanpa_keterangan),
+        potongan_tidak_hadir: num(settings.potongan_tidak_hadir),
+        tunj_kehadiran: num(settings.tunj_kehadiran)
+      }
+    });
+  } catch (error) {
+    console.error('Deduction settings error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching deduction settings' });
+  }
+});
+
+// PUT simpan pengaturan potongan absensi & T. Kehadiran (GLOBAL)
+router.put('/admin/payroll/deduction-settings', authenticateOperator, async (req, res) => {
+  try {
+    const vals = {};
+    DEDUCTION_FIELDS.forEach(f => { if (req.body[f] !== undefined) vals[f] = num(req.body[f]); });
+    if (Object.keys(vals).length === 0) return res.status(400).json({ success: false, message: 'Tidak ada field yang dikirim' });
+    const set = Object.keys(vals).map(f => `${f} = ?`).join(', ');
+    await db.query(`INSERT INTO payroll_settings (id, ${Object.keys(vals).join(', ')}) VALUES (1, ${Object.keys(vals).map(() => '?').join(', ')}) ON DUPLICATE KEY UPDATE ${set}`, [...Object.values(vals), ...Object.values(vals)]);
+    res.json({ success: true, message: 'Pengaturan potongan tersimpan' });
+  } catch (error) {
+    console.error('Save deduction settings error:', error);
+    res.status(500).json({ success: false, message: 'Error saving deduction settings' });
   }
 });
 
@@ -113,9 +224,9 @@ router.post('/admin/payroll/generate', authenticateOperator, async (req, res) =>
     if (!periode || !/^\d{4}-\d{2}$/.test(periode)) return res.status(400).json({ success: false, message: 'Periode tidak valid (format YYYY-MM)' });
     const [tahun, bulan] = periode.split('-').map(Number);
     const { data } = await getPayrollData(tenantId, bulan, tahun);
-    const insertSql = `INSERT INTO payroll (teacher_id, tenant_id, periode, gaji_pokok, tunj_kinerja, tunj_umum, tunj_istri, tunj_anak, tunj_kepala_sekolah, tunj_wali_kelas, honor_bendahara, potongan, total_gaji, hadir, terlambat, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE tenant_id = VALUES(tenant_id), gaji_pokok = VALUES(gaji_pokok), tunj_kinerja = VALUES(tunj_kinerja), tunj_umum = VALUES(tunj_umum), tunj_istri = VALUES(tunj_istri), tunj_anak = VALUES(tunj_anak), tunj_kepala_sekolah = VALUES(tunj_kepala_sekolah), tunj_wali_kelas = VALUES(tunj_wali_kelas), honor_bendahara = VALUES(honor_bendahara), potongan = VALUES(potongan), total_gaji = VALUES(total_gaji), hadir = VALUES(hadir), terlambat = VALUES(terlambat), created_at = NOW()`;
+    const insertSql = `INSERT INTO payroll (teacher_id, tenant_id, periode, gaji_pokok, tunj_kinerja, tunj_umum, tunj_istri, tunj_anak, tunj_kepala_sekolah, tunj_wali_kelas, honor_bendahara, tunj_kehadiran, potongan, total_gaji, hadir, terlambat, izin, sakit, tanpa_keterangan, tidak_hadir, dinas_luar, cuti, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE tenant_id = VALUES(tenant_id), gaji_pokok = VALUES(gaji_pokok), tunj_kinerja = VALUES(tunj_kinerja), tunj_umum = VALUES(tunj_umum), tunj_istri = VALUES(tunj_istri), tunj_anak = VALUES(tunj_anak), tunj_kepala_sekolah = VALUES(tunj_kepala_sekolah), tunj_wali_kelas = VALUES(tunj_wali_kelas), honor_bendahara = VALUES(honor_bendahara), tunj_kehadiran = VALUES(tunj_kehadiran), potongan = VALUES(potongan), total_gaji = VALUES(total_gaji), hadir = VALUES(hadir), terlambat = VALUES(terlambat), izin = VALUES(izin), sakit = VALUES(sakit), tanpa_keterangan = VALUES(tanpa_keterangan), tidak_hadir = VALUES(tidak_hadir), dinas_luar = VALUES(dinas_luar), cuti = VALUES(cuti), created_at = NOW()`;
     for (const r of data) {
-      await db.query(insertSql, [r.id, r.tenant_id, periode, r.gaji_pokok, r.tunj_kinerja, r.tunj_umum, r.tunj_istri, r.tunj_anak, r.tunj_kepala_sekolah, r.tunj_wali_kelas, r.honor_bendahara, r.potongan, r.total_gaji, r.hadir, r.terlambat, req.user.id]);
+      await db.query(insertSql, [r.id, r.tenant_id, periode, r.gaji_pokok, r.tunj_kinerja, r.tunj_umum, r.tunj_istri, r.tunj_anak, r.tunj_kepala_sekolah, r.tunj_wali_kelas, r.honor_bendahara, r.tunj_kehadiran, r.potongan, r.total_gaji, r.hadir, r.terlambat, r.izin, r.sakit, r.tanpa_keterangan, r.tidak_hadir, r.dinas_luar, 0, req.user.id]);
     }
     res.json({ success: true, message: `${data.length} slip gaji disimpan untuk ${periode}`, data });
   } catch (error) {
@@ -134,10 +245,39 @@ router.get('/admin/payroll/history', authenticateOperator, async (req, res) => {
     if (periode) { q += ' AND p.periode = ?'; params.push(periode); }
     q += ' ORDER BY p.tenant_id, t.nama';
     const rows = await db.query(q, params);
-    res.json({ success: true, data: rows.map(r => ({ ...r, gaji_pokok: num(r.gaji_pokok), tunj_kinerja: num(r.tunj_kinerja), tunj_umum: num(r.tunj_umum), tunj_istri: num(r.tunj_istri), tunj_anak: num(r.tunj_anak), tunj_kepala_sekolah: num(r.tunj_kepala_sekolah), tunj_wali_kelas: num(r.tunj_wali_kelas), honor_bendahara: num(r.honor_bendahara), potongan: num(r.potongan), total_gaji: num(r.total_gaji), hadir: num(r.hadir), terlambat: num(r.terlambat) })) });
+    res.json({ success: true, data: rows.map(r => ({ ...r, gaji_pokok: num(r.gaji_pokok), tunj_kinerja: num(r.tunj_kinerja), tunj_umum: num(r.tunj_umum), tunj_istri: num(r.tunj_istri), tunj_anak: num(r.tunj_anak), tunj_kepala_sekolah: num(r.tunj_kepala_sekolah), tunj_wali_kelas: num(r.tunj_wali_kelas), honor_bendahara: num(r.honor_bendahara), tunj_kehadiran: num(r.tunj_kehadiran), potongan: num(r.potongan), total_gaji: num(r.total_gaji), hadir: num(r.hadir), terlambat: num(r.terlambat), izin: num(r.izin), sakit: num(r.sakit), tanpa_keterangan: num(r.tanpa_keterangan), tidak_hadir: num(r.tidak_hadir), dinas_luar: num(r.dinas_luar), cuti: num(r.cuti) })) });
   } catch (error) {
     console.error('Payroll history error:', error);
     res.status(500).json({ success: false, message: 'Error fetching payroll history' });
+  }
+});
+
+router.post('/admin/payroll/import', authenticateOperator, async (req, res) => {
+  try {
+    const { periode, data } = req.body;
+    if (!periode || !data || !Array.isArray(data)) {
+      return res.status(400).json({ success: false, message: 'periode dan data wajib diisi' });
+    }
+    let updated = 0;
+    for (const row of data) {
+      const nik = (row['NIK'] || row.nik || '').trim();
+      const teacher = await db.query('SELECT id FROM teachers WHERE nik = ?', [nik]);
+      if (!teacher.length) continue;
+      const teacherId = teacher[0].id;
+      const vals = {};
+      SALARY_FIELDS.forEach(f => {
+        const val = parseFloat(row[f] || row[f.replace(/_/g, ' ')] || 0);
+        if (!isNaN(val)) vals[f] = val;
+      });
+      if (Object.keys(vals).length === 0) continue;
+      const set = Object.keys(vals).map(f => `${f} = ?`).join(', ');
+      await db.query(`UPDATE teachers SET ${set}, updated_at = NOW() WHERE id = ?`, [...Object.values(vals), teacherId]);
+      updated++;
+    }
+    res.json({ success: true, message: `${updated} guru diperbarui, slip gaji dibuat untuk ${periode}` });
+  } catch (error) {
+    console.error('Payroll import error:', error);
+    res.status(500).json({ success: false, message: 'Error import: ' + error.message });
   }
 });
 
@@ -188,7 +328,7 @@ async function sendSalarySlipEmail(teacherId, periode) {
   let gaji;
   if (slip.length) gaji = slip[0];
   else {
-    gaji = { gaji_pokok: t.gaji_pokok, tunj_kinerja: t.tunj_kinerja, tunj_umum: t.tunj_umum, tunj_istri: t.tunj_istri, tunj_anak: t.tunj_anak, tunj_kepala_sekolah: t.tunj_kepala_sekolah, tunj_wali_kelas: t.tunj_wali_kelas, honor_bendahara: t.honor_bendahara, potongan: t.potongan };
+    gaji = { gaji_pokok: t.gaji_pokok, tunj_kinerja: t.tunj_kinerja, tunj_umum: t.tunj_umum, tunj_istri: t.tunj_istri, tunj_anak: t.tunj_anak, tunj_kepala_sekolah: t.tunj_kepala_sekolah, tunj_wali_kelas: t.tunj_wali_kelas, honor_bendahara: t.honor_bendahara, tunj_kehadiran: t.tunj_kehadiran, potongan: t.potongan };
     const comps = { potongan: t.potongan };
     COMPONENTS.forEach(f => comps[f] = t[f]);
     gaji.total_gaji = computeTotal(comps);
@@ -258,20 +398,28 @@ router.get('/admin/payroll/bsi-export', authenticateOperator, async (req, res) =
     const tahun = parseInt(req.query.tahun) || new Date().getFullYear();
     const { data } = await getPayrollData(tenantId, bulan, tahun);
     const bsiData = data.filter(d => (d.bank || '').toUpperCase().includes('BSI'));
-    if (!bsiData.length) return res.status(400).json({ success: false, message: 'Tidak ada data guru dengan bank BSI' });
-    const tanggal = new Date().toISOString().slice(0, 10);
-    const totalNominal = bsiData.reduce((sum, d) => sum + (parseFloat(d.total_gaji) || 0), 0);
-    let content = '0||' + tanggal + '|' + bsiData.length + '|' + Math.round(totalNominal) + '|\n';
-    content += '0|BENEFICIARY ACCT (35)|BENEFICIARY ACCT NAME |CREDIT AMOUNT CCY|AMOUNT|CUST REF NO|MESSAGE (65)|EXTENDED PAYMENT DETAIL|BENEFICIARY NOTIF EMAIL(100)|SMS NOTIF (100)|\n';
-    bsiData.forEach((d, i) => {
-      const noRek = (d.nomor_rekening || d.nik || '').substring(0, 35);
-      const nama = (d.nama || '').substring(0, 35);
-      const nominal = Math.round(parseFloat(d.total_gaji) || 0);
-      content += (i + 1) + '|' + noRek + '|' + nama + '|IDR|' + nominal + '||\n';
-    });
-    res.setHeader('Content-Type', 'text/plain');
-    res.setHeader('Content-Disposition', 'attachment; filename="payroll_bsi_cuz_' + tahun + String(bulan).padStart(2, '0') + '.txt"');
-    res.send(content);
+    if (bsiData.length) {
+      const tanggal = new Date().toISOString().slice(0, 10);
+      const totalNominal = bsiData.reduce((sum, d) => sum + (parseFloat(d.total_gaji) || 0), 0);
+      let content = '0||' + tanggal + '|' + bsiData.length + '|' + Math.round(totalNominal) + '|\n';
+      content += 'BENEFICIARY ACCT (35)|BENEFICIARY ACCT NAME |CREDIT AMOUNT CCY|AMOUNT|CUST REF NO|MESSAGE (65)|EXTENDED PAYMENT DETAIL|BENEFICIARY NOTIF EMAIL(100)|SMS NOTIF (100)|\n';
+      bsiData.forEach((d, i) => {
+        const noRek = (d.nomor_rekening || '').substring(0, 35);
+        const nama = (d.nama || '').substring(0, 35);
+        const nominal = Math.round(parseFloat(d.total_gaji) || 0);
+        const nik = (d.nik || '').substring(0, 15);
+        const message = `Gaji ${MONTH_NAMES[bulan]} ${tahun}`.substring(0, 65);
+        const extDetail = '';
+        const email = '';
+        const sms = '';
+        content += noRek + '|' + nama + '|IDR|' + nominal + '|' + nik + '|' + message + '|' + extDetail + '|' + email + '|' + sms + '\n';
+      });
+      res.setHeader('Content-Type', 'text/plain');
+      res.setHeader('Content-Disposition', 'attachment; filename="payroll_bsi_cuz_' + tahun + String(bulan).padStart(2, '0') + '.txt"');
+      res.send(content);
+    } else {
+      return res.status(400).json({ success: false, message: 'Tidak ada data guru dengan bank BSI' });
+    }
   } catch (error) {
     console.error('BSI export error:', error);
     res.status(500).json({ success: false, message: 'Error BSI export' });

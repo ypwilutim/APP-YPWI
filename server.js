@@ -249,6 +249,7 @@ app.use('/api', chatRoutes);
 app.use('/api', notificationsRoutes);
 app.use('/api', skGuruRoutes);
 app.use('/api', payrollRoutes);
+app.use('/api', require('./src/routes/paktaIntegritas'));
 app.use('/api', wahaRoutes);
 app.use('/api', require('./src/routes/treasurer'));
 app.use('/api', require('./src/routes/xendit'));
@@ -454,7 +455,7 @@ async function sendWhatsAppMessage(number, message) {
 global.sendWhatsAppMessage = sendWhatsAppMessage;
 
 // Export email function to global for use in route modules
-global.sendEmail = async (to, subject, htmlContent, textContent = '') => {
+global.sendEmail = async (to, subject, htmlContent, textContent = '', attachments = []) => {
   if (!process.env.EMAIL_ENABLED || process.env.EMAIL_ENABLED !== 'true') {
     console.log('📧 Email disabled, skipping email to:', to);
     return { success: true, message: 'Email disabled' };
@@ -471,7 +472,8 @@ global.sendEmail = async (to, subject, htmlContent, textContent = '') => {
       to: to,
       subject: subject,
       html: htmlContent,
-      text: textContent
+      text: textContent,
+      attachments: attachments
     });
     
     console.log('✅ Email sent: %s', info.messageId);

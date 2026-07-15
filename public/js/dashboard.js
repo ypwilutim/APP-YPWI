@@ -164,8 +164,7 @@ function forceLogout() {
 })();
 
 
-async function setTeacherInfo() {
-    try {
+async function setTeacherInfo() {    try {
         const response = await fetch('/api/teacher/info', {
             headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -243,9 +242,80 @@ async function setTeacherInfo() {
 
                 adminSection.innerHTML = htmlContent;
             }
+
+            // --- Pakta Integritas: hanya Kepala Sekolah / Pimpinan / Pimpinan Pondok / Ketua ---
+            const paktaSigner = isPaktaSigner(assignments);
+            const deskPakta = document.getElementById('desktopPaktaBtn');
+            const mobPakta = document.getElementById('mobilePaktaNav');
+            if (deskPakta) deskPakta.style.display = paktaSigner ? 'block' : 'none';
+            if (mobPakta) mobPakta.style.display = paktaSigner ? 'flex' : 'none';
+            if (paktaSigner) initPaktaIntegritas();
+
+            // --- Viewer Pakta: hanya Admin / Ketua tenant YPWILUTIM ---
+            const paktaViewer = isPaktaViewer(assignments);
+            const deskViewer = document.getElementById('desktopPaktaViewerBtn');
+            const mobViewer = document.getElementById('mobilePaktaViewerNav');
+            if (deskViewer) deskViewer.style.display = paktaViewer ? 'block' : 'none';
+            if (mobViewer) mobViewer.style.display = paktaViewer ? 'flex' : 'none';
         }
     } catch (error) {
         console.error('Error loading teacher info:', error);
+    }
+}
+
+// ============================================================
+// PAKTA INTEGRITAS - Modal & akses khusus pimpinan unit
+// ============================================================
+const PAKTA_SIGNER_JABATANS = ['kepalasekolah', 'pimpinan', 'pimpinanpondok', 'ketua'];
+const PAKTA_VIEWER_TENANT = 'YPWILUTIM';
+const PAKTA_VIEWER_JABATANS = ['admin', 'ketua'];
+
+function isPaktaSigner(assignments) {
+    return (assignments || []).some(a =>
+        PAKTA_SIGNER_JABATANS.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''))
+    );
+}
+
+function isPaktaViewer(assignments) {
+    return (assignments || []).some(a =>
+        a.tenant_id === PAKTA_VIEWER_TENANT &&
+        PAKTA_VIEWER_JABATANS.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''))
+    );
+}
+
+function openPaktaModal() {
+    const m = document.getElementById('paktaIntegritasModal');
+    if (m) m.style.display = 'flex';
+}
+
+function closePaktaModal() {
+    const m = document.getElementById('paktaIntegritasModal');
+    if (m) m.style.display = 'none';
+}
+
+function goToPaktaSign() {
+    window.location.href = 'pakta-sign.html';
+}
+
+async function initPaktaIntegritas() {
+    try {
+        const periode = new Date().toISOString().slice(0, 7);
+        const lbl = document.getElementById('paktaPeriodeLabel');
+        if (lbl) lbl.textContent = periode;
+
+        const res = await fetch('/api/pakta/me', {
+            headers: { 'Authorization': 'Bearer ' + (window.token || localStorage.getItem('token')) }
+        });
+        const json = await res.json();
+        if (json.success) {
+            if (json.data && json.data.status === 'sudah') {
+                closePaktaModal();
+            } else {
+                openPaktaModal();
+            }
+        }
+    } catch (e) {
+        // Jangan paksa tampil modal bila pengecekan gagal
     }
 }
 
@@ -1821,7 +1891,7 @@ function checkAndShowAllUnitsSummary() {
     const hasKetuaOrAdminAtYpwilutim = assignments.some(a => {
         const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
         console.log('[DEBUG] Checking role:', a.tenant_id, jabatan);
-        return a.tenant_id === 'YPWILUTIM' && (jabatan.includes('ketua') || jabatan.includes('admin'));
+        return a.tenant_id === 'YPWILUTIM' && (jabatan.includes('ketua') || jabatan.includes('admin') || jabatan.includes('kepala') || jabatan.includes('pimpinan') || jabatan.includes('kepalasekolah'));
     });
     
     console.log('[DEBUG] hasKetuaOrAdminAtYpwilutim:', hasKetuaOrAdminAtYpwilutim);

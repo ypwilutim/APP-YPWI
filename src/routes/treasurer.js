@@ -1,9 +1,43 @@
 const express = require('express');
 const db = require('../../db');
 const nodemailer = require('nodemailer');
+const axios = require('axios');
 const { authenticateToken, authenticateOperator, verifyTenantAccess } = require('../middleware/auth');
+const { sendBillTemplate } = require('../utils/whatsappTemplate');
 
 const router = express.Router();
+
+const XENDIT_API_BASE = 'https://api.xendit.co';
+
+function getXenditAuth(apiKey) {
+  return Buffer.from(apiKey + ':').toString('base64');
+}
+
+async function getTenantXenditConfig(tenantId) {
+  try {
+    const [tenant] = await db.query(
+      'SELECT xendit_api_key, xendit_public_key, xendit_webhook_token, xendit_enabled FROM tenants WHERE tenant_id = ?',
+      [tenantId]
+    );
+    if (tenant && tenant.xendit_api_key) {
+      return tenant;
+    }
+    return {
+      xendit_api_key: process.env.XENDIT_API_KEY || null,
+      xendit_public_key: process.env.XENDIT_PUBLIC_KEY || null,
+      xendit_webhook_token: process.env.XENDIT_WEBHOOK_TOKEN || null,
+      xendit_enabled: process.env.XENDIT_ENABLED === 'true' ? 1 : 0
+    };
+  } catch (error) {
+    console.error('Get xendit config error:', error);
+    return {
+      xendit_api_key: process.env.XENDIT_API_KEY || null,
+      xendit_public_key: process.env.XENDIT_PUBLIC_KEY || null,
+      xendit_webhook_token: process.env.XENDIT_WEBHOOK_TOKEN || null,
+      xendit_enabled: process.env.XENDIT_ENABLED === 'true' ? 1 : 0
+    };
+  }
+}
 
 // Public endpoints for development/testing (no auth required)
 // GET /api/treasurer/public/spp-summary - Ringkasan pembayaran SPP (Xendit)
@@ -174,6 +208,353 @@ router.get('/treasurer/public/payment-defaulters', async (req, res) => {
   } catch (error) {
     console.error('Public payment defaulters error:', error);
     res.status(500).json({ success: false, message: 'Error fetching payment defaulters' });
+  }
+});
+
+// POST /api/treasurer/public/send-spp-reminder - Kirim pengingat SPP via Meta WhatsApp template
+router.post('/treasurer/public/send-spp-reminder', async (req, res) => {
+  try {
+    const { no_wa, nama_siswa, jumlah_tagihan, bulan, tanggal_jatuh_tempo, tenant_id, student_id } = req.body;
+
+    if (!no_wa) {
+      return res.status(400).json({ success: false, message: 'Nomor WA tidak tersedia' });
+    }
+    if (!nama_siswa) {
+      return res.status(400).json({ success: false, message: 'Nama siswa tidak tersedia' });
+    }
+
+    let invoiceUrl = null;
+    if (student_id) {
+      const [inv] = await db.query(
+        'SELECT external_id FROM xendit_invoices WHERE student_id = ? AND status = "PENDING" ORDER BY created_at DESC LIMIT 1',
+        [student_id]
+      );
+      if (inv?.external_id) {
+        invoiceUrl = `xendit-payment.html?external_id=${inv.external_id}`;
+      }
+    }
+    const finalInvoiceUrl = invoiceUrl || `xendit-payment.html?student_id=${student_id || ''}`;
+
+    const now = new Date();
+    const bulanPengiriman = bulan || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const jatuhTempo = tanggal_jatuh_tempo || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-10`;
+
+    const result = await sendBillTemplate(no_wa, {
+      nama_siswa,
+      bulan: bulanPengiriman,
+      jumlah_tagihan: jumlah_tagihan ? `${Number(jumlah_tagihan).toLocaleString('id-ID')}` : '-',
+      tanggal_jatuh_tempo: jatuhTempo,
+      invoice_url: finalInvoiceUrl
+    }, 'invoice_spp');
+
+    res.json({
+      success: true,
+      message: 'Pengingat SPP berhasil dikirim via WhatsApp',
+      messageId: result.messageId
+    });
+} catch (error) {
+    console.error('Send SPP reminder error:', error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/treasurer/public/send-all-spp-reminders - Kirim pengingat ke semua siswa belum bayar
+router.post('/treasurer/public/send-all-spp-reminders', async (req, res) => {
+  try {
+    const { tenant_id } = req.body;
+    let tenantId = tenant_id || null;
+
+    let defaulterQuery = `
+      SELECT s.id, s.nama_siswa, s.nisn, s.no_wa, tn.nama_sekolah, tn.tenant_id,
+        COALESCE(CASE WHEN s.kelas = 'PI' THEN s.arrears_pi WHEN s.kelas = 'XI' THEN s.arrears_xi ELSE 0 END, 0) as total_arrears
+      FROM students s
+      JOIN tenants tn ON s.tenant_id = tn.tenant_id
+      WHERE s.status = 'active'
+    `;
+    const params = [];
+    if (tenantId) {
+      defaulterQuery += ' AND s.tenant_id = ?';
+      params.push(tenantId);
+    }
+    defaulterQuery += ' AND (COALESCE(CASE WHEN s.kelas = "PI" THEN s.arrears_pi WHEN s.kelas = "XI" THEN s.arrears_xi ELSE 0 END, 0) > 0)';
+
+    const [defaulters] = await db.query(defaulterQuery, params);
+    
+    if (!defaulters || defaulters.length === 0) {
+      return res.json({ success: true, message: 'Tidak ada siswa yang belum bayar', sent: 0, failed: 0 });
+    }
+
+    const now = new Date();
+    const bulanPengiriman = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const jatuhTempo = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-10`;
+
+    let sent = 0, failed = 0;
+    const results = [];
+
+    for (const student of defaulters) {
+      if (!student.no_wa) { failed++; continue; }
+      
+      const number = student.no_wa.replace(/[^0-9]/g, '');
+      
+      let invoiceUrl = null;
+      const [inv] = await db.query(
+        'SELECT external_id FROM xendit_invoices WHERE student_id = ? AND status = "PENDING" ORDER BY created_at DESC LIMIT 1',
+        [student.id]
+      );
+      if (inv?.external_id) {
+        invoiceUrl = `xendit-payment.html?external_id=${inv.external_id}`;
+      } else {
+        invoiceUrl = `xendit-payment.html?student_id=${student.id}`;
+      }
+
+      try {
+        const result = await sendBillTemplate(number, {
+          nama_siswa: student.nama_siswa,
+          bulan: bulanPengiriman,
+          jumlah_tagihan: student.total_arrears ? `${Number(student.total_arrears).toLocaleString('id-ID')}` : '-',
+          tanggal_jatuh_tempo: jatuhTempo,
+          invoice_url: invoiceUrl
+        }, 'invoice_spp');
+        sent++;
+        results.push({ id: student.id, success: true });
+      } catch (e) {
+        failed++;
+        results.push({ id: student.id, success: false, error: e.message });
+      }
+    }
+
+    res.json({ success: true, message: `Terkirim: ${sent} | Gagal: ${failed}`, sent, failed });
+  } catch (error) {
+    console.error('Send all SPP reminders error:', error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/treasurer/public/create-concession-invoice - Create concession invoice (additional installment)
+router.post('/treasurer/public/create-concession-invoice', async (req, res) => {
+  try {
+    const { student_id, amount } = req.body;
+
+    if (!student_id) {
+      return res.status(400).json({ success: false, message: 'student_id wajib diisi' });
+    }
+
+    const [student] = await db.query(
+      'SELECT s.*, tn.nama_sekolah, tn.tenant_id FROM students s JOIN tenants tn ON s.tenant_id = tn.tenant_id WHERE s.id = ?',
+      [student_id]
+    );
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Siswa tidak ditemukan' });
+    }
+
+    const tenantId = student.tenant_id;
+    const config = await getTenantXenditConfig(tenantId);
+    if (!config || !config.xendit_api_key || config.xendit_enabled !== 1) {
+      return res.status(400).json({ success: false, message: 'Xendit belum dikonfigurasi untuk tenant ini' });
+    }
+
+    let finalAmount;
+    if (amount !== undefined && amount !== null && amount !== '' && !isNaN(parseFloat(amount))) {
+      finalAmount = parseFloat(amount);
+    } else {
+      const [arrears] = await db.query(
+        "SELECT COALESCE(SUM(amount),0) as total FROM xendit_invoices WHERE student_id = ? AND tenant_id = ? AND status NOT IN ('PAID','EXPIRED')",
+        [student_id, tenantId]
+      );
+      const [paymentArrears] = await db.query(
+        "SELECT COALESCE(SUM(amount),0) as total FROM payment_invoices WHERE student_id = ? AND tenant_id = ? AND status NOT IN ('paid','cancelled')",
+        [student_id, tenantId]
+      );
+      finalAmount = (parseFloat(arrears && arrears.total) || 0) + (parseFloat(paymentArrears && paymentArrears.total) || 0);
+    }
+
+    if (finalAmount <= 0) {
+      return res.status(400).json({ success: false, message: 'Amount tidak valid' });
+    }
+
+    const externalId = `CONCESSION-${tenantId}-${student_id}-${Date.now()}`;
+    const callbackUrl = `${process.env.BASE_URL || 'http://localhost:3000'}/api/xendit/webhook`;
+    const successRedirect = `${process.env.BASE_URL || 'http://localhost:3000'}/xendit-payment.html?external_id=${externalId}`;
+    const failureRedirect = `${process.env.BASE_URL || 'http://localhost:3000'}/xendit-payment.html?external_id=${externalId}`;
+
+    const invoicePayload = {
+      external_id: externalId,
+      amount: finalAmount,
+      description: `Cicilan tambahan ${student.nama_siswa} - ${student.nama_sekolah}`,
+      invoice_duration: 31536000,
+      currency: 'IDR',
+      success_redirect_url: successRedirect,
+      failure_redirect_url: failureRedirect
+    };
+
+    const response = await axios.post(
+      `${XENDIT_API_BASE}/v2/invoices`,
+      invoicePayload,
+      {
+        headers: {
+          'Authorization': `Basic ${getXenditAuth(config.xendit_api_key)}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    const xenditInvoice = response.data;
+
+    console.log(`[CONCESSION] Invoice created: ${xenditInvoice.id} for student ${student_id}, tenant ${tenantId}`);
+
+    await db.query(
+      `INSERT INTO xendit_invoices (tenant_id, student_id, xendit_invoice_id, external_id, amount, description, status, payment_method, callback_url, invoice_url, expiry_date, installment_type)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        tenantId,
+        student_id,
+        xenditInvoice.id,
+        externalId,
+        finalAmount,
+        invoicePayload.description,
+        xenditInvoice.status,
+        'MULTIPLE',
+        callbackUrl,
+        xenditInvoice.invoice_url,
+        xenditInvoice.expiry_date,
+        'concession'
+      ]
+    );
+
+    res.json({
+      success: true,
+      message: 'Invoice konsesi Xendit berhasil dibuat',
+      data: {
+        invoice_id: xenditInvoice.id,
+        external_id: externalId,
+        invoice_url: xenditInvoice.invoice_url,
+        payment_page_url: `${process.env.BASE_URL || 'http://localhost:3000'}/xendit-payment.html?external_id=${encodeURIComponent(externalId)}`,
+        amount: finalAmount,
+        status: xenditInvoice.status,
+        expiry_date: xenditInvoice.expiry_date,
+        payment_methods: xenditInvoice.available_payment_methods,
+        installment_type: 'concession'
+      }
+    });
+  } catch (error) {
+    console.error('Create concession invoice error:', error.response?.data || error.message);
+    res.status(500).json({ success: false, message: error.response?.data?.message || 'Error creating concession invoice' });
+  }
+});
+
+// POST /api/treasurer/public/create-invoice - Create Xendit invoice (public endpoint)
+router.post('/treasurer/public/create-invoice', async (req, res) => {
+  try {
+    const { student_id, amount, tenant_id } = req.body;
+
+    if (!student_id || !tenant_id) {
+      return res.status(400).json({ success: false, message: 'student_id dan tenant_id wajib diisi' });
+    }
+
+    const [student] = await db.query(
+      'SELECT s.*, tn.nama_sekolah FROM students s JOIN tenants tn ON s.tenant_id = tn.tenant_id WHERE s.id = ? AND s.tenant_id = ?',
+      [student_id, tenant_id]
+    );
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Siswa tidak ditemukan' });
+    }
+
+    const config = await getTenantXenditConfig(tenant_id);
+    if (!config || !config.xendit_api_key || config.xendit_enabled !== 1) {
+      return res.status(400).json({ success: false, message: 'Xendit belum dikonfigurasi untuk tenant ini' });
+    }
+
+    const [existing] = await db.query(
+      'SELECT id, xendit_invoice_id FROM xendit_invoices WHERE student_id = ? AND tenant_id = ? AND status = "PENDING" ORDER BY created_at DESC LIMIT 1',
+      [student_id, tenant_id]
+    );
+    if (existing) {
+      try {
+        await axios.post(
+          `${XENDIT_API_BASE}/v2/invoices/${existing.xendit_invoice_id}/expire`,
+          {},
+          { headers: { 'Authorization': `Basic ${getXenditAuth(config.xendit_api_key)}` } }
+        );
+        await db.query('UPDATE xendit_invoices SET status = "EXPIRED" WHERE id = ?', [existing.id]);
+        console.log(`[PUBLIC-CREATE-INVOICE] Expired old invoice: ${existing.xendit_invoice_id}`);
+      } catch (e) { console.warn('Failed to expire old invoice:', e.message); }
+    }
+
+    const finalAmount = amount !== undefined && amount !== null && !isNaN(parseFloat(amount))
+      ? parseFloat(amount)
+      : parseFloat(student.iuran_bulanan) || 0;
+
+    if (finalAmount <= 0) {
+      return res.status(400).json({ success: false, message: 'Amount tidak valid' });
+    }
+
+    const periode = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+
+    const externalId = `SPP-${tenant_id}-${student_id}-${periode}-${Date.now()}`;
+    const callbackUrl = `${process.env.BASE_URL || 'http://localhost:3000'}/api/xendit/webhook`;
+    const successRedirect = `${process.env.BASE_URL || 'http://localhost:3000'}/xendit-payment.html?external_id=${externalId}`;
+    const failureRedirect = `${process.env.BASE_URL || 'http://localhost:3000'}/xendit-payment.html?external_id=${externalId}`;
+
+    const invoicePayload = {
+      external_id: externalId,
+      amount: finalAmount,
+      description: `SPP ${student.nama_siswa} - ${student.nama_sekolah}`,
+      invoice_duration: 31536000,
+      currency: 'IDR',
+      success_redirect_url: successRedirect,
+      failure_redirect_url: failureRedirect
+    };
+
+    const response = await axios.post(
+      `${XENDIT_API_BASE}/v2/invoices`,
+      invoicePayload,
+      {
+        headers: {
+          'Authorization': `Basic ${getXenditAuth(config.xendit_api_key)}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    const xenditInvoice = response.data;
+
+    console.log(`[PUBLIC-CREATE-INVOICE] Invoice created: ${xenditInvoice.id} for student ${student_id}, tenant ${tenant_id}`);
+
+    await db.query(
+      `INSERT INTO xendit_invoices (tenant_id, student_id, xendit_invoice_id, external_id, amount, description, status, payment_method, callback_url, invoice_url, expiry_date)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        tenant_id,
+        student_id,
+        xenditInvoice.id,
+        externalId,
+        finalAmount,
+        invoicePayload.description,
+        xenditInvoice.status,
+        'MULTIPLE',
+        callbackUrl,
+        xenditInvoice.invoice_url,
+        xenditInvoice.expiry_date
+      ]
+    );
+
+    res.json({
+      success: true,
+      message: 'Invoice Xendit berhasil dibuat',
+      data: {
+        invoice_id: xenditInvoice.id,
+        external_id: externalId,
+        invoice_url: xenditInvoice.invoice_url,
+        payment_page_url: `${process.env.BASE_URL || 'http://localhost:3000'}/xendit-payment.html?external_id=${encodeURIComponent(externalId)}`,
+        amount: finalAmount,
+        status: xenditInvoice.status,
+        expiry_date: xenditInvoice.expiry_date,
+        payment_methods: xenditInvoice.available_payment_methods
+      }
+    });
+  } catch (error) {
+    console.error('Create invoice error:', error.response?.data || error.message);
+    res.status(500).json({ success: false, message: error.response?.data?.message || 'Error creating invoice' });
   }
 });
 

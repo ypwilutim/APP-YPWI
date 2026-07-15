@@ -38,6 +38,15 @@
       display: flex;
     }
 
+    .modal-content.show {
+      display: block;
+    }
+
+    #skGuruModal.hidden { display: none; }
+    #skGuruModal.show { display: flex; }
+    #accountModal.hidden { display: none; }
+    #accountModal.show { display: flex; }
+
     .chart-placeholder {
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
       border-radius: 8px;
@@ -112,6 +121,12 @@
           data-tab="dashboard">
           <i class="fas fa-chart-line"></i>
           <span>Dashboard</span>
+        </button>
+        <button
+          class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+          data-tab="akun-guru">
+          <i class="fas fa-user-check"></i>
+          <span>Akun Guru</span>
         </button>
         <button
           class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
@@ -275,6 +290,80 @@
         </div>
       </div>
 
+      <!-- Akun Guru Tab -->
+      <div id="akun-guruTab" class="tab-content hidden">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+          <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Guru Aktif</p>
+                <p class="text-3xl font-bold text-gray-900 mt-2" id="akunTotalGuru">0</p>
+              </div>
+              <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                <i class="fas fa-users text-blue-600"></i>
+              </div>
+            </div>
+          </div>
+          <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Punya Akun</p>
+                <p class="text-3xl font-bold text-green-600 mt-2" id="akunPunyaAkun">0</p>
+              </div>
+              <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                <i class="fas fa-user-check text-green-600"></i>
+              </div>
+            </div>
+          </div>
+          <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Belum Punya Akun</p>
+                <p class="text-3xl font-bold text-red-600 mt-2" id="akunBelumAkun">0</p>
+              </div>
+              <div class="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
+                <i class="fas fa-user-times text-red-600"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div class="flex justify-between items-center mb-6">
+            <h3 class="text-lg font-semibold text-gray-900">Guru Tanpa Akun</h3>
+            <div class="flex space-x-2">
+              <button onclick="loadNoAccountTeachers()" class="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700">
+                <i class="fas fa-sync-alt mr-2"></i>Muat Ulang
+              </button>
+              <button onclick="sendEmailToSelected()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+                <i class="fas fa-envelope mr-2"></i>Kirim Email ke Guru Tanpa Akun
+              </button>
+            </div>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full">
+              <thead class="bg-gray-50 border-b border-gray-100">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">
+                    <input type="checkbox" id="selectAllNoAccount" onchange="toggleSelectAllNoAccount()">
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Nama</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">NIK</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">NIP</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Email</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">No. WA</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Unit</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="noAccountTableBody" class="divide-y divide-gray-100">
+                <tr><td colspan="8" class="text-center py-8 text-gray-500">Memuat data...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
       <!-- Teachers Tab -->
       <div id="teachersTab" class="tab-content hidden">
         <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
@@ -374,8 +463,7 @@
           <div class="flex justify-between items-center mb-6">
             <h3 class="text-lg font-semibold text-gray-900">Manajemen Data Siswa</h3>
             <div class="flex space-x-2">
-              <button onclick="showStudentTransferModal()"
-                class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700">
+              <button onclick="showStudentMutasiModal()" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700" id="mutasiBtn" disabled>
                 <i class="fas fa-exchange-alt mr-2"></i>Mutasi
               </button>
               <button onclick="showStudentFilterModal()"
@@ -385,10 +473,6 @@
               <button onclick="loadStudentPaymentSummary()"
                 class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">
                 <i class="fas fa-wallet mr-2"></i>Ringkasan Iuran
-              </button>
-              <button onclick="showMutasiStudentsModal()"
-                class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700">
-                <i class="fas fa-exchange-alt mr-2"></i>Mutasi Lintas Sekolah
               </button>
               <button onclick="showAddStudentModal()"
                 class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
@@ -411,9 +495,7 @@
             <table class="w-full">
               <thead class="bg-gray-50 border-b border-gray-100">
                 <tr>
-                  <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">
-                    <input type="checkbox" id="selectAllStudents" onchange="toggleSelectAllStudents()">
-                  </th>
+                  <th class="px-6 py-4 text-center text-xs font-semibold text-gray-600 uppercase"><input type="checkbox" id="selectAllStudents" onchange="toggleSelectAllStudents()"></th>
                   <th
                     class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase cursor-pointer hover:bg-gray-100"
                     onclick="sortStudents('nama_siswa')">Nama <i class="fas fa-sort"></i></th>
@@ -426,9 +508,6 @@
                   <th
                     class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase cursor-pointer hover:bg-gray-100"
                     onclick="sortStudents('nama_kelas')">Kelas <i class="fas fa-sort"></i></th>
-                  <th
-                    class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase cursor-pointer hover:bg-gray-100"
-                    onclick="sortStudents('nama_sekolah')">Sekolah <i class="fas fa-sort"></i></th>
                   <th class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase">Orang Tua</th>
                   <th
                     class="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase cursor-pointer hover:bg-gray-100"
@@ -438,7 +517,7 @@
               </thead>
               <tbody id="studentsTable" class="divide-y divide-gray-100">
                 <tr>
-                  <td colspan="9" class="px-6 py-12 text-center text-gray-500">
+                  <td colspan="7" class="px-6 py-12 text-center text-gray-500">
                     <i class="fas fa-spinner fa-spin text-xl mb-2"></i>
                     <p>Memuat data...</p>
                   </td>
@@ -810,6 +889,38 @@
                 class="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 text-sm">
                 <i class="fas fa-history mr-1"></i>Riwayat
               </button>
+              <button onclick="toggleDeductionSettings()"
+                class="bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 text-sm">
+                <i class="fas fa-cog mr-1"></i>Potongan & T. Kehadiran
+              </button>
+            </div>
+          </div>
+
+          <!-- Panel Pengaturan Potongan Absensi & T. Kehadiran (GLOBAL) -->
+          <div id="deductionSettingsPanel" class="hidden mb-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+            <div class="flex items-center justify-between mb-3">
+              <h4 class="font-semibold text-amber-800">Pengaturan Potongan Absensi &amp; T. Kehadiran</h4>
+              <button onclick="toggleDeductionSettings()" class="text-amber-700 hover:text-amber-900 text-sm"><i class="fas fa-times"></i></button>
+            </div>
+            <p class="text-xs text-amber-700 mb-3">Nilai berlaku untuk <b>semua unit</b>. Potongan dihitung otomatis:
+              (Terlambat &times; Rp) + (Izin &times; Rp) + (Sakit &times; Rp) + (Tanpa Keterangan &times; Rp) + (Tidak Hadir &times; Rp).</p>
+            <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <div><label class="block text-xs text-gray-600 mb-1">Potong Terlambat (Rp/kali)</label>
+                <input type="number" id="setPotTerlambat" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" step="1000"></div>
+              <div><label class="block text-xs text-gray-600 mb-1">Potong Izin (Rp/hari)</label>
+                <input type="number" id="setPotIzin" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" step="1000"></div>
+              <div><label class="block text-xs text-gray-600 mb-1">Potong Sakit (Rp/hari)</label>
+                <input type="number" id="setPotSakit" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" step="1000"></div>
+              <div><label class="block text-xs text-gray-600 mb-1">Potong Tanpa Keterangan (Rp/hari)</label>
+                <input type="number" id="setPotTanpaKet" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" step="1000"></div>
+              <div><label class="block text-xs text-gray-600 mb-1">Potong Tidak Hadir (Rp/hari)</label>
+                <input type="number" id="setPotTidakHadir" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" step="1000"></div>
+              <div><label class="block text-xs text-gray-600 mb-1">T. Kehadiran (Rp, tetap)</label>
+                <input type="number" id="setTunjKehadiran" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" step="1000"></div>
+            </div>
+            <div class="mt-3 flex gap-2">
+              <button onclick="saveDeductionSettings()"
+                class="bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 text-sm"><i class="fas fa-save mr-1"></i>Simpan Pengaturan</button>
             </div>
           </div>
 
@@ -830,7 +941,8 @@
                     <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">T. Anak</th>
                     <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">T. KepSek</th>
                     <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">T. WaliKelas</th>
-                    <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Honor Bendahara</th>
+                    <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">T. Bendahara</th>
+                    <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">T. Kehadiran</th>
                     <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Potongan</th>
                     <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Total</th>
                     <th class="px-3 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Aksi</th>
@@ -843,7 +955,7 @@
                 </tbody>
                 <tfoot id="payrollFooter" class="bg-gray-50 font-semibold hidden">
                   <tr>
-                    <td colspan="13" class="px-3 py-3 text-right text-gray-700">Total Keseluruhan</td>
+                    <td colspan="14" class="px-3 py-3 text-right text-gray-700">Total Keseluruhan</td>
                     <td id="payrollGrandTotal" class="px-3 py-3 text-right text-gray-900"></td>
                     <td></td>
                   </tr>
@@ -851,7 +963,8 @@
               </table>
             </div>
             <p class="text-xs text-gray-500 mt-3">Total = Gaji Pokok + T. Kinerja + T. Umum + T. Istri + T. Anak + T.
-              KepSek + T. WaliKelas + Honor Bendahara − Potongan. Kehadiran hanya informasi.</p>
+              KepSek + T. WaliKelas + T. Bendahara + T. Kehadiran − Potongan. Potongan dihitung otomatis dari absensi
+              (Terlambat, Izin, Sakit, Tanpa Keterangan, Tidak Hadir) sesuai pengaturan.</p>
           </div>
 
           <!-- History View -->
@@ -999,9 +1112,9 @@
             </div>
           </div>
 
-          <!-- SK Guru Modal -->
-          <div id="skGuruModal"
-            class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+           <!-- SK Guru Modal -->
+           <div id="skGuruModal"
+             class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
             <div class="bg-white rounded-xl p-6 w-full max-w-2xl mx-4">
               <div class="flex justify-between items-center mb-4">
                 <h3 class="text-lg font-semibold text-gray-900" id="skGuruModalTitle">Buat SK Guru</h3>
@@ -2631,6 +2744,7 @@
 
       const titles = {
         'dashboard': 'Dashboard',
+        'akun-guru': 'Akun Guru',
         'teachers': 'Manajemen Guru',
         'students': 'Manajemen Siswa',
         'evaluations': 'Penilaian Guru Otomatis',
@@ -2651,6 +2765,9 @@
         if (typeof loadTenantFilters === 'function') loadTenantFilters();
         if (typeof loadAttendanceLogs === 'function') loadAttendanceLogs();
       }
+      if (tabName === 'students') {
+        if (typeof loadStudents === 'function') loadStudents();
+      }
       if (tabName === 'whatsapp') {
         if (typeof loadWhatsAppTemplates === 'function') loadWhatsAppTemplates();
         if (typeof loadStudentsForBill === 'function') loadStudentsForBill();
@@ -2660,6 +2777,9 @@
       if (tabName === 'payroll') {
         if (typeof loadPayrollSelectors === 'function') loadPayrollSelectors();
         if (typeof loadPayroll === 'function') loadPayroll();
+      }
+      if (tabName === 'akun-guru') {
+        if (typeof loadAkunGuru === 'function') loadAkunGuru();
       }
     };
 
@@ -2673,6 +2793,114 @@
 
   <script src="js/admin-dashboard.js" defer></script>
   <script src="js/payroll-admin.js" defer></script>
-</body>
 
-</html>
+  <!-- Student Edit Modal -->
+  <div id="studentEditModal" class="modal fixed inset-0 bg-black bg-opacity-50 z-[10000] justify-center items-center">
+    <div class="main-card w-full max-w-2xl mx-4 bg-white max-h-[90vh] flex flex-col">
+      <div class="p-5 border-b border-gray-100 flex items-center justify-between">
+        <div class="flex items-center">
+          <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+            <i class="fas fa-user-graduate text-blue-600"></i>
+          </div>
+          <div>
+            <h3 class="text-lg font-semibold text-gray-900">Edit Data Siswa</h3>
+            <p class="text-gray-600 text-sm">Semua field dari tabel students &amp; parents</p>
+          </div>
+        </div>
+        <button onclick="closeStudentEditModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
+      </div>
+      <div class="p-5 overflow-y-auto flex-1">
+        <input type="hidden" id="editStudentId">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Sekolah (Tenant)</label>
+            <select id="editStudentTenant" onchange="fetchClassesForTenant(this.value)" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"></select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Kelas</label>
+            <select id="editStudentClass" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"></select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Nama Siswa</label>
+            <input type="text" id="editStudentNama" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">NIS</label>
+            <input type="text" id="editStudentNis" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">NISN</label>
+            <input type="text" id="editStudentNisn" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Jenis Kelamin</label>
+            <select id="editStudentJk" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500">
+              <option value="">--</option>
+              <option value="L">Laki-laki</option>
+              <option value="P">Perempuan</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Iuran Bulanan (Rp)</label>
+            <input type="number" id="editStudentIuran" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500" min="0" step="1000">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Nama Orang Tua</label>
+            <input type="text" id="editStudentParent" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">No. WA Orang Tua</label>
+            <input type="text" id="editStudentWa" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500">
+          </div>
+        </div>
+      </div>
+      <div class="p-4 border-t border-gray-100 flex justify-end space-x-2">
+        <button onclick="closeStudentEditModal()" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-md text-sm font-medium hover:bg-gray-200">Batal</button>
+        <button onclick="saveStudentEdit()" class="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700">Simpan</button>
+      </div>
+</div>
+  </div>
+
+  <!-- Akun Guru Modal -->
+  <div id="accountModal" class="modal fixed inset-0 bg-black bg-opacity-50 z-[10001] justify-center items-center">
+    <div class="bg-white rounded-lg max-w-3xl w-full mx-4 max-h-[90vh] flex flex-col">
+      <div class="p-5 border-b border-gray-100 flex items-center justify-between">
+        <h3 class="text-lg font-semibold text-gray-900">Guru Tanpa Akun</h3>
+        <button onclick="closeAccountModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
+      </div>
+      <div class="p-5 overflow-y-auto flex-1">
+        <div class="mb-4 flex items-center justify-between">
+          <p class="text-sm text-gray-600">Daftar guru yang belum memiliki akun sistem:</p>
+          <button onclick="sendEmailToSelected()" class="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 flex items-center">
+            <i class="fas fa-envelope mr-2"></i>Kirim Email ke Guru Tanpa Akun
+          </button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead class="bg-gray-50 border-b border-gray-100">
+              <tr>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">
+                  <input type="checkbox" id="selectAllNoAccount" onchange="toggleSelectAllNoAccount()">
+                </th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Nama</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">NIK</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Email</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">No. WA</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Unit</th>
+              </tr>
+            </thead>
+            <tbody id="noAccountTableBody" class="divide-y divide-gray-100">
+              <tr><td colspan="6" class="text-center py-8 text-gray-500">Memuat data...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="p-4 border-t border-gray-100 flex justify-end space-x-2">
+        <button onclick="closeAccountModal()" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-md text-sm font-medium hover:bg-gray-200">Tutup</button>
+      </div>
+    </div>
+  </div>
+
+  </body>
+
+  </html>

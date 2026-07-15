@@ -13,6 +13,7 @@ const { logToFile } = require('../middlewares/logger');
 const { fetchMetaTemplates } = require('../utils/whatsappTemplate');
 
 const router = express.Router();
+const XLSX = require('xlsx');
 
 // ============================================================
 // MULTER CONFIG FOR TEACHER PHOTOS
@@ -41,6 +42,17 @@ const teacherUpload = multer({
       return cb(new Error('Format file tidak didukung. Gunakan JPG, PNG, atau GIF'));
     }
     cb(null, true);
+  }
+});
+
+const excelUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+  fileFilter: (req, file, cb) => {
+    const allowed = ['.xlsx', '.xls', '.csv'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowed.includes(ext)) cb(null, true);
+    else cb(new Error('Format file harus .xlsx, .xls, atau .csv'));
   }
 });
 
@@ -688,16 +700,21 @@ router.get('/admin/teachers', authenticateOperator, async (req, res) => {
   try {
     let tenantId = req.query.tenant_id;
 
-    if (req.user.role === 'guru' && !tenantId) {
+    if (req.user.role !== 'admin' && !tenantId) {
       const adminAssignments = (req.user.assignments || []).filter(a => {
-        const roles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin'];
+        const roles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin', 'guru'];
         return roles.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''));
       });
       if (adminAssignments.length === 1) {
         tenantId = adminAssignments[0].tenant_id;
       } else if (adminAssignments.length > 1) {
-        return res.status(400).json({ success: false, message: 'Tentukan tenant_id' });
+        tenantId = req.user.tenant_id || adminAssignments[0].tenant_id;
       }
+    }
+
+    // For 'guru' role, use their assigned tenant from assignments or user's primary tenant
+    if (req.user.role === 'guru' && !tenantId) {
+      tenantId = req.user.tenant_id || (req.user.assignments?.[0]?.tenant_id);
     }
 
     let query = `
@@ -1044,18 +1061,195 @@ router.get('/admin/summary', authenticateOperator, async (req, res) => {
     }
     const [totalLocations] = await db.query(locQuery, locParams);
 
+    let accountWithQuery = 'SELECT COUNT(DISTINCT t.id) as count FROM teachers t JOIN users u ON t.id = u.guru_id WHERE t.status_aktif = 1';
+    let accountWithParams = [];
+    if (tenantId) {
+      accountWithQuery += ' AND EXISTS (SELECT 1 FROM teacher_assignments ta WHERE ta.teacher_id = t.id AND ta.tenant_id = ?)';
+      accountWithParams.push(tenantId);
+    }
+    const [teachersWithAccount] = await db.query(accountWithQuery, accountWithParams);
+
+    let accountWithoutQuery = 'SELECT COUNT(DISTINCT t.id) as count FROM teachers t LEFT JOIN users u ON t.id = u.guru_id WHERE t.status_aktif = 1 AND u.id IS NULL';
+    let accountWithoutParams = [];
+    if (tenantId) {
+      accountWithoutQuery += ' AND EXISTS (SELECT 1 FROM teacher_assignments ta WHERE ta.teacher_id = t.id AND ta.tenant_id = ?)';
+      accountWithoutParams.push(tenantId);
+    }
+    const [teachersWithoutAccount] = await db.query(accountWithoutQuery, accountWithoutParams);
+
     res.json({
       success: true,
       data: {
         totalTeachers: totalTeachers.count,
         activeToday: activeToday.count,
         lateToday: lateToday.count,
-        totalLocations: totalLocations.count
+        totalLocations: totalLocations.count,
+        teachersWithAccount: teachersWithAccount.count,
+        teachersWithoutAccount: teachersWithoutAccount.count
       }
     });
   } catch (error) {
     console.error('Admin summary error:', error);
     res.status(500).json({ success: false, message: 'Error fetching summary' });
+  }
+});
+
+// GET /api/admin/teacher-account-summary - Get list of teachers without accounts
+router.get('/admin/teacher-account-summary', authenticateOperator, async (req, res) => {
+  try {
+    let tenantId = req.query.tenant_id;
+
+    if (req.user.role !== 'admin' && !tenantId) {
+      const adminAssignments = (req.user.assignments || []).filter(a => {
+        const roles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin'];
+        return roles.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''));
+      });
+      if (adminAssignments.length === 1) {
+        tenantId = adminAssignments[0].tenant_id;
+      } else if (adminAssignments.length > 1) {
+        tenantId = adminAssignments[0].tenant_id;
+      }
+    }
+
+    if (tenantId && !verifyTenantAccess(req, tenantId)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+
+    let query = `
+      SELECT t.id, t.nama, t.nik, t.nip, t.email, t.no_wa, t.status_kepegawaian,
+             GROUP_CONCAT(DISTINCT CONCAT(ta.tenant_id, ':', ta.jabatan_di_unit, ':', tn.nama_sekolah)) as assignments
+      FROM teachers t
+      LEFT JOIN users u ON t.id = u.guru_id
+      LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id
+      LEFT JOIN tenants tn ON ta.tenant_id = tn.tenant_id
+      WHERE t.status_aktif = 1 AND u.id IS NULL
+    `;
+    let params = [];
+
+    if (tenantId) {
+      query += ' AND EXISTS (SELECT 1 FROM teacher_assignments ta2 WHERE ta2.teacher_id = t.id AND ta2.tenant_id = ?)';
+      params.push(tenantId);
+    }
+
+    query += ' GROUP BY t.id ORDER BY t.nama ASC';
+    const teachers = await db.query(query, params);
+
+    const formattedTeachers = teachers.map(teacher => ({
+      ...teacher,
+      assignments: teacher.assignments ? teacher.assignments.split(',').map(a => {
+        const [tenant_id, jabatan, nama_sekolah] = a.split(':');
+        return { tenant_id, jabatan_di_unit: jabatan, nama_sekolah };
+      }) : []
+    }));
+
+    res.json({ success: true, data: formattedTeachers });
+  } catch (error) {
+    console.error('Teacher account summary error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching teacher account summary' });
+  }
+});
+
+// POST /api/admin/send-email-no-account - Send email to teachers without accounts
+router.post('/admin/send-email-no-account', authenticateOperator, async (req, res) => {
+  try {
+    const { teacher_ids, message } = req.body;
+
+    if (!teacher_ids || !Array.isArray(teacher_ids) || teacher_ids.length === 0) {
+      return res.status(400).json({ success: false, message: 'Pilih minimal satu guru' });
+    }
+
+    let tenantId = req.query.tenant_id;
+    if (req.user.role !== 'admin' && !tenantId) {
+      const adminAssignments = (req.user.assignments || []).filter(a => {
+        const roles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin'];
+        return roles.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''));
+      });
+      if (adminAssignments.length === 1) {
+        tenantId = adminAssignments[0].tenant_id;
+      } else if (adminAssignments.length > 1) {
+        tenantId = adminAssignments[0].tenant_id;
+      }
+    }
+
+    const placeholders = teacher_ids.map(() => '?').join(',');
+    let query = `
+      SELECT t.id, t.nama, t.email, t.no_wa
+      FROM teachers t
+      LEFT JOIN users u ON t.id = u.guru_id
+      WHERE t.status_aktif = 1 AND u.id IS NULL AND t.id IN (${placeholders})
+    `;
+    let params = [...teacher_ids];
+
+    if (tenantId) {
+      query += ' AND EXISTS (SELECT 1 FROM teacher_assignments ta WHERE ta.teacher_id = t.id AND ta.tenant_id = ?)';
+      params.push(tenantId);
+    }
+
+    const teachers = await db.query(query, params);
+
+    if (teachers.length === 0) {
+      return res.status(404).json({ success: false, message: 'Tidak ada guru tanpa akun yang ditemukan' });
+    }
+
+    let sentCount = 0;
+    let errorMessages = [];
+
+    for (const teacher of teachers) {
+      if (!teacher.email) {
+        errorMessages.push(`${teacher.nama}: email tidak tersedia`);
+        continue;
+      }
+
+      const customMessage = message || 'Akun sistem absensi Anda belum dibuat. Silakan hubungi admin untuk mengaktivasi akun Anda.';
+      const htmlMessage = `<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aktivasi Akun - YPWI Lutim</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5;">
+  <div style="max-width: 600px; margin: 20px auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+    <div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 30px; text-align: center;">
+      <h1 style="margin: 0; color: white; font-size: 24px;">YPWI LUTIM</h1>
+      <p style="margin: 5px 0 0 0; color: rgba(255,255,255,0.9); font-size: 14px;">Notifikasi Aktivasi Akun</p>
+    </div>
+    <div style="padding: 30px;">
+      <h2 style="margin: 0 0 20px 0; color: #333; font-size: 20px;">⚠️ Akun Belum Aktif</h2>
+      <p style="margin: 0 0 15px 0; color: #555; font-size: 16px; line-height: 1.6;">
+        Assalamu'alaikum <strong>${teacher.nama}</strong>,
+      </p>
+      <p style="margin: 0 0 20px 0; color: #555; font-size: 16px; line-height: 1.6;">
+        ${customMessage}
+      </p>
+      <p style="margin: 20px 0 0 0; color: #888; font-size: 14px;">Email ini dikirim otomatis oleh sistem. Silakan hubungi admin sekolah untuk proses aktivasi akun.</p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+      try {
+        if (typeof global.sendEmail === 'function') {
+          await global.sendEmail(teacher.email, 'Pemberitahuan Aktivasi Akun - YPWI Lutim', htmlMessage);
+          sentCount++;
+        } else {
+          errorMessages.push(`${teacher.nama}: email tidak terkirim`);
+        }
+      } catch (emailError) {
+        errorMessages.push(`${teacher.nama}: ${emailError.message}`);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Email berhasil dikirim ke ${sentCount} dari ${teachers.length} guru`,
+      sentCount,
+      totalCount: teachers.length,
+      errors: errorMessages
+    });
+  } catch (error) {
+    console.error('Send email no account error:', error);
+    res.status(500).json({ success: false, message: 'Error sending email: ' + error.message });
   }
 });
 
@@ -1073,12 +1267,19 @@ router.get('/admin/students', authenticateOperator, async (req, res) => {
 
     if (req.user.role !== 'admin' && !tenantId) {
       const adminAssignments = (req.user.assignments || []).filter(a => {
-        const roles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin'];
+        const roles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin', 'guru'];
         return roles.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''));
       });
       if (adminAssignments.length === 1) {
         tenantId = adminAssignments[0].tenant_id;
+      } else if (adminAssignments.length > 1) {
+        tenantId = req.user.tenant_id || adminAssignments[0].tenant_id;
       }
+    }
+
+    // Fallback to user's primary tenant or first assignment
+    if (!tenantId && req.user.role === 'guru') {
+      tenantId = req.user.tenant_id || (req.user.assignments?.[0]?.tenant_id);
     }
 
     let countQuery = `
@@ -1110,14 +1311,14 @@ router.get('/admin/students', authenticateOperator, async (req, res) => {
     const total = totalResult.total;
 
     let query = `
-      SELECT s.id, s.nama_siswa, s.nisn, s.nis, s.jenis_kelamin, s.iuran_bulanan,
-             c.nama_kelas, tn.nama_sekolah, p.nama_orang_tua, p.no_wa as no_wa_ortu
-      FROM students s
-      LEFT JOIN classes c ON s.class_id = c.id
-      LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id
-      LEFT JOIN parents p ON s.parent_id = p.id
-      WHERE 1=1
-    `;
+SELECT s.id, s.nama_siswa, s.nisn, s.nis, s.jenis_kelamin, s.iuran_bulanan,
+       s.class_id, s.tenant_id, c.nama_kelas, tn.nama_sekolah, p.nama_orang_tua, p.no_wa as no_wa_ortu
+       FROM students s
+       LEFT JOIN classes c ON s.class_id = c.id
+       LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id
+       LEFT JOIN parents p ON s.parent_id = p.id
+       WHERE 1=1
+     `;
     let params = [];
 
     if (tenantId) {
@@ -1147,7 +1348,7 @@ router.get('/admin/students', authenticateOperator, async (req, res) => {
     };
     const sortField = allowedSortFields[sortBy] || 's.nama_siswa';
 
-    query += ` ORDER BY ${sortField} ${sortDir} LIMIT ? OFFSET ?`;
+    query += ` ORDER BY (s.class_id IS NULL) DESC, ${sortField} ${sortDir} LIMIT ? OFFSET ?`;
     params.push(limit, offset);
 
     const students = await db.query(query, params);
@@ -1168,6 +1369,231 @@ router.get('/admin/students', authenticateOperator, async (req, res) => {
   }
 });
 
+// GET /api/admin/students/incomplete - Students with incomplete data (esp. parent data)
+router.get('/admin/students/incomplete', authenticateOperator, async (req, res) => {
+  try {
+    const tenantId = req.query.tenant_id;
+    if (!tenantId) {
+      return res.status(400).json({ success: false, message: 'tenant_id wajib diisi' });
+    }
+    if (req.user.role !== 'admin' && !verifyTenantAccess(req, tenantId)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak untuk tenant ini' });
+    }
+
+    const query = `
+      SELECT s.id, s.nama_siswa, s.nisn, s.nis, s.jenis_kelamin, s.iuran_bulanan,
+             c.nama_kelas, tn.nama_sekolah,
+             p.id as parent_id, p.nama_orang_tua, p.no_wa as no_wa_ortu
+      FROM students s
+      LEFT JOIN classes c ON s.class_id = c.id
+      LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id
+      LEFT JOIN parents p ON s.parent_id = p.id
+      WHERE s.tenant_id = ?
+        AND (
+          s.parent_id IS NULL
+          OR p.nama_orang_tua IS NULL OR p.nama_orang_tua = ''
+          OR p.no_wa IS NULL OR p.no_wa = ''
+          OR s.nisn IS NULL OR s.nisn = ''
+          OR s.jenis_kelamin IS NULL OR s.jenis_kelamin = ''
+          OR s.iuran_bulanan IS NULL
+        )
+      ORDER BY c.nama_kelas ASC, s.nama_siswa ASC
+    `;
+    const students = await db.query(query, [tenantId]);
+
+    const formatted = students.map(s => {
+      const missing = [];
+      if (!s.parent_id || !s.nama_orang_tua) missing.push('Nama Orang Tua');
+      if (!s.no_wa_ortu) missing.push('No. WA Orang Tua');
+      if (!s.nisn) missing.push('NISN');
+      if (!s.jenis_kelamin) missing.push('Jenis Kelamin');
+      if (s.iuran_bulanan == null) missing.push('Iuran Bulanan');
+      return { ...s, missing };
+    });
+
+    res.json({ success: true, data: formatted, total: formatted.length });
+  } catch (error) {
+    console.error('Admin incomplete students error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching incomplete students' });
+  }
+});
+
+// GET /api/admin/students/incomplete/export - Export incomplete students as Excel
+router.get('/admin/students/incomplete/export', authenticateOperator, async (req, res) => {
+  try {
+    const tenantId = req.query.tenant_id;
+    if (!tenantId) {
+      return res.status(400).json({ success: false, message: 'tenant_id wajib diisi' });
+    }
+    if (req.user.role !== 'admin' && !verifyTenantAccess(req, tenantId)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak untuk tenant ini' });
+    }
+
+    const students = await db.query(`
+      SELECT s.id, s.nama_siswa, s.nisn, s.nis, s.jenis_kelamin, s.iuran_bulanan,
+             c.nama_kelas, p.nama_orang_tua, p.no_wa as no_wa_ortu
+      FROM students s
+      LEFT JOIN classes c ON s.class_id = c.id
+      LEFT JOIN parents p ON s.parent_id = p.id
+      WHERE s.tenant_id = ?
+        AND (
+          s.parent_id IS NULL
+          OR p.nama_orang_tua IS NULL OR p.nama_orang_tua = ''
+          OR p.no_wa IS NULL OR p.no_wa = ''
+          OR s.nisn IS NULL OR s.nisn = ''
+          OR s.jenis_kelamin IS NULL OR s.jenis_kelamin = ''
+          OR s.iuran_bulanan IS NULL
+        )
+      ORDER BY c.nama_kelas ASC, s.nama_siswa ASC
+    `, [tenantId]);
+
+    const data = students.map(s => ({
+      'ID Siswa': s.id,
+      'Nama Siswa': s.nama_siswa || '',
+      'NISN': s.nisn || '',
+      'NIS': s.nis || '',
+      'Kelas': s.nama_kelas || '',
+      'Nama Orang Tua': s.nama_orang_tua || '',
+      'No. WhatsApp': s.no_wa_ortu || '',
+      'Jenis Kelamin': s.jenis_kelamin || '',
+      'Iuran Bulanan': s.iuran_bulanan ?? ''
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(data.length ? data : [{ 'ID Siswa': '', 'Nama Siswa': '', 'NISN': '', 'NIS': '', 'Kelas': '', 'Nama Orang Tua': '', 'No. WhatsApp': '', 'Jenis Kelamin': '', 'Iuran Bulanan': '' }]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Siswa Belum Lengkap');
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    const fileName = `siswa_belum_lengkap_${tenantId}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.send(buf);
+  } catch (error) {
+    console.error('Export incomplete students error:', error);
+    res.status(500).json({ success: false, message: 'Error export data siswa' });
+  }
+});
+
+// GET /api/admin/students/export - Export ALL students as Excel for bulk editing
+router.get('/admin/students/export', authenticateOperator, async (req, res) => {
+  try {
+    const tenantId = req.query.tenant_id;
+    if (!tenantId) {
+      return res.status(400).json({ success: false, message: 'tenant_id wajib diisi' });
+    }
+    if (req.user.role !== 'admin' && !verifyTenantAccess(req, tenantId)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak untuk tenant ini' });
+    }
+
+    const students = await db.query(`
+      SELECT s.id, s.nama_siswa, s.nisn, s.nis, s.jenis_kelamin, s.iuran_bulanan,
+             c.nama_kelas, p.nama_orang_tua, p.no_wa as no_wa_ortu
+      FROM students s
+      LEFT JOIN classes c ON s.class_id = c.id
+      LEFT JOIN parents p ON s.parent_id = p.id
+      WHERE s.tenant_id = ?
+      ORDER BY c.nama_kelas ASC, s.nama_siswa ASC
+    `, [tenantId]);
+
+    const data = students.map(s => ({
+      'ID Siswa': s.id,
+      'Nama Siswa': s.nama_siswa,
+      'NISN': s.nisn || '',
+      'NIS': s.nis || '',
+      'Kelas': s.nama_kelas || '',
+      'Nama Orang Tua': s.nama_orang_tua || '',
+      'No. WhatsApp': s.no_wa_ortu || '',
+      'Jenis Kelamin': s.jenis_kelamin || '',
+      'Iuran Bulanan': s.iuran_bulanan ?? ''
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(data.length ? data : [{ 'ID Siswa': '', 'Nama Siswa': '', 'NISN': '', 'NIS': '', 'Kelas': '', 'Nama Orang Tua': '', 'No. WhatsApp': '', 'Jenis Kelamin': '', 'Iuran Bulanan': '' }]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Data Siswa');
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    const fileName = `data_siswa_${tenantId}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.send(buf);
+  } catch (error) {
+    console.error('Export students error:', error);
+    res.status(500).json({ success: false, message: 'Error export data siswa' });
+  }
+});
+
+// POST /api/admin/students/incomplete/import - Import edited Excel to update students
+router.post('/admin/students/incomplete/import', authenticateOperator, excelUpload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'File excel wajib diupload' });
+    }
+    const tenantId = req.body.tenant_id;
+    if (!tenantId) {
+      return res.status(400).json({ success: false, message: 'tenant_id wajib diisi' });
+    }
+    if (req.user.role !== 'admin' && !verifyTenantAccess(req, tenantId)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak untuk tenant ini' });
+    }
+
+    const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+    const errors = [];
+    let updated = 0;
+
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      const rowNo = i + 2;
+      const idVal = r['ID Siswa'];
+      const id = parseInt(idVal);
+      const namaSiswaRaw = String(r['Nama Siswa'] || '').trim();
+      const noWa = String(r['No. WhatsApp'] || '').trim();
+
+      let stu;
+      if (id) {
+        [stu] = await db.query('SELECT id, parent_id FROM students WHERE id = ? AND tenant_id = ?', [id, tenantId]);
+      } else if (namaSiswaRaw) {
+        [stu] = await db.query('SELECT id, parent_id FROM students WHERE nama_siswa = ? AND tenant_id = ?', [namaSiswaRaw, tenantId]);
+      }
+      if (!stu) {
+        const key = id || namaSiswaRaw;
+        errors.push(`Baris ${rowNo}: Siswa "${key}" tidak ditemukan di tenant ini`);
+        continue;
+      }
+
+      const namaOrangTua = String(r['Nama Orang Tua'] || '').trim() || null;
+      const nisn = String(r['NISN'] || '').trim() || null;
+      const nis = String(r['NIS'] || '').trim() || null;
+      const jk = String(r['Jenis Kelamin'] || '').trim() || null;
+      const iuranRaw = String(r['Iuran Bulanan'] || '').trim();
+      const iuran = iuranRaw === '' ? null : parseFloat(iuranRaw);
+
+      await db.query(
+        'UPDATE students SET nisn = COALESCE(?, nisn), nis = COALESCE(?, nis), nama_siswa = COALESCE(?, nama_siswa), jenis_kelamin = COALESCE(?, jenis_kelamin), iuran_bulanan = COALESCE(?, iuran_bulanan) WHERE id = ?',
+        [nisn, nis, namaSiswaRaw || null, jk, iuran, stu.id]
+      );
+
+      if (stu.parent_id) {
+        await db.query(
+          'UPDATE parents SET nama_orang_tua = COALESCE(?, nama_orang_tua), no_wa = COALESCE(?, no_wa) WHERE id = ?',
+          [namaOrangTua, noWa || null, stu.parent_id]
+        );
+      } else {
+        const ins = await db.query('INSERT INTO parents (nama_orang_tua, no_wa) VALUES (?, ?)', [namaOrangTua, noWa || null]);
+        await db.query('UPDATE students SET parent_id = ? WHERE id = ?', [ins.insertId, stu.id]);
+      }
+      updated++;
+    }
+
+    res.json({ success: true, updated, errors, message: `${updated} siswa diperbarui` });
+  } catch (error) {
+    console.error('Import incomplete students error:', error);
+    res.status(500).json({ success: false, message: 'Error import data siswa: ' + error.message });
+  }
+});
+
 // GET /api/admin/students/all - List all students (no pagination)
 router.get('/admin/students/all', authenticateOperator, async (req, res) => {
   try {
@@ -1175,7 +1601,7 @@ router.get('/admin/students/all', authenticateOperator, async (req, res) => {
 
     let query = `
       SELECT s.id, s.nama_siswa, s.nisn, s.nis, s.jenis_kelamin, s.iuran_bulanan,
-             s.class_id, c.nama_kelas, tn.nama_sekolah, p.no_wa as no_wa_ortu
+             s.class_id, s.tenant_id, c.nama_kelas, tn.nama_sekolah, p.no_wa as no_wa_ortu
       FROM students s
       LEFT JOIN classes c ON s.class_id = c.id
       LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id
@@ -1198,12 +1624,117 @@ router.get('/admin/students/all', authenticateOperator, async (req, res) => {
   }
 });
 
+// POST /api/admin/students/:id/mutasi - Initiate student mutasi transfer
+router.post('/admin/students/:id/mutasi', authenticateOperator, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { target_tenant_id, target_tenant_name, reason } = req.body;
+
+    const [student] = await db.query('SELECT id, nama_siswa, tenant_id, class_id FROM students WHERE id = ?', [id]);
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Siswa tidak ditemukan' });
+    }
+
+    const oldTenantId = student.tenant_id;
+    let newTenantId = target_tenant_id;
+
+    // If "Other" option selected with custom tenant name
+    if (target_tenant_id === 'other' && target_tenant_name) {
+      const [existingTenant] = await db.query('SELECT tenant_id FROM tenants WHERE tenant_id = ?', [target_tenant_name]);
+      if (existingTenant) {
+        newTenantId = existingTenant.tenant_id;
+      } else {
+        // Create new tenant
+        await db.query(
+          'INSERT INTO tenants (tenant_id, nama_sekolah) VALUES (?, ?)',
+          [target_tenant_name, target_tenant_name]
+        );
+        newTenantId = target_tenant_name;
+      }
+    }
+
+    if (!newTenantId) {
+      return res.status(400).json({ success: false, message: 'Tujuan mutasi wajib diisi' });
+    }
+
+    // Record mutasi in mutasi_students table (for tracking)
+    await db.query(
+      'INSERT INTO mutasi_students (student_id, old_tenant_id, new_tenant_id, reason, created_at) VALUES (?, ?, ?, ?, NOW())',
+      [id, oldTenantId, newTenantId, reason || null]
+    );
+
+    // Update student: set to new tenant, clear class_id
+    // Try with mutasi_status column first, fallback without
+    try {
+      await db.query(
+        'UPDATE students SET tenant_id = ?, class_id = NULL, mutasi_status = ? WHERE id = ?',
+        [newTenantId, 'completed', id]
+      );
+    } catch (colError) {
+      await db.query(
+        'UPDATE students SET tenant_id = ?, class_id = NULL WHERE id = ?',
+        [newTenantId, id]
+      );
+    }
+
+    res.json({ success: true, message: `${student.nama_siswa} berhasil dimutasi ke ${newTenantId}` });
+  } catch (error) {
+    console.error('Student mutasi error:', error);
+    res.status(500).json({ success: false, message: 'Error mutasi siswa: ' + error.message });
+  }
+});
+
+// GET /api/admin/mutasi/students - List mutasi students (students with NULL class_id in this tenant)
+router.get('/admin/mutasi/students', authenticateOperator, async (req, res) => {
+  try {
+    let tenantId = req.query.tenant_id;
+    let query = `
+      SELECT m.id as mutasi_id, m.student_id, m.old_tenant_id, m.new_tenant_id, m.reason, m.created_at,
+             s.nama_siswa, s.nisn, s.nis, s.jenis_kelamin, s.iuran_bulanan, s.tenant_id,
+             t.nama_sekolah as old_school, tn.nama_sekolah as new_school
+      FROM mutasi_students m
+      JOIN students s ON m.student_id = s.id
+      LEFT JOIN tenants t ON m.old_tenant_id = t.tenant_id
+      LEFT JOIN tenants tn ON m.new_tenant_id = tn.tenant_id
+      WHERE s.class_id IS NULL
+    `;
+    let params = [];
+    if (tenantId) {
+      query += ' AND s.tenant_id = ?';
+      params.push(tenantId);
+    }
+    query += ' ORDER BY m.created_at DESC';
+    const mutasiList = await db.query(query, params);
+    res.json({ success: true, data: mutasiList });
+  } catch (error) {
+    console.error('Get mutasi students error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching mutasi records' });
+  }
+});
+
+// PUT /admin/students/:id/class - Assign class to mutasi student (finalize adoption)
+router.put('/admin/students/:id/class', authenticateOperator, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { class_id } = req.body;
+    if (!class_id) {
+      return res.status(400).json({ success: false, message: 'class_id wajib diisi' });
+    }
+    await db.query('UPDATE students SET class_id = ? WHERE id = ?', [class_id, id]);
+    await db.query('DELETE FROM mutasi_students WHERE student_id = ?', [id]);
+    res.json({ success: true, message: 'Kelas siswa berhasil diset' });
+  } catch (error) {
+    console.error('Assign class error:', error);
+    res.status(500).json({ success: false, message: 'Error assigning class' });
+  }
+});
+
 // GET /api/admin/students/:id - Get single student by ID
 router.get('/admin/students/:id', authenticateOperator, async (req, res) => {
   try {
     const { id } = req.params;
     const [student] = await db.query(
-      'SELECT s.*, c.nama_kelas, tn.nama_sekolah FROM students s LEFT JOIN classes c ON s.class_id = c.id LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id WHERE s.id = ?',
+      'SELECT s.*, c.nama_kelas, tn.nama_sekolah, p.id as parent_id_ref, p.nama_orang_tua, p.no_wa as no_wa_ortu FROM students s LEFT JOIN classes c ON s.class_id = c.id LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id LEFT JOIN parents p ON s.parent_id = p.id WHERE s.id = ?',
       [id]
     );
 
@@ -1222,7 +1753,7 @@ router.get('/admin/students/:id', authenticateOperator, async (req, res) => {
 router.get('/admin/classes', authenticateOperator, async (req, res) => {
   try {
     let tenantId = req.query.tenant_id;
-    let query = 'SELECT id, tenant_id, nama_kelas FROM classes';
+    let query = 'SELECT id, tenant_id, nama_kelas, tingkatan FROM classes';
     let params = [];
 
     if (tenantId) {
@@ -1230,7 +1761,7 @@ router.get('/admin/classes', authenticateOperator, async (req, res) => {
       params.push(tenantId);
     }
 
-    query += ' ORDER BY nama_kelas ASC';
+    query += ' ORDER BY CAST(tingkatan AS UNSIGNED) ASC, nama_kelas ASC';
     const classes = await db.query(query, params);
     res.json({ success: true, data: classes });
   } catch (error) {
@@ -1265,19 +1796,33 @@ router.post('/admin/students', authenticateOperator, async (req, res) => {
   }
 });
 
-// PUT /api/admin/students/:id - Update student
+// PUT /api/admin/students/:id - Update student (including parent data)
 router.put('/admin/students/:id', authenticateOperator, async (req, res) => {
   try {
     const { id } = req.params;
-    const { tenant_id, nis, nisn, nama_siswa, jenis_kelamin, class_id, parent_id, iuran_bulanan } = req.body;
+    const { tenant_id, nis, nisn, nama_siswa, jenis_kelamin, class_id, parent_id, iuran_bulanan, nama_orang_tua, no_wa } = req.body;
 
     if (!nis || !nama_siswa) {
       return res.status(400).json({ success: false, message: 'NIS dan nama siswa wajib diisi' });
     }
 
+    // Resolve parent: use provided parent_id, or update/create parent from nama_orang_tua/no_wa
+    let resolvedParentId = parent_id || null;
+    if (!resolvedParentId && (nama_orang_tua || no_wa)) {
+      const [existing] = await db.query('SELECT id FROM students WHERE id = ?', [id]);
+      if (existing && existing.parent_id) {
+        resolvedParentId = existing.parent_id;
+        await db.query('UPDATE parents SET nama_orang_tua = COALESCE(?, nama_orang_tua), no_wa = COALESCE(?, no_wa) WHERE id = ?',
+          [nama_orang_tua || null, no_wa || null, resolvedParentId]);
+      } else {
+        const ins = await db.query('INSERT INTO parents (nama_orang_tua, no_wa) VALUES (?, ?)', [nama_orang_tua || null, no_wa || null]);
+        resolvedParentId = ins.insertId;
+      }
+    }
+
     const result = await db.query(
       'UPDATE students SET nis = ?, nisn = ?, nama_siswa = ?, jenis_kelamin = ?, class_id = ?, parent_id = ?, iuran_bulanan = ? WHERE id = ?',
-      [nis, nisn || null, nama_siswa, jenis_kelamin, class_id || null, parent_id || null, iuran_bulanan || 0, id]
+      [nis, nisn || null, nama_siswa, jenis_kelamin, class_id || null, resolvedParentId, iuran_bulanan || 0, id]
     );
 
     if (result.affectedRows === 0) {

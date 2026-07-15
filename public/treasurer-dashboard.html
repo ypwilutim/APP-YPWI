@@ -22,10 +22,6 @@
       display: none;
     }
 
-    .modal.show {
-      display: flex;
-    }
-
     .financial-card {
       transition: transform 0.2s;
     }
@@ -42,6 +38,38 @@
 </head>
 
 <body class="bg-gray-50 min-h-screen">
+  <!-- Login Overlay -->
+  <div id="loginOverlay" class="fixed inset-0 z-50 flex items-center justify-center bg-gray-50">
+    <div class="bg-white rounded-xl shadow-lg border border-gray-100 p-8 w-full max-w-sm">
+      <div class="flex items-center space-x-3 mb-6">
+        <div class="w-10 h-10 bg-emerald-600 rounded-lg flex items-center justify-center">
+          <i class="fas fa-wallet text-white"></i>
+        </div>
+        <div>
+          <h1 class="text-xl font-bold text-gray-900">YPWI Lutim</h1>
+          <p class="text-sm text-gray-500">Login Bendahara</p>
+        </div>
+      </div>
+      <form onsubmit="doLogin(event)">
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Username</label>
+          <input id="loginUsername" type="text" required autocomplete="username"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
+        </div>
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+          <input id="loginPassword" type="password" required autocomplete="current-password"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
+        </div>
+        <div id="loginError" class="hidden mb-4 text-sm text-red-600 bg-red-50 p-2 rounded"></div>
+        <button id="loginBtn" type="submit"
+          class="w-full px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium">
+          Masuk
+        </button>
+      </form>
+    </div>
+  </div>
+
   <div class="flex min-h-screen">
     <!-- Sidebar -->
     <aside class="w-64 bg-white shadow-lg border-r">
@@ -63,10 +91,10 @@
           <i class="fas fa-chart-line"></i>
           <span>Dashboard</span>
         </button>
-<button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
-           data-tab="payroll">
+        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+          data-tab="payroll">
           <i class="fas fa-wallet"></i>
-           <span>Penggajian</span>
+          <span>Penggajian</span>
         </button>
         <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
           data-tab="spp">
@@ -74,19 +102,24 @@
           <span>SPP Siswa</span>
         </button>
         <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+          data-tab="invoice-individual">
+          <i class="fas fa-file-invoice"></i>
+          <span>Buat Invoice Individual</span>
+        </button>
+        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
           data-tab="reports">
           <i class="fas fa-chart-bar"></i>
           <span>Laporan Keuangan</span>
         </button>
-<button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
-           data-tab="reminders">
+        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+          data-tab="reminders">
           <i class="fas fa-bell"></i>
-           <span>Pengingat SPP</span>
+          <span>Pengingat SPP</span>
         </button>
         <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
-           data-tab="attendanceRecap">
+          data-tab="attendanceRecap">
           <i class="fas fa-calendar-check"></i>
-           <span>Rekap Absensi</span>
+          <span>Rekap Absensi</span>
         </button>
       </nav>
     </aside>
@@ -106,6 +139,10 @@
               <i class="fas fa-user text-white text-sm"></i>
             </div>
             <span class="text-sm font-medium" id="treasurerRole">Bendahara</span>
+            <button onclick="logout()" title="Keluar"
+              class="ml-1 w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full flex items-center justify-center text-gray-600">
+              <i class="fas fa-sign-out-alt text-sm"></i>
+            </button>
           </div>
         </div>
       </div>
@@ -178,22 +215,64 @@
           </div>
         </div>
 
-        <!-- Charts Row -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-            <h3 class="text-lg font-semibold text-gray-900 mb-4">Distribusi Pendapatan SPP</h3>
-            <div class="chart-container">
-              <canvas id="incomeChart"></canvas>
-            </div>
-          </div>
+<!-- Tenant Summary Cards -->
+         <div id="tenantCards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+           <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 text-center">
+             <i class="fas fa-spinner fa-spin text-3xl text-gray-400"></i>
+             <p class="text-gray-500 mt-2">Memuat data...</p>
+           </div>
+         </div>
 
-          <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-            <h3 class="text-lg font-semibold text-gray-900 mb-4">Distribusi Gaji Guru</h3>
-            <div class="chart-container">
-              <canvas id="expenseChart"></canvas>
-            </div>
-          </div>
-        </div>
+         <!-- Overall Summary -->
+         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+           <div class="financial-card bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+             <div class="flex items-center justify-between">
+               <div>
+                 <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Pendapatan SPP</p>
+                 <p class="text-3xl font-bold text-emerald-600 mt-2" id="totalIncome">Rp 0</p>
+               </div>
+               <div class="w-12 h-12 bg-emerald-100 rounded-lg flex items-center justify-center">
+                 <i class="fas fa-arrow-down text-emerald-600"></i>
+               </div>
+             </div>
+           </div>
+
+           <div class="financial-card bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+             <div class="flex items-center justify-between">
+               <div>
+                 <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Gaji Guru</p>
+                 <p class="text-3xl font-bold text-red-600 mt-2" id="totalExpense">Rp 0</p>
+               </div>
+               <div class="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
+                 <i class="fas fa-arrow-up text-red-600"></i>
+               </div>
+             </div>
+           </div>
+
+           <div class="financial-card bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+             <div class="flex items-center justify-between">
+               <div>
+                 <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Saldo Kas</p>
+                 <p class="text-3xl font-bold text-blue-600 mt-2" id="currentBalance">Rp 0</p>
+               </div>
+               <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                 <i class="fas fa-wallet text-blue-600"></i>
+               </div>
+             </div>
+           </div>
+
+           <div class="financial-card bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+             <div class="flex items-center justify-between">
+               <div>
+                 <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Belum Bayar SPP</p>
+                 <p class="text-3xl font-bold text-orange-600 mt-2" id="unpaidCount">0 Siswa</p>
+               </div>
+               <div class="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                 <i class="fas fa-exclamation-triangle text-orange-600"></i>
+               </div>
+             </div>
+           </div>
+         </div>
 
         <!-- Recent Activity -->
         <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
@@ -204,120 +283,170 @@
         </div>
       </div>
 
-      <!-- Salary Tab -->
+      <!-- Payroll Tab (Sistem Admin) -->
       <div id="payrollTab" class="tab-content hidden">
-        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <div class="flex justify-between items-center mb-6">
-            <h3 class="text-lg font-semibold text-gray-900">Slip Gaji Guru</h3>
-            <div class="flex space-x-2">
-              <select id="payrollTenantSelect"
-                class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500">
-                <option value="">Semua Sekolah</option>
-              </select>
-              <input type="month" id="payrollBulan"
-                class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
-                value="">
-              <button onclick="loadPayroll()"
-                class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
-                <i class="fas fa-sync-alt mr-2"></i>Refresh
-              </button>
+        <div class="bg-white rounded-xl shadow-sm border-2 border-emerald-200 p-6 mb-4">
+          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+            <h3 class="text-lg font-semibold text-gray-900">Sistem Penggajian Guru</h3>
+            <div class="flex flex-wrap items-end gap-2">
+              <div><label class="block text-xs font-medium text-gray-600 mb-1">Sekolah</label>
+                <select id="payrollTenantSelect" class="px-3 py-2 border border-gray-300 rounded-md text-sm"><option value="">Semua Sekolah</option></select>
+              </div>
+              <div><label class="block text-xs font-medium text-gray-600 mb-1">Bulan</label>
+                <select id="payrollBulan" class="px-3 py-2 border border-gray-300 rounded-md text-sm">
+                  <option value="1">Januari</option><option value="2">Februari</option><option value="3">Maret</option><option value="4">April</option>
+                  <option value="5">Mei</option><option value="6">Juni</option><option value="7" selected>Juli</option><option value="8">Agustus</option>
+                  <option value="9">September</option><option value="10">Oktober</option><option value="11">November</option><option value="12">Desember</option>
+                </select>
+              </div>
+              <div><label class="block text-xs font-medium text-gray-600 mb-1">Tahun</label>
+                <select id="payrollTahun" class="px-3 py-2 border border-gray-300 rounded-md text-sm"></select>
+              </div>
+              <button onclick="loadPayroll()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm"><i class="fas fa-calculator mr-1"></i>Hitung</button>
+              <button onclick="exportPayrollTemplate()" class="bg-teal-600 text-white px-4 py-2 rounded-lg text-sm"><i class="fas fa-file-export mr-1"></i>Template</button>
+              <button onclick="importPayrollExcel()" class="bg-cyan-600 text-white px-4 py-2 rounded-lg text-sm"><i class="fas fa-file-import mr-1"></i>Import</button>
+              <button onclick="exportPayrollPDF()" class="bg-red-600 text-white px-4 py-2 rounded-lg text-sm"><i class="fas fa-file-pdf mr-1"></i>PDF</button>
+              <button onclick="exportPayrollBsiCUZ()" class="bg-orange-600 text-white px-4 py-2 rounded-lg text-sm"><i class="fas fa-file-export mr-1"></i>BSI CUZ</button>
+              <button onclick="sendSelectedPayrollEmails()" class="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm"><i class="fas fa-envelope mr-1"></i>Email Terpilih</button>
+              <button onclick="togglePayrollHistory()" class="bg-gray-600 text-white px-4 py-2 rounded-lg text-sm"><i class="fas fa-history mr-1"></i>Riwayat</button>
             </div>
           </div>
-
-          <div class="overflow-x-auto">
-            <table class="w-full">
-              <thead class="bg-gray-50 border-b border-gray-100">
-                <tr>
-                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Nama Guru</th>
-                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Jabatan</th>
-                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Gaji Pokok</th>
-                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Tunjangan</th>
-                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Honor</th>
-                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Total</th>
-                  <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Aksi</th>
-                </tr>
-              </thead>
-              <tbody id="payrollTable" class="divide-y divide-gray-100">
-                <tr>
-                  <td colspan="7" class="px-4 py-8 text-center text-gray-500">
-                    <i class="fas fa-spinner fa-spin text-xl mb-2"></i>
-                    <p>Memuat data...</p>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+<div id="payrollComputeView">
+             <div class="overflow-x-auto"><table class="w-full text-sm divide-y divide-gray-100"><thead class="bg-gray-50"><tr class="border-b">
+               <th class="px-3 py-2 text-center text-xs font-semibold text-gray-600 uppercase" style="width:40px"><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)"></th>
+               <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">#</th>
+               <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Nama</th>
+               <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">NIK</th>
+               <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
+               <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Gaji Pokok</th>
+               <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">T. Kinerja</th>
+               <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">T. Umum</th>
+               <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">T. Istri</th>
+               <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">T. Anak</th>
+               <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">T. KepSek</th>
+               <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">T. WaliKelas</th>
+               <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Honor</th>
+               <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Potongan</th>
+               <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Total</th>
+               <th class="px-3 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Aksi</th>
+             </tr></thead><tbody id="payrollTable" class="divide-y divide-gray-100"><tr><td colspan="16" class="px-4 py-8 text-center text-gray-500">
+                   <i class="fas fa-spinner fa-spin text-xl mb-2"></i>
+                   <p>Pilih periode lalu klik Hitung</p>
+               </td></tr></tbody></table></div>
+           </div>
+          <div id="payrollHistoryView" class="hidden">
+            <div class="flex justify-between mb-4"><h4>Riwayat Slip Gaji</h4><button onclick="togglePayrollHistory()" class="text-blue-600">← Kembali</button></div>
+            <div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr><th>Periode</th><th>Nama</th><th>NIK</th><th>Total</th><th>Aksi</th></tr></thead><tbody id="payrollHistoryTable"></tbody></table></div>
           </div>
         </div>
       </div>
 
-      <!-- SPP Tab -->
+      <!-- SPP Tab (Sistem Admin / Xendit) -->
       <div id="sppTab" class="tab-content hidden">
-        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <div class="flex justify-between items-center mb-6">
-            <h3 class="text-lg font-semibold text-gray-900">Ringkasan SPP Siswa</h3>
-            <div class="flex space-x-2">
-              <select id="sppTenantFilter"
-                class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500">
-                <option value="">Semua Sekolah</option>
-              </select>
-              <button onclick="loadSppData()"
-                class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
-                <i class="fas fa-sync-alt mr-2"></i>Refresh
-              </button>
-            </div>
+        <div class="bg-white rounded-xl shadow-sm border-2 border-blue-200 p-6 mb-4">
+          <h3 class="text-lg font-semibold mb-4">Ringkasan SPP Siswa</h3>
+          <div class="flex flex-wrap gap-2 mb-4">
+            <select id="sppMonthSelect" class="px-3 py-2 border">
+              <option value="1">Januari</option><option value="2">Februari</option><option value="3">Maret</option><option value="4">April</option>
+              <option value="5">Mei</option><option value="6">Juni</option><option value="7" selected>Juli</option><option value="8">Agustus</option>
+              <option value="9">September</option><option value="10">Oktober</option><option value="11">November</option><option value="12">Desember</option>
+            </select>
+            <select id="sppYearSelect" class="px-3 py-2 border"></select>
+            <button onclick="loadSppSummary()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm"><i class="fas fa-sync-alt mr-1"></i>Tampilkan</button>
+            <button onclick="syncAllInvoices()" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg text-sm"><i class="fas fa-sync mr-1"></i>Sync Semua</button>
+            <button onclick="loadStudentInvoices()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm"><i class="fas fa-list mr-1"></i>List Invoice Siswa</button>
+            <button onclick="generateSppBatch()" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm"><i class="fas fa-plus mr-1"></i>Buat Invoice Batch</button>
+            <button onclick="window.open('admin-dashboard.html#tagihan', '_blank')" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm"><i class="fas fa-external-link-alt mr-1"></i>Lihat Invoice</button>
           </div>
-
           <div class="overflow-x-auto">
-            <table class="w-full">
+            <table class="w-full text-sm">
               <thead class="bg-gray-50 border-b border-gray-100">
                 <tr>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">#</th>
                   <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Sekolah</th>
-                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Total Siswa</th>
-                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Sudah Bayar</th>
-                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Belum Bayar</th>
-                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Total Pemasukan</th>
+                  <th class="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Total Siswa</th>
+                  <th class="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Total Pemasukan</th>
+                  <th class="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Sudah Bayar</th>
+                  <th class="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Belum Bayar</th>
                   <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Aksi</th>
                 </tr>
               </thead>
-<tbody id="sppTable" class="divide-y divide-gray-100">
-                <tr>
-                  <td colspan="6" class="px-4 py-8 text-center text-gray-500">
-                    <i class="fas fa-spinner fa-spin text-xl mb-2"></i>
-                    <p>Memuat data...</p>
-                  </td>
-                </tr>
+              <tbody id="sppTable" class="divide-y divide-gray-100">
+                <tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">
+                  <i class="fas fa-spinner fa-spin text-xl mb-2"></i>
+                  <p>Pilih periode lalu klik Tampilkan</p>
+                </td></tr>
               </tbody>
             </table>
           </div>
 
-          <!-- CSV Upload Section -->
-          <div class="mt-6 border-t pt-4">
-            <h4 class="font-medium text-gray-900 mb-3">Import Pembayaran CSV (Rekening Koran BSI)</h4>
-            <div class="flex items-center space-x-3">
-              <input type="file" id="csvFileInput" accept=".csv"
-                class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500">
-              <button onclick="uploadPayments()"
-                class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                <i class="fas fa-upload mr-2"></i>Upload & Proses
-              </button>
+          <div id="invoicesSection" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+            <div class="bg-white rounded-xl shadow-2xl max-w-6xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+              <div class="flex justify-between items-center p-4 border-b sticky top-0 bg-white z-10">
+                <h4 class="font-semibold text-lg">Daftar Invoice Siswa</h4>
+                <button onclick="document.getElementById('invoicesSection').classList.add('hidden')" class="text-gray-500 hover:text-gray-700 text-2xl leading-none">&times;</button>
+              </div>
+              <div class="overflow-auto">
+                <table class="w-full text-sm">
+                  <thead class="bg-gray-50 border-b border-gray-100 sticky top-0">
+                    <tr>
+                      <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">#</th>
+                      <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Nama Siswa</th>
+                      <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Sekolah</th>
+                      <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Periode</th>
+                      <th class="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Jumlah</th>
+                      <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Status</th>
+                      <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody id="studentInvoicesTable" class="divide-y divide-gray-100"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
 </div>
-             <p class="text-xs text-gray-500 mt-2">Format BSI Rekening Koran: Tanggal,No.Rek,VA,Nama,Keterangan,Debit,Kredit. <a href="/template/BSI_Statement_Template.csv" class="text-emerald-600 underline">Download template</a></p>
-
-             <hr class="my-4">
-
-             <h4 class="font-medium text-gray-900 mb-3">Export VA untuk Cuz BSI</h4>
-             <div class="flex items-center space-x-3">
-               <button onclick="exportVA()"
-                 class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
-                 <i class="fas fa-download mr-2"></i>Download VA CSV
+       </div>
+ 
+       <!-- Invoice Individual Tab -->
+       <div id="invoice-individualTab" class="tab-content hidden">
+         <div class="bg-white rounded-xl shadow-sm border-2 border-indigo-200 p-6 mb-4">
+           <h3 class="text-lg font-semibold mb-4">Buat Invoice Individual</h3>
+           <div class="space-y-4 max-w-2xl">
+             <div>
+               <label class="block text-sm font-medium text-gray-700 mb-2">Pilih Sekolah</label>
+               <select id="individualTenantSelect" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" onchange="loadStudentsByTenant()">
+                 <option value=""> Pilih Sekolah </option>
+               </select>
+             </div>
+             <div>
+               <label class="block text-sm font-medium text-gray-700 mb-2">Nama Siswa / Pencarian</label>
+               <div class="relative">
+                 <input type="text" id="studentSearchInput" placeholder="Ketik nama siswa..." 
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent" 
+                   onkeyup="searchStudents()" autocomplete="off">
+                 <div id="studentSearchResults" class="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-lg shadow-lg hidden max-h-60 overflow-y-auto"></div>
+               </div>
+             </div>
+             <div>
+               <label class="block text-sm font-medium text-gray-700 mb-2">Jumlah (Opsional)</label>
+               <input type="number" id="individualAmount" min="0" step="1" placeholder="Kosongkan untuk jumlah default"
+                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+             </div>
+             <div class="flex space-x-3 pt-4">
+               <button onclick="createIndividualInvoice()"
+                 class="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium">
+                 <i class="fas fa-file-invoice mr-2"></i>Buat Invoice
+               </button>
+               <button onclick="createIndividualConcessionInvoice()"
+                 class="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium">
+                 <i class="fas fa-percentage mr-2"></i>Buat Invoice Keringanan
                </button>
              </div>
-             <p class="text-xs text-gray-500 mt-2">Download data siswa untuk dibuat Virtual Account di Cuz BSI</p>
            </div>
-        </div>
-      </div>
-
-      <!-- Reports Tab -->
+         </div>
+       </div>
+ 
+       <!-- Reports Tab -->
       <div id="reportsTab" class="tab-content hidden">
         <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <div class="flex justify-between items-center mb-6">
@@ -343,22 +472,22 @@
         </div>
       </div>
 
-      <!-- Attendance Recap Tab -->
+      <!-- Attendance Recap Tab (Sistem Admin) -->
       <div id="attendanceRecapTab" class="tab-content hidden">
-        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <div class="flex justify-between items-center mb-4">
-            <h3 class="text-lg font-semibold text-gray-900">Rekap Absensi Bulanan</h3>
-            <div class="flex space-x-2">
-              <select id="recapTenantSelect" class="px-3 py-2 border border-gray-300 rounded-md"><option value="">Memuat...</option></select>
-              <select id="recapMonthSelect" class="px-3 py-2 border border-gray-300 rounded-md">
-                <option value="1">Januari</option><option value="2">Februari</option><option value="3">Maret</option><option value="4">April</option>
-                <option value="5">Mei</option><option value="6">Juni</option><option value="7" selected>Juli</option><option value="8">Agustus</option>
-                <option value="9">September</option><option value="10">Oktober</option><option value="11">November</option><option value="12">Desember</option>
-              </select>
-              <select id="recapYearSelect" class="px-3 py-2 border border-gray-300 rounded-md"></select>
-              <button onclick="loadMonthlyRecap()" class="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700">Tampilkan</button>
-              <button onclick="exportMonthlyPdfFromRecap()" class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700">Export PDF</button>
-            </div>
+        <div class="bg-white rounded-xl shadow-sm border-2 border-purple-200 p-6 mb-4">
+          <div class="flex justify-between mb-4">
+            <h3 class="text-lg font-semibold">Rekap Absensi Bulanan</h3>
+          </div>
+          <div class="flex flex-wrap gap-2 mb-4">
+            <select id="recapTenantSelect" class="px-3 py-2 border"><option value="">Memuat...</option></select>
+            <select id="recapMonthSelect" class="px-3 py-2 border">
+              <option value="1">Januari</option><option value="2">Februari</option><option value="3">Maret</option><option value="4">April</option>
+              <option value="5">Mei</option><option value="6">Juni</option><option value="7" selected>Juli</option><option value="8">Agustus</option>
+              <option value="9">September</option><option value="10">Oktober</option><option value="11">November</option><option value="12">Desember</option>
+            </select>
+            <select id="recapYearSelect" class="px-3 py-2 border"></select>
+            <button onclick="loadMonthlyRecap()" class="bg-emerald-600 text-white px-4 py-2 rounded">Tampilkan</button>
+            <button onclick="exportMonthlyPdfFromRecap()" class="bg-red-600 text-white px-4 py-2 rounded">Export PDF</button>
           </div>
           <div id="monthlyRecapContent"></div>
         </div>
@@ -369,16 +498,20 @@
         <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <div class="flex justify-between items-center mb-6">
             <h3 class="text-lg font-semibold text-gray-900">Pengingat SPP</h3>
-            <div class="flex space-x-2">
-              <select id="reminderTenantFilter"
-                class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500">
-                <option value="">Semua Sekolah</option>
-              </select>
-              <button onclick="loadPaymentDefaulters()"
-                class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
-                <i class="fas fa-sync-alt mr-2"></i>Refresh
-              </button>
-            </div>
+<div class="flex space-x-2">
+               <select id="reminderTenantFilter"
+                 class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500">
+                 <option value="">Semua Sekolah</option>
+               </select>
+               <button onclick="loadPaymentDefaulters()"
+                 class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
+                 <i class="fas fa-sync-alt mr-2"></i>Refresh
+               </button>
+               <button onclick="sendAllReminders()"
+                 class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                 <i class="fab fa-whatsapp mr-2"></i>Kirim Semua
+               </button>
+             </div>
           </div>
 
           <div class="overflow-x-auto">
@@ -388,13 +521,15 @@
                   <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Nama Siswa</th>
                   <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">NISN</th>
                   <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Sekolah</th>
+                  <th class="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Tunggakan</th>
+                  <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Status</th>
                   <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">No. WA Orang Tua</th>
                   <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Aksi</th>
                 </tr>
               </thead>
               <tbody id="reminderTable" class="divide-y divide-gray-100">
                 <tr>
-                  <td colspan="5" class="px-4 py-8 text-center text-gray-500">
+                  <td colspan="7" class="px-4 py-8 text-center text-gray-500">
                     <i class="fas fa-spinner fa-spin text-xl mb-2"></i>
                     <p>Memuat data...</p>
                   </td>
@@ -407,96 +542,89 @@
     </main>
   </div>
 
-  <!-- Salary Slip Modal -->
-  <div id="salarySlipModal" class="modal fixed inset-0 bg-black bg-opacity-50 z-50 justify-center items-center">
-    <div class="bg-white rounded-lg max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-      <div class="p-6">
-        <div class="flex justify-between items-center mb-4">
-          <h3 class="text-lg font-semibold text-gray-900">Slip Gaji Guru</h3>
-          <button onclick="hideSalarySlipModal()" class="text-gray-500 hover:text-gray-700">
-            <i class="fas fa-times"></i>
-          </button>
-        </div>
-        <div id="salarySlipContent" class="space-y-4">
-          <div class="grid grid-cols-2 gap-4">
-            <div>
-              <label class="block text-sm font-medium text-gray-700">Nama</label>
-              <p id="slipNama" class="mt-1 text-gray-900 font-semibold">-</p>
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700">Jabatan</label>
-              <p id="slipJabatan" class="mt-1 text-gray-900">-</p>
-            </div>
-          </div>
-
-          <div class="border-t pt-4">
-            <h4 class="font-medium text-gray-900 mb-3">Rincian Gaji</h4>
-            <div class="space-y-2 text-sm">
-              <div class="flex justify-between">
-                <span>Gaji Pokok</span>
-                <span id="slipGajiPokok" class="font-medium">Rp 0</span>
-              </div>
-              <div class="flex justify-between">
-                <span>Tunjangan Kinerja</span>
-                <span id="slipTunjangan" class="font-medium">Rp 0</span>
-              </div>
-              <div class="flex justify-between border-t pt-2">
-                <span class="font-bold">Total Gaji</span>
-                <span id="slipTotal" class="font-bold text-emerald-600">Rp 0</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div class="flex justify-end space-x-3 pt-6 border-t mt-6">
-          <button type="button" onclick="hideSalarySlipModal()"
-            class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100">Tutup</button>
-          <button type="button" onclick="downloadSalarySlip()"
-            class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
-            <i class="fas fa-download mr-2"></i>Download PDF
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-    let currentTenantId = '';
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="js/payroll-admin.js"></script>
+  <script>
     let currentMonth = new Date().toISOString().slice(0, 7);
     let incomeChart = null;
     let expenseChart = null;
 
-document.addEventListener('DOMContentLoaded', function () {
-       loadTenantFilters();
-       loadDashboardData();
+    function initDashboard() {
+      loadTenantFilters();
+      loadDashboardData();
 
-       document.querySelectorAll('[data-tab]').forEach(btn => {
-         btn.addEventListener('click', function () {
-           switchTab(this.dataset.tab);
-         });
-       });
-     });
+      document.querySelectorAll('[data-tab]').forEach(btn => {
+        btn.addEventListener('click', function () {
+          const tabName = this.dataset.tab;
+          document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
+          document.querySelectorAll('[data-tab]').forEach(n => {
+            n.classList.remove('bg-emerald-600', 'text-white');
+            n.classList.add('text-gray-600');
+          });
+          document.getElementById(tabName + 'Tab').classList.remove('hidden');
+          this.classList.add('bg-emerald-600', 'text-white');
 
-    function switchTab(tabName) {
-      document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
-      document.querySelectorAll('[data-tab]').forEach(n => {
-        n.classList.remove('bg-emerald-600', 'text-white');
-        n.classList.add('text-gray-600');
+          if (['payroll', 'spp', 'attendanceRecap', 'invoice-individual'].includes(tabName)) loadTenantFilters();
+          if (tabName === 'dashboard') loadDashboardData();
+          if (tabName === 'payroll') loadPayroll();
+          if (tabName === 'spp') loadSppSummary();
+          if (tabName === 'reports') loadFinancialReport();
+          if (tabName === 'reminders') loadPaymentDefaulters();
+        });
       });
-      document.getElementById(tabName + 'Tab').classList.remove('hidden');
-      const btn = document.querySelector(`[data-tab="${tabName}"]`);
-      btn.classList.add('bg-emerald-600', 'text-white');
-      btn.classList.remove('text-gray-600');
-      
-      // Auto-load data for each tab
-      if (tabName === 'payroll') loadPayroll();
-      if (tabName === 'spp') loadSppData();
-      if (tabName === 'reports') loadFinancialReport();
-      if (tabName === 'reminders') loadPaymentDefaulters();
-      if (tabName === 'attendanceRecap') { loadTenantFilters(); }
     }
 
-     function getAuthHeader() {
+    document.addEventListener('DOMContentLoaded', function () {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        document.getElementById('loginOverlay').classList.remove('hidden');
+        return;
+      }
+      document.getElementById('loginOverlay').classList.add('hidden');
+      initDashboard();
+    });
+
+    async function doLogin(e) {
+      e.preventDefault();
+      const btn = document.getElementById('loginBtn');
+      const err = document.getElementById('loginError');
+      err.classList.add('hidden');
+      btn.disabled = true;
+      btn.textContent = 'Memproses...';
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: document.getElementById('loginUsername').value,
+            password: document.getElementById('loginPassword').value
+          })
+        });
+        const data = await res.json();
+        if (data.success && data.token) {
+          localStorage.setItem('token', data.token);
+          document.getElementById('loginOverlay').classList.add('hidden');
+          initDashboard();
+        } else {
+          err.textContent = data.message || 'Login gagal';
+          err.classList.remove('hidden');
+        }
+      } catch (error) {
+        err.textContent = 'Terjadi kesalahan jaringan';
+        err.classList.remove('hidden');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Masuk';
+      }
+    }
+
+    function logout() {
+      localStorage.removeItem('token');
+      location.reload();
+    }
+
+    function getAuthHeader() {
       const token = localStorage.getItem('token');
       return token ? { 'Authorization': 'Bearer ' + token } : {};
     }
@@ -506,19 +634,72 @@ document.addEventListener('DOMContentLoaded', function () {
       return `Rp ${num.toLocaleString('id-ID')}`;
     }
 
-    async function loadDashboardData() {
-      const tenantId = document.getElementById('dashboardTenantFilter').value;
+async function loadDashboardData() {
+       const tenantId = document.getElementById('dashboardTenantFilter').value;
+
+       try {
+         const [incomeRes, expenseRes, defaulterRes] = await Promise.all([
+           fetch(`/api/treasurer/public/spp-summary?tenant_id=${tenantId}`),
+           fetch(`/api/treasurer/public/salary-summary?tenant_id=${tenantId}`),
+           fetch(`/api/treasurer/public/payment-defaulters?tenant_id=${tenantId}`)
+         ]);
+
+         const incomeData = await incomeRes.json();
+         const expenseData = await expenseRes.json();
+         const defaulterData = await defaulterRes.json();
+
+         let totalIncome = 0, totalExpense = 0;
+
+         const tenantCards = document.getElementById('tenantCards');
+         if (incomeData.success && incomeData.data?.length) {
+           incomeData.data.forEach(item => {
+             totalIncome += parseFloat(item.total_pemasukan) || 0;
+           });
+           document.getElementById('totalIncome').textContent = formatCurrency(totalIncome);
+           
+           tenantCards.innerHTML = incomeData.data.map(d => `
+             <div class="bg-white rounded-xl shadow-sm border border-emerald-200 p-5 hover:shadow-md transition-shadow">
+               <div class="border-b border-gray-100 pb-3 mb-3">
+                 <h4 class="font-semibold text-gray-900">${d.nama_sekolah || 'Tidak diketahui'}</h4>
+                 <p class="text-xs text-gray-500 mt-1">${d.total_siswa || 0} siswa</p>
+               </div>
+               <div class="space-y-2 text-sm">
+                 <div class="flex justify-between"><span class="text-gray-600">Pendapatan</span><span class="font-medium text-emerald-600">${formatCurrency(d.total_pemasukan || 0)}</span></div>
+                 <div class="flex justify-between"><span class="text-gray-600">Bayar</span><span class="font-medium text-green-600">${d.sudah_bayar || 0}</span></div>
+                 <div class="flex justify-between"><span class="text-gray-600">Belum Bayar</span><span class="font-medium text-orange-600">${d.belum_bayar || 0}</span></div>
+               </div>
+             </div>
+           `).join('');
+         } else {
+           tenantCards.innerHTML = '<div class="col-span-full text-center py-8 text-gray-500">Tidak ada data sekolah</div>';
+         }
+
+         if (expenseData.success) {
+           expenseData.data.forEach(item => {
+             totalExpense += parseFloat(item.total_gaji) || 0;
+           });
+           document.getElementById('totalExpense').textContent = formatCurrency(totalExpense);
+         }
+
+         if (defaulterData.success) {
+           document.getElementById('unpaidCount').innerHTML = `${defaulterData.data.length} <span class="text-sm font-normal">Siswa</span>`;
+         }
+
+document.getElementById('currentBalance').textContent = formatCurrency(totalIncome - totalExpense);
+        } catch (error) {
+          console.error('Dashboard load error:', error);
+        }
+      }
+
+    async function loadFinancialReport() {
+      const tenantId = document.getElementById('reportTenantFilter').value;
+      const month = document.getElementById('reportMonthFilter').value || currentMonth;
 
       try {
-        const [incomeRes, expenseRes, defaulterRes] = await Promise.all([
-          fetch(`/api/treasurer/public/spp-summary?tenant_id=${tenantId}`),
-          fetch(`/api/treasurer/public/salary-summary?tenant_id=${tenantId}`),
-          fetch(`/api/treasurer/public/payment-defaulters?tenant_id=${tenantId}`)
-        ]);
-
-        const incomeData = await incomeRes.json();
-        const expenseData = await expenseRes.json();
-        const defaulterData = await defaulterRes.json();
+        const response = await fetch(`/api/treasurer/public/spp-summary?tenant_id=${tenantId}`);
+        const incomeData = await response.json();
+        const expenseResponse = await fetch(`/api/treasurer/public/salary-summary?tenant_id=${tenantId}`);
+        const expenseData = await expenseResponse.json();
 
         let totalIncome = 0, totalExpense = 0;
 
@@ -526,194 +707,40 @@ document.addEventListener('DOMContentLoaded', function () {
           incomeData.data.forEach(item => {
             totalIncome += parseFloat(item.total_pemasukan) || 0;
           });
-          document.getElementById('totalIncome').textContent = formatCurrency(totalIncome);
         }
 
         if (expenseData.success) {
           expenseData.data.forEach(item => {
             totalExpense += parseFloat(item.total_gaji) || 0;
           });
-          document.getElementById('totalExpense').textContent = formatCurrency(totalExpense);
         }
 
-        if (defaulterData.success) {
-          document.getElementById('unpaidCount').textContent = `${defaulterData.data.length} Siswa`;
-        }
+        const report = {
+          total_pemasukan: totalIncome,
+          total_pengeluaran: totalExpense,
+          saldo: totalIncome - totalExpense
+        };
 
-        document.getElementById('currentBalance').textContent = formatCurrency(totalIncome - totalExpense);
-
-        renderCharts(incomeData.data || [], expenseData.data || []);
+        document.getElementById('financialReportContent').innerHTML = `
+          <div class="grid grid-cols-2 gap-6">
+            <div class="bg-emerald-50 p-4 rounded-lg">
+              <h4 class="font-semibold text-emerald-800 mb-2">Total Pemasukan</h4>
+              <p class="text-2xl font-bold text-emerald-600">${formatCurrency(report.total_pemasukan)}</p>
+            </div>
+            <div class="bg-red-50 p-4 rounded-lg">
+              <h4 class="font-semibold text-red-800 mb-2">Total Pengeluaran</h4>
+              <p class="text-2xl font-bold text-red-600">${formatCurrency(report.total_pengeluaran)}</p>
+            </div>
+          </div>
+          <div class="mt-6 bg-blue-50 p-4 rounded-lg">
+            <h4 class="font-semibold text-blue-800 mb-2">Saldo Kas</h4>
+            <p class="text-3xl font-bold text-blue-600">${formatCurrency(report.saldo)}</p>
+          </div>
+        `;
       } catch (error) {
-        console.error('Dashboard load error:', error);
+        console.error('Report load error:', error);
       }
     }
-
-    async function loadTenantFilters() {
-      try {
-        const response = await fetch('/api/tenants');
-        const data = await response.json();
-        if (data.success) {
-          const options = data.data.map(t => `<option value="${t.tenant_id}">${t.nama_sekolah}</option>`).join('');
-          document.querySelectorAll('[id$="TenantFilter"]').forEach(select => {
-            select.innerHTML = `<option value="">Semua Sekolah</option>` + options;
-          });
-        }
-      } catch (error) {
-        console.error('Load tenants error:', error);
-      }
-    }
-
-    function renderCharts(incomeData, expenseData) {
-      const incomeCtx = document.getElementById('incomeChart').getContext('2d');
-      if (incomeChart && typeof incomeChart.destroy === 'function') incomeChart.destroy();
-      incomeChart = new Chart(incomeCtx, {
-        type: 'doughnut',
-        data: {
-          labels: incomeData.map((item, idx) => item.nama_sekolah || `Sekolah ${idx + 1}`),
-          datasets: [{
-            data: incomeData.map(item => item.total_pemasukan || 0),
-            backgroundColor: ['#10b981', '#059669', '#047857', '#0f766e']
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false
-        }
-      });
-
-      const expenseCtx = document.getElementById('expenseChart').getContext('2d');
-      if (expenseChart && typeof expenseChart.destroy === 'function') expenseChart.destroy();
-      expenseChart = new Chart(expenseCtx, {
-        type: 'doughnut',
-        data: {
-          labels: expenseData.map((item, idx) => item.nama?.substring(0, 15) || `Guru ${idx + 1}`),
-          datasets: [{
-            data: expenseData.map(item => item.total_gaji || 0),
-            backgroundColor: ['#ef4444', '#f97316', '#eab308', '#84cc16']
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false
-        }
-      });
-    }
-
-    async function loadPayroll() {
-      const tenantId = document.getElementById('payrollTenantSelect').value;
-
-      try {
-        const response = await fetch(`/api/treasurer/public/salary-summary?tenant_id=${tenantId}`);
-        const data = await response.json();
-
-        if (data.success) {
-          document.getElementById('payrollTable').innerHTML = data.data.map(item => `
-            <tr>
-              <td class="px-4 py-3">${item.nama}</td>
-              <td class="px-4 py-3">${item.jabatan}</td>
-              <td class="px-4 py-3">Rp ${(item.gaji_pokok || 0).toLocaleString('id-ID')}</td>
-              <td class="px-4 py-3">Rp ${(item.tunjangan || 0).toLocaleString('id-ID')}</td>
-              <td class="px-4 py-3">Rp ${(item.honor_bendahara || 0).toLocaleString('id-ID')}</td>
-              <td class="px-4 py-3 font-bold">Rp ${(item.total_gaji || 0).toLocaleString('id-ID')}</td>
-              <td class="px-4 py-3 text-center">
-                <button onclick="showSalarySlip('${item.teacher_id}')"
-                  class="px-3 py-1 bg-emerald-600 text-white rounded hover:bg-emerald-700 text-sm mr-1"
-                  title="Download PDF">
-                  <i class="fas fa-download mr-1"></i>PDF
-                </button>
-                <button onclick="sendEmailSlip('${item.teacher_id}')"
-                  class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
-                  title="Kirim Email">
-                  <i class="fas fa-envelope mr-1"></i>Email
-                </button>
-              </td>
-            </tr>
-          `).join('');
-        }
-      } catch (error) {
-        console.error('Salary load error:', error);
-      }
-    }
-
-    async function loadSppData() {
-      const tenantId = document.getElementById('sppTenantFilter').value;
-
-      try {
-        const response = await fetch(`/api/treasurer/public/spp-summary?tenant_id=${tenantId}`);
-        const data = await response.json();
-
-        if (data.success) {
-          document.getElementById('sppTable').innerHTML = data.data.map(item => `
-            <tr>
-              <td class="px-4 py-3">${item.nama_sekolah}</td>
-              <td class="px-4 py-3">${item.total_siswa}</td>
-              <td class="px-4 py-3">${item.sudah_bayar}</td>
-              <td class="px-4 py-3 text-red-600 font-medium">${item.belum_bayar}</td>
-              <td class="px-4 py-3">Rp ${parseFloat(item.total_pemasukan || 0).toLocaleString('id-ID')}</td>
-              <td class="px-4 py-3 text-center">
-                <button onclick="sendWarningToAll('${item.tenant_id}')"
-                  class="px-3 py-1 bg-orange-600 text-white rounded hover:bg-orange-700 text-sm">
-                  <i class="fab fa-whatsapp mr-1"></i>WA Reminder
-                </button>
-              </td>
-            </tr>
-          `).join('');
-        }
-      } catch (error) {
-        console.error('SPP load error:', error);
-      }
-    }
-
-async function loadFinancialReport() {
-       const tenantId = document.getElementById('reportTenantFilter').value;
-       const month = document.getElementById('reportMonthFilter').value || currentMonth;
-
-       try {
-         const response = await fetch(`/api/treasurer/public/spp-summary?tenant_id=${tenantId}`);
-         const incomeData = await response.json();
-         const expenseResponse = await fetch(`/api/treasurer/public/salary-summary?tenant_id=${tenantId}`);
-         const expenseData = await expenseResponse.json();
-
-         let totalIncome = 0, totalExpense = 0;
-
-         if (incomeData.success) {
-           incomeData.data.forEach(item => {
-             totalIncome += parseFloat(item.total_pemasukan) || 0;
-           });
-         }
-
-         if (expenseData.success) {
-           expenseData.data.forEach(item => {
-             totalExpense += parseFloat(item.total_gaji) || 0;
-           });
-         }
-
-         const report = {
-           total_pemasukan: totalIncome,
-           total_pengeluaran: totalExpense,
-           saldo: totalIncome - totalExpense
-         };
-
-         document.getElementById('financialReportContent').innerHTML = `
-           <div class="grid grid-cols-2 gap-6">
-             <div class="bg-emerald-50 p-4 rounded-lg">
-               <h4 class="font-semibold text-emerald-800 mb-2">Total Pemasukan</h4>
-               <p class="text-2xl font-bold text-emerald-600">${formatCurrency(report.total_pemasukan)}</p>
-             </div>
-             <div class="bg-red-50 p-4 rounded-lg">
-               <h4 class="font-semibold text-red-800 mb-2">Total Pengeluaran</h4>
-               <p class="text-2xl font-bold text-red-600">${formatCurrency(report.total_pengeluaran)}</p>
-             </div>
-           </div>
-           <div class="mt-6 bg-blue-50 p-4 rounded-lg">
-             <h4 class="font-semibold text-blue-800 mb-2">Saldo Kas</h4>
-             <p class="text-3xl font-bold text-blue-600">${formatCurrency(report.saldo)}</p>
-           </div>
-         `;
-       } catch (error) {
-         console.error('Report load error:', error);
-       }
-     }
 
     async function loadPaymentDefaulters() {
       const tenantId = document.getElementById('reminderTenantFilter').value;
@@ -722,109 +749,303 @@ async function loadFinancialReport() {
         const response = await fetch(`/api/treasurer/public/payment-defaulters?tenant_id=${tenantId}`);
         const data = await response.json();
 
-        if (data.success) {
-          document.getElementById('reminderTable').innerHTML = data.data.map(item => `
-            <tr>
-              <td class="px-4 py-3">${item.nama_siswa}</td>
-              <td class="px-4 py-3">${item.nisn}</td>
-              <td class="px-4 py-3">${item.nama_sekolah || '-'}</td>
-              <td class="px-4 py-3">${item.no_wa || '-'}</td>
-              <td class="px-4 py-3 text-center">
-                ${item.no_wa ? `
-                  <button onclick="sendReminder('${item.no_wa}', '${item.nama_siswa}')"
-                    class="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm">
-                    <i class="fab fa-whatsapp mr-1"></i>Kirim WA
-                  </button>
-                ` : '-'}
-              </td>
-            </tr>
-          `).join('');
-        }
+if (data.success) {
+document.getElementById('reminderTable').innerHTML = data.data.map(item => `
+              <tr>
+                <td class="px-4 py-3">${item.nama_siswa}</td>
+                <td class="px-4 py-3">${item.nisn}</td>
+                <td class="px-4 py-3">${item.nama_sekolah || '-'}</td>
+                <td class="px-4 py-3 text-right font-medium text-orange-600">${formatCurrency(item.total_arrears || 0)}</td>
+                <td class="px-4 py-3 text-center">
+                  <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full ${item.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+                    ${item.status === 'active' ? 'Aktif' : 'Tidak Aktif'}
+                  </span>
+                </td>
+                <td class="px-4 py-3">${item.no_wa || '-'}</td>
+                <td class="px-4 py-3 text-center">
+                   ${item.no_wa ? `
+                     <button onclick="sendReminder('${item.no_wa}', '${item.nama_siswa}', ${item.total_arrears || 0}, ${item.id})"
+                       class="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm">
+                       <i class="fab fa-whatsapp mr-1"></i>Kirim WA
+                     </button>
+                     <button onclick="openPartialPaymentModal(${item.id})"
+                       class="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm ml-2">
+                       <i class="fas fa-percentage mr-1"></i>Bayar Sebagian
+                     </button>
+                   ` : '-'}
+                 </td>
+               </tr>
+             `).join('');
+       }
       } catch (error) {
         console.error('Defaulter load error:', error);
       }
     }
 
-function showSalarySlip(teacherId) {
-      window.open(`/api/treasurer/public/salary-slip-pdf/${teacherId}?month=${currentMonth}`, '_blank');
-    }
+async function sendReminder(noWa, nama, totalArrears, studentId) {
+       const number = (noWa || '').replace(/[^0-9]/g, '');
+       if (!number) {
+         showToast('Nomor WA tidak tersedia', 'error');
+         return;
+       }
+       try {
+         const btn = event?.target;
+         if (btn) { btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; btn.disabled = true; }
+         const response = await fetch('/api/treasurer/public/send-spp-reminder', {
+           method: 'POST',
+           headers: { 'Content-Type': 'application/json' },
+           body: JSON.stringify({
+             no_wa: number,
+             nama_siswa: nama,
+             jumlah_tagihan: totalArrears || null,
+             student_id: studentId
+           })
+         });
+        const data = await response.json();
 
-    function sendEmailSlip(teacherId) {
-      if (confirm('Kirim slip gaji ke email guru?')) {
-        fetch(`/api/treasurer/public/send-salary-slip-email`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ teacherId, month: currentMonth })
-        }).then(r => r.json()).then(data => {
-          if (data.success) {
-            alert('Email berhasil terkirim');
-          } else {
-            alert('Gagal: ' + data.message + '\nPastikan guru memiliki email di database');
-          }
-        });
+        if (data.success) {
+          showToast('Pengingat SPP berhasil dikirim via WhatsApp', 'success');
+        } else {
+          showToast(data.message || 'Gagal mengirim pengingat', 'error');
+        }
+        if (btn) { btn.innerHTML = '<i class="fab fa-whatsapp mr-1"></i>Kirim WA'; btn.disabled = false; }
+      } catch (error) {
+        console.error('Send reminder error:', error);
+        showToast('Gagal mengirim pengingat WhatsApp', 'error');
+        const btn = event?.target;
+        if (btn) { btn.innerHTML = '<i class="fab fa-whatsapp mr-1"></i>Kirim WA'; btn.disabled = false; }
       }
     }
 
-    function exportVA() {
-      const tenantId = document.getElementById('sppTenantFilter').value;
-      const url = `/api/treasurer/public/export-va?tenant_id=${tenantId}`;
-      window.location.href = url;
+    async function sendAllReminders() {
+      const tenantId = document.getElementById('reminderTenantFilter').value;
+      const btn = event?.target;
+      
+      try {
+        if (btn) { btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Mengirim...'; btn.disabled = true; }
+        
+        const response = await fetch('/api/treasurer/public/send-all-spp-reminders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tenant_id: tenantId || null })
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+          showToast(data.message, 'success');
+        } else {
+          showToast(data.message || 'Gagal mengirim pengingat', 'error');
+        }
+        if (btn) { btn.innerHTML = '<i class="fab fa-whatsapp mr-2"></i>Kirim Semua'; btn.disabled = false; }
+      } catch (error) {
+        console.error('Send all reminders error:', error);
+        showToast('Gagal mengirim pengingat', 'error');
+        if (btn) { btn.innerHTML = '<i class="fab fa-whatsapp mr-2"></i>Kirim Semua'; btn.disabled = false; }
+      }
     }
 
-    function sendWarningToAll(tenantId) {
-      alert('Fitur kirim reminder massal ke semua wali murid akan diimplementasikan');
+    window.toggleSelectAll = function (checkbox) {
+      document.querySelectorAll('.email-checkbox').forEach(cb => cb.checked = checkbox.checked);
+    };
+
+window.openPartialPaymentModal = function(studentId) {
+       document.getElementById('partialPaymentStudentId').value = studentId;
+       document.getElementById('partialPaymentModal').style.display = 'flex';
+     };
+
+    window.closePartialPaymentModal = function() {
+      document.getElementById('partialPaymentModal').style.display = 'none';
+    };
+
+    window.createConcessionInvoice = function() {
+      const amount = document.getElementById('partialPaymentAmount').value;
+      const studentId = document.getElementById('partialPaymentStudentId').value;
+      if (!amount || amount <= 0) {
+        showToast('Masukkan jumlah yang valid', 'error');
+        return;
+      }
+      fetch('/api/treasurer/public/create-concession-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ student_id: studentId, amount: parseFloat(amount) })
+      }).then(res => res.json()).then(data => {
+        if (data.success) {
+          showToast('Invoice keringanan berhasil dibuat', 'success');
+          closePartialPaymentModal();
+        } else {
+          showToast(data.message || 'Gagal membuat invoice', 'error');
+        }
+      }).catch(() => showToast('Gagal membuat invoice', 'error'));
+    };
+
+    let selectedStudentId = null;
+    let allStudents = [];
+
+async function loadStudentsByTenant() {
+       const tenantId = document.getElementById('individualTenantSelect').value;
+       if (!tenantId) {
+         searchResults.classList.add('hidden');
+         return;
+       }
+       const searchResults = document.getElementById('studentSearchResults');
+       searchResults.innerHTML = '<div class="p-3 text-center text-gray-500">Memuat...</div>';
+       searchResults.classList.remove('hidden');
+      
+      try {
+        const response = await fetch('/api/treasurer/public/students?tenant_id=' + tenantId, {
+          headers: getAuthHeader()
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+          allStudents = data.data || [];
+          selectedStudentId = null;
+          document.getElementById('studentSearchInput').value = '';
+          if (allStudents.length === 0) {
+            searchResults.innerHTML = '<div class="p-3 text-center text-gray-500">Tidak ada siswa</div>';
+          } else {
+            searchResults.classList.add('hidden');
+          }
+        } else {
+          searchResults.innerHTML = '<div class="p-3 text-center text-red-500">Gagal memuat siswa</div>';
+        }
+      } catch (error) {
+        searchResults.innerHTML = '<div class="p-3 text-center text-red-500">Error jaringan</div>';
+      }
     }
 
-    // Attendance Recap Functions
-    window.switchAttendanceView = function(view) {
-        document.getElementById('recapLogView')?.classList.toggle('hidden', view === 'monthly');
-        document.getElementById('recapMonthlySection')?.classList.toggle('hidden', view !== 'monthly');
-    };
+    function searchStudents() {
+      const query = document.getElementById('studentSearchInput').value.toLowerCase();
+      const searchResults = document.getElementById('studentSearchResults');
+      
+      if (!query || allStudents.length === 0) {
+        searchResults.classList.add('hidden');
+        return;
+      }
+      
+      const filtered = allStudents.filter(s => s.nama_siswa.toLowerCase().includes(query) || s.nisn.includes(query));
+      
+      if (filtered.length === 0) {
+        searchResults.innerHTML = '<div class="p-3 text-center text-gray-500">Siswa tidak ditemukan</div>';
+        searchResults.classList.remove('hidden');
+        return;
+      }
+      
+      searchResults.innerHTML = filtered.map(s => `
+        <div class="p-3 hover:bg-gray-100 cursor-pointer border-b last:border-0" onclick="selectStudent(${s.id}, '${s.nama_siswa}')">
+          <div class="font-medium text-gray-900">${s.nama_siswa}</div>
+          <div class="text-sm text-gray-500">NISN: ${s.nisn}</div>
+        </div>
+      `).join('');
+      searchResults.classList.remove('hidden');
+    }
 
-    window.loadMonthlyRecap = async function() {
-        const monthNames = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-        const tenantId = document.getElementById('recapTenantSelect')?.value;
-        const month = document.getElementById('recapMonthSelect')?.value;
-        const year = document.getElementById('recapYearSelect')?.value;
-        const content = document.getElementById('monthlyRecapContent');
-        if (!tenantId || !month || !year) { showToast('Pilih sekolah, bulan, dan tahun', 'error'); return; }
-        content.innerHTML = '<p class="text-center py-8"><i class="fas fa-spinner fa-spin"></i> Memuat...</p>';
-        try {
-            const token = localStorage.getItem('token');
-            const res = await fetch('/api/admin/attendance-monthly?tenant_id=' + tenantId + '&bulan=' + month + '&tahun=' + year, { headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
-            const json = await res.json();
-            if (!json.success) { showToast('Gagal memuat data', 'error'); return; }
-            const data = json.data;
-            const daysInMonth = json.daysInMonth || 30;
-            let headerHtml = '<tr><th rowspan="2">No</th><th rowspan="2">Nama</th>';
-            for (let d = 1; d <= daysInMonth; d++) headerHtml += '<th>' + d + '</th>';
-            headerHtml += '<th colspan="7">Keterangan</th></tr><tr>';
-            for (let d = 1; d <= daysInMonth; d++) headerHtml += '<th></th>';
-            headerHtml += '<th>H</th><th>T</th><th>I</th><th>S</th><th>DL</th><th>C</th><th>TK</th></tr>';
-            let bodyHtml = '';
-            data.forEach((d, i) => {
-                bodyHtml += '<tr><td>' + (i + 1) + '</td><td>' + (d.nama || '') + '</td>';
-                for (let day = 1; day <= daysInMonth; day++) bodyHtml += '<td>' + (d['tgl_' + day] || '') + '</td>';
-                bodyHtml += '<td>' + (d.hadir || 0) + '</td><td>' + (d.terlambat || 0) + '</td><td>' + (d.izin || 0) + '</td><td>' + (d.sakit || 0) + '</td><td>' + (d.dinas_luar || 0) + '</td><td>' + (d.cuti || 0) + '</td><td>' + (d.tanpa_keterangan || 0) + '</td></tr>';
-            });
-            content.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:10pt">' + headerHtml + bodyHtml + '</table>';
-        } catch (e) { content.innerHTML = '<p class="text-red-500">Error: ' + e.message + '</p>'; }
-    };
+    function selectStudent(id, name) {
+      selectedStudentId = id;
+      document.getElementById('studentSearchInput').value = name;
+      document.getElementById('studentSearchResults').classList.add('hidden');
+    }
 
-    window.exportMonthlyPdfFromRecap = async function() {
-        const tenantId = document.getElementById('recapTenantSelect')?.value;
-        const month = document.getElementById('recapMonthSelect')?.value;
-        const year = document.getElementById('recapYearSelect')?.value;
-        const monthNames = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-        const content = document.getElementById('monthlyRecapContent');
-        const table = content?.querySelector('table');
-        if (!table) { showToast('Data belum dimuat', 'error'); return; }
-        const tanggal = new Date().getDate() + ' ' + monthNames[new Date().getMonth() + 1] + ' ' + new Date().getFullYear();
-        const win = window.open('', '_blank');
-        win.document.write('<!DOCTYPE html><html><head><title>Rekap Absensi</title><style>@page{size:A4 landscape;margin:1cm}body{font-family:Arial;font-size:8pt}table{width:100%;border-collapse:collapse}th,td{border:1px solid #000;padding:2px;text-align:center;font-size:7pt}.sign-row{display:flex;justify-content:space-between;margin-top:40px}.sign-box{width:45%;text-align:center}</style></head><body><h2 style="text-align:center">Rekap Absensi</h2>' + table.outerHTML + '<script>window.onload=function(){window.print();}<\/script></body></html>');
-        win.document.close();
-    };
+async function createIndividualInvoice() {
+      const tenantId = document.getElementById('individualTenantSelect').value;
+      if (!tenantId) {
+        showToast('Pilih sekolah terlebih dahulu', 'error');
+        return;
+      }
+      if (!selectedStudentId) {
+        showToast('Pilih siswa terlebih dahulu', 'error');
+        return;
+      }
+      
+      const amount = document.getElementById('individualAmount').value || null;
+      
+      try {
+        const response = await fetch('/api/treasurer/public/create-invoice', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+          body: JSON.stringify({ student_id: selectedStudentId, tenant_id: tenantId, amount: amount ? parseFloat(amount) : null })
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+          showToast('Invoice berhasil dibuat', 'success');
+          document.getElementById('studentSearchInput').value = '';
+          document.getElementById('individualAmount').value = '';
+          selectedStudentId = null;
+        } else {
+          showToast(data.message || 'Gagal membuat invoice', 'error');
+        }
+      } catch (error) {
+        showToast('Gagal membuat invoice', 'error');
+      }
+    }
+
+async function createIndividualConcessionInvoice() {
+      const tenantId = document.getElementById('individualTenantSelect').value;
+      if (!tenantId) {
+        showToast('Pilih sekolah terlebih dahulu', 'error');
+        return;
+      }
+      if (!selectedStudentId) {
+        showToast('Pilih siswa terlebih dahulu', 'error');
+        return;
+      }
+      
+      const amount = document.getElementById('individualAmount').value;
+      if (!amount || amount <= 0) {
+        showToast('Masukkan jumlah untuk invoice keringanan', 'error');
+        return;
+      }
+      
+      try {
+        const response = await fetch('/api/treasurer/public/create-concession-invoice', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+          body: JSON.stringify({ student_id: selectedStudentId, tenant_id: tenantId, amount: parseFloat(amount) })
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+          showToast('Invoice keringanan berhasil dibuat', 'success');
+          document.getElementById('studentSearchInput').value = '';
+          document.getElementById('individualAmount').value = '';
+          selectedStudentId = null;
+        } else {
+          showToast(data.message || 'Gagal membuat invoice keringanan', 'error');
+        }
+      } catch (error) {
+        showToast('Gagal membuat invoice keringanan', 'error');
+      }
+    }
   </script>
+
+  <div id="partialPaymentModal" class="modal fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-lg font-semibold">Buat Invoice Keringanan</h3>
+        <button onclick="closePartialPaymentModal()" class="text-gray-500 hover:text-gray-700 text-2xl leading-none">&times;</button>
+      </div>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Jumlah Pembayaran</label>
+          <input type="number" id="partialPaymentAmount" min="1" step="1"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"
+            placeholder="Masukkan jumlah">
+        </div>
+        <input type="hidden" id="partialPaymentStudentId">
+        <div class="flex space-x-3 pt-4">
+          <button onclick="closePartialPaymentModal()"
+            class="flex-1 px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400">
+            Batal
+          </button>
+          <button onclick="createConcessionInvoice()"
+            class="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
+            Buat Invoice Keringanan
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 </body>
 
 </html>

@@ -548,6 +548,18 @@
               <i class="fas fa-wallet"></i> Bendahara
             </button>
           </div>
+          <div id="desktopPaktaBtn" style="display: none; margin-right: 0.5rem;">
+            <button onclick="openPaktaModal()"
+              style="display: inline-flex; align-items: center; gap: 0.5rem; background: #ccfbf1; color: #0f766e; padding: 0.6rem 1.25rem; border-radius: 0.5rem; font-weight: 700; font-size: 0.85rem; border: 1px solid #5eead4; cursor: pointer; transition: all 0.2s;">
+              <i class="fas fa-file-signature"></i> Pakta Integritas
+            </button>
+          </div>
+          <div id="desktopPaktaViewerBtn" style="display: none; margin-right: 0.5rem;">
+            <a href="pakta-viewer.html"
+              style="display: inline-flex; align-items: center; gap: 0.5rem; background: #e0e7ff; color: #4338ca; padding: 0.6rem 1.25rem; border-radius: 0.5rem; font-weight: 700; font-size: 0.85rem; border: 1px solid #a5b4fc; text-decoration: none; cursor: pointer; transition: all 0.2s;">
+              <i class="fas fa-eye"></i> Viewer Pakta
+            </a>
+          </div>
           <a href="chat.html" title="Chat Internal"
             style="display: inline-flex; align-items: center; gap: 0.5rem; background: #f0fdf4; color: #15803d; padding: 0.6rem 1rem; border-radius: 0.5rem; font-weight: 600; font-size: 0.85rem; text-decoration: none; border: 1px solid #bbf7d0;">
             <i class="fas fa-comments"></i> Chat
@@ -824,6 +836,17 @@ style="font-size: 0.95rem; font-weight: 700; color: #0f172a; margin: 0 0 0.75rem
       <i class="fas fa-wallet" style="font-size: 1.3rem; display: block; margin-bottom: 2px;"></i>
       <span style="font-size: 0.65rem; font-weight: 600;">Bendahara</span>
     </div>
+    <div id="mobilePaktaNav" style="text-align: center; color: #0f766e; cursor: pointer; display: none;"
+      onclick="openPaktaModal()">
+      <i class="fas fa-file-signature" style="font-size: 1.3rem; display: block; margin-bottom: 2px;"></i>
+      <span style="font-size: 0.65rem; font-weight: 600;">Pakta</span>
+    </div>
+    <div id="mobilePaktaViewerNav" style="text-align: center; color: #4338ca; cursor: pointer; display: none;">
+      <a href="pakta-viewer.html" style="text-decoration: none; color: inherit;">
+        <i class="fas fa-eye" style="font-size: 1.3rem; display: block; margin-bottom: 2px;"></i>
+        <span style="font-size: 0.65rem; font-weight: 600;">Viewer</span>
+      </a>
+    </div>
     <div onclick="logout();"
       style="text-align: center; color: #64748b; cursor: pointer; -webkit-tap-highlight-color: transparent;">
       <i class="fas fa-sign-out-alt" style="font-size: 1.3rem; display: block; margin-bottom: 2px;"></i>
@@ -1018,6 +1041,38 @@ style="font-size: 0.95rem; font-weight: 700; color: #0f172a; margin: 0 0 0.75rem
         <button onclick="closePermissionModal()" class="btn-secondary" style="flex: 1;">Batal</button>
         <button id="submitPermissionBtn" onclick="submitPermission()" class="btn-primary" style="flex: 1;">Ajukan
           Izin</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pakta Integritas Modal -->
+  <div id="paktaIntegritasModal" class="modal-overlay" style="display: none;">
+    <div class="modal-container">
+      <div class="modal-header" style="background: linear-gradient(135deg, #0f766e, #0d9488);">
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+          <div style="display: flex; align-items: center; gap: 12px;">
+            <i class="fas fa-file-signature" style="font-size: 1.25rem;"></i>
+            <h3 style="margin: 0; font-size: 1.25rem;">Pakta Integritas Digital</h3>
+          </div>
+        </div>
+        <p style="margin: 8px 0 0 0; opacity: 0.85; font-size: 0.875rem;">Wajib ditandatangani oleh pimpinan unit</p>
+      </div>
+
+      <div style="padding: 1.25rem;">
+        <p style="margin: 0 0 0.75rem 0; font-size: 0.9rem; line-height: 1.6; color: #334155;">
+          Anda belum menandatangani <strong>Pakta Integritas</strong> periode ini
+          (<span id="paktaPeriodeLabel">-</span>).
+        </p>
+        <div
+          style="padding: 0.75rem 1rem; background: #fef2f2; border-left: 4px solid #dc2626; border-radius: 6px; font-size: 0.85rem; color: #7f1d1d;">
+          Apabila melanggar isi pakta, dikenakan sanksi administratif sebesar
+          <strong>Rp 1.500.000</strong>.
+        </div>
+      </div>
+
+      <div style="padding: 1rem; border-top: 1px solid #e2e8f0; display: flex; gap: 8px;">
+        <button onclick="goToPaktaSign()" class="btn-primary" style="flex: 1; background: linear-gradient(135deg, #0f766e, #0d9488);">Tanda
+          Tangani Sekarang</button>
       </div>
     </div>
   </div>

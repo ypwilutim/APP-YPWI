@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Viewer Pakta Integritas</title>
+  <style>
+    :root { --brand:#0f766e; --line:#cbd5e1; --bg:#f1f5f9; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:Segoe UI, Roboto, Arial, sans-serif; background:var(--bg); color:#0f172a; }
+    .wrap { max-width:1000px; margin:24px auto; padding:0 16px; }
+    .card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:20px; box-shadow:0 1px 3px rgba(0,0,0,.06); }
+    h1 { color:var(--brand); font-size:22px; margin:0 0 12px; }
+    .toolbar { display:flex; gap:10px; align-items:center; margin-bottom:14px; flex-wrap:wrap; }
+    input, select { font:inherit; padding:8px 10px; border:1px solid var(--line); border-radius:8px; }
+    button { font:inherit; padding:8px 14px; border-radius:8px; border:1px solid var(--line); background:var(--brand); color:#fff; cursor:pointer; }
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    th, td { text-align:left; padding:10px; border-bottom:1px solid var(--line); }
+    th { background:#f8fafc; color:#475569; font-weight:600; }
+    .badge { padding:3px 8px; border-radius:999px; font-size:12px; background:#ecfdf5; color:#065f46; }
+    .badge.no { background:#fef2f2; color:#991b1b; }
+    a.link { color:var(--brand); text-decoration:none; }
+    iframe, embed { width:100%; height:70vh; border:1px solid var(--line); border-radius:10px; background:#fff; }
+    .status { font-size:14px; padding:10px 12px; border-radius:8px; }
+    .status.err { background:#fef2f2; color:#991b1b; }
+    .empty { color:#94a3b8; font-size:14px; padding:20px 0; }
+    a.back { display:inline-block; margin-bottom:10px; color:var(--brand); text-decoration:none; font-size:13px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <a class="back" href="javascript:history.back()">&larr; Kembali ke Dashboard</a>
+    <div class="card">
+      <h1>Viewer Dokumen Pakta Integritas</h1>
+      <div class="toolbar">
+        <input type="text" id="tenantFilter" placeholder="Filter tenant_id (opsional)" />
+        <button id="btnRefresh">Muat Dokumen</button>
+      </div>
+      <table>
+        <thead>
+          <tr><th>Guru</th><th>Tenant</th><th>Periode</th><th>Status</th><th>Ditandatangani</th><th>Aksi</th></tr>
+        </thead>
+        <tbody id="rows"><tr><td colspan="6" class="empty">Memuat...</td></tr></tbody>
+      </table>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <h1 style="font-size:16px;">Pratinjau PDF</h1>
+      <div id="previewError" class="status err" style="display:none;"></div>
+      <embed id="preview" type="application/pdf" title="Pratinjau Pakta" />
+      <div style="margin-top:8px;">
+        <button id="btnOpenPdf" style="display:none;">Buka di Tab Baru</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/pakta-viewer.js"></script>
+</body>
+</html>

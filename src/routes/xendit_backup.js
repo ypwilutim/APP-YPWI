@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const db = require('../../db');
 const axios = require('axios');
 const { authenticateToken, authenticateOperator, verifyTenantAccess, isSuperAdminTenant } = require('../middleware/auth');
@@ -77,9 +77,9 @@ router.get('/xendit/settings', authenticateOperator, async (req, res) => {
       success: true,
       data: {
         tenant_id: tenantId,
-        xendit_api_key: config.xendit_api_key ? '••••••••' : null,
-        xendit_public_key: config.xendit_public_key ? '••••••••' : null,
-        xendit_webhook_token: config.xendit_webhook_token ? '••••••••' : null,
+        xendit_api_key: config.xendit_api_key ? 'â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢' : null,
+        xendit_public_key: config.xendit_public_key ? 'â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢' : null,
+        xendit_webhook_token: config.xendit_webhook_token ? 'â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢' : null,
         xendit_enabled: config.xendit_enabled ? true : false
       }
     });
@@ -217,7 +217,7 @@ const config = await getTenantXenditConfig(tenant_id);
       failure_redirect_url: failureRedirect
     };
 
-console.log('Invoice payload being sent to Xendit:', JSON.stringify(invoicePayload, null, 2));
+    console.log('Invoice payload being sent to Xendit:', JSON.stringify(invoicePayload, null, 2));
     const response = await axios.post(
       `${XENDIT_API_BASE}/v2/invoices`,
       invoicePayload,
@@ -231,34 +231,31 @@ console.log('Invoice payload being sent to Xendit:', JSON.stringify(invoicePaylo
 
     const xenditInvoice = response.data;
 
-    console.log(`[CREATE-INVOICE] Invoice created: ${xenditInvoice.id} for student ${student_id}, tenant ${tenant_id}`);
-
 await db.query(
-       `INSERT INTO xendit_invoices (tenant_id, student_id, xendit_invoice_id, external_id, amount, description, status, payment_method, callback_url, invoice_url, expiry_date, installment_type)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-       [
-         tenant_id,
-         student_id,
-         xenditInvoice.id,
-         externalId,
-         finalAmount,
-         invoicePayload.description,
-         xenditInvoice.status,
-         payment_method || 'MULTIPLE',
-         callbackUrl,
-         xenditInvoice.invoice_url,
-         xenditInvoice.expiry_date,
-         installment_type || null
-       ]
-     );
+      `INSERT INTO xendit_invoices (tenant_id, student_id, xendit_invoice_id, external_id, amount, description, status, payment_method, callback_url, invoice_url, expiry_date)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        tenant_id,
+        student_id,
+        xenditInvoice.id,
+        externalId,
+        finalAmount,
+        invoicePayload.description,
+        xenditInvoice.status,
+        payment_method || 'MULTIPLE',
+        callbackUrl,
+        xenditInvoice.invoice_url,
+        xenditInvoice.expiry_date
+      ]
+    );
 
     res.json({
-       success: true,
-       message: 'Invoice Xendit berhasil dibuat',
-       data: {
-         invoice_id: xenditInvoice.id,
-         external_id: externalId,
-         invoice_url: xenditInvoice.invoice_url,
+      success: true,
+      message: 'Invoice Xendit berhasil dibuat',
+      data: {
+        invoice_id: xenditInvoice.id,
+        external_id: externalId,
+        invoice_url: xenditInvoice.invoice_url,
         amount: finalAmount,
         status: xenditInvoice.status,
         expiry_date: xenditInvoice.expiry_date,
@@ -272,53 +269,45 @@ await db.query(
 });
 
 // POST /api/xendit/public/create-invoice - Create Xendit invoice (testing, public)
- router.post('/xendit/public/create-invoice', async (req, res) => {
-   try {
-     const { tenant_id, student_id, amount, description, payment_method, redirect_url, installment_type } = req.body;
+router.post('/xendit/public/create-invoice', async (req, res) => {
+  try {
+    const { tenant_id, student_id, amount, description, payment_method, redirect_url } = req.body;
 
-     if (!tenant_id || !student_id) {
-       return res.status(400).json({ success: false, message: 'tenant_id dan student_id wajib diisi' });
-     }
+    if (!tenant_id || !student_id) {
+      return res.status(400).json({ success: false, message: 'tenant_id dan student_id wajib diisi' });
+    }
 
-     const config = await getTenantXenditConfig(tenant_id);
-     if (!config || !config.xendit_api_key || config.xendit_enabled !== 1) {
-       return res.status(400).json({ success: false, message: 'Xendit belum dikonfigurasi untuk tenant ini' });
-     }
+    const config = await getTenantXenditConfig(tenant_id);
+    if (!config || !config.xendit_api_key || config.xendit_enabled !== 1) {
+      return res.status(400).json({ success: false, message: 'Xendit belum dikonfigurasi untuk tenant ini' });
+    }
 
-     const [student] = await db.query(
-       'SELECT s.*, tn.nama_sekolah, p.no_wa as parent_wa FROM students s JOIN tenants tn ON s.tenant_id = tn.tenant_id LEFT JOIN parents p ON s.parent_id = p.id WHERE s.id = ?',
-       [student_id]
-     );
-     if (!student) {
-       return res.status(404).json({ success: false, message: 'Siswa tidak ditemukan' });
-     }
+    const [student] = await db.query(
+      'SELECT s.*, tn.nama_sekolah, p.no_wa as parent_wa FROM students s JOIN tenants tn ON s.tenant_id = tn.tenant_id LEFT JOIN parents p ON s.parent_id = p.id WHERE s.id = ?',
+      [student_id]
+    );
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Siswa tidak ditemukan' });
+    }
 
-     const finalAmount = installment_type === 'partial'
-       ? (amount !== undefined && amount !== null && !isNaN(parseFloat(amount)) ? parseFloat(amount) : 0)
-       : await computeInvoiceAmount(student_id, tenant_id, amount);
+    const finalAmount = await computeInvoiceAmount(student_id, tenant_id, amount);
 
-     if (finalAmount <= 0) {
-       return res.status(400).json({ success: false, message: 'Amount tidak valid' });
-     }
+    const periode = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
 
-     const periode = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
-
-if (installment_type !== 'partial') {
-        const [existing] = await db.query(
-          'SELECT id, xendit_invoice_id FROM xendit_invoices WHERE student_id = ? AND tenant_id = ? AND status IN ("PENDING", "OPEN") ORDER BY created_at DESC LIMIT 1',
-          [student_id, tenant_id]
+    const [existing] = await db.query(
+      'SELECT id, xendit_invoice_id FROM xendit_invoices WHERE student_id = ? AND tenant_id = ? AND status = "PENDING" ORDER BY created_at DESC LIMIT 1',
+      [student_id, tenant_id]
+    );
+    if (existing) {
+      try {
+        await axios.post(
+          `${XENDIT_API_BASE}/v2/invoices/${existing.xendit_invoice_id}/expire`,
+          {},
+          { headers: { 'Authorization': `Basic ${getXenditAuth(config.xendit_api_key)}` } }
         );
-        if (existing) {
-          try {
-            await axios.post(
-              `${XENDIT_API_BASE}/v2/invoices/${existing.xendit_invoice_id}/expire`,
-              {},
-              { headers: { 'Authorization': `Basic ${getXenditAuth(config.xendit_api_key)}` } }
-            );
-            await db.query('UPDATE xendit_invoices SET status = "EXPIRED" WHERE id = ?', [existing.id]);
-          } catch (e) { console.warn('Failed to expire old invoice:', e.message); }
-        }
-      }
+        await db.query('UPDATE xendit_invoices SET status = "EXPIRED" WHERE id = ?', [existing.id]);
+      } catch (e) { console.warn('Failed to expire old invoice:', e.message); }
+    }
 
     const paymentMethods = payment_method === 'VIRTUAL_ACCOUNT'
       ? [{ type: 'VIRTUAL_ACCOUNT', virtual_account: { channel_code: ['MANDIRI', 'BNI', 'BRI', 'BSI', 'PERMATA', 'CIMB'] } }]
@@ -357,28 +346,25 @@ if (installment_type !== 'partial') {
       }
     );
 
-const xenditInvoice = response.data;
+    const xenditInvoice = response.data;
 
-    console.log(`[PUBLIC] Invoice created: ${xenditInvoice.id} for student ${student_id}, tenant ${tenant_id}`);
-
-await db.query(
-       `INSERT INTO xendit_invoices (tenant_id, student_id, xendit_invoice_id, external_id, amount, description, status, payment_method, callback_url, invoice_url, expiry_date, installment_type)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-       [
-         tenant_id,
-         student_id,
-         xenditInvoice.id,
-         externalId,
-         finalAmount,
-         invoicePayload.description,
-         xenditInvoice.status,
-         payment_method || 'MULTIPLE',
-         callbackUrl,
-         xenditInvoice.invoice_url,
-         xenditInvoice.expiry_date,
-         installment_type || null
-       ]
-     );
+    await db.query(
+      `INSERT INTO xendit_invoices (tenant_id, student_id, xendit_invoice_id, external_id, amount, description, status, payment_method, callback_url, invoice_url, expiry_date)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        tenant_id,
+        student_id,
+        xenditInvoice.id,
+        externalId,
+        finalAmount,
+        invoicePayload.description,
+        xenditInvoice.status,
+        payment_method || 'MULTIPLE',
+        callbackUrl,
+        xenditInvoice.invoice_url,
+        xenditInvoice.expiry_date
+      ]
+    );
 
     res.json({
       success: true,
@@ -391,17 +377,16 @@ await db.query(
         amount: finalAmount,
         status: xenditInvoice.status,
         expiry_date: xenditInvoice.expiry_date,
-        payment_methods: xenditInvoice.available_payment_methods,
-        installment_type: installment_type || null
+        payment_methods: xenditInvoice.available_payment_methods
       }
     });
-   } catch (error) {
-     console.error('Create public xendit invoice error:', error.response?.data || error.message);
-     res.status(500).json({ success: false, message: error.response?.data?.message || 'Error creating xendit invoice' });
-   }
- });
+  } catch (error) {
+    console.error('Create public xendit invoice error:', error.response?.data || error.message);
+    res.status(500).json({ success: false, message: error.response?.data?.message || 'Error creating xendit invoice' });
+  }
+});
 
- // GET /api/xendit/public/invoices - List Xendit invoices (testing, public)
+// GET /api/xendit/public/invoices - List Xendit invoices (testing, public)
 router.get('/xendit/public/invoices', async (req, res) => {
   try {
     const reqTenantId = req.query.tenant_id;
@@ -476,43 +461,15 @@ router.post('/xendit/public/create-invoices-batch', async (req, res) => {
       scope ? [scope] : []
     );
 
-const paidRows = await db.query(
-      `SELECT student_id FROM xendit_invoices WHERE ${scope ? 'tenant_id = ? AND' : ''} status = 'PAID'`,
+    const existingRows = await db.query(
+      `SELECT student_id FROM xendit_invoices WHERE ${scope ? 'tenant_id = ? AND' : ''} status NOT IN ('PAID','EXPIRED')`,
       scope ? [scope] : []
     );
-    const paidSet = new Set((paidRows || []).map(e => e.student_id));
-
-    const pendingInvoices = await db.query(
-      `SELECT student_id, id, xendit_invoice_id, amount FROM xendit_invoices WHERE ${scope ? 'tenant_id = ? AND' : ''} status IN ('PENDING','OPEN')`,
-      scope ? [scope] : []
-    );
-    const pendingSyncMap = new Map((pendingInvoices || []).map(e => [e.student_id, e]));
+    const existingSet = new Set((existingRows || []).map(e => e.student_id));
 
     let created = 0, skipped = 0, failed = 0;
     for (const st of students) {
-      console.log(`[BATCH] Processing student: ${st.id} - ${st.nama_siswa}`);
-      if (paidSet.has(st.id)) {
-        skipped++; continue;
-      }
-      if (pendingSyncMap.has(st.id)) {
-        const existingInvoice = pendingSyncMap.get(st.id);
-        if (existingInvoice && existingInvoice.xendit_invoice_id) {
-          try {
-            const syncResponse = await axios.get(`${XENDIT_API_BASE}/v2/invoices/${existingInvoice.xendit_invoice_id}`, { headers: { 'Authorization': `Basic ${getXenditAuth(config.xendit_api_key)}` } });
-            const syncData = syncResponse.data;
-            if (syncData.status === 'PAID' || syncData.status === 'SETTLED') {
-              await db.query('UPDATE xendit_invoices SET status = ?, paid_at = NOW() WHERE id = ?', ['PAID', existingInvoice.id]);
-              await db.query('UPDATE students SET iuran_bulanan = ?, updated_at = NOW() WHERE id = ?', [existingInvoice.amount || 0, st.id]);
-              console.log(`[BATCH] Synced invoice ${existingInvoice.xendit_invoice_id} to PAID for student ${st.id}`);
-            } else if (syncData.status === 'EXPIRED') {
-              await db.query('UPDATE xendit_invoices SET status = "EXPIRED" WHERE id = ?', [existingInvoice.id]);
-            }
-          } catch (syncErr) {
-            console.error('[BATCH] Sync error for invoice', existingInvoice.xendit_invoice_id, syncErr.response?.data || syncErr.message);
-          }
-        }
-        skipped++; continue;
-      }
+      if (existingSet.has(st.id)) { skipped++; continue; }
       let finalAmount = parseFloat(amount);
       if (!finalAmount) {
         const [baseRow] = await db.query('SELECT iuran_bulanan FROM students WHERE id = ? AND tenant_id = ?', [st.id, st.tenant_id]);
@@ -541,7 +498,6 @@ const paidRows = await db.query(
           `INSERT INTO xendit_invoices (tenant_id, student_id, xendit_invoice_id, external_id, amount, description, status, payment_method, callback_url, invoice_url, expiry_date) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
           [st.tenant_id, st.id, xi.id, externalId, finalAmount, invoicePayload.description, xi.status, payment_method || 'MULTIPLE', `${process.env.BASE_URL || 'http://localhost:3000'}/api/xendit/webhook`, xi.invoice_url, xi.expiry_date]
         );
-        console.log(`[BATCH] Invoice created for student ${st.id}: ${xi.id}`);
         created++;
       } catch (e) {
         failed++;
@@ -575,13 +531,12 @@ router.get('/xendit/public/invoices/:id/sync', async (req, res) => {
     );
 
     const xenditInvoice = response.data;
-    const isPaidOrSettled = xenditInvoice.status === 'PAID' || xenditInvoice.status === 'SETTLED';
-    if (isPaidOrSettled) {
+    if (xenditInvoice.status === 'PAID') {
       await db.query('UPDATE students SET iuran_bulanan = ?, updated_at = NOW() WHERE id = ?', [invoice.amount, invoice.student_id]);
     }
     await db.query('UPDATE xendit_invoices SET status = ?, paid_at = ? WHERE id = ?', [
       xenditInvoice.status,
-      isPaidOrSettled ? (xenditInvoice.paid_at || new Date()) : null,
+      xenditInvoice.status === 'PAID' ? (xenditInvoice.paid_at || new Date()) : null,
       invoiceId
     ]);
 
@@ -722,22 +677,27 @@ router.get('/xendit/invoices/:id/sync', authenticateOperator, async (req, res) =
       }
     );
 
-const xenditInvoice = response.data;
-     const isPaidOrSettled = xenditInvoice.status === 'PAID' || xenditInvoice.status === 'SETTLED';
-     if (xenditInvoice.status === 'PAID' || xenditInvoice.status === 'SETTLED') {
-       await db.query('UPDATE students SET iuran_bulanan = ?, updated_at = NOW() WHERE id = ?', [
-         invoice.amount,
-         invoice.student_id
-       ]);
-     }
+    const xenditInvoice = response.data;
+    const updateData = {
+      status: xenditInvoice.status,
+      payment_method: xenditInvoice.payment_method || invoice.payment_method,
+      paid_at: xenditInvoice.status === 'PAID' ? (xenditInvoice.paid_at || new Date()) : null
+    };
 
-     await db.query('UPDATE xendit_invoices SET status = ?, paid_at = ? WHERE id = ?', [
-       xenditInvoice.status,
-       isPaidOrSettled ? (xenditInvoice.paid_at || new Date()) : null,
-       invoiceId
-     ]);
+    if (xenditInvoice.status === 'PAID') {
+      await db.query('UPDATE students SET iuran_bulanan = ?, updated_at = NOW() WHERE id = ?', [
+        invoice.amount,
+        invoice.student_id
+      ]);
+    }
 
-     res.json({ success: true, data: { status: xenditInvoice.status, paid_at: isPaidOrSettled ? (xenditInvoice.paid_at || new Date()) : null } });
+    await db.query('UPDATE xendit_invoices SET status = ?, paid_at = ? WHERE id = ?', [
+      updateData.status,
+      updateData.paid_at,
+      invoiceId
+    ]);
+
+    res.json({ success: true, data: updateData });
   } catch (error) {
     console.error('Sync xendit invoice error:', error);
     res.status(500).json({ success: false, message: 'Error syncing invoice' });
@@ -751,7 +711,7 @@ router.post('/xendit/webhook', async (req, res) => {
 
     console.log('Xendit webhook received:', event, data?.id);
 
-    if (event === 'invoice.paid' || event === 'invoice.settled') {
+    if (event === 'invoice.paid') {
       const [invoice] = await db.query(
         'SELECT * FROM xendit_invoices WHERE xendit_invoice_id = ?',
         [data.id]
@@ -763,15 +723,12 @@ router.post('/xendit/webhook', async (req, res) => {
           invoice.amount,
           invoice.student_id
         ]);
-        console.log(`[WEBHOOK] Invoice ${invoice.id} marked as PAID, student ${invoice.student_id} updated`);
-      } else {
-        console.log(`[WEBHOOK] Invoice not found for xendit_invoice_id: ${data.id}`);
+        console.log(`Invoice ${invoice.id} marked as PAID, student ${invoice.student_id} updated`);
       }
     }
 
     if (event === 'invoice.expired') {
       await db.query('UPDATE xendit_invoices SET status = ? WHERE xendit_invoice_id = ?', ['EXPIRED', data.id]);
-      console.log(`[WEBHOOK] Invoice ${data.id} marked as EXPIRED`);
     }
 
     res.json({ success: true });
@@ -800,18 +757,18 @@ router.post('/api/xendit/webhook-fallback', async (req, res) => {
     const xenditInvoice = response.data;
     const [invoice] = await db.query('SELECT * FROM xendit_invoices WHERE xendit_invoice_id = ?', [invoice_id]);
 
-if (invoice) {
-       await db.query('UPDATE xendit_invoices SET status = ?, updated_at = NOW() WHERE xendit_invoice_id = ?', [
-         xenditInvoice.status,
-         invoice_id
-       ]);
-       if (xenditInvoice.status === 'PAID' || xenditInvoice.status === 'SETTLED') {
-         await db.query('UPDATE students SET iuran_bulanan = ?, updated_at = NOW() WHERE id = ?', [
-           invoice.amount,
-           invoice.student_id
-         ]);
-       }
-     }
+    if (invoice) {
+      await db.query('UPDATE xendit_invoices SET status = ?, updated_at = NOW() WHERE xendit_invoice_id = ?', [
+        xenditInvoice.status,
+        invoice_id
+      ]);
+      if (xenditInvoice.status === 'PAID') {
+        await db.query('UPDATE students SET iuran_bulanan = ?, updated_at = NOW() WHERE id = ?', [
+          invoice.amount,
+          invoice.student_id
+        ]);
+      }
+    }
 
     res.json({ success: true, data: xenditInvoice });
   } catch (error) {
@@ -851,10 +808,10 @@ router.get('/xendit/public/invoice-status', async (req, res) => {
 
     const xenditInvoice = response.data;
 
-if ((xenditInvoice.status === 'PAID' || xenditInvoice.status === 'SETTLED') && (invoice.status !== 'PAID' && invoice.status !== 'SETTLED')) {
-       await db.query('UPDATE xendit_invoices SET status = ?, paid_at = NOW() WHERE id = ?', ['PAID', invoice.id]);
-       await db.query('UPDATE students SET iuran_bulanan = ?, updated_at = NOW() WHERE id = ?', [invoice.amount, invoice.student_id]);
-     }
+    if (xenditInvoice.status === 'PAID' && invoice.status !== 'PAID') {
+      await db.query('UPDATE xendit_invoices SET status = ?, paid_at = NOW() WHERE id = ?', ['PAID', invoice.id]);
+      await db.query('UPDATE students SET iuran_bulanan = ?, updated_at = NOW() WHERE id = ?', [invoice.amount, invoice.student_id]);
+    }
 
     res.json({
       success: true,
@@ -875,223 +832,5 @@ if ((xenditInvoice.status === 'PAID' || xenditInvoice.status === 'SETTLED') && (
   }
 });
 
-// GET /api/xendit/debug-invoices - Debug list all invoices with status
-router.get('/xendit/debug-invoices', async (req, res) => {
-  try {
-    const tenant_id = req.query.tenant_id;
-    let query = 'SELECT id, tenant_id, student_id, external_id, xendit_invoice_id, amount, status, created_at, paid_at FROM xendit_invoices';
-    let params = [];
-    if (tenant_id) {
-      query += ' WHERE tenant_id = ?';
-      params.push(tenant_id);
-    }
-    query += ' ORDER BY created_at DESC LIMIT 50';
-    const invoices = await db.query(query, params);
-    res.json({ success: true, data: invoices });
-  } catch (e) {
-    res.status(500).json({ success: false, message: e.message });
-  }
-});
-
-// GET /api/xendit/sync-all-pending - Sync all pending invoices status from Xendit
-router.get('/xendit/sync-all-pending', authenticateOperator, async (req, res) => {
-  try {
-    const tenantId = req.query.tenant_id;
-
-    if (!tenantId) {
-      return res.status(400).json({ success: false, message: 'tenant_id required' });
-    }
-
-    if (!verifyTenantAccess(req, tenantId)) {
-      return res.status(403).json({ success: false, message: 'Akses ditolak' });
-    }
-
-    const config = await getTenantXenditConfig(tenantId);
-    if (!config || !config.xendit_api_key) {
-      return res.status(400).json({ success: false, message: 'Xendit belum dikonfigurasi' });
-    }
-
-    const invoices = await db.query(
-      'SELECT id, student_id, xendit_invoice_id, amount FROM xendit_invoices WHERE tenant_id = ? AND status IN (\'PENDING\', \'OPEN\')',
-      [tenantId]
-    );
-
-    if (!invoices || invoices.length === 0) {
-      return res.json({ success: true, message: 'Tidak ada invoice PENDING/OPEN', data: { updated: 0, paid: 0, expired: 0 } });
-    }
-
-    let updated = 0, paid = 0, expired = 0, failed = 0;
-
-    for (const inv of invoices) {
-      try {
-        const response = await axios.get(
-          `${XENDIT_API_BASE}/v2/invoices/${inv.xendit_invoice_id}`,
-          { headers: { 'Authorization': `Basic ${getXenditAuth(config.xendit_api_key)}` } }
-        );
-
-        const xenditInvoice = response.data;
-        const isPaidOrSettled = xenditInvoice.status === 'PAID' || xenditInvoice.status === 'SETTLED';
-
-        if (isPaidOrSettled) {
-          await db.query('UPDATE xendit_invoices SET status = ?, paid_at = ? WHERE id = ?', [
-            xenditInvoice.status,
-            xenditInvoice.paid_at || new Date(),
-            inv.id
-          ]);
-          await db.query('UPDATE students SET iuran_bulanan = ?, updated_at = NOW() WHERE id = ?', [
-            inv.amount,
-            inv.student_id
-          ]);
-          paid++;
-        } else if (xenditInvoice.status === 'EXPIRED') {
-          await db.query('UPDATE xendit_invoices SET status = "EXPIRED", updated_at = NOW() WHERE id = ?', [inv.id]);
-          expired++;
-        } else {
-          await db.query('UPDATE xendit_invoices SET status = ?, updated_at = NOW() WHERE id = ?', [
-            xenditInvoice.status,
-            inv.id
-          ]);
-        }
-        updated++;
-      } catch (err) {
-        console.error(`[SYNC-ALL] Failed to sync invoice ${inv.xendit_invoice_id}:`, err.response?.data || err.message);
-        failed++;
-      }
-    }
-
-    res.json({
-      success: true,
-      message: `Sinkronisasi selesai: ${updated} diperbarui, ${paid} paid, ${expired} expired, ${failed} gagal`,
-      data: { updated, paid, expired, failed }
-    });
-  } catch (error) {
-    console.error('Sync all pending invoices error:', error);
-    res.status(500).json({ success: false, message: 'Error syncing pending invoices' });
-  }
-});
-
-// POST /api/treasurer/public/create-concession-invoice - Create concession invoice (additional installment)
-router.post('/treasurer/public/create-concession-invoice', async (req, res) => {
-  try {
-    const { student_id, amount, description, payment_method, redirect_url } = req.body;
-
-    if (!student_id) {
-      return res.status(400).json({ success: false, message: 'student_id wajib diisi' });
-    }
-
-    const [student] = await db.query(
-      'SELECT s.*, tn.nama_sekolah, tn.tenant_id, p.no_wa as parent_wa FROM students s JOIN tenants tn ON s.tenant_id = tn.tenant_id LEFT JOIN parents p ON s.parent_id = p.id WHERE s.id = ?',
-      [student_id]
-    );
-    if (!student) {
-      return res.status(404).json({ success: false, message: 'Siswa tidak ditemukan' });
-    }
-
-    const config = await getTenantXenditConfig(student.tenant_id);
-    if (!config || !config.xendit_api_key || config.xendit_enabled !== 1) {
-      return res.status(400).json({ success: false, message: 'Xendit belum dikonfigurasi untuk tenant ini' });
-    }
-
-    let finalAmount;
-    if (amount !== undefined && amount !== null && amount !== '' && !isNaN(parseFloat(amount))) {
-      finalAmount = parseFloat(amount);
-    } else {
-      const [arrears] = await db.query(
-        "SELECT COALESCE(SUM(amount),0) as total FROM xendit_invoices WHERE student_id = ? AND tenant_id = ? AND status NOT IN ('PAID','EXPIRED')",
-        [student_id, student.tenant_id]
-      );
-      const [paymentArrears] = await db.query(
-        "SELECT COALESCE(SUM(amount),0) as total FROM payment_invoices WHERE student_id = ? AND tenant_id = ? AND status NOT IN ('paid','cancelled')",
-        [student_id, student.tenant_id]
-      );
-      finalAmount = (parseFloat(arrears && arrears.total) || 0) + (parseFloat(paymentArrears && paymentArrears.total) || 0);
-    }
-
-    if (finalAmount <= 0) {
-      return res.status(400).json({ success: false, message: 'Amount tidak valid' });
-    }
-
-    const periode = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
-
-    const paymentMethods = payment_method === 'VIRTUAL_ACCOUNT'
-      ? [{ type: 'VIRTUAL_ACCOUNT', virtual_account: { channel_code: ['MANDIRI', 'BNI', 'BRI', 'BSI', 'PERMATA', 'CIMB'] } }]
-      : payment_method === 'QRIS'
-        ? [{ type: 'QRIS' }]
-        : [
-            { type: 'VIRTUAL_ACCOUNT', virtual_account: { channel_code: ['MANDIRI', 'BNI', 'BRI', 'BSI', 'PERMATA', 'CIMB'] } },
-            { type: 'QRIS' },
-            { type: 'EWALLET', ewallet: { channel_code: ['SHOPEEPAY', 'LINKAJA', 'DANA', 'OVO'] } },
-            { type: 'RETAIL_OUTLET', retail_outlet: { channel_code: ['ALFAMART', 'INDOMARET'] } }
-          ];
-
-    const externalId = `CONCESSION-${student.tenant_id}-${student_id}-${Date.now()}`;
-    const callbackUrl = `${process.env.BASE_URL || 'http://localhost:3000'}/api/xendit/webhook`;
-    const successRedirect = redirect_url || `${process.env.BASE_URL || 'http://localhost:3000'}/xendit-payment.html?external_id=${externalId}`;
-    const failureRedirect = redirect_url || `${process.env.BASE_URL || 'http://localhost:3000'}/xendit-payment.html?external_id=${externalId}`;
-
-    const invoicePayload = {
-      external_id: externalId,
-      amount: finalAmount,
-      description: description || `Cicilan tambahan ${student.nama_siswa} - ${student.nama_sekolah}`,
-      invoice_duration: 31536000,
-      currency: 'IDR',
-      success_redirect_url: successRedirect,
-      failure_redirect_url: failureRedirect
-    };
-
-    const response = await axios.post(
-      `${XENDIT_API_BASE}/v2/invoices`,
-      invoicePayload,
-      {
-        headers: {
-          'Authorization': `Basic ${getXenditAuth(config.xendit_api_key)}`,
-          'Content-Type': 'application/json'
-        }
-      }
-    );
-
-    const xenditInvoice = response.data;
-
-    console.log(`[CONCESSION] Invoice created: ${xenditInvoice.id} for student ${student_id}, tenant ${student.tenant_id}`);
-
-    await db.query(
-      `INSERT INTO xendit_invoices (tenant_id, student_id, xendit_invoice_id, external_id, amount, description, status, payment_method, callback_url, invoice_url, expiry_date, installment_type)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        student.tenant_id,
-        student_id,
-        xenditInvoice.id,
-        externalId,
-        finalAmount,
-        invoicePayload.description,
-        xenditInvoice.status,
-        payment_method || 'MULTIPLE',
-        callbackUrl,
-        xenditInvoice.invoice_url,
-        xenditInvoice.expiry_date,
-        'concession'
-      ]
-    );
-
-    res.json({
-      success: true,
-      message: 'Invoice konsesi Xendit berhasil dibuat',
-      data: {
-        invoice_id: xenditInvoice.id,
-        external_id: externalId,
-        invoice_url: xenditInvoice.invoice_url,
-        payment_page_url: `${process.env.BASE_URL || 'http://localhost:3000'}/xendit-payment.html?external_id=${encodeURIComponent(externalId)}`,
-        amount: finalAmount,
-        status: xenditInvoice.status,
-        expiry_date: xenditInvoice.expiry_date,
-        payment_methods: xenditInvoice.available_payment_methods,
-        installment_type: 'concession'
-      }
-    });
-  } catch (error) {
-    console.error('Create concession invoice error:', error.response?.data || error.message);
-    res.status(500).json({ success: false, message: error.response?.data?.message || 'Error creating concession invoice' });
-  }
-});
-
 module.exports = router;
+

@@ -20,69 +20,89 @@ let currentPage = 1;
 let totalPages = 1;
 let pageLimit = 10;
 let currentMapContext = 'edit'; // 'edit' atau 'add' — menentukan field mana yang diupdate oleh map/deteksi
+async function loadScannerDevices() {
+    const container = document.getElementById('devices-list');
+    if (!container) return;
 
-// Make functions globally available for onclick attributes
-window.editTenantLocation = editTenantLocation;
-window.autoDetectLocationModal = autoDetectLocationModal;
+    container.innerHTML = '<div class="text-center py-8 text-gray-500"><i class="fas fa-spinner fa-spin text-xl mb-2"></i><p>Memuat data device...</p></div>';
 
-// Map functions (stubs for incomplete location modal feature)
-window.toggleMap = function () {
-    const mapContainer = document.getElementById('mapContainer');
-    if (mapContainer) {
-        mapContainer.classList.toggle('hidden');
-    }
-};
-window.centerMapOnCurrent = function () { };
-window.clearMapMarker = function () { };
-window.updateMiniMap = function (lat, lng) { };
-window.updateLocationMap = function (lat, lng) { };
-window.updateCoordinatePreview = updateCoordinatePreview;
-
-// Stub functions for map/location features
-window.copyCoordinates = function () {
-    const lat = document.getElementById('latitudeInput')?.value;
-    const lng = document.getElementById('longitudeInput')?.value;
-    if (lat && lng) {
-        navigator.clipboard.writeText(`${lat}, ${lng}`).then(() => {
-            showToast('Koordinat disalin!', 'success');
+    try {
+        const response = await fetch('/api/scanner/devices', {
+            headers: { 'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}` }
         });
-    }
-};
-window.copyCoordinatesModal = function () {
-    const lat = document.getElementById('locationLat')?.value;
-    const lng = document.getElementById('locationLng')?.value;
-    if (lat && lng) {
-        navigator.clipboard.writeText(`${lat}, ${lng}`).then(() => {
-            showToast('Koordinat disalin!', 'success');
-        });
-    }
-};
-window.goToPage = goToPage;
-window.prevPage = prevPage;
-window.nextPage = nextPage;
 
-// Stub functions for location modal and device management
-window.hideTenantLocationModal = function () {
-    const modal = document.getElementById('tenantLocationModal');
-    if (modal) modal.classList.add('hidden');
-};
-window.hideAddDeviceModal = function () {
-    const modal = document.getElementById('addDeviceModal');
-    if (modal) modal.classList.add('hidden');
-};
-window.hideAddTenantModal = function () {
-    const modal = document.getElementById('addTenantModal');
-    if (modal) modal.classList.add('hidden');
-};
-window.selectTeacher = function (id) { };
-window.editDevice = function (id) { };
-window.changeDeviceStatus = function (id, status) { };
-window.deleteDevice = function (id) { };
-window.showAddLocationModal = function () { };
-window.toggleLocationStatus = function (id) { };
-window.deleteTenantLocation = function (id) { };
-window.loadScannerDevices = function () { };
-window.loadQRLogs = function () { };
+        if (response.status === 401 || response.status === 403) {
+            container.innerHTML = '<div class="text-center py-8 text-gray-500">Akses ditolak</div>';
+            return;
+        }
+
+        const data = await response.json();
+
+        if (data.success && data.data && data.data.length > 0) {
+            container.innerHTML = data.data.map(device => `
+                <div class="bg-white border border-gray-200 rounded-lg p-4 flex justify-between items-center">
+                    <div>
+                        <h5 class="font-medium text-gray-900">${device.school_name || '-'} - ${device.device_name || device.device_id}</h5>
+                        <p class="text-sm text-gray-600">Status: ${device.status || 'Aktif'} | Total Scan: ${device.total_scans_today || device.total_scans || 0}</p>
+                        ${device.last_scan_time ? `<p class="text-xs text-gray-500 mt-1">Scan Terakhir: ${new Date(device.last_scan_time).toLocaleString('id-ID')}</p>` : ''}
+                        ${device.last_scan && !device.last_scan_time ? `<p class="text-xs text-gray-500 mt-1">Scan Terakhir: ${new Date(device.last_scan).toLocaleString('id-ID')}</p>` : ''}
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${device.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+                            ${device.status === 'active' ? 'Aktif' : device.status || 'Aktif'}
+                        </span>
+                    </div>
+                </div>
+            `).join('');
+        } else {
+            container.innerHTML = '<div class="text-center py-8 text-gray-500">Belum ada device terdaftar</div>';
+        }
+    } catch (error) {
+        console.error('Error loading scanner devices:', error);
+        container.innerHTML = '<div class="text-center py-8 text-red-500">Error memuat device</div>';
+    }
+}
+
+async function loadQRLogs() {
+    const tbody = document.getElementById('qr-logs-table');
+    if (!tbody) return;
+
+    tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>Memuat logs...</td></tr>';
+
+    try {
+        const response = await fetch('/api/scanner/attendance/logs?limit=50', {
+            headers: { 'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}` }
+        });
+
+        if (response.status === 401 || response.status === 403) {
+            tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-gray-500">Akses ditolak</td></tr>';
+            return;
+        }
+
+        const data = await response.json();
+
+        if (data.success && data.data && data.data.length > 0) {
+            tbody.innerHTML = data.data.map(log => `
+                <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-3 text-sm text-gray-900">${log.teacher_name || '-'}</td>
+                    <td class="px-4 py-3 text-sm text-gray-500">${log.school_name || '-'}</td>
+                    <td class="px-4 py-3 text-sm text-gray-500">${log.device_name || log.device_id || '-'}</td>
+                    <td class="px-4 py-3 text-sm text-gray-500">${log.waktu_scan ? new Date(log.waktu_scan).toLocaleString('id-ID') : '-'}</td>
+                    <td class="px-4 py-3 text-sm">
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${log.sync_status === 'synced' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}">
+                            ${log.sync_status === 'synced' ? 'Tersinkron' : log.sync_status || '-'}
+                        </span>
+                    </td>
+                </tr>
+            `).join('');
+        } else {
+            tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-gray-500">Belum ada log scanner</td></tr>';
+        }
+    } catch (error) {
+        console.error('Error loading QR logs:', error);
+        tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-red-500">Error memuat logs</td></tr>';
+    }
+}
 window.loadTenantLocations = fetchTenantLocations;
 window.updateToggleVisual = updateToggleVisual;
 window.showAddTenantModal = function () {
@@ -294,12 +314,16 @@ async function fetchDashboardData() {
             setEl('todayAttendance', d.activeToday ?? 0);
             setEl('lateCount', d.lateToday ?? 0);
             setEl('scannerStatus', 'Online');
+            setEl('accountWithCount', d.teachersWithAccount ?? 0);
+            setEl('accountWithoutCount', d.teachersWithoutAccount ?? 0);
         } else {
             // Clear loading animation even on error
             setEl('totalTeachers', 0);
             setEl('todayAttendance', 0);
             setEl('lateCount', 0);
             setEl('scannerStatus', 'Error');
+            setEl('accountWithCount', 0);
+            setEl('accountWithoutCount', 0);
         }
     } catch (error) {
         console.error('Dashboard fetch error:', error);
@@ -312,7 +336,7 @@ async function fetchDashboardData() {
 
 async function fetchTeachers(page = 1) {
     try {
-        const tenantId = window.teacherTenantFilterValue || '';
+        const tenantId = window.teacherTenantFilterValue || window.tenantId || (JSON.parse(localStorage.getItem('user') || '{}'))?.tenant_id || (JSON.parse(localStorage.getItem('user') || '{}'))?.assignments?.[0]?.tenant_id || '';
         const statusKepegawaian = window.teacherStatusFilterValue || '';
         const search = window.teacherSearchValue || '';
 
@@ -1510,8 +1534,10 @@ function refreshTenantLocations() {
 }
 
 // Update coordinate preview when inputs change
-document.getElementById('latitudeInput').addEventListener('input', updateCoordinatePreview);
-document.getElementById('longitudeInput').addEventListener('input', updateCoordinatePreview);
+const latInput = document.getElementById('latitudeInput');
+const lngInput = document.getElementById('longitudeInput');
+if (latInput) latInput.addEventListener('input', updateCoordinatePreview);
+if (lngInput) lngInput.addEventListener('input', updateCoordinatePreview);
 
 function updateCoordinatePreview() {
     const lat = document.getElementById('latitudeInput').value;
@@ -1812,7 +1838,8 @@ function setupWhatsApp() {
     setupMessageTemplates();
 
     // Bulk WhatsApp form
-    document.getElementById('bulkWhatsAppForm').addEventListener('submit', async (e) => {
+    const bulkForm = document.getElementById('bulkWhatsAppForm');
+    if (bulkForm) bulkForm.addEventListener('submit', async (e) => {
         e.preventDefault();
 
         const tenantId = document.getElementById('bulkTenantSelect').value;
@@ -1914,7 +1941,8 @@ function setupWhatsApp() {
     });
 
     // Refresh button
-    document.getElementById('refreshWhatsApp').addEventListener('click', () => {
+    const refreshWhatsAppBtn = document.getElementById('refreshWhatsApp');
+    if (refreshWhatsAppBtn) refreshWhatsAppBtn.addEventListener('click', () => {
         loadTenantsForWhatsApp();
         loadTeachersForWhatsApp();
         updateWhatsAppStatus('🔄 Data diperbarui', 'info');
@@ -1945,9 +1973,9 @@ window.loadStudents = async function (page = 1) {
     const searchInput = document.getElementById('studentSearch');
     const search = window.studentSearchValue || (searchInput ? searchInput.value.trim() : '');
     const classId = window.studentClassFilterValue || '';
-    const tenantId = window.studentTenantFilterValue || '';
+    const tenantId = window.studentTenantFilterValue || window.tenantId || (JSON.parse(localStorage.getItem('user') || '{}'))?.tenant_id || (JSON.parse(localStorage.getItem('user') || '{}'))?.assignments?.[0]?.tenant_id || '';
 
-    tbody.innerHTML = '<tr><td colspan="8" class="px-6 py-12 text-center text-gray-500"><i class="fas fa-spinner fa-spin"></i> Memuat...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-12 text-center text-gray-500"><i class="fas fa-spinner fa-spin"></i> Memuat...</td></tr>';
 
     try {
         const params = new URLSearchParams({
@@ -1965,37 +1993,31 @@ window.loadStudents = async function (page = 1) {
         });
         const data = await response.json();
 
-        if (data.success) {
+if (data.success) {
             totalStudents = data.pagination?.total || 0;
             totalStudentPages = data.pagination?.totalPages || 1;
 
             tbody.innerHTML = data.data.map(s => `
-             <tr>
-               <td class="px-6 py-4">
-                 <input type="checkbox" class="student-checkbox" value="${s.id}" onchange="updateSelectAllStudents()">
-               </td>
-               <td class="px-6 py-4">${s.nama_siswa}</td>
-               <td class="px-6 py-4">${s.nisn || '-'}</td>
-               <td class="px-6 py-4">${s.nis}</td>
-               <td class="px-6 py-4">${s.nama_kelas || '-'}</td>
-               <td class="px-6 py-4">${s.nama_sekolah || '-'}</td>
-               <td class="px-6 py-4">${s.nama_orang_tua || '-'}<br><small>${s.no_wa_ortu || ''}</small></td>
-               <td class="px-6 py-4">Rp ${(s.iuran_bulanan || 0).toLocaleString('id-ID')}</td>
-               <td class="px-6 py-4">
-                 <button onclick="editStudent(${s.id})" class="text-blue-600 hover:text-blue-800 mr-2">
-                   <i class="fas fa-edit"></i>
-                 </button>
-                 <button onclick="updateStudentPayment(${s.id}, ${s.iuran_bulanan || 0})" class="text-green-600 hover:text-green-800 mr-2">
-                   <i class="fas fa-wallet"></i>
-                 </button>
-                 <button onclick="deleteStudent(${s.id})" class="text-red-600 hover:text-red-800">
-                   <i class="fas fa-trash"></i>
-                 </button>
-               </td>
-             </tr>
-           `).join('') || '<tr><td colspan="9" class="px-6 py-12 text-center text-gray-500">Tidak ada data siswa</td></tr>';
+              <tr class="${!s.nama_kelas || s.class_id === null ? 'bg-yellow-50' : ''}">
+                <td class="px-6 py-4 text-center"><input type="checkbox" class="student-checkbox" value="${s.id}" onchange="updateMutasiBtnState()"></td>
+                <td class="px-6 py-4">${s.nama_siswa || '-'}${!s.nama_kelas || s.class_id === null ? '<span class="text-xs text-yellow-600 font-semibold">(Belum ada kelas)</span>' : ''}</td>
+                <td class="px-6 py-4">${s.nisn || '-'}</td>
+                <td class="px-6 py-4">${s.nis || '-'}</td>
+                <td class="px-6 py-4">${s.nama_kelas || '-'}</td>
+                <td class="px-6 py-4">${s.nama_orang_tua || '-'}<br><small>${s.no_wa_ortu || ''}</small></td>
+                <td class="px-6 py-4">Rp ${(s.iuran_bulanan || 0).toLocaleString('id-ID')}</td>
+                <td class="px-6 py-4">
+                  <button onclick="showStudentMutasiModal(${s.id}, '${s.nama_siswa || ''}', '${s.nama_sekolah || ''}', '${s.tenant_id || ''}')" class="text-purple-600 hover:text-purple-800 mr-2" title="Mutasi">
+                    <i class="fas fa-exchange-alt"></i>
+                  </button>
+                  <button onclick="editStudent(${s.id})" class="text-blue-600 hover:text-blue-800" title="Edit">
+                    <i class="fas fa-edit"></i>
+                  </button>
+                </td>
+              </tr>
+            `).join('') || '<tr><td colspan="8" class="px-6 py-12 text-center text-gray-500">Tidak ada data siswa</td></tr>';
 
-            renderStudentPagination();
+renderStudentPagination();
         } else {
             tbody.innerHTML = '<tr><td colspan="8" class="px-6 py-12 text-center text-red-500">Gagal memuat data</td></tr>';
         }
@@ -2403,17 +2425,261 @@ window.createUser = createUser;
 window.editRule = editRule;
 window.deleteRule = deleteRule;
 window.showSettingsTab = showSettingsTab;
+window.showAccountModal = showAccountModal;
+window.closeAccountModal = closeAccountModal;
+window.toggleSelectAllNoAccount = toggleSelectAllNoAccount;
+window.sendEmailToSelected = sendEmailToSelected;
+window.loadAkunGuru = loadAkunGuru;
+window.showAddTeacherModal = showAddTeacherModal;
+window.hideTeacherModal = hideTeacherModal;
+window.showAddRuleModal = showAddRuleModal;
+window.hideRuleModal = hideRuleModal;
+window.hideLocationModal = hideLocationModal;
+window.deleteSelectedTeachers = deleteSelectedTeachers;
+window.createUsersForSelected = createUsersForSelected;
+window.refreshTenantLocations = refreshTenantLocations;
 
-// Stub functions for admin dashboard
-window.loadStudents = async function () {
-    const tbody = document.getElementById('studentsTable');
-    if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-12 text-center text-gray-500">Belum ada data siswa</td></tr>';
+// Stub functions untuk fitur yang belum diimplementasi sepenuhnya
+window.openWhatsAppMessenger = function () { };
+window.showMutasiTeachersModal = function () { };
+window.loadStudentPaymentSummary = function () { };
+window.loadTenantLocations = function () { };
+window.loadEmploymentRules = function () { };
+window.createBackup = function () { };
+window.restoreDatabase = function () { };
+window.showSkGuruModal = function () {
+    const modal = document.getElementById('skGuruModal');
+    if (modal) { modal.classList.remove('hidden'); modal.classList.add('show'); }
 };
+window.hideSkGuruModal = function () {
+    const modal = document.getElementById('skGuruModal');
+    if (modal) { modal.classList.remove('show'); modal.classList.add('hidden'); }
+};
+window.previewSkGuru = function () { alert('Fitur preview SK Guru belum tersedia'); };
+window.bulkGenerateSkGuru = function () { alert('Fitur bulk generate SK Guru belum tersedia'); };
+window.hideSkPreviewModal = function () { alert('Fitur preview SK Guru belum tersedia'); };
+window.confirmGenerateSk = function () { alert('Fitur generate SK belum tersedia'); };
+window.saveSkAutomationSettings = function () { alert('Fitur pengaturan SK Automation belum tersedia'); };
+window.refreshBankSettings = function () { };
+window.loadBillSettings = function () { };
+window.saveBillSettings = function () { alert('Fitur pengaturan iuran belum tersedia'); };
+window.loadPaymentSettings = function () { };
+window.savePaymentSettings = function () { alert('Fitur pengaturan payment belum tersedia'); };
+window.testPaymentConnection = function () { alert('Fitur test payment belum tersedia'); };
+window.generateMonthlyInvoices = function () { alert('Fitur generate invoice bulanan belum tersedia'); };
+window.hideSalaryModal = function () { };
+window.saveSalary = function () { alert('Fitur pengaturan gaji belum tersedia'); };
+window.openBulkBillModal = function () { alert('Fitur bulk bill belum tersedia'); };
+window.closeChangePasswordModal = function () { };
+window.changePassword = function () { alert('Fitur change password belum tersedia'); };
+window.closeStudentEditModal = function () { };
+window.saveStudentEdit = function () { alert('Fitur edit siswa belum tersedia'); };
 
-window.loadAttendanceLogs = async function (page = 1) {
+// Stub functions for admin dashboard (hanya fallback bila belum didefinisikan oleh halaman lain seperti school-admin.html)
+// Student edit helpers (always available for the single Edit action)
+{
+  const studentAuthHdr = () => ({ 'Authorization': 'Bearer ' + (window.authToken || localStorage.getItem('token') || '') });
+
+  async function populateStudentEditSelects(tenantId, classId) {
+    const tSel = document.getElementById('editStudentTenant');
+    const cSel = document.getElementById('editStudentClass');
+    try {
+      const tr = await fetch('/api/admin/tenants?limit=500', { headers: studentAuthHdr() }).then(r => r.json());
+      if (tSel) tSel.innerHTML = (tr.data || []).map(t => `<option value="${t.tenant_id}" ${t.tenant_id === tenantId ? 'selected' : ''}>${t.nama_sekolah}</option>`).join('');
+    } catch (e) { console.error(e); }
+    try {
+      const effectiveTenantId = tenantId || window.tenantId || (JSON.parse(localStorage.getItem('user') || '{}'))?.tenant_id || (JSON.parse(localStorage.getItem('user') || '{}'))?.assignments?.[0]?.tenant_id;
+      const cr = await fetch('/api/admin/classes?limit=1000&tenant_id=' + (effectiveTenantId || ''), { headers: studentAuthHdr() }).then(r => r.json());
+      if (cSel) cSel.innerHTML = '<option value="">-- Pilih Kelas --</option>' + (cr.data || []).map(c => `<option value="${c.id}" ${c.id === classId ? 'selected' : ''}>${c.tingkatan ? c.tingkatan + ' - ' : ''}${c.nama_kelas}</option>`).join('');
+    } catch (e) { console.error(e); }
+  }
+
+  window.fetchClassesForTenant = async function (tenantId) {
+    const cSel = document.getElementById('editStudentClass');
+    if (!cSel || !tenantId) return;
+    try {
+      const cr = await fetch('/api/admin/classes?limit=1000&tenant_id=' + tenantId, { headers: studentAuthHdr() }).then(r => r.json());
+      cSel.innerHTML = '<option value="">-- Pilih Kelas --</option>' + (cr.data || []).map(c => `<option value="${c.id}">${c.tingkatan ? c.tingkatan + ' - ' : ''}${c.nama_kelas}</option>`).join('');
+    } catch (e) { console.error(e); }
+  }
+
+  window.editStudent = async function (id) {
+    try {
+      const res = await fetch('/api/admin/students/' + id, { headers: studentAuthHdr() });
+      const data = await res.json();
+      if (!data.success) { alert('Gagal memuat data siswa'); return; }
+      const s = data.data;
+      document.getElementById('editStudentId').value = s.id;
+      document.getElementById('editStudentNama').value = s.nama_siswa || '';
+      document.getElementById('editStudentNis').value = s.nis || '';
+      document.getElementById('editStudentNisn').value = s.nisn || '';
+      document.getElementById('editStudentJk').value = s.jenis_kelamin || '';
+      document.getElementById('editStudentIuran').value = s.iuran_bulanan ?? 0;
+      document.getElementById('editStudentParent').value = s.nama_orang_tua || '';
+      document.getElementById('editStudentWa').value = s.no_wa_ortu || '';
+      await populateStudentEditSelects(s.tenant_id, s.class_id);
+      document.getElementById('studentEditModal').classList.add('show');
+    } catch (e) { console.error(e); alert('Error memuat siswa'); }
+  };
+
+  window.saveStudentEdit = async function () {
+    const id = document.getElementById('editStudentId').value;
+    const payload = {
+      tenant_id: document.getElementById('editStudentTenant').value,
+      class_id: document.getElementById('editStudentClass').value || null,
+      nama_siswa: document.getElementById('editStudentNama').value,
+      nis: document.getElementById('editStudentNis').value,
+      nisn: document.getElementById('editStudentNisn').value,
+      jenis_kelamin: document.getElementById('editStudentJk').value,
+      iuran_bulanan: parseFloat(document.getElementById('editStudentIuran').value) || 0,
+      nama_orang_tua: document.getElementById('editStudentParent').value,
+      no_wa: document.getElementById('editStudentWa').value
+    };
+    try {
+      const res = await fetch('/api/admin/students/' + id, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...studentAuthHdr() },
+        body: JSON.stringify(payload)
+      });
+      const d = await res.json();
+      if (d.success) {
+        document.getElementById('studentEditModal').classList.remove('show');
+        window.loadStudents(1);
+        alert('Data siswa berhasil disimpan');
+      } else { alert(d.message || 'Gagal menyimpan'); }
+    } catch (e) { console.error(e); alert('Error menyimpan'); }
+  };
+
+  window.closeStudentEditModal = function () {
+    document.getElementById('studentEditModal')?.classList.remove('show');
+  };
+
+  // Student Mutasi Functions
+  window.showStudentMutasiModal = async function (id, namaSiswa, oldSchool, oldTenant) {
+    const modal = document.getElementById('studentMutasiModal');
+    if (!modal) return;
+    
+    // If called from header button without args, get selected students
+    if (!id) {
+      const checked = Array.from(document.querySelectorAll('.student-checkbox:checked')).map(cb => cb.value);
+      if (checked.length === 0) return;
+      if (checked.length === 1) {
+        id = checked[0];
+      } else {
+        openBulkMutasiModal(checked);
+        return;
+      }
+    }
+    
+    document.getElementById('mutasiStudentId').value = id;
+    document.getElementById('mutasiOldSchool').value = oldSchool || '-';
+    document.getElementById('mutasiReason').value = '';
+    
+    const targetSel = document.getElementById('mutasiTarget');
+    const tenantsRes = await fetch('/api/admin/tenants?limit=500', { headers: studentAuthHdr() });
+    const tenantsData = await tenantsRes.json();
+    const tenants = tenantsData.success ? tenantsData.data : [];
+    targetSel.innerHTML = '<option value="">Pilih Sekolah Tujuan</option>' +
+      tenants.filter(t => t.tenant_id !== oldTenant).map(t => `<option value="${t.tenant_id}">${t.nama_sekolah}</option>`).join('') +
+      '<option value="other">Lainnya...</option>';
+    
+    document.getElementById('mutasiOtherInput').classList.add('hidden');
+    modal.classList.add('show');
+  };
+
+  window.toggleMutasiOtherInput = function () {
+    const target = document.getElementById('mutasiTarget').value;
+    const otherInput = document.getElementById('mutasiOtherInput');
+    otherInput.classList.toggle('hidden', target !== 'other');
+  };
+
+  // Checkbox handlers
+  window.toggleSelectAllStudents = function () {
+    const selectAll = document.getElementById('selectAllStudents');
+    const checkboxes = document.querySelectorAll('.student-checkbox');
+    checkboxes.forEach(cb => cb.checked = selectAll.checked);
+    updateMutasiBtnState();
+  };
+
+  window.updateMutasiBtnState = function () {
+    const checked = document.querySelectorAll('.student-checkbox:checked');
+    const btn = document.getElementById('mutasiBtn');
+    if (btn) btn.disabled = checked.length === 0;
+  };
+
+  window.closeStudentMutasiModal = function () {
+    const modal = document.getElementById('studentMutasiModal');
+    if (modal) modal.classList.remove('show');
+  };
+
+  // Bulk mutasi modal opener for admin-dashboard
+  window.openBulkMutasiModal = async function (ids) {
+    const modal = document.getElementById('studentMutasiModal');
+    if (!modal) return;
+    document.getElementById('mutasiStudentId').value = ids.join(',');
+    document.getElementById('mutasiOldSchool').value = ids.length + ' siswa dipilih';
+    document.getElementById('mutasiReason').value = '';
+
+    const targetSel = document.getElementById('mutasiTarget');
+    const tenantsRes = await fetch('/api/admin/tenants?limit=500', { headers: studentAuthHdr() });
+    const tenantsData = await tenantsRes.json();
+    const tenants = tenantsData.success ? tenantsData.data : [];
+    targetSel.innerHTML = '<option value="">Pilih Sekolah Tujuan</option>' +
+      tenants.map(t => `<option value="${t.tenant_id}">${t.nama_sekolah}</option>`).join('') +
+      '<option value="other">Lainnya...</option>';
+
+    document.getElementById('mutasiOtherInput').classList.add('hidden');
+    modal.classList.add('show');
+  };
+
+  window.submitStudentMutasi = async function () {
+    const idInput = document.getElementById('mutasiStudentId').value;
+    const ids = idInput.includes(',') ? idInput.split(',').map(s => s.trim()) : [idInput];
+    const targetTenant = document.getElementById('mutasiTarget').value;
+    const otherSchoolName = document.getElementById('mutasiOtherSchoolName').value.trim();
+    const reason = document.getElementById('mutasiReason').value.trim();
+
+    if (!targetTenant) {
+      if (typeof Swal !== 'undefined') {
+        Swal.fire('Error', 'Pilih tujuan mutasi', 'error');
+      } else {
+        alert('Pilih tujuan mutasi');
+      }
+      return;
+    }
+
+    try {
+      const promises = ids.map(sid =>
+        fetch('/api/admin/students/' + sid + '/mutasi', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...studentAuthHdr() },
+          body: JSON.stringify({ target_tenant_id: targetTenant, target_tenant_name: otherSchoolName || null, reason })
+        }).then(r => r.json())
+      );
+      const results = await Promise.all(promises);
+      const success = results.filter(r => r.success).length;
+      closeStudentMutasiModal();
+      loadStudents(1);
+      if (typeof Swal !== 'undefined') {
+        showToast(`${success}/${ids.length} siswa berhasil dimutasi`, 'success');
+      } else {
+        console.log(`${success}/${ids.length} siswa berhasil dimutasi`);
+      }
+    } catch (e) {
+      console.error('[BULK MUTASI]', e);
+      if (typeof Swal !== 'undefined') {
+        showToast('Terjadi kesalahan', 'error');
+      }
+    }
+  };
+}
+
+if (typeof window.loadAttendanceLogs !== 'function') {
+  window.loadAttendanceLogs = async function (page = 1) {
     const tbody = document.getElementById('attendanceTable');
     if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-12 text-center text-gray-500">Belum ada log absensi</td></tr>';
-};
+  };
+}
 
 // ===== Attendance Monthly Recap =====
 window.switchAttendanceView = function(view) {
@@ -2544,3 +2810,178 @@ window.loadTenantFilters = async function() {
         if (tenantSelect) tenantSelect.innerHTML = '<option value="">Gagal memuat</option>';
     }
 };
+
+async function showAccountModal() {
+    const modal = document.getElementById('accountModal');
+    if (!modal) return;
+    modal.classList.add('show');
+    await loadNoAccountTeachers();
+}
+
+function closeAccountModal() {
+    const modal = document.getElementById('accountModal');
+    if (modal) {
+        modal.classList.remove('show');
+    }
+}
+
+async function loadNoAccountTeachers() {
+    const tbody = document.getElementById('noAccountTableBody');
+    if (!tbody) return;
+
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-gray-500"><i class="fas fa-spinner fa-spin"></i> Memuat data...</td></tr>';
+
+    try {
+        const response = await fetch('/api/admin/teacher-account-summary', {
+            headers: { 'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}` }
+        });
+
+        if (response.status === 401 || response.status === 403) {
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-gray-500">Akses ditolak</td></tr>';
+            return;
+        }
+
+        const data = await response.json();
+
+        if (data.success && data.data && data.data.length > 0) {
+            tbody.innerHTML = data.data.map(teacher => `
+                <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-3">
+                        <input type="checkbox" class="no-account-checkbox" value="${teacher.id}">
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-900">${teacher.nama || '-'}</td>
+                    <td class="px-4 py-3 text-sm text-gray-500">${teacher.nik || '-'}</td>
+                    <td class="px-4 py-3 text-sm text-gray-500">${teacher.nip || '-'}</td>
+                    <td class="px-4 py-3 text-sm text-gray-500">${teacher.email || '-'}</td>
+                    <td class="px-4 py-3 text-sm text-gray-500">${teacher.no_wa || '-'}</td>
+                    <td class="px-4 py-3 text-sm text-gray-500">${teacher.assignments && teacher.assignments.length > 0 ? teacher.assignments.map(a => a.nama_sekolah || a.tenant_id).join(', ') : '-'}</td>
+                    <td class="px-4 py-3 text-sm">
+                        <button onclick="createUser(${teacher.id})" class="text-green-600 hover:text-green-800" title="Buat Akun">
+                            <i class="fas fa-user-plus"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        } else {
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-gray-500">Semua guru sudah memiliki akun</td></tr>';
+        }
+    } catch (error) {
+        console.error('Error loading no account teachers:', error);
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8 text-red-500">Error memuat data</td></tr>';
+    }
+}
+
+function toggleSelectAllNoAccount() {
+    const selectAll = document.getElementById('selectAllNoAccount');
+    const checkboxes = document.querySelectorAll('.no-account-checkbox');
+    checkboxes.forEach(cb => cb.checked = selectAll.checked);
+}
+
+async function sendEmailToSelected() {
+    const checkboxes = document.querySelectorAll('.no-account-checkbox:checked');
+    const teacherIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
+
+    if (teacherIds.length === 0) {
+        alert('Pilih minimal satu guru untuk dikirim email');
+        return;
+    }
+
+    const customMessage = prompt('Masukkan pesan email (opsional):', 'Akun sistem absensi Anda belum dibuat. Silakan hubungi admin untuk mengaktivasi akun Anda.');
+    if (customMessage === null) return;
+
+    try {
+        const response = await fetch('/api/admin/send-email-no-account', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}`
+            },
+            body: JSON.stringify({ teacher_ids: teacherIds, message: customMessage })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            alert(result.message);
+            loadNoAccountTeachers();
+        } else {
+            alert('Error: ' + result.message);
+        }
+    } catch (error) {
+        console.error('Send email error:', error);
+        alert('Terjadi kesalahan');
+    }
+}
+
+async function loadAkunGuru() {
+    try {
+        const response = await fetch('/api/admin/summary', {
+            headers: { 'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}` }
+        });
+
+        if (response.status === 401 || response.status === 403) {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            return;
+        }
+
+        const res = await response.json();
+
+        if (res.success) {
+            const d = res.data;
+            const el = (id, val) => { const e = document.getElementById(id); if (e) e.textContent = val; };
+            el('akunTotalGuru', d.totalTeachers ?? 0);
+            el('akunPunyaAkun', d.teachersWithAccount ?? 0);
+            el('akunBelumAkun', d.teachersWithoutAccount ?? 0);
+        }
+    } catch (error) {
+        console.error('Error loading akun guru summary:', error);
+    }
+
+    await loadNoAccountTeachers();
+}
+
+// Global exports for onclick handlers
+window.editTenantLocation = editTenantLocation;
+window.autoDetectLocationModal = autoDetectLocationModal;
+window.toggleMap = function () {
+    const mapContainer = document.getElementById('mapContainer');
+    if (mapContainer) mapContainer.classList.toggle('hidden');
+};
+window.centerMapOnCurrent = function () { };
+window.clearMapMarker = function () { };
+window.updateMiniMap = function () { };
+window.updateLocationMap = function () { };
+window.updateCoordinatePreview = updateCoordinatePreview;
+window.copyCoordinates = function () {
+    const lat = document.getElementById('latitudeInput')?.value;
+    const lng = document.getElementById('longitudeInput')?.value;
+    if (lat && lng) navigator.clipboard.writeText(`${lat}, ${lng}`);
+};
+window.copyCoordinatesModal = function () {
+    const lat = document.getElementById('locationLat')?.value;
+    const lng = document.getElementById('locationLng')?.value;
+    if (lat && lng) navigator.clipboard.writeText(`${lat}, ${lng}`);
+};
+window.goToPage = goToPage;
+window.prevPage = prevPage;
+window.nextPage = nextPage;
+window.hideTenantLocationModal = function () {
+    const modal = document.getElementById('tenantLocationModal');
+    if (modal) modal.classList.add('hidden');
+};
+window.hideAddDeviceModal = function () {
+    const modal = document.getElementById('addDeviceModal');
+    if (modal) modal.classList.add('hidden');
+};
+window.hideAddTenantModal = function () {
+    const modal = document.getElementById('addTenantModal');
+    if (modal) modal.classList.add('hidden');
+};
+window.selectTeacher = function (id) { };
+window.editDevice = function (id) { };
+window.changeDeviceStatus = function (id, status) { };
+window.deleteDevice = function (id) { };
+window.showAddLocationModal = function () { };
+window.toggleLocationStatus = function (id) { };
+window.deleteTenantLocation = function (id) { };

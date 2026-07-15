@@ -81,6 +81,43 @@ async function sendBillTemplate(phoneNumber, { nama_siswa, bulan, jumlah_tagihan
 
   const url = `${WHATSAPP_BASE_URL}/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
 
+  const isInvoiceSpp = templateName === 'invoice_spp';
+  let urlParam = '';
+  if (invoice_url) {
+    try { urlParam = new URL(invoice_url).pathname + new URL(invoice_url).search; } catch (e) { urlParam = invoice_url; }
+  }
+
+  const components = [
+    {
+      type: 'body',
+      parameters: isInvoiceSpp ? [
+        { type: 'text', text: nama_siswa || '-' },
+        { type: 'text', text: bulan || '-' },
+        { type: 'text', text: jumlah_tagihan || '0' },
+        { type: 'text', text: tanggal_jatuh_tempo || '-' }
+      ] : [
+        { type: 'text', text: nama_siswa || '-' },
+        { type: 'text', text: bulan || '-' },
+        { type: 'text', text: jumlah_tagihan || '0' },
+        { type: 'text', text: tanggal_jatuh_tempo || '-' },
+        { type: 'text', text: invoice_url || nomor_rekening || '-' },
+        { type: 'text', text: nama_pembayaran || nama_penerima || '-' }
+      ]
+    }
+  ];
+
+  if (isInvoiceSpp && urlParam) {
+    components.push({
+      type: 'button',
+      sub_type: 'url',
+      index: '0',
+      parameters: [{
+        type: 'text',
+        text: urlParam
+      }]
+    });
+  }
+
   const payload = {
     messaging_product: 'whatsapp',
     to: formattedPhone,
@@ -90,19 +127,7 @@ async function sendBillTemplate(phoneNumber, { nama_siswa, bulan, jumlah_tagihan
       language: {
         code: 'id'
       },
-      components: [
-        {
-          type: 'body',
-parameters: [
-             { type: 'text', text: nama_siswa || '-' },
-             { type: 'text', text: bulan || '-' },
-             { type: 'text', text: jumlah_tagihan || '0' },
-             { type: 'text', text: tanggal_jatuh_tempo || '-' },
-             { type: 'text', text: invoice_url || nomor_rekening || '-' },
-             { type: 'text', text: nama_pembayaran || nama_penerima || '-' }
-           ]
-        }
-      ]
+      components
     }
   };
 

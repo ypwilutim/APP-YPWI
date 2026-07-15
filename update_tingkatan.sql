@@ -1,0 +1,14 @@
+UPDATE classes SET tingkatan = 'TK' WHERE nama_kelas LIKE 'B%' OR nama_kelas LIKE 'A%' OR nama_kelas LIKE 'TK %';
+UPDATE classes SET tingkatan = '1' WHERE (nama_kelas REGEXP '[[:<:]]1[[:>:]]' OR nama_kelas LIKE '1%' OR nama_kelas LIKE '1 %' OR nama_kelas LIKE '1_') AND tingkatan IS NULL AND nama_kelas NOT LIKE '10%' AND nama_kelas NOT LIKE '11%' AND nama_kelas NOT LIKE '12%';
+UPDATE classes SET tingkatan = '2' WHERE (nama_kelas REGEXP '[[:<:]]2[[:>:]]' OR nama_kelas LIKE '2%' OR nama_kelas LIKE 'VII') AND tingkatan IS NULL AND nama_kelas NOT LIKE '12%' AND nama_kelas NOT LIKE '20%';
+UPDATE classes SET tingkatan = '3' WHERE (nama_kelas REGEXP '[[:<:]]3[[:>:]]' OR nama_kelas LIKE '3%' OR nama_kelas LIKE 'VIII') AND tingkatan IS NULL;
+UPDATE classes SET tingkatan = '4' WHERE (nama_kelas REGEXP '[[:<:]]4[[:>:]]' OR nama_kelas LIKE '4%' OR nama_kelas LIKE 'IX') AND tingkatan IS NULL AND nama_kelas NOT LIKE '14%';
+UPDATE classes SET tingkatan = '5' WHERE (nama_kelas REGEXP '[[:<:]]5[[:>:]]' OR nama_kelas LIKE '5%' OR nama_kelas LIKE 'X') AND tingkatan IS NULL AND nama_kelas NOT LIKE '15%';
+UPDATE classes SET tingkatan = '6' WHERE (nama_kelas REGEXP '[[:<:]]6[[:>:]]' OR nama_kelas LIKE '6%' OR nama_kelas LIKE 'XI') AND tingkatan IS NULL AND nama_kelas NOT LIKE '16%';
+UPDATE classes SET tingkatan = '7' WHERE (nama_kelas REGEXP '[[:<:]]7[[:>:]]' OR nama_kelas LIKE '7%' OR nama_kelas LIKE 'XII') AND tingkatan IS NULL AND nama_kelas NOT LIKE '17%';
+UPDATE classes SET tingkatan = '8' WHERE (nama_kelas REGEXP '[[:<:]]8[[:>:]]' OR nama_kelas LIKE '8%') AND tingkatan IS NULL;
+UPDATE classes SET tingkatan = '9' WHERE (nama_kelas REGEXP '[[:<:]]9[[:>:]]' OR nama_kelas LIKE '9%') AND tingkatan IS NULL;
+UPDATE classes SET tingkatan = '10' WHERE nama_kelas LIKE '10%' AND tingkatan IS NULL;
+UPDATE classes SET tingkatan = '11' WHERE nama_kelas LIKE '11%' AND tingkatan IS NULL;
+UPDATE classes SET tingkatan = '12' WHERE nama_kelas LIKE '12%' AND tingkatan IS NULL;
+UPDATE classes SET tingkatan = '6' WHERE LOWER(nama_kelas) = 'kelas 65' AND tingkatan IS NULL;
