@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Biaya Pendidikan (SPP) - YPWI Lutim</title>
+  <meta name="description" content="Informasi biaya pendidikan dan SPP YPWI Lutim. Nominal SPP disesuaikan per peserta didik." />
+  <style>
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color:#1a2233; line-height:1.6; background:#f6f8fc; }
+    a { color:#0e4ea2; text-decoration:none; }
+
+    .site-nav-inner { max-width:1080px; margin:0 auto; padding:1rem; display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; }
+    .brand { font-weight:800; font-size:1.2rem; color:#0e2a5e; }
+    .nav-links { display:flex; gap:1.2rem; align-items:center; flex-wrap:wrap; }
+    .nav-links a { color:#28324a; font-weight:500; }
+    .nav-cta { background:#0e4ea2; color:#fff !important; padding:0.5rem 1rem; border-radius:8px; }
+    .nav-toggle { display:none; background:none; border:0; font-size:1.4rem; cursor:pointer; }
+
+    .section { max-width:1080px; margin:0 auto; padding:2.5rem 1rem; }
+    h1 { color:#0e2a5e; font-size:1.9rem; margin-top:0; }
+    h2 { color:#0e2a5e; font-size:1.3rem; }
+    .note { background:#fff; border:1px solid #e3e9f3; border-left:4px solid #0e4ea2; border-radius:10px; padding:1rem 1.2rem; }
+    table { width:100%; border-collapse:collapse; margin-top:1.2rem; background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 2px 10px rgba(14,42,94,0.04); }
+    th, td { padding:0.85rem 1rem; text-align:left; border-bottom:1px solid #eef2f8; }
+    th { background:#0e2a5e; color:#fff; font-weight:600; }
+    tr:last-child td { border-bottom:0; }
+    .tag { display:inline-block; font-size:0.78rem; padding:0.15rem 0.6rem; border-radius:999px; background:#e8f0ff; color:#0e2a5e; }
+    .empty { color:#7a869c; }
+
+    .site-footer-inner { max-width:1080px; margin:0 auto; padding:2.5rem 1rem 1rem; display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:1.5rem; }
+    .site-footer-inner h3 { color:#fff; margin:0 0 0.4rem; }
+    .site-footer-inner h4 { margin:0 0 0.4rem; color:#cfe0ff; }
+    .site-footer-inner p { margin:0.2rem 0; color:#dbe6fa; font-size:0.95rem; }
+    .site-footer-inner a { color:#fff; text-decoration:underline; }
+    .site-footer-bottom { text-align:center; padding:1rem; color:#aebbd6; font-size:0.85rem; }
+    footer { background:#0e2a5e; margin-top:2rem; }
+
+    @media (max-width:640px) {
+      .nav-links { display:none; width:100%; flex-direction:column; align-items:flex-start; }
+      .nav-links.open { display:flex; }
+      .nav-toggle { display:block; }
+    }
+  </style>
+</head>
+<body>
+  <header id="site-nav"></header>
+
+  <section class="section">
+    <h1>Informasi Biaya Pendidikan (SPP)</h1>
+    <div class="note">
+      <p><strong>YPWI Lutim</strong> adalah lembaga pendidikan di bawah <strong>Yayasan Pesantren Wahdah Islamiyah Luwu Timur</strong>. Layanan ini merupakan <strong>penagihan iuran pendidikan (SPP)</strong>, bukan penjualan barang.</p>
+      <p>Besaran SPP <strong>bervariasi per peserta didik</strong> sesuai dengan unit pendidikan, tingkat, dan ketentuan masing-masing. Nominal pasti yang harus dibayar akan ditampilkan pada menu tagihan setelah orang tua/wali <a href="/login.html">masuk</a> ke akun masing-masing.</p>
+    </div>
+
+    <h2 style="margin-top:2rem;">Daftar Unit Pendidikan</h2>
+    <p>Berikut adalah unit pendidikan yang terdaftar beserta kisaran iuran bulanan (apabila telah ditetapkan):</p>
+    <table>
+      <thead>
+        <tr><th>Unit</th><th>Jenis</th><th>Iuran Bulanan (Rp)</th></tr>
+      </thead>
+      <tbody id="catalog-body">
+        <tr><td colspan="3" class="empty">Memuat data...</td></tr>
+      </tbody>
+    </table>
+    <p class="empty" style="margin-top:1rem; font-size:0.9rem;">* Nominal di atas merupakan referensi per unit. Nominal final per siswa dapat berbeda dan diinformasikan melalui tagihan resmi.</p>
+  </section>
+
+  <footer id="site-footer"></footer>
+  <script src="/js/site.js"></script>
+  <script>
+    (async function () {
+      const body = document.getElementById('catalog-body');
+      const fmt = (n) => n ? 'Rp ' + n.toLocaleString('id-ID') : '<span class="empty">Menyesuaikan per siswa</span>';
+      const labels = { yayasan: 'Yayasan', sekolah: 'Sekolah', pondok: 'Pondok Pesantren' };
+      try {
+        const res = await fetch('/api/public/catalog');
+        const j = await res.json();
+        if (j.success && j.data && j.data.length) {
+          body.innerHTML = j.data.map(u => `
+            <tr>
+              <td>${u.nama}</td>
+              <td><span class="tag">${labels[u.tipe_unit] || u.tipe_unit}</span></td>
+              <td>${fmt(u.iuran_bulanan)}</td>
+            </tr>`).join('');
+        } else {
+          body.innerHTML = '<tr><td colspan="3" class="empty">Data unit belum tersedia.</td></tr>';
+        }
+      } catch (e) {
+        body.innerHTML = '<tr><td colspan="3" class="empty">Gagal memuat data katalog.</td></tr>';
+      }
+    })();
+  </script>
+</body>
+</html>

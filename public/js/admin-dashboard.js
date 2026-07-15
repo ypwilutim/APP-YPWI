@@ -820,27 +820,32 @@ function showAddTeacherModal() {
     document.getElementById('teacherForm').reset();
 
     const tenantSelect = document.getElementById('teacherTenantSelect');
-    tenantSelect.innerHTML = '<option value="">Pilih Sekolah</option>';
-    fetch('/api/admin/tenants', {
-        headers: { 'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}` }
-    })
-        .then(res => res.json())
-        .then(data => {
-            if (data.success) {
-                data.data.forEach(tenant => {
-                    const option = document.createElement('option');
-                    option.value = tenant.tenant_id;
-                    option.textContent = tenant.nama_sekolah;
-                    tenantSelect.appendChild(option);
-                });
-            }
-        });
+    if (tenantSelect) {
+      tenantSelect.innerHTML = '<option value="">Pilih Sekolah</option>';
+      fetch('/api/admin/tenants', {
+          headers: { 'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}` }
+      })
+          .then(res => res.json())
+          .then(data => {
+              if (data.success) {
+                  data.data.forEach(tenant => {
+                      const option = document.createElement('option');
+                      option.value = tenant.tenant_id;
+                      option.textContent = tenant.nama_sekolah;
+                      tenantSelect.appendChild(option);
+                  });
+              }
+          });
+    }
 
-    document.getElementById('teacherModal').classList.add('show');
+    const modal = document.getElementById('teacherModal') || document.getElementById('addTeacherModal');
+    if (modal) modal.classList.add('show');
 }
 
 function hideTeacherModal() {
-    document.getElementById('teacherModal').classList.remove('show');
+    const modal = document.getElementById('teacherModal') || document.getElementById('addTeacherModal');
+    if (modal) modal.classList.remove('show');
+    if (modal) modal.style.display = 'none';
 }
 
 function showAddRuleModal() {

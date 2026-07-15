@@ -214,8 +214,12 @@ const teacherUpload = multer({
 app.use(cors());
 app.use(express.static('public'));
 
-// Redirect root to login page
+// Redirect root: subdomain pembayaran -> landing publik, domain utama -> login admin
 app.get('/', (req, res) => {
+  const host = req.get('host') || '';
+  if (host.toLowerCase().startsWith('payment.')) {
+    return res.redirect('/landing.html');
+  }
   res.redirect('/login.html');
 });
 
@@ -254,6 +258,7 @@ app.use('/api', wahaRoutes);
 app.use('/api', require('./src/routes/treasurer'));
 app.use('/api', require('./src/routes/xendit'));
 app.use('/api', require('./src/routes/payments'));
+app.use('/api', require('./src/routes/public'));
 
 const logFilePath = path.join(__dirname, 'logs', 'app.log');
 // Ensure logs directory exists

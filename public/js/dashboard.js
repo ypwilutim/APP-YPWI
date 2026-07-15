@@ -223,7 +223,7 @@ async function setTeacherInfo() {
                 });
 
                 if (adminUnits.length > 0) {
-                    htmlContent += `<button onclick="showAdminUnitModal(adminUnits)" style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.3rem 0.75rem;background:#059669;color:white;border-radius:0.5rem;font-size:0.8rem;font-weight:600;border:none;cursor:pointer;"><span class="fas fa-user-cog mr-1"></span> Admin Unit</button>`;
+                    htmlContent += `<button onclick="showAdminUnitModal.call(null, window.userAssignments ? window.userAssignments.filter(a => ['admin','operator','media','tu','tatausaha'].some(r => (a.jabatan_di_unit||'').toLowerCase().replace(/\\s/g,'').includes(r))) : [])" style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.3rem 0.75rem;background:#059669;color:white;border-radius:0.5rem;font-size:0.8rem;font-weight:600;border:none;cursor:pointer;"><span class="fas fa-user-cog mr-1"></span> Admin Unit</button>`;
                 }
 
                 adminSection.innerHTML = htmlContent;
@@ -2184,7 +2184,10 @@ function setupTreasurerNav() {
 }
 
 // Menampilkan Modal
+let storedAdminUnits = [];
+
 function showAdminUnitModal(units) {
+    storedAdminUnits = units;
     const listEl = document.getElementById('adminUnitList');
     const modal = document.getElementById('adminUnitModal');
     const confirmBtn = document.getElementById('confirmAdminUnitBtn');
@@ -2194,7 +2197,6 @@ function showAdminUnitModal(units) {
     currentAdminUnits = units;
     selectedAdminUnitId = null;
 
-    // Gunakan template ini di dalam fungsi .map Anda
     listEl.innerHTML = units.map((unit) => `
     <label class="unit-option">
         <div class="unit-icon">
@@ -2337,17 +2339,22 @@ function openEditProfileModal() {
     }
 }
 
+function openCompleteProfile() {
+    const teacherId = document.getElementById('editTeacherId').value;
+    if (teacherId) {
+        window.location.href = 'complete-profile.html?teacher_id=' + teacherId;
+    }
+}
+
 // Close edit profile modal
 function closeEditProfileModal() {
     const modal = document.getElementById('editProfileModal');
     if (modal) {
         modal.style.display = 'none';
         const preview = document.getElementById('editPhotoPreview');
-        const placeholder = document.getElementById('editPhotoPlaceholder');
-        if (preview && placeholder) {
+        if (preview) {
             preview.src = '';
             preview.style.display = 'none';
-            placeholder.style.display = 'block';
         }
         const photoInput = document.getElementById('editPhotoInput');
         if (photoInput) photoInput.value = '';
@@ -2368,11 +2375,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 const reader = new FileReader();
                 reader.onload = function(event) {
                     const preview = document.getElementById('editPhotoPreview');
-                    const placeholder = document.getElementById('editPhotoPlaceholder');
-                    if (preview && placeholder) {
+                    if (preview) {
                         preview.src = event.target.result;
                         preview.style.display = 'block';
-                        placeholder.style.display = 'none';
                     }
                 };
                 reader.readAsDataURL(file);
@@ -2392,7 +2397,11 @@ async function loadEditProfileData() {
             document.getElementById('editTeacherId').value = teacher.id || '';
             const sv = (id, val) => {
                 const el = document.getElementById(id);
-                if (el && val != null) el.value = val;
+                if (el && val != null) el.textContent = val;
+            };
+            const setText = (id, val, map) => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = map ? (map[val] || val) : val;
             };
             sv('editNama', teacher.nama);
             sv('editNik', teacher.nik);
@@ -2400,23 +2409,27 @@ async function loadEditProfileData() {
             sv('editEmail', teacher.email);
             sv('editTempatLahir', teacher.tempat_lahir);
             sv('editTanggalLahir', teacher.tanggal_lahir);
-            sv('editJenisKelamin', teacher.jenis_kelamin);
+            setText('editJenisKelaminText', teacher.jenis_kelamin, { L: 'Laki-laki', P: 'Perempuan' });
             sv('editAlamat', teacher.alamat);
             sv('editNoWa', teacher.no_wa);
-            sv('editStatusKepegawaian', teacher.status_kepegawaian);
-            sv('editStatusAktif', teacher.status_aktif);
+            setText('editStatusKepegawaianText', teacher.status_kepegawaian, { PTY: 'PTY', PKY: 'PKY', Honor: 'Honor' });
+            setText('editStatusAktifText', teacher.status_aktif, { 1: 'Aktif', 0: 'Tidak Aktif' });
             sv('editTmt', teacher.tmt);
-            sv('editPendidikanTerakhir', teacher.pendidikan_terakhir);
+            if (teacher.pendidikan_terakhir) {
+                const parts = teacher.pendidikan_terakhir.split('/');
+                sv('editPendidikanText', parts[0] || '');
+                sv('editJurusan', parts[1] || '');
+                sv('editNamaSekolahPendidikan', parts[2] || '');
+            }
             sv('editBank', teacher.bank);
             sv('editNomorRekening', teacher.nomor_rekening);
             if (teacher.link_foto) {
                 const preview = document.getElementById('editPhotoPreview');
-                const placeholder = document.getElementById('editPhotoPlaceholder');
-                if (preview && placeholder) {
+                if (preview) {
                     preview.src = teacher.link_foto;
                     preview.style.display = 'block';
-                    placeholder.style.display = 'none';
                 }
+                document.getElementById('editPhotoPlaceholder').style.display = 'none';
             }
         }
     } catch (error) {
@@ -2425,56 +2438,8 @@ async function loadEditProfileData() {
     }
 }
 
-async function submitEditProfile() {
-    const btn = event.target;
-    const teacherId = document.getElementById('editTeacherId').value;
-    const required = ['editNama', 'editNik', 'editEmail', 'editTempatLahir', 'editTanggalLahir', 'editJenisKelamin', 'editNoWa', 'editAlamat', 'editStatusKepegawaian', 'editStatusAktif', 'editTmt', 'editPendidikanTerakhir', 'editBank', 'editNomorRekening'];
-    for (let id of required) {
-        const el = document.getElementById(id);
-        if (!el || !el.value) {
-            Swal.fire({ title: 'Error', text: 'Semua field wajib diisi', icon: 'error' });
-            return;
-        }
-    }
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner spinner" style="margin-right: 0.5rem;"></i>Menyimpan...';
-    try {
-        const fd = new FormData();
-        fd.append('teacherId', teacherId);
-        fd.append('nama', document.getElementById('editNama').value);
-        fd.append('nik', document.getElementById('editNik').value);
-        fd.append('nip', document.getElementById('editNip').value);
-        fd.append('email', document.getElementById('editEmail').value);
-        fd.append('tempat_lahir', document.getElementById('editTempatLahir').value);
-        fd.append('tanggal_lahir', document.getElementById('editTanggalLahir').value);
-        fd.append('jenis_kelamin', document.getElementById('editJenisKelamin').value);
-        fd.append('alamat', document.getElementById('editAlamat').value);
-        fd.append('no_wa', document.getElementById('editNoWa').value);
-        fd.append('status_kepegawaian', document.getElementById('editStatusKepegawaian').value);
-        fd.append('status_aktif', document.getElementById('editStatusAktif').value);
-        fd.append('tmt', document.getElementById('editTmt').value);
-        fd.append('pendidikan_terakhir', document.getElementById('editPendidikanTerakhir').value);
-        fd.append('bank', document.getElementById('editBank').value);
-        fd.append('nomor_rekening', document.getElementById('editNomorRekening').value);
-        const photoInput = document.getElementById('editPhotoInput');
-        if (photoInput && photoInput.files[0]) fd.append('foto', photoInput.files[0]);
-        const res = await fetch('/api/public/teachers/' + teacherId, {
-            method: 'PUT',
-            headers: { 'Authorization': 'Bearer ' + (window.token || localStorage.getItem('token')) },
-            body: fd
-        });
-        const result = await res.json();
-        if (result.success) {
-            Swal.fire({ title: 'Berhasil', text: 'Profil berhasil diperbarui', icon: 'success', confirmButtonColor: '#066e3a' });
-            closeEditProfileModal();
-            setTeacherInfo();
-        } else {
-            throw new Error(result.message || 'Gagal');
-        }
-    } catch (err) {
-        Swal.fire({ title: 'Error', text: err.message, icon: 'error' });
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = 'Simpan Profil';
-    }
+function openCompleteProfile() {
+    const teacherId = document.getElementById('editTeacherId');
+    const id = teacherId ? teacherId.value : '';
+    window.location.href = 'complete-profile.html' + (id ? '?teacher_id=' + id : '');
 }

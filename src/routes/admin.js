@@ -2888,19 +2888,14 @@ router.put('/public/teachers/:teacherId', teacherUpload.single('foto'), async (r
   }
 });
 
-// GET /api/public/teachers/:teacherId - Get teacher data for profile completion (no auth required)
 router.get('/public/teachers/:teacherId', async (req, res) => {
   try {
     const [teacher] = await db.query(
-      'SELECT t.*, GROUP_CONCAT(CONCAT(ta.tenant_id, ":", ta.jabatan_di_unit)) as assignments ' +
-      'FROM teachers t ' +
-      'LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id ' +
-      'WHERE t.id = ? ' +
-      'GROUP BY t.id',
+      'SELECT t.id, t.nama, t.nik, t.nip, t.email, t.tempat_lahir, t.tanggal_lahir, t.jenis_kelamin, t.alamat, t.no_wa, t.status_kepegawaian, t.status_aktif, t.tmt, t.pendidikan_terakhir, t.BANK as bank, t.nomor_rekening, t.link_foto, GROUP_CONCAT(CONCAT(ta.tenant_id, ":", ta.jabatan_di_unit)) as assignments FROM teachers t LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id WHERE t.id = ?',
       [req.params.teacherId]
     );
 
-    if (!teacher) {
+    if (!teacher || teacher.length === 0) {
       return res.status(404).json({ success: false, message: 'Guru tidak ditemukan' });
     }
 
@@ -2916,7 +2911,7 @@ router.get('/public/teachers/:teacherId', async (req, res) => {
     res.json({ success: true, data: formattedTeacher });
   } catch (error) {
     console.error('Public teacher error:', error);
-    res.status(500).json({ success: false, message: 'Error fetching teacher data' });
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 

@@ -6,31 +6,68 @@
   <title>Ketentuan Layanan - YPWI Lutim</title>
   <style>
     * { box-sizing: border-box; }
-    body { font-family: system-ui, -apple-system, sans-serif; max-width: 800px; margin: 0 auto; padding: 2rem 1rem; color: #111; line-height: 1.6; }
-    h1 { font-size: 1.5rem; margin-bottom: 0.5rem; }
-    h2 { font-size: 1.15rem; margin-top: 1.5rem; margin-bottom: 0.5rem; }
-    p { margin: 0.5rem 0; }
-    ul { padding-left: 1.25rem; }
-    a { color: #0e4ea2; }
+    body { margin:0; font-family: system-ui, -apple-system, sans-serif; color:#1a2233; line-height:1.6; background:#f6f8fc; }
+    a { color:#0e4ea2; }
+
+    .site-nav-inner { max-width:1080px; margin:0 auto; padding:1rem; display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; }
+    .brand { font-weight:800; font-size:1.2rem; color:#0e2a5e; }
+    .nav-links { display:flex; gap:1.2rem; align-items:center; flex-wrap:wrap; }
+    .nav-links a { color:#28324a; font-weight:500; }
+    .nav-cta { background:#0e4ea2; color:#fff !important; padding:0.5rem 1rem; border-radius:8px; }
+    .nav-toggle { display:none; background:none; border:0; font-size:1.4rem; cursor:pointer; }
+
+    .wrap { max-width:800px; margin:0 auto; padding:2.5rem 1rem 1rem; }
+    h1 { font-size:1.6rem; color:#0e2a5e; }
+    h2 { font-size:1.15rem; margin-top:1.6rem; color:#0e2a5e; }
+    p { margin:0.5rem 0; }
+    ul { padding-left:1.25rem; }
+
+    .site-footer-inner { max-width:1080px; margin:0 auto; padding:2.5rem 1rem 1rem; display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:1.5rem; }
+    .site-footer-inner h3 { color:#fff; margin:0 0 0.4rem; }
+    .site-footer-inner h4 { margin:0 0 0.4rem; color:#cfe0ff; }
+    .site-footer-inner p { margin:0.2rem 0; color:#dbe6fa; font-size:0.95rem; }
+    .site-footer-inner a { color:#fff; text-decoration:underline; }
+    .site-footer-bottom { text-align:center; padding:1rem; color:#aebbd6; font-size:0.85rem; }
+    footer { background:#0e2a5e; margin-top:2rem; }
+
+    @media (max-width:640px) {
+      .nav-links { display:none; width:100%; flex-direction:column; align-items:flex-start; }
+      .nav-links.open { display:flex; }
+      .nav-toggle { display:block; }
+    }
   </style>
 </head>
 <body>
-  <h1>Ketentuan Layanan</h1>
-  <p>Terakhir diperbarui: 14 Juni 2026</p>
+  <header id="site-nav"></header>
 
-  <h2>1. Penerimaan Ketentuan</h2>
-  <p>Dengan menggunakan sistem ini, pengguna menerima syarat dan ketentuan yang berlaku di lingkungan YPWI Lutim.</p>
+  <div class="wrap">
+    <h1>Ketentuan Layanan</h1>
+    <p>Terakhir diperbarui: 15 Juli 2026</p>
+    <p>Layanan ini diselenggarakan oleh <strong>YPWI Lutim</strong> atas nama badan hukum <strong>Yayasan Pesantren Wahdah Islamiyah Luwu Timur</strong>.</p>
 
-  <h2>2. Penggunaan Layanan</h2>
-  <p>Sistem ini disediakan untuk keperluan absensi, notifikasi, dan administrasi internal. Pengguna berkewajiban menjaga kerahasiaan akun dan menggunakan layanan sesuai aturan.</p>
+    <h2>1. Penerimaan Ketentuan</h2>
+    <p>Dengan menggunakan sistem ini, pengguna menerima syarat dan ketentuan yang berlaku di lingkungan YPWI Lutim.</p>
 
-  <h2>3. Ketersediaan</h2>
-  <p>YPWI Lutim berusaha menjaga ketersediaan layanan, namun tidak menjamin operasi tanpa gangguan.</p>
+    <h2>2. Layanan Pembayaran (SPP)</h2>
+    <p>Sistem ini menyediakan layanan <strong>penagihan iuran pendidikan (SPP)</strong> dan kewajiban keuangan peserta didik. Besaran tagihan ditentukan per peserta didik sesuai dengan unit pendidikan, tingkat, dan ketentuan yang berlaku. Nominal yang harus dibayar ditampilkan pada menu tagihan masing-masing orang tua/wali.</p>
 
-  <h2>4. Perubahan Ketentuan</h2>
-  <p>Ketentuan dapat diperbarui dari waktu ke waktu untuk menjaga kesesuaian dengan kebijakan internal dan ketentuan layanan pihak ketiga.</p>
+    <h2>3. Pemrosesan Pembayaran</h2>
+    <p>Seluruh transaksi pembayaran diproses melalui penyedia layanan pembayaran pihak ketiga, <strong>Midtrans</strong>. YPWI Lutim tidak menyimpan data kartu atau kredensial pembayaran pengguna. Data transaksi dikelola sesuai kebijakan keamanan Midtrans.</p>
 
-  <h2>5. Kontak</h2>
-  <p>Hubungi administrator sistem untuk pertanyaan terkait ketentuan layanan.</p>
+    <h2>4. Penggunaan Layanan</h2>
+    <p>Sistem ini disediakan untuk keperluan absensi, notifikasi, administrasi keuangan, dan operasional internal yayasan. Pengguna berkewajiban menjaga kerahasiaan akun dan menggunakan layanan sesuai aturan.</p>
+
+    <h2>5. Ketersediaan</h2>
+    <p>YPWI Lutim berusaha menjaga ketersediaan layanan, namun tidak menjamin operasi tanpa gangguan.</p>
+
+    <h2>6. Perubahan Ketentuan</h2>
+    <p>Ketentuan dapat diperbarui dari waktu ke waktu untuk menjaga kesesuaian dengan kebijakan internal dan ketentuan layanan pihak ketiga.</p>
+
+    <h2>7. Kontak</h2>
+    <p>Untuk pertanyaan terkait ketentuan layanan, hubungi administrator YPWI Lutim melalui informasi kontak yang tercantum di bagian bawah halaman ini.</p>
+  </div>
+
+  <footer id="site-footer"></footer>
+  <script src="/js/site.js"></script>
 </body>
 </html>

@@ -6,34 +6,68 @@
   <title>Kebijakan Privasi - YPWI Lutim</title>
   <style>
     * { box-sizing: border-box; }
-    body { font-family: system-ui, -apple-system, sans-serif; max-width: 800px; margin: 0 auto; padding: 2rem 1rem; color: #111; line-height: 1.6; }
-    h1 { font-size: 1.5rem; margin-bottom: 0.5rem; }
-    h2 { font-size: 1.15rem; margin-top: 1.5rem; margin-bottom: 0.5rem; }
-    p { margin: 0.5rem 0; }
-    ul { padding-left: 1.25rem; }
-    a { color: #0e4ea2; }
+    body { margin:0; font-family: system-ui, -apple-system, sans-serif; color:#1a2233; line-height:1.6; background:#f6f8fc; }
+    a { color:#0e4ea2; }
+
+    .site-nav-inner { max-width:1080px; margin:0 auto; padding:1rem; display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; }
+    .brand { font-weight:800; font-size:1.2rem; color:#0e2a5e; }
+    .nav-links { display:flex; gap:1.2rem; align-items:center; flex-wrap:wrap; }
+    .nav-links a { color:#28324a; font-weight:500; }
+    .nav-cta { background:#0e4ea2; color:#fff !important; padding:0.5rem 1rem; border-radius:8px; }
+    .nav-toggle { display:none; background:none; border:0; font-size:1.4rem; cursor:pointer; }
+
+    .wrap { max-width:800px; margin:0 auto; padding:2.5rem 1rem 1rem; }
+    h1 { font-size:1.6rem; color:#0e2a5e; }
+    h2 { font-size:1.15rem; margin-top:1.6rem; color:#0e2a5e; }
+    p { margin:0.5rem 0; }
+    ul { padding-left:1.25rem; }
+
+    .site-footer-inner { max-width:1080px; margin:0 auto; padding:2.5rem 1rem 1rem; display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:1.5rem; }
+    .site-footer-inner h3 { color:#fff; margin:0 0 0.4rem; }
+    .site-footer-inner h4 { margin:0 0 0.4rem; color:#cfe0ff; }
+    .site-footer-inner p { margin:0.2rem 0; color:#dbe6fa; font-size:0.95rem; }
+    .site-footer-inner a { color:#fff; text-decoration:underline; }
+    .site-footer-bottom { text-align:center; padding:1rem; color:#aebbd6; font-size:0.85rem; }
+    footer { background:#0e2a5e; margin-top:2rem; }
+
+    @media (max-width:640px) {
+      .nav-links { display:none; width:100%; flex-direction:column; align-items:flex-start; }
+      .nav-links.open { display:flex; }
+      .nav-toggle { display:block; }
+    }
   </style>
 </head>
 <body>
-  <h1>Kebijakan Privasi</h1>
-  <p>Terakhir diperbarui: 14 Juni 2026</p>
+  <header id="site-nav"></header>
 
-  <h2>1. Informasi yang Kami Kumpulkan</h2>
-  <p>YPWI Lutim mengumpulkan data pribadi yang berkaitan dengan penggunaan sistem absensi, termasuk nama, nomor telepon, dan data kehadiran.</p>
+  <div class="wrap">
+    <h1>Kebijakan Privasi</h1>
+    <p>Terakhir diperbarui: 15 Juli 2026</p>
+    <p>Kebijakan ini berlaku untuk layanan yang diselenggarakan oleh <strong>YPWI Lutim</strong> atas nama badan hukum <strong>Yayasan Pesantren Wahdah Islamiyah Luwu Timur</strong>.</p>
 
-  <h2>2. Penggunaan Informasi</h2>
-  <p>Data digunakan untuk proses absensi, notifikasi WhatsApp, evaluasi kehadiran, dan operasional internal yayasan.</p>
+    <h2>1. Informasi yang Kami Kumpulkan</h2>
+    <p>YPWI Lutim mengumpulkan data pribadi yang berkaitan dengan penggunaan sistem, termasuk nama, nomor telepon/WhatsApp, alamat, data peserta didik, dan data kehadiran serta tagihan pembayaran.</p>
 
-  <h2>3. Berbagi Data</h2>
-  <p>Kami tidak menjual atau menyewakan data pribadi. Data hanya dibagikan kepada pihak internal yang berwenang dan penyedia layanan yang mendukung sistem ini.</p>
+    <h2>2. Penggunaan Informasi</h2>
+    <p>Data digunakan untuk penagihan SPP, proses absensi, notifikasi WhatsApp, evaluasi kehadiran, dan operasional internal yayasan.</p>
 
-  <h2>4. Keamanan</h2>
-  <p>Kami menerapkan kontrol akses berbasis peran, enkripsi koneksi, dan praktik operasional yang wajar untuk melindungi data.</p>
+    <h2>3. Pemrosesan Pembayaran</h2>
+    <p>Pembayaran diproses melalui penyedia layanan pihak ketiga <strong>Midtrans</strong>. YPWI Lutim tidak menyimpan data kartu atau kredensial pembayaran. Data transaksi keuangan dikelola oleh Midtrans sesuai kebijakan privasinya masing-masing.</p>
 
-  <h2>5. Hak Pengguna</h2>
-  <p>Anda dapat meminta pembaruan, koreksi, atau penghapusan data pribadi yang disimpan dalam sistem ini.</p>
+    <h2>4. Berbagi Data</h2>
+    <p>Kami tidak menjual atau menyewakan data pribadi. Data hanya dibagikan kepada pihak internal yang berwenang dan penyedia layanan yang mendukung sistem ini (termasuk penyedia pembayaran).</p>
 
-  <h2>6. Kontak</h2>
-  <p>Untuk pertanyaan privasi, hubungi administrator sistem YPWI Lutim.</p>
+    <h2>5. Keamanan</h2>
+    <p>Kami menerapkan kontrol akses berbasis peran, enkripsi koneksi (HTTPS), dan praktik operasional yang wajar untuk melindungi data.</p>
+
+    <h2>6. Hak Pengguna</h2>
+    <p>Anda dapat meminta pembaruan, koreksi, atau penghapusan data pribadi yang disimpan dalam sistem ini sesuai peraturan yang berlaku.</p>
+
+    <h2>7. Kontak</h2>
+    <p>Untuk pertanyaan privasi, hubungi administrator YPWI Lutim melalui informasi kontak yang tercantum di bagian bawah halaman ini.</p>
+  </div>
+
+  <footer id="site-footer"></footer>
+  <script src="/js/site.js"></script>
 </body>
 </html>
