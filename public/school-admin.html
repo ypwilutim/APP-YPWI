@@ -3228,42 +3228,7 @@
           } catch (e) { console.error('[DEL ATURAN]', e); showToast('Terjadi kesalahan', 'error'); }
         };
 
-        // Submit form aturan (Tambah / Edit)
-        document.getElementById('aturanForm')?.addEventListener('submit', async (e) => {
-          e.preventDefault();
-          const formData = new FormData(e.target);
-          const hariList = Array.from(e.target.querySelectorAll('input[name="hari"]:checked')).map(cb => cb.value).join(',');
-          formData.set('hari', hariList);
-          const data = Object.fromEntries(formData);
-          const editId = e.target.dataset.editId;
-          try {
-            const r = await fetch(editId ? apiUrl('/admin/rules/' + editId) : apiUrl('/admin/rules'), {
-              method: editId ? 'PUT' : 'POST',
-              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
-              body: JSON.stringify(data)
-            });
-            if (checkAuth401403(r)) return;
-            const d = await r.json();
-            if (d.success) { hideAturanModal(); fetchAturan(); showToast(editId ? 'Aturan diperbarui' : 'Aturan ditambahkan', 'success'); }
-            else showToast(d.message || 'Gagal', 'error');
-          } catch (err) { console.error('[ATURAN FORM]', err); showToast('Terjadi kesalahan', 'error'); }
-        });
-
-        // Toggle Gunakan Aturan Pusat (use_central_rules)
-        document.getElementById('aturanCentralToggle')?.addEventListener('change', async function () {
-          try {
-            const isChecked = this.checked ? 1 : 0;
-            const r = await fetch(apiUrl('/admin/tenants/' + tenantId), {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
-              body: JSON.stringify({ use_central_rules: isChecked })
-            });
-            if (checkAuth401403(r)) return;
-            const d = await r.json();
-            if (d.success) { showToast('Pengaturan aturan pusat diperbarui', 'success'); fetchAturan(); loadDashboard(); }
-            else { showToast(d.message || 'Gagal memperbarui', 'error'); }
-          } catch (err) { console.error('[ATURAN CENTRAL TOGGLE]', err); showToast('Terjadi kesalahan', 'error'); }
-        });
+        // Submit form aturan (Tambah / Edit) -- listener dipasang di attachDeferredFormListeners
 
         // ===== WHATSAPP =====
         let teacherDataList = [];
@@ -4143,6 +4108,55 @@
                 if (d.success) { hideAssignmentModal(); loadAssignments(); showToast('Tugas guru diupdate', 'success'); }
                 else showToast(d.message || 'Gagal', 'error');
               } catch (err) { console.error('[ASSIGNMENT FORM]', err); showToast('Terjadi kesalahan', 'error'); }
+            });
+          }
+
+          var aturanForm = document.getElementById('aturanForm');
+          if (aturanForm && !aturanForm.dataset.listenerAttached) {
+            aturanForm.dataset.listenerAttached = 'true';
+            aturanForm.addEventListener('submit', async function (e) {
+              e.preventDefault();
+              var formData = new FormData(e.target);
+              var hariList = Array.from(e.target.querySelectorAll('input[name="hari"]:checked')).map(function (cb) { return cb.value; }).join(',');
+              formData.set('hari', hariList);
+              var data = Object.fromEntries(formData);
+              var editId = e.target.dataset.editId;
+              try {
+                var r = await fetch((editId ? apiUrl('/admin/rules/' + editId) : apiUrl('/admin/rules')), {
+                  method: editId ? 'PUT' : 'POST',
+                  headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+                  body: JSON.stringify(data)
+                });
+                if (checkAuth401403(r)) return;
+                if (!r.ok) {
+                  let msg = 'Gagal';
+                  try { const err = await r.json(); msg = err.message || msg; } catch (_) { }
+                  showToast(msg, 'error');
+                  return;
+                }
+                var d = await r.json();
+                if (d.success) { hideAturanModal(); fetchAturan(); showToast(editId ? 'Aturan diperbarui' : 'Aturan ditambahkan', 'success'); }
+                else showToast(d.message || 'Gagal', 'error');
+              } catch (err) { console.error('[ATURAN FORM]', err); showToast('Terjadi kesalahan', 'error'); }
+            });
+          }
+
+          var aturanCentralToggle = document.getElementById('aturanCentralToggle');
+          if (aturanCentralToggle && !aturanCentralToggle.dataset.listenerAttached) {
+            aturanCentralToggle.dataset.listenerAttached = 'true';
+            aturanCentralToggle.addEventListener('change', async function () {
+              try {
+                var isChecked = this.checked ? 1 : 0;
+                var r = await fetch(apiUrl('/admin/tenants/' + tenantId), {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+                  body: JSON.stringify({ use_central_rules: isChecked })
+                });
+                if (checkAuth401403(r)) return;
+                var d = await r.json();
+                if (d.success) { showToast('Pengaturan aturan pusat diperbarui', 'success'); fetchAturan(); loadDashboard(); }
+                else { showToast(d.message || 'Gagal memperbarui', 'error'); }
+              } catch (err) { console.error('[ATURAN CENTRAL TOGGLE]', err); showToast('Terjadi kesalahan', 'error'); }
             });
           }
         }
