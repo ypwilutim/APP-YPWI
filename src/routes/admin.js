@@ -2572,7 +2572,7 @@ router.put('/admin/leave-requests/:id/status', authenticateOperator, async (req,
 router.get('/teacher/info', authenticateToken, async (req, res) => {
   try {
     const [teacher] = await db.query(
-      'SELECT t.id, t.nama, t.link_foto FROM teachers t WHERE t.id = ?',
+      'SELECT t.id, t.nama, t.nik, t.nip, t.email, t.tempat_lahir, t.tanggal_lahir, t.jenis_kelamin, t.alamat, t.no_wa, t.status_kepegawaian, t.status_aktif, t.tmt, t.pendidikan_terakhir, t.bank, t.nomor_rekening, t.link_foto FROM teachers t WHERE t.id = ?',
       [req.user.guru_id]
     );
 

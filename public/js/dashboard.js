@@ -164,7 +164,8 @@ function forceLogout() {
 })();
 
 
-async function setTeacherInfo() {    try {
+async function setTeacherInfo() {
+    try {
         const response = await fetch('/api/teacher/info', {
             headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -222,41 +223,11 @@ async function setTeacherInfo() {    try {
                 });
 
                 if (adminUnits.length > 0) {
-                    if (adminUnits.length === 1) {
-                        const unit = adminUnits[0];
-                        htmlContent += `<a href="school-admin.html?tenant=${unit.tenant_id}" style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.3rem 0.75rem;background:#059669;color:white;border-radius:0.5rem;font-size:0.8rem;font-weight:600;text-decoration:none;margin-left:0.5rem;"><span class="fas fa-user-cog mr-1"></span> Admin ${unit.nama_sekolah || unit.tenant_id}</a>`;
-                    } else {
-                        let dropdownOptions = '<option value="">-- Pilih Unit --</option>';
-                        adminUnits.forEach(unit => {
-                            dropdownOptions += `<option value="${unit.tenant_id}">${unit.nama_sekolah || unit.tenant_id}</option>`;
-                        });
-                        htmlContent += `
-                          <div style="display:inline-block;margin-left:0.5rem;">
-                            <select id="adminUnitSelect" onchange="goToAdminUnit(this)" style="padding:0.3rem 0.5rem;border-radius:0.25rem;border:1px solid #059669;background:white;color:#059669;font-size:0.8rem;font-weight:600;cursor:pointer;">
-                              ${dropdownOptions}
-                            </select>
-                          </div>
-                        `;
-                    }
+                    htmlContent += `<button onclick="showAdminUnitModal(adminUnits)" style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.3rem 0.75rem;background:#059669;color:white;border-radius:0.5rem;font-size:0.8rem;font-weight:600;border:none;cursor:pointer;"><span class="fas fa-user-cog mr-1"></span> Admin Unit</button>`;
                 }
 
                 adminSection.innerHTML = htmlContent;
             }
-
-            // --- Pakta Integritas: hanya Kepala Sekolah / Pimpinan / Pimpinan Pondok / Ketua ---
-            const paktaSigner = isPaktaSigner(assignments);
-            const deskPakta = document.getElementById('desktopPaktaBtn');
-            const mobPakta = document.getElementById('mobilePaktaNav');
-            if (deskPakta) deskPakta.style.display = paktaSigner ? 'block' : 'none';
-            if (mobPakta) mobPakta.style.display = paktaSigner ? 'flex' : 'none';
-            if (paktaSigner) initPaktaIntegritas();
-
-            // --- Viewer Pakta: hanya Admin / Ketua tenant YPWILUTIM ---
-            const paktaViewer = isPaktaViewer(assignments);
-            const deskViewer = document.getElementById('desktopPaktaViewerBtn');
-            const mobViewer = document.getElementById('mobilePaktaViewerNav');
-            if (deskViewer) deskViewer.style.display = paktaViewer ? 'block' : 'none';
-            if (mobViewer) mobViewer.style.display = paktaViewer ? 'flex' : 'none';
         }
     } catch (error) {
         console.error('Error loading teacher info:', error);
@@ -319,9 +290,8 @@ async function initPaktaIntegritas() {
     }
 }
 
-let currentLocation = null;
 let currentAttendanceRule = null;
-window.isLocationValid = false;
+    window.isLocationValid = false;
 
 function updateLocationDisplay(success, message) {
     const locationInfo = document.getElementById('locationInfo');
@@ -2191,30 +2161,6 @@ window.goToAdminUnit = function (select) {
 let currentAdminUnits = [];
 let selectedAdminUnitId = null;
 
-// Setup mobile & desktop nav
-function setupMobileAdminNav() {
-    const mobileNav = document.getElementById('mobileAdminNav');
-    const desktopBtn = document.getElementById('desktopAdminBtn');
-
-    // Filter unit dengan role admin
-    const adminUnits = (window.userAssignments || []).filter(a => {
-        const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
-        const adminRoles = ['admin', 'operator', 'media', 'tu', 'tatausaha'];
-        return adminRoles.some(role => jabatan.includes(role));
-    });
-
-    if (adminUnits.length > 0) {
-        if (mobileNav) {
-            mobileNav.style.display = 'block';
-            mobileNav.onclick = () => showAdminUnitModal(adminUnits);
-        }
-        if (desktopBtn) {
-            desktopBtn.style.display = 'block';
-            desktopBtn.onclick = () => showAdminUnitModal(adminUnits);
-        }
-    }
-}
-
 // Setup bendahara/treasurer nav button
 function setupTreasurerNav() {
     const mobileNav = document.getElementById('mobileTreasurerNav');
@@ -2309,7 +2255,6 @@ function confirmAdminUnit() {
 
 // Inisialisasi
 document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(setupMobileAdminNav, 2000);
     setTimeout(setupTreasurerNav, 2000);
 });
 
@@ -2378,5 +2323,158 @@ async function submitPermission() {
     } finally {
         submitBtn.disabled = false;
         submitBtn.innerHTML = originalText;
+    }
+}// ============================================================
+// Edit Profile Modal Functions
+// ============================================================
+
+// Open edit profile modal and load teacher data
+function openEditProfileModal() {
+    const modal = document.getElementById('editProfileModal');
+    if (modal) {
+        modal.style.display = 'flex';
+        loadEditProfileData();
+    }
+}
+
+// Close edit profile modal
+function closeEditProfileModal() {
+    const modal = document.getElementById('editProfileModal');
+    if (modal) {
+        modal.style.display = 'none';
+        const preview = document.getElementById('editPhotoPreview');
+        const placeholder = document.getElementById('editPhotoPlaceholder');
+        if (preview && placeholder) {
+            preview.src = '';
+            preview.style.display = 'none';
+            placeholder.style.display = 'block';
+        }
+        const photoInput = document.getElementById('editPhotoInput');
+        if (photoInput) photoInput.value = '';
+    }
+}
+
+function handleEditPhotoClick() {
+    const photoInput = document.getElementById('editPhotoInput');
+    if (photoInput) photoInput.click();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const editPhotoInput = document.getElementById('editPhotoInput');
+    if (editPhotoInput) {
+        editPhotoInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    const preview = document.getElementById('editPhotoPreview');
+                    const placeholder = document.getElementById('editPhotoPlaceholder');
+                    if (preview && placeholder) {
+                        preview.src = event.target.result;
+                        preview.style.display = 'block';
+                        placeholder.style.display = 'none';
+                    }
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+    }
+});
+
+async function loadEditProfileData() {
+    try {
+        const teacherInfo = await fetch('/api/teacher/info', {
+            headers: { 'Authorization': 'Bearer ' + (window.token || localStorage.getItem('token')) }
+        }).then(r => r.json());
+
+        if (teacherInfo.success && teacherInfo.teacher) {
+            const teacher = teacherInfo.teacher;
+            document.getElementById('editTeacherId').value = teacher.id || '';
+            const sv = (id, val) => {
+                const el = document.getElementById(id);
+                if (el && val != null) el.value = val;
+            };
+            sv('editNama', teacher.nama);
+            sv('editNik', teacher.nik);
+            sv('editNip', teacher.nip);
+            sv('editEmail', teacher.email);
+            sv('editTempatLahir', teacher.tempat_lahir);
+            sv('editTanggalLahir', teacher.tanggal_lahir);
+            sv('editJenisKelamin', teacher.jenis_kelamin);
+            sv('editAlamat', teacher.alamat);
+            sv('editNoWa', teacher.no_wa);
+            sv('editStatusKepegawaian', teacher.status_kepegawaian);
+            sv('editStatusAktif', teacher.status_aktif);
+            sv('editTmt', teacher.tmt);
+            sv('editPendidikanTerakhir', teacher.pendidikan_terakhir);
+            sv('editBank', teacher.bank);
+            sv('editNomorRekening', teacher.nomor_rekening);
+            if (teacher.link_foto) {
+                const preview = document.getElementById('editPhotoPreview');
+                const placeholder = document.getElementById('editPhotoPlaceholder');
+                if (preview && placeholder) {
+                    preview.src = teacher.link_foto;
+                    preview.style.display = 'block';
+                    placeholder.style.display = 'none';
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error loading teacher data:', error);
+        Swal.fire({ title: 'Error', text: 'Gagal memuat data profil', icon: 'error' });
+    }
+}
+
+async function submitEditProfile() {
+    const btn = event.target;
+    const teacherId = document.getElementById('editTeacherId').value;
+    const required = ['editNama', 'editNik', 'editEmail', 'editTempatLahir', 'editTanggalLahir', 'editJenisKelamin', 'editNoWa', 'editAlamat', 'editStatusKepegawaian', 'editStatusAktif', 'editTmt', 'editPendidikanTerakhir', 'editBank', 'editNomorRekening'];
+    for (let id of required) {
+        const el = document.getElementById(id);
+        if (!el || !el.value) {
+            Swal.fire({ title: 'Error', text: 'Semua field wajib diisi', icon: 'error' });
+            return;
+        }
+    }
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner spinner" style="margin-right: 0.5rem;"></i>Menyimpan...';
+    try {
+        const fd = new FormData();
+        fd.append('teacherId', teacherId);
+        fd.append('nama', document.getElementById('editNama').value);
+        fd.append('nik', document.getElementById('editNik').value);
+        fd.append('nip', document.getElementById('editNip').value);
+        fd.append('email', document.getElementById('editEmail').value);
+        fd.append('tempat_lahir', document.getElementById('editTempatLahir').value);
+        fd.append('tanggal_lahir', document.getElementById('editTanggalLahir').value);
+        fd.append('jenis_kelamin', document.getElementById('editJenisKelamin').value);
+        fd.append('alamat', document.getElementById('editAlamat').value);
+        fd.append('no_wa', document.getElementById('editNoWa').value);
+        fd.append('status_kepegawaian', document.getElementById('editStatusKepegawaian').value);
+        fd.append('status_aktif', document.getElementById('editStatusAktif').value);
+        fd.append('tmt', document.getElementById('editTmt').value);
+        fd.append('pendidikan_terakhir', document.getElementById('editPendidikanTerakhir').value);
+        fd.append('bank', document.getElementById('editBank').value);
+        fd.append('nomor_rekening', document.getElementById('editNomorRekening').value);
+        const photoInput = document.getElementById('editPhotoInput');
+        if (photoInput && photoInput.files[0]) fd.append('foto', photoInput.files[0]);
+        const res = await fetch('/api/public/teachers/' + teacherId, {
+            method: 'PUT',
+            headers: { 'Authorization': 'Bearer ' + (window.token || localStorage.getItem('token')) },
+            body: fd
+        });
+        const result = await res.json();
+        if (result.success) {
+            Swal.fire({ title: 'Berhasil', text: 'Profil berhasil diperbarui', icon: 'success', confirmButtonColor: '#066e3a' });
+            closeEditProfileModal();
+            setTeacherInfo();
+        } else {
+            throw new Error(result.message || 'Gagal');
+        }
+    } catch (err) {
+        Swal.fire({ title: 'Error', text: err.message, icon: 'error' });
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = 'Simpan Profil';
     }
 }
