@@ -1094,4 +1094,44 @@ router.post('/treasurer/public/create-concession-invoice', async (req, res) => {
   }
 });
 
+async function createVaPayment(opts) {
+  const { tenant_id, student_id, amount, external_id } = opts
+  const config = await getTenantXenditConfig(tenant_id)
+  if (!config || !config.xendit_api_key) {
+    throw { response: { data: { message: 'Xendit belum dikonfigurasi' } } }
+  }
+  const [student] = await db.query(
+    'SELECT s.*, tn.nama_sekolah FROM students s JOIN tenants tn ON s.tenant_id = tn.tenant_id WHERE s.id = ?',
+    [student_id]
+  )
+  if (!student) throw { response: { data: { message: 'Siswa tidak ditemukan' } } }
+  let finalAmount = parseFloat(amount)
+  if (!finalAmount) {
+    const base = parseFloat(student.iuran_bulanan) || 0
+    const [arrears] = await db.query(
+      "SELECT COALESCE(SUM(amount),0) as total FROM xendit_invoices WHERE student_id = ? AND tenant_id = ? AND status NOT IN ('PAID','EXPIRED')",
+      [student_id, tenant_id]
+    )
+    finalAmount = base + (parseFloat(arrears && arrears.total) || 0)
+  }
+  const extId = external_id || `SPP-${tenant_id}-${student_id}-${Date.now()}`
+  const invoicePayload = {
+    external_id: extId,
+    amount: finalAmount,
+    description: `SPP ${student.nama_siswa} - ${student.nama_sekolah}`,
+    invoice_duration: 31536000,
+    currency: 'IDR',
+    success_redirect_url: `${process.env.BASE_URL || 'http://localhost:3000'}/xendit-payment.html?external_id=${extId}`,
+    failure_redirect_url: `${process.env.BASE_URL || 'http://localhost:3000'}/xendit-payment.html?external_id=${extId}`
+  }
+  const response = await axios.post(
+    `${XENDIT_API_BASE}/v2/invoices`,
+    invoicePayload,
+    { headers: { 'Authorization': `Basic ${getXenditAuth(config.xendit_api_key)}`, 'Content-Type': 'application/json' } }
+  )
+  return { invoice_id: response.data.id, external_id: extId, invoice_url: response.data.invoice_url, amount: finalAmount }
+}
+
 module.exports = router;
+module.exports.createVaPayment = createVaPayment
+module.exports.createVaPayment = createVaPayment

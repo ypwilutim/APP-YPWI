@@ -251,28 +251,42 @@ router.get('/attendance-rules', authenticateToken, async (req, res) => {
     // Cek apakah tenant menggunakan aturan pusat
     if (targetTenantId) {
       const [tenantInfo] = await db.query(
-        'SELECT use_central_rules FROM tenants WHERE tenant_id = ?',
+        'SELECT use_central_rules, tipe_unit FROM tenants WHERE tenant_id = ?',
         [targetTenantId]
       );
 
       if (tenantInfo && tenantInfo.use_central_rules === 1) {
-        targetTenantId = 'YPWILUTIM';
+        // Ambil tipe_unit tenant untuk resolve aturan pusat
+        const userTipeUnit = tenantInfo.tipe_unit;
         useCentral = true;
       }
     }
 
-    // Query rules berdasarkan tenant_id
-    let query = 'SELECT id, tenant_id, tipe, jam_mulai, jam_selesai, status_log, hari FROM attendance_rules';
+    // Query rules: tenant rules + central rules by tipe_unit
+    let query = 'SELECT id, tenant_id, tipe_unit, tipe, jam_mulai, jam_selesai, status_log, hari FROM attendance_rules';
     let params = [];
 
-    if (targetTenantId) {
-      query += ' WHERE tenant_id = ?';
-      params.push(targetTenantId);
+    // Build query untuk tenant rules + central rules (jika useCentral)
+    const ruleConditions = [];
+    const ruleParams = [];
+
+    // Tenant-specific rules
+    ruleConditions.push('(tenant_id = ?)');
+    ruleParams.push(targetTenantId);
+
+    // Central rules by tipe_unit (jika useCentral)
+    if (useCentral && userTipeUnit) {
+      ruleConditions.push('(tenant_id IS NULL AND tipe_unit = ?)');
+      ruleParams.push(userTipeUnit);
     }
 
-    query += ' ORDER BY tipe, jam_mulai';
+    if (ruleConditions.length > 0) {
+      query += ' WHERE ' + ruleConditions.join(' OR ');
+    }
 
-    const rules = await db.query(query, params);
+    query += ' ORDER BY tenant_id NULLS FIRST, tipe, jam_mulai';
+
+    const rules = await db.query(query, ruleParams);
 
     const dataRules = Array.isArray(rules) ? rules : (rules.rows || rules[0] || []);
 
@@ -317,7 +331,9 @@ router.get('/admin/attendance-logs', authenticateOperator, async (req, res) => {
   try {
     const dateFilter = req.query.date;
     const statusFilter = req.query.status;
-    let tenantId = req.query.tenant_id;
+    // Prioritas: query param > user.tenant_id (dari JWT) > assignments[0]
+    let tenantId = Array.isArray(req.query.tenant_id) ? req.query.tenant_id[0] : req.query.tenant_id;
+    tenantId = tenantId || req.user.tenant_id || (req.user && req.user.assignments && req.user.assignments.length === 1 ? req.user.assignments[0].tenant_id : null);
 
     // Operator: force tenant_id from assignment if not provided
     if (req.user.role !== 'admin' && !tenantId) {
@@ -330,40 +346,14 @@ router.get('/admin/attendance-logs', authenticateOperator, async (req, res) => {
       }
     }
 
-    // KODE PERBAIKAN: Filter berdasarkan teacher_assignments dengan logika:
-    // - Absen di unit tempat scan (al.tenant_id = tenantId): hanya muncul di unit itu
-    // - Absen dinas luar (al.dinas_luar = 1): muncul di SEMUA unit guru
-    let query = `
-      SELECT al.id, al.teacher_id, al.waktu_scan, al.jenis, al.status, al.metode,
-             t.nama, t.nip, ten.nama_sekolah, ar.keterangan AS nama_aturan,
-             al.tenant_id as scan_tenant_id, al.dinas_luar
-      FROM attendance_logs al
-      JOIN teachers t ON al.teacher_id = t.id
-      JOIN teacher_assignments ta ON t.id = ta.teacher_id
-      JOIN tenants ten ON al.tenant_id = ten.tenant_id
-      LEFT JOIN attendance_rules ar ON al.rule_id = ar.id
-    `;
-    let params = [];
-
-    if (tenantId) {
-      query += ` WHERE ta.tenant_id = ? 
-                 AND (al.tenant_id = ? OR al.dinas_luar = 1)`;
-      params.push(tenantId, tenantId);
+    // Filter: hanya tampilkan absen untuk guru yang terdaftar di tenant ini + scan di tenant ini
+    if (!tenantId) {
+      return res.status(400).json({ success: false, message: 'tenant_id required' });
     }
+    const query = `SELECT al.id, al.teacher_id, al.waktu_scan, al.jenis, al.status, al.metode, t.nama, t.nip, ten.nama_sekolah, ar.keterangan AS nama_aturan, al.tenant_id as scan_tenant_id, al.dinas_luar FROM attendance_logs al JOIN teachers t ON al.teacher_id = t.id JOIN tenants ten ON al.tenant_id = ten.tenant_id LEFT JOIN attendance_rules ar ON al.rule_id = ar.id WHERE al.tenant_id = ? ORDER BY al.waktu_scan DESC LIMIT 100`;
 
-    if (dateFilter) {
-      query += (tenantId ? ' AND' : ' WHERE') + ' DATE(al.waktu_scan) = ?';
-      params.push(dateFilter);
-    }
-
-    if (statusFilter && statusFilter !== '') {
-      query += (tenantId || dateFilter ? ' AND' : ' WHERE') + ' al.status = ?';
-      params.push(statusFilter);
-    }
-
-    query += ' ORDER BY al.waktu_scan DESC LIMIT 100';
-
-    const logs = await db.query(query, params);
+    const logs = await db.query(query, [tenantId]);
+    console.log('[ATTENDANCE DEBUG]', { tenantId, count: logs.length, sample: logs.slice(0, 3).map(l => ({teacher_id: l.teacher_id, scan_tenant_id: l.scan_tenant_id, nama_guru: l.nama})) });
 
     res.json({ success: true, data: logs });
   } catch (error) {

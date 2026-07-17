@@ -41,7 +41,7 @@ router.get('/public/catalog', async (req, res) => {
 
 // GET /api/public/info - Public business identity & contact info
 router.get('/public/info', (req, res) => {
-  const phone = process.env.PUBLIC_BIZ_PHONE || '';
+  const phone = process.env.PUBLIC_BIZ_PHONE || ''
   res.json({
     success: true,
     data: {
@@ -53,7 +53,30 @@ router.get('/public/info', (req, res) => {
       email: process.env.PUBLIC_BIZ_EMAIL || process.env.EMAIL_USER || 'admin@ypwilutim.com',
       domain: `${req.protocol}://${req.get('host')}`
     }
-  });
-});
+  })
+})
 
-module.exports = router;
+router.get('/public/active-gateway/:tenant_id', async (req, res) => {
+  try {
+    const tenant_id = req.params.tenant_id.toUpperCase()
+    const [gw] = await db.query('SELECT gateway, is_active, config FROM payment_gateways WHERE tenant_id = ? AND is_active = 1 LIMIT 1', [tenant_id])
+    if (!gw) return res.status(404).json({ success: false, message: 'Tidak ada gateway aktif' })
+    res.json({ success: true, data: { gateway: gw.gateway, config: gw.config } })
+  } catch (e) {
+    res.status(500).json({ success: false, message: 'Error fetching active gateway' })
+  }
+})
+
+router.get('/public/student/:tenant_id/:nis', async (req, res) => {
+  try {
+    const tenant_id = req.params.tenant_id.toUpperCase()
+    const nis = req.params.nis
+    const [student] = await db.query('SELECT id, nisn, nama_siswa, iuran_bulanan FROM students WHERE tenant_id = ? AND nisn = ? LIMIT 1', [tenant_id, nis])
+    if (!student) return res.status(404).json({ success: false, message: 'Siswa tidak ditemukan' })
+    res.json({ success: true, data: student })
+  } catch (e) {
+    res.status(500).json({ success: false, message: 'Error fetching student' })
+  }
+})
+
+module.exports = router

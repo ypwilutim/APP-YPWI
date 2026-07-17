@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="id">
 
 <head>
@@ -116,10 +116,15 @@
           <i class="fas fa-bell"></i>
           <span>Pengingat SPP</span>
         </button>
-        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
-          data-tab="attendanceRecap">
+<button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+           data-tab="attendanceRecap">
           <i class="fas fa-calendar-check"></i>
           <span>Rekap Absensi</span>
+        </button>
+        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+          data-tab="payment-gateway">
+          <i class="fas fa-credit-card"></i>
+          <span>Payment Gateway</span>
         </button>
       </nav>
     </aside>
@@ -335,7 +340,7 @@
                </td></tr></tbody></table></div>
            </div>
           <div id="payrollHistoryView" class="hidden">
-            <div class="flex justify-between mb-4"><h4>Riwayat Slip Gaji</h4><button onclick="togglePayrollHistory()" class="text-blue-600">← Kembali</button></div>
+            <div class="flex justify-between mb-4"><h4>Riwayat Slip Gaji</h4><button onclick="togglePayrollHistory()" class="text-blue-600">? Kembali</button></div>
             <div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr><th>Periode</th><th>Nama</th><th>NIK</th><th>Total</th><th>Aksi</th></tr></thead><tbody id="payrollHistoryTable"></tbody></table></div>
           </div>
         </div>
@@ -432,16 +437,20 @@
                <input type="number" id="individualAmount" min="0" step="1" placeholder="Kosongkan untuk jumlah default"
                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
              </div>
-             <div class="flex space-x-3 pt-4">
-               <button onclick="createIndividualInvoice()"
-                 class="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium">
-                 <i class="fas fa-file-invoice mr-2"></i>Buat Invoice
-               </button>
-               <button onclick="createIndividualConcessionInvoice()"
-                 class="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium">
-                 <i class="fas fa-percentage mr-2"></i>Buat Invoice Keringanan
-               </button>
-             </div>
+<div class="flex space-x-3 pt-4">
+                <button onclick="createIndividualInvoice()"
+                  class="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium">
+                  <i class="fas fa-file-invoice mr-2"></i>Buat Invoice
+                </button>
+                <button onclick="generatePaymentLink()"
+                  class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">
+                  <i class="fas fa-link mr-2"></i>Buat Payment Link
+                </button>
+                <button onclick="createIndividualConcessionInvoice()"
+                  class="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium">
+                  <i class="fas fa-percentage mr-2"></i>Buat Invoice Keringanan
+                </button>
+              </div>
            </div>
          </div>
        </div>
@@ -537,10 +546,119 @@
               </tbody>
             </table>
           </div>
+</div>
+        </div>
+
+        <!-- Payment Gateway Tab (BSI VA Manual) -->
+        <div id="payment-gatewayTab" class="tab-content hidden">
+          <div class="bg-white rounded-xl shadow-sm border-2 border-indigo-200 p-6 mb-4">
+            <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
+              <h3 class="text-lg font-semibold text-gray-900">Payment Gateway - BSI VA Manual</h3>
+              <div class="flex flex-wrap items-end gap-2">
+                <div>
+                  <label class="block text-xs font-medium text-gray-600 mb-1">Pilih Sekolah</label>
+                  <select id="bsiTenantSelect"
+                    class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    onchange="loadBsiStudents()">
+                    <option value="">Pilih Sekolah</option>
+                  </select>
+                </div>
+                <button onclick="openBsiVaModal()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                  <i class="fas fa-plus-circle mr-1"></i>Buat VA BSI
+                </button>
+                <button onclick="generateBsiCsv()" class="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                  <i class="fas fa-file-csv mr-1"></i>Buat VA Semua (CSV)
+                </button>
+                <button onclick="document.getElementById('bsiReportFile').click()" class="bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                  <i class="fas fa-file-import mr-1"></i>Import Laporan BSI
+                </button>
+                <input type="file" id="bsiReportFile" accept=".csv,.json" class="hidden" onchange="importBsiReport(this)">
+              </div>
+            </div>
+
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead class="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Nama Siswa</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">NISN</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Sekolah</th>
+                    <th class="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Iuran</th>
+                    <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">VA Number</th>
+                    <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Status</th>
+                    <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="bsiStudentTable" class="divide-y divide-gray-100">
+                  <tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">
+                    <i class="fas fa-spinner fa-spin text-xl mb-2"></i>
+                    <p>Pilih sekolah untuk melihat siswa</p>
+                  </td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </main>
+    </div>
+
+    <!-- BSI VA Modal -->
+    <div id="bsiVaModal" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+      <div class="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+        <div class="flex justify-between items-center p-4 border-b sticky top-0 bg-white z-10">
+          <div>
+            <h4 class="font-semibold text-lg">Buat Virtual Account BSI</h4>
+            <p id="bsiModalSchool" class="text-xs text-gray-500"></p>
+          </div>
+          <button onclick="closeBsiVaModal()" class="text-gray-500 hover:text-gray-700 text-2xl leading-none">&times;</button>
+        </div>
+        <div class="p-4 border-b">
+          <div class="flex items-center gap-2">
+            <input type="text" id="bsiStudentSearch" onkeyup="filterBsiStudents()" placeholder="Cari nama siswa..."
+              class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
+            <label class="flex items-center gap-1 text-sm text-gray-600 whitespace-nowrap">
+              <input type="checkbox" id="bsiSelectAll" onchange="bsiToggleSelectAll(this)"> Pilih Semua
+            </label>
+          </div>
+        </div>
+        <div class="overflow-auto flex-1">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 border-b border-gray-100 sticky top-0">
+              <tr>
+                <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase" style="width:40px">#</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Nama Siswa</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">NISN</th>
+                <th class="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Iuran</th>
+                <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">VA</th>
+              </tr>
+            </thead>
+            <tbody id="bsiModalStudentList" class="divide-y divide-gray-100"></tbody>
+          </table>
+        </div>
+        <div class="p-4 border-t flex justify-between items-center sticky bottom-0 bg-white z-10">
+          <span id="bsiSelectedCount" class="text-sm text-gray-600">0 siswa dipilih</span>
+          <div class="flex gap-2">
+            <button onclick="closeBsiVaModal()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400">Batal</button>
+            <button onclick="createBsiVaSelected()" id="bsiCreateBtn" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium">
+              <i class="fas fa-plus-circle mr-1"></i>Buat VA Terpilih
+            </button>
+          </div>
         </div>
       </div>
-    </main>
-  </div>
+    </div>
+
+    <!-- BSI VA Progress Modal -->
+    <div id="bsiProgressModal" class="hidden fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
+      <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+        <h4 class="font-semibold text-lg mb-1">Membuat Virtual Account BSI</h4>
+        <p id="bsiProgressText" class="text-sm text-gray-600 mb-4">0 / 0 siswa</p>
+        <div class="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+          <div id="bsiProgressBar" class="bg-indigo-600 h-4 rounded-full transition-all duration-200" style="width:0%"></div>
+        </div>
+        <p id="bsiProgressPercent" class="text-center text-2xl font-bold text-indigo-600 mt-3">0%</p>
+      </div>
+    </div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -568,10 +686,11 @@
           if (['payroll', 'spp', 'attendanceRecap', 'invoice-individual'].includes(tabName)) loadTenantFilters();
           if (tabName === 'dashboard') loadDashboardData();
           if (tabName === 'payroll') loadPayroll();
-          if (tabName === 'spp') loadSppSummary();
+if (tabName === 'spp') loadSppSummary();
           if (tabName === 'reports') loadFinancialReport();
           if (tabName === 'reminders') loadPaymentDefaulters();
-        });
+          if (tabName === 'payment-gateway') loadBsiTenants();
+          });
       });
     }
 
@@ -980,6 +1099,55 @@ async function createIndividualInvoice() {
       }
     }
 
+    async function generatePaymentLink() {
+      const tenantId = document.getElementById('individualTenantSelect').value;
+      if (!tenantId) {
+        showToast('Pilih sekolah terlebih dahulu', 'error');
+        return;
+      }
+      if (!selectedStudentId) {
+        showToast('Pilih siswa terlebih dahulu', 'error');
+        return;
+      }
+      
+      try {
+        const res = await fetch('/api/doku/create-invoice', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+          body: JSON.stringify({ tenant_id: tenantId, student_id: parseInt(selectedStudentId) })
+        });
+        const json = await res.json();
+        if (json.success) {
+          const modal = document.createElement('div');
+          modal.innerHTML = `
+            <div class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" id="linkModal">
+              <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+                <div class="flex justify-between items-center mb-4">
+                  <h3 class="text-lg font-semibold">Payment Link DOKU Siap</h3>
+                  <button onclick="document.getElementById('linkModal').remove()" class="text-gray-500 hover:text-gray-700">&times;</button>
+                </div>
+                <input type="text" value="${json.invoice_url}" readonly class="w-full px-3 py-2 border border-gray-300 rounded-lg mb-4 bg-gray-50">
+                <button onclick="copyLink('${json.invoice_url}');document.getElementById('linkModal').remove()" class="w-full px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
+                  <i class="fas fa-copy mr-2"></i>Salin & Tutup
+                </button>
+              </div>
+            </div>
+          `;
+          document.body.appendChild(modal);
+        } else {
+          showToast(json.message || 'Gagal buat payment link', 'error');
+        }
+      } catch (e) {
+        showToast('Error: ' + e.message, 'error');
+      }
+    }
+
+    function copyLink(url) {
+      navigator.clipboard.writeText(url);
+      showToast('Link disalin ke clipboard', 'success');
+      document.getElementById('linkModal')?.remove();
+    }
+
 async function createIndividualConcessionInvoice() {
       const tenantId = document.getElementById('individualTenantSelect').value;
       if (!tenantId) {
@@ -1038,14 +1206,281 @@ async function createIndividualConcessionInvoice() {
             class="flex-1 px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400">
             Batal
           </button>
-          <button onclick="createConcessionInvoice()"
-            class="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
-            Buat Invoice Keringanan
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-</body>
+<button onclick="createConcessionInvoice()"
+             class="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
+             Buat Invoice Keringanan
+           </button>
+         </div>
+       </div>
+     </div>
+</div>
+
+    <script>
+      // ===================== BSI VA MANUAL =====================
+      let bsiStudentCache = [];
+
+      // Isi dropdown sekolah di tab Payment Gateway
+      async function loadBsiTenants() {
+        try {
+          const res = await fetch('/api/treasurer/public/tenants', { headers: getAuthHeader() });
+          const data = await res.json();
+          const sel = document.getElementById('bsiTenantSelect');
+          sel.innerHTML = '<option value="">Pilih Sekolah</option>' +
+            (data.data || []).map(t => `<option value="${t.tenant_id}">${t.nama_sekolah}</option>`).join('');
+        } catch (e) {
+          console.error('loadBsiTenants', e);
+        }
+      }
+
+      async function loadBsiStudents() {
+        const tenantId = document.getElementById('bsiTenantSelect').value;
+        const tbody = document.getElementById('bsiStudentTable');
+        if (!tenantId) {
+          tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">Pilih sekolah untuk melihat siswa</td></tr>';
+          return;
+        }
+        tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-500"><i class="fas fa-spinner fa-spin"></i> Memuat...</td></tr>';
+        try {
+          const res = await fetch('/api/treasurer/public/students?tenant_id=' + tenantId, { headers: getAuthHeader() });
+          const data = await res.json();
+          if (!data.success || !data.data.length) {
+            tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">Tidak ada siswa aktif</td></tr>';
+            return;
+          }
+          tbody.innerHTML = data.data.map(s => {
+            const hasVa = s.va_number && s.va_number !== 'null' && s.va_number !== '';
+            const status = s.va_status || (hasVa ? 'pending' : '-');
+            const badge = {
+              paid: 'bg-green-100 text-green-800',
+              pending: 'bg-amber-100 text-amber-800',
+              failed: 'bg-red-100 text-red-800',
+              '-': 'bg-gray-100 text-gray-800'
+            }[status] || 'bg-gray-100 text-gray-800';
+            return `
+              <tr class="border-b">
+                <td class="px-4 py-2">${s.nama_siswa || ''}</td>
+                <td class="px-4 py-2">${s.nisn || '-'}</td>
+                <td class="px-4 py-2">${s.nama_sekolah || s.tenant_id || '-'}</td>
+                <td class="px-4 py-2 text-right">${s.iuran_bulanan ? 'Rp ' + Number(s.iuran_bulanan).toLocaleString('id-ID') : '-'}</td>
+                <td class="px-4 py-2 text-center font-mono text-xs">${hasVa ? s.va_number : '<span class="text-gray-400">-</span>'}</td>
+                <td class="px-4 py-2 text-center"><span class="text-xs px-2 py-1 rounded ${badge}">${status}</span></td>
+                <td class="px-4 py-2 text-center">
+                  ${hasVa ? '' : `<button onclick="createBsiVaSingle(${s.id})" class="px-2 py-1 bg-indigo-600 text-white rounded text-xs hover:bg-indigo-700">Buat VA</button>`}
+                </td>
+              </tr>`;
+          }).join('');
+        } catch (e) {
+          tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-red-500">Error: ' + e.message + '</td></tr>';
+        }
+      }
+
+      async function openBsiVaModal() {
+        const tenantId = document.getElementById('bsiTenantSelect').value;
+        if (!tenantId) { showToast('Pilih sekolah terlebih dahulu', 'error'); return; }
+        const schoolName = document.getElementById('bsiTenantSelect').selectedOptions[0]?.text || '';
+        document.getElementById('bsiModalSchool').textContent = schoolName;
+        document.getElementById('bsiVaModal').classList.remove('hidden');
+        document.getElementById('bsiSelectAll').checked = false;
+        document.getElementById('bsiSelectedCount').textContent = '0 siswa dipilih';
+
+        const tbody = document.getElementById('bsiModalStudentList');
+        tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-gray-500"><i class="fas fa-spinner fa-spin"></i> Memuat...</td></tr>';
+        try {
+          const res = await fetch('/api/treasurer/public/students?tenant_id=' + tenantId, { headers: getAuthHeader() });
+          const data = await res.json();
+          bsiStudentCache = data.data || [];
+          renderBsiModalStudents();
+        } catch (e) {
+          tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-red-500">Error: ' + e.message + '</td></tr>';
+        }
+      }
+
+      function renderBsiModalStudents(filter) {
+        const q = (filter || '').toLowerCase();
+        const tbody = document.getElementById('bsiModalStudentList');
+        const list = bsiStudentCache.filter(s =>
+          !q || (s.nama_siswa || '').toLowerCase().includes(q) || (s.nisn || '').includes(q)
+        );
+        if (!list.length) {
+          tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-gray-500">Tidak ada siswa</td></tr>';
+          return;
+        }
+        tbody.innerHTML = list.map((s, i) => `
+          <tr class="border-b">
+            <td class="px-4 py-2 text-center"><input type="checkbox" class="bsi-checkbox" value="${s.id}" onchange="updateBsiCount()"></td>
+            <td class="px-4 py-2">${s.nama_siswa || ''}</td>
+            <td class="px-4 py-2">${s.nisn || '-'}</td>
+            <td class="px-4 py-2 text-right">${s.iuran_bulanan ? 'Rp ' + Number(s.iuran_bulanan).toLocaleString('id-ID') : '-'}</td>
+            <td class="px-4 py-2 text-center font-mono text-xs">${s.va_number && s.va_number !== 'null' ? s.va_number : '<span class="text-gray-400">-</span>'}</td>
+          </tr>`).join('');
+      }
+
+      function filterBsiStudents() {
+        renderBsiModalStudents(document.getElementById('bsiStudentSearch').value);
+      }
+
+      function bsiToggleSelectAll(cb) {
+        document.querySelectorAll('.bsi-checkbox').forEach(c => c.checked = cb.checked);
+        updateBsiCount();
+      }
+
+      function updateBsiCount() {
+        const n = document.querySelectorAll('.bsi-checkbox:checked').length;
+        document.getElementById('bsiSelectedCount').textContent = n + ' siswa dipilih';
+      }
+
+      function closeBsiVaModal() {
+        document.getElementById('bsiVaModal').classList.add('hidden');
+      }
+
+      async function createBsiVaSelected() {
+        const tenantId = document.getElementById('bsiTenantSelect').value;
+        const ids = Array.from(document.querySelectorAll('.bsi-checkbox:checked')).map(c => parseInt(c.value));
+        if (!ids.length) { showToast('Pilih minimal 1 siswa', 'error'); return; }
+
+        const btn = document.getElementById('bsiCreateBtn');
+        btn.disabled = true;
+
+        const progModal = document.getElementById('bsiProgressModal');
+        const bar = document.getElementById('bsiProgressBar');
+        const pct = document.getElementById('bsiProgressPercent');
+        const txt = document.getElementById('bsiProgressText');
+        progModal.classList.remove('hidden');
+        const total = ids.length;
+        let done = 0, ok = 0, fail = 0;
+        const updateProgress = () => {
+          const percent = total ? Math.round((done / total) * 100) : 100;
+          bar.style.width = percent + '%';
+          pct.textContent = percent + '%';
+          txt.textContent = done + ' / ' + total + ' siswa' + (fail ? ' (gagal ' + fail + ')' : '');
+        };
+        updateProgress();
+
+        for (const student_id of ids) {
+          try {
+            const res = await fetch('/api/treasurer/bsi/create-single', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+              body: JSON.stringify({ tenant_id: tenantId, student_id })
+            });
+            const d = await res.json();
+            if (d.success) ok++; else fail++;
+          } catch (e) { fail++; }
+          done++;
+          updateProgress();
+        }
+
+        btn.disabled = false;
+        progModal.classList.add('hidden');
+        showToast(`Berhasil buat ${ok} VA${fail ? ', gagal ' + fail : ''}`, fail ? 'error' : 'success');
+        closeBsiVaModal();
+        loadBsiStudents();
+      }
+
+      async function createBsiVaSingle(studentId) {
+        const tenantId = document.getElementById('bsiTenantSelect').value;
+        try {
+          const res = await fetch('/api/treasurer/bsi/create-single', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+            body: JSON.stringify({ tenant_id: tenantId, student_id })
+          });
+          const d = await res.json();
+          if (d.success) { showToast('VA ' + d.data.va_number + ' berhasil dibuat', 'success'); loadBsiStudents(); }
+          else showToast(d.message || 'Gagal buat VA', 'error');
+        } catch (e) { showToast('Gagal buat VA', 'error'); }
+      }
+
+      // Buat VA Semua -> download CSV langsung (dengan auth header)
+      async function generateBsiCsv() {
+        const tenantId = document.getElementById('bsiTenantSelect').value;
+        if (!tenantId) { showToast('Pilih sekolah terlebih dahulu', 'error'); return; }
+        try {
+          const res = await fetch('/api/treasurer/bsi/generate-csv?tenant_id=' + encodeURIComponent(tenantId), {
+            headers: getAuthHeader()
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            showToast(err.message || 'Gagal generate CSV', 'error');
+            return;
+          }
+          const blob = await res.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'BSI_VA_' + tenantId + '.csv';
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          window.URL.revokeObjectURL(url);
+          showToast('CSV berhasil didownload', 'success');
+        } catch (e) {
+          showToast('Gagal generate CSV', 'error');
+        }
+      }
+
+      // Import laporan BSI (csv/json) -> update payment_transactions paid
+      async function importBsiReport(input) {
+        const file = input.files[0];
+        if (!file) return;
+        try {
+          const text = await file.text();
+          let records = [];
+          if (file.name.toLowerCase().endsWith('.json')) {
+            records = JSON.parse(text);
+          } else {
+            records = parseBsiCsv(text);
+          }
+          const res = await fetch('/api/treasurer/bsi/import-report', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+            body: JSON.stringify({ records })
+          });
+          const d = await res.json();
+          if (d.success) showToast(d.message, 'success');
+          else showToast(d.message || 'Gagal import', 'error');
+          loadBsiStudents();
+        } catch (e) {
+          showToast('Gagal memproses file: ' + e.message, 'error');
+        } finally {
+          input.value = '';
+        }
+      }
+
+      function parseBsiCsv(text) {
+        const lines = text.trim().split(/\r?\n/);
+        if (!lines.length) return [];
+        const headers = splitCsvLine(lines[0]);
+        return lines.slice(1).map(line => {
+          const cols = splitCsvLine(line);
+          const obj = {};
+          headers.forEach((h, i) => obj[h.trim()] = (cols[i] || '').trim());
+          return obj;
+        });
+      }
+
+      function splitCsvLine(line) {
+        const out = [];
+        let cur = '', q = false;
+        for (let i = 0; i < line.length; i++) {
+          const c = line[i];
+          if (c === '"') { if (q && line[i + 1] === '"') { cur += '"'; i++; } else q = !q; }
+          else if (c === ',' && !q) { out.push(cur); cur = ''; }
+          else cur += c;
+        }
+        out.push(cur);
+        return out;
+      }
+
+      // Init tab
+      (function () {
+        const origInit = initDashboard;
+        initDashboard = function () {
+          origInit();
+          loadBsiTenants();
+        };
+      })();
+    </script>
+  </body>
 
 </html>

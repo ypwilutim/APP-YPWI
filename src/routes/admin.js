@@ -223,17 +223,35 @@ router.put('/admin/tenants/:tenantId', authenticateOperator, async (req, res) =>
 // RULES ROUTES (attendance_rules)
 // ============================================================
 
-// GET /api/admin/rules - List attendance rules
+// GET /api/admin/rules - List attendance rules (tenant-specific or central)
 router.get('/admin/rules', authenticateOperator, async (req, res) => {
   try {
     let tenantId = req.query.tenant_id;
-    // Jika tenant_id tidak diberikan, pakai dari user atau assignments
-    if (!tenantId) {
-      tenantId = req.user.tenant_id || (req.user.assignments && req.user.assignments[0] && req.user.assignments[0].tenant_id);
+    const central = req.query.central; // '1' untuk ambil aturan pusat
+
+    // Ambil tipe_unit user (untuk aturan pusat)
+    let userTipeUnit = null;
+    if (req.user.assignments && req.user.assignments[0]) {
+      userTipeUnit = req.user.assignments[0].tipe_unit || null;
     }
+
     let query = 'SELECT * FROM attendance_rules';
     let params = [];
-    if (tenantId) {
+
+    if (central === '1') {
+      // Aturan pusat global (tenant_id IS NULL), filter berdasarkan tipe_unit user
+      query += ' WHERE tenant_id IS NULL';
+      if (userTipeUnit) {
+        query += ' AND tipe_unit = ?';
+        params.push(userTipeUnit);
+      }
+    } else if (tenantId) {
+      // Aturan tenant spesifik
+      query += ' WHERE tenant_id = ?';
+      params.push(tenantId);
+    } else {
+      // Default: aturan tenant user (legacy)
+      tenantId = req.user.tenant_id || (req.user.assignments && req.user.assignments[0] && req.user.assignments[0].tenant_id);
       query += ' WHERE tenant_id = ?';
       params.push(tenantId);
     }
@@ -412,17 +430,26 @@ router.get('/admin/rules/:id', authenticateOperator, async (req, res) => {
 
 
 
-// POST /api/admin/rules - Create rule
+// POST /api/admin/rules - Create rule (tenant-specific or central)
 router.post('/admin/rules', authenticateOperator, async (req, res) => {
   try {
-    const { tenant_id, tipe, jam_mulai, jam_selesai, keterangan, status_log, hari } = req.body;
+    const { tenant_id, tipe_unit, tipe, jam_mulai, jam_selesai, keterangan, status_log, hari } = req.body;
 
-    if (!tenant_id || !tipe || !jam_mulai || !jam_selesai || !status_log) {
-      return res.status(400).json({ success: false, message: 'Semua field wajib diisi' });
+    // Aturan pusat: tenant_id null + tipe_unit wajib
+    if (!tenant_id && tipe_unit) {
+      // Validasi akses: user harus punya akses pusat (YPWILUTIM)
+      const hasCentralAccess = req.user.assignments?.some(a => a.tenant_id === 'YPWILUTIM');
+      if (!hasCentralAccess) {
+        return res.status(403).json({ success: false, message: 'Hanya admin pusat yang boleh membuat aturan global' });
+      }
+    } else if (!tenant_id && !tipe_unit) {
+      return res.status(400).json({ success: false, message: 'tenant_id atau tipe_unit wajib diisi' });
+    } else if (!verifyTenantAccess(req, tenant_id)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
     }
 
-    if (!verifyTenantAccess(req, tenant_id)) {
-      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    if (!tipe || !jam_mulai || !jam_selesai || !status_log) {
+      return res.status(400).json({ success: false, message: 'Semua field wajib diisi' });
     }
 
     if (!['Datang', 'Pulang'].includes(tipe)) {
@@ -433,8 +460,8 @@ router.post('/admin/rules', authenticateOperator, async (req, res) => {
     }
 
     await db.query(
-      'INSERT INTO attendance_rules (tenant_id, tipe, jam_mulai, jam_selesai, keterangan, status_log, hari) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [tenant_id, tipe, jam_mulai, jam_selesai, keterangan || null, status_log, hari || null]
+      'INSERT INTO attendance_rules (tenant_id, tipe_unit, tipe, jam_mulai, jam_selesai, keterangan, status_log, hari) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [tenant_id || null, tipe_unit || null, tipe, jam_mulai, jam_selesai, keterangan || null, status_log, hari || null]
     );
 
     res.json({ success: true, message: 'Aturan berhasil dibuat' });
@@ -444,35 +471,41 @@ router.post('/admin/rules', authenticateOperator, async (req, res) => {
   }
 });
 
-// PUT /api/admin/rules/:id - Update rule
+// PUT /api/admin/rules/:id - Update rule (tenant-specific or central)
 router.put('/admin/rules/:id', authenticateOperator, async (req, res) => {
   try {
     const { id } = req.params;
-    let { tenant_id, tipe, jam_mulai, jam_selesai, keterangan, status_log, hari } = req.body;
+    const { tipe_unit, tipe, jam_mulai, jam_selesai, keterangan, status_log, hari } = req.body;
 
-    // Get existing rule to verify tenant access and use its tenant_id if not provided in body
-    const [existingRule] = await db.query('SELECT tenant_id FROM attendance_rules WHERE id = ?', [id]);
+    // Get existing rule
+    const [existingRule] = await db.query('SELECT tenant_id, tipe_unit FROM attendance_rules WHERE id = ?', [id]);
     if (!existingRule) {
       return res.status(404).json({ success: false, message: 'Rule tidak ditemukan' });
     }
 
-    // Use query tenant_id as fallback, then existing rule's tenant_id
-    const targetTenantId = tenant_id || req.query.tenant_id || existingRule.tenant_id;
+    const isCentralRule = !existingRule.tenant_id;
+    let targetTenantId = existingRule.tenant_id;
 
-    if (!verifyTenantAccess(req, targetTenantId)) {
-      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    if (isCentralRule) {
+      // Central rule: user must have YPWILUTIM access
+      const hasCentralAccess = req.user.assignments?.some(a => a.tenant_id === 'YPWILUTIM');
+      if (!hasCentralAccess) {
+        return res.status(403).json({ success: false, message: 'Hanya admin pusat yang boleh mengedit aturan global' });
+      }
+    } else {
+      // Tenant rule: verify access
+      if (!verifyTenantAccess(req, targetTenantId)) {
+        return res.status(403).json({ success: false, message: 'Akses ditolak' });
+      }
     }
-
-    // Use existing rule's tenant_id if body tenant_id is empty but query or existing has it
-    tenant_id = targetTenantId;
 
     if (!tipe || !jam_mulai || !jam_selesai || !status_log) {
       return res.status(400).json({ success: false, message: 'Field tipe, jam_mulai, jam_selesai, status_log wajib diisi' });
     }
 
     const result = await db.query(
-      'UPDATE attendance_rules SET tenant_id = ?, tipe = ?, jam_mulai = ?, jam_selesai = ?, keterangan = ?, status_log = ?, hari = ? WHERE id = ?',
-      [tenant_id, tipe, jam_mulai, jam_selesai, keterangan || null, status_log, hari || null, id]
+      'UPDATE attendance_rules SET tipe_unit = ?, tipe = ?, jam_mulai = ?, jam_selesai = ?, keterangan = ?, status_log = ?, hari = ? WHERE id = ?',
+      [tipe_unit || null, tipe, jam_selesai, jam_mulai, keterangan || null, status_log, hari || null, id]
     );
 
     if (result.affectedRows === 0) {
@@ -1596,10 +1629,130 @@ router.post('/admin/students/incomplete/import', authenticateOperator, excelUplo
       updated++;
     }
 
-    res.json({ success: true, updated, errors, message: `${updated} siswa diperbarui` });
+res.json({ success: true, updated, errors, message: `${updated} siswa diperbarui` });
+   } catch (error) {
+     console.error('Import incomplete students error:', error);
+     res.status(500).json({ success: false, message: 'Error import data siswa: ' + error.message });
+   }
+});
+
+// POST /api/admin/students/import - Import new students from Excel
+router.post('/admin/students/import', authenticateOperator, excelUpload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'File excel wajib diupload' });
+    }
+    const tenantId = req.body.tenant_id;
+    if (!tenantId) {
+      return res.status(400).json({ success: false, message: 'tenant_id wajib diisi' });
+    }
+    if (req.user.role !== 'admin' && !verifyTenantAccess(req, tenantId)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak untuk tenant ini' });
+    }
+
+    const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+    const errors = [];
+    let created = 0;
+
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      const rowNo = i + 2;
+      const nis = String(r['NIS'] || '').trim();
+      const nisn = String(r['NISN'] || '').trim() || null;
+      const namaSiswa = String(r['Nama Siswa'] || '').trim();
+      const jk = String(r['Jenis Kelamin'] || '').trim() || null;
+      const className = String(r['Nama Kelas'] || '').trim();
+      const iuranRaw = String(r['Iuran Bulanan'] || '').trim();
+      const iuran = iuranRaw === '' ? 0 : parseFloat(iuranRaw);
+      const namaOrangTua = String(r['Nama Orang Tua'] || '').trim() || null;
+      const noWa = String(r['No. WhatsApp'] || '').trim() || null;
+
+      if (!nis || !namaSiswa) {
+        errors.push(`Baris ${rowNo}: NIS dan Nama Siswa wajib diisi`);
+        continue;
+      }
+
+      // Cek NIS sudah ada
+      const [existing] = await db.query('SELECT id FROM students WHERE nis = ?', [nis]);
+      if (existing) {
+        errors.push(`Baris ${rowNo}: NIS "${nis}" sudah digunakan`);
+        continue;
+      }
+
+      // Cari class_id berdasarkan nama kelas
+      let classId = null;
+      if (className) {
+        const [classRow] = await db.query('SELECT id FROM classes WHERE nama_kelas = ? AND tenant_id = ?', [className, tenantId]);
+        if (classRow) classId = classRow.id;
+      }
+
+      // Buat parent jika ada data orang tua
+      let parentId = null;
+      if (namaOrangTua || noWa) {
+        const ins = await db.query('INSERT INTO parents (nama_orang_tua, no_wa) VALUES (?, ?)', [namaOrangTua, noWa]);
+        parentId = ins.insertId;
+      }
+
+      // Insert siswa baru
+      await db.query(
+        'INSERT INTO students (tenant_id, nis, nisn, nama_siswa, jenis_kelamin, class_id, parent_id, iuran_bulanan) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [tenantId, nis, nisn, namaSiswa, jk, classId, parentId, iuran]
+      );
+      created++;
+    }
+
+res.json({ success: true, created, errors, message: `${created} siswa berhasil ditambahkan` });
+   } catch (error) {
+     console.error('Import new students error:', error);
+     res.status(500).json({ success: false, message: 'Error import siswa baru: ' + error.message });
+   }
+});
+
+// GET /api/admin/students/import-template - Download template for new student import
+router.get('/admin/students/import-template', authenticateOperator, async (req, res) => {
+  try {
+    const tenantId = req.query.tenant_id;
+
+    // Ambil daftar kelas untuk dropdown
+    const classes = tenantId ? await db.query(
+      'SELECT id, nama_kelas FROM classes WHERE tenant_id = ? ORDER BY nama_kelas ASC',
+      [tenantId]
+    ) : [];
+
+    // Buat template kosong dengan header
+    const data = [{
+      'NIS': '',
+      'NISN': '',
+      'Nama Siswa': '',
+      'Nama Kelas': '',
+      'Nama Orang Tua': '',
+      'No. WhatsApp': '',
+      'Jenis Kelamin': '',
+      'Iuran Bulanan': ''
+    }];
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Template Import Siswa');
+
+    // Tambahkan sheet kelas sebagai referensi
+    if (classes.length > 0) {
+      const classData = classes.map(c => ({ 'ID Kelas': c.id, 'Nama Kelas': c.nama_kelas }));
+      const classWs = XLSX.utils.json_to_sheet(classData);
+      XLSX.utils.book_append_sheet(wb, classWs, 'Referensi Kelas');
+    }
+
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    res.setHeader('Content-Disposition', 'attachment; filename="template_import_siswa_baru.xlsx"');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.send(buf);
   } catch (error) {
-    console.error('Import incomplete students error:', error);
-    res.status(500).json({ success: false, message: 'Error import data siswa: ' + error.message });
+    console.error('Template download error:', error);
+    res.status(500).json({ success: false, message: 'Error download template' });
   }
 });
 

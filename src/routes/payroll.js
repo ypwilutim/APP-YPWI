@@ -31,18 +31,18 @@ async function getWorkingDays(tenantId, bulan, tahun) {
   const lastDay = new Date(tahun, bulan, 0).getDate();
   let rules;
   if (tenantId) {
-    rules = await db.query('SELECT hari_kerja FROM attendance_rules WHERE tenant_id = ? AND is_active = 1', [tenantId]);
+    rules = await db.query('SELECT hari FROM attendance_rules WHERE tenant_id = ? AND status_log = ?', [tenantId, 'tepat_waktu']);
   } else {
-    rules = await db.query('SELECT hari_kerja FROM attendance_rules WHERE is_active = 1');
+    rules = await db.query('SELECT hari FROM attendance_rules WHERE status_log = ?', ['tepat_waktu']);
   }
   const workSet = new Set();
   (rules || []).forEach(r => {
-    (r.hari_kerja || '').split(',').forEach(d => {
+    (r.hari || '').split(',').forEach(d => {
       const key = (d || '').trim().toLowerCase();
       if (DAY_MAP[key] !== undefined) workSet.add(DAY_MAP[key]);
     });
   });
-  if (workSet.size === 0) [1, 2, 3, 4, 5, 6].forEach(d => workSet.add(d)); // default sekolah
+  if (workSet.size === 0) [1, 2, 3, 4, 5, 6].forEach(d => workSet.add(d));
   let count = 0;
   for (let d = 1; d <= lastDay; d++) {
     if (workSet.has(new Date(tahun, bulan - 1, d).getDay())) count++;

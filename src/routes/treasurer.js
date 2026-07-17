@@ -591,7 +591,7 @@ router.get('/treasurer/public/students', async (req, res) => {
   try {
     let tenantId = req.query.tenant_id;
     let query = `
-      SELECT s.id, s.nama_siswa, s.nisn, s.tenant_id, tn.nama_sekolah, p.no_wa as parent_wa, p.nama_orang_tua
+      SELECT s.id, s.nama_siswa, s.nisn, s.tenant_id, tn.nama_sekolah, p.no_wa as parent_wa, p.nama_orang_tua, s.iuran_bulanan, s.va_number, s.va_name, s.status
       FROM students s
       JOIN tenants tn ON s.tenant_id = tn.tenant_id
       LEFT JOIN parents p ON s.parent_id = p.id
@@ -602,7 +602,7 @@ router.get('/treasurer/public/students', async (req, res) => {
       query += ' AND s.tenant_id = ?';
       params.push(tenantId);
     }
-    query += ' ORDER BY s.nama_siswa ASC';
+    query += " AND (s.status = 'active' OR s.status = 'aktif' OR s.status IS NULL) ORDER BY s.nama_siswa ASC";
     const students = await db.query(query, params);
     res.json({ success: true, data: students });
   } catch (error) {
@@ -1391,4 +1391,361 @@ router.get('/treasurer/public/test-email', async (req, res) => {
   }
 });
 
-module.exports = router;
+router.post('/treasurer/gateway/settings', authenticateOperator, async (req, res) => {
+  try {
+    const { tenant_id, gateway, enabled, api_key, client_key, config } = req.body
+    if (!tenant_id || !gateway) return res.status(400).json({ success: false, message: 'tenant_id dan gateway required' })
+    if (!verifyTenantAccess(req, tenant_id)) return res.status(403).json({ success: false, message: 'Akses ditolak' })
+    const gwConfig = { ...(config || {}), va_prefix: gateway === 'bsi_manual' ? (config?.va_prefix || '2231') : undefined }
+    const [existing] = await db.query('SELECT id FROM payment_gateways WHERE tenant_id = ? AND gateway = ?', [tenant_id, gateway])
+    if (existing) {
+      await db.query('UPDATE payment_gateways SET is_active = ?, api_key = ?, client_key = ?, config = ? WHERE tenant_id = ? AND gateway = ?', [enabled ? 1 : 0, api_key || null, client_key || null, JSON.stringify(gwConfig), tenant_id, gateway])
+    } else {
+      await db.query('INSERT INTO payment_gateways (tenant_id, gateway, is_active, api_key, client_key, config) VALUES (?, ?, ?, ?, ?, ?)', [tenant_id, gateway, enabled ? 1 : 0, api_key || null, client_key || null, JSON.stringify(gwConfig)])
+    }
+    res.json({ success: true, message: `Gateway ${gateway} ${enabled ? 'diaktifkan' : 'dinonaktifkan'}` })
+  } catch (error) {
+    console.error('Update gateway settings error:', error)
+    res.status(500).json({ success: false, message: 'Error updating gateway settings' })
+  }
+})
+
+router.get('/treasurer/gateway/settings', authenticateOperator, async (req, res) => {
+  try {
+    const tenant_id = req.query.tenant_id
+    if (!tenant_id) return res.status(400).json({ success: false, message: 'tenant_id required' })
+    if (!verifyTenantAccess(req, tenant_id)) return res.status(403).json({ success: false, message: 'Akses ditolak' })
+    let gateways = await db.query('SELECT gateway, is_active, api_key, client_key, config FROM payment_gateways WHERE tenant_id = ? ORDER BY gateway ASC', [tenant_id])
+    if (!gateways || gateways.length === 0) {
+      const defaultGateways = ['midtrans', 'xendit', 'bsi_manual', 'doku']
+      for (const gw of defaultGateways) {
+        await db.query('INSERT IGNORE INTO payment_gateways (tenant_id, gateway, is_active) VALUES (?, ?, 0)', [tenant_id, gw])
+      }
+      gateways = await db.query('SELECT gateway, is_active, api_key, client_key, config FROM payment_gateways WHERE tenant_id = ? ORDER BY gateway ASC', [tenant_id])
+    }
+    res.json({ success: true, data: gateways })
+  } catch (error) {
+    console.error('Get gateway settings error:', error)
+    res.status(500).json({ success: false, message: 'Error fetching gateway settings' })
+  }
+})
+
+router.get('/treasurer/bsi/template', authenticateOperator, async (req, res) => {
+  try {
+    const fs = require('fs')
+    const path = require('path')
+    const templatePath = path.join(__dirname, '../../template/BSI/BULK_VA_Transaction_Template.csv')
+    if (fs.existsSync(templatePath)) {
+      const csv = fs.readFileSync(templatePath, 'utf8')
+      res.setHeader('Content-Type', 'text/csv')
+      res.setHeader('Content-Disposition', 'attachment; filename=BULK_VA_Template.csv')
+      res.send(csv)
+    } else {
+      res.status(404).json({ success: false, message: 'Template tidak ditemukan' })
+    }
+  } catch (error) {
+    console.error('Get BSI template error:', error)
+    res.status(500).json({ success: false, message: 'Error getting template' })
+  }
+})
+
+router.get('/treasurer/bsi/export', authenticateOperator, async (req, res) => {
+  try {
+    const tenantId = req.query.tenant_id
+    let vaPrefix = '2231'
+    const [gw] = await db.query('SELECT config FROM payment_gateways WHERE tenant_id = ? AND gateway = ? AND is_active = 1', [tenantId || 'YPWILUTIM', 'bsi_manual'])
+    if (gw && gw.config) {
+      try { const cfg = JSON.parse(gw.config); vaPrefix = cfg.va_prefix || '2231' } catch (e) {}
+    }
+    let query = 'SELECT pt.*, s.nama_siswa, s.nisn FROM payment_transactions pt LEFT JOIN students s ON pt.student_id = s.id WHERE gateway = ?'
+    const params = ['bsi_manual']
+    if (tenantId) { query += ' AND pt.tenant_id = ?'; params.push(tenantId) }
+    query += ' ORDER BY pt.created_at DESC LIMIT 500'
+    const [transactions] = await db.query(query, params)
+    const header = 'Type,Parent Account,Virtual Account Number,Virtual Account Name,Amount,Remark,Transaction Date'
+    const rows = (transactions || []).map(t => [
+      'Debit', '', (vaPrefix + (t.external_id || '')), t.nama_siswa || '', t.amount, t.description || '', t.paid_at || ''
+    ].map(v => `"${v || ''}"`).join(','))
+    res.setHeader('Content-Type', 'text/csv')
+    res.send([header, ...rows].join('\n'))
+  } catch (error) {
+    console.error('Export BSI error:', error)
+    res.status(500).json({ success: false, message: 'Error exporting BSI data' })
+  }
+})
+
+router.get('/treasurer/public/tenants', authenticateOperator, async (req, res) => {
+  try {
+    const tenants = await db.query('SELECT tenant_id, nama_sekolah FROM tenants ORDER BY nama_sekolah');
+    res.json({ success: true, data: tenants });
+  } catch (error) {
+    console.error('Get tenants error:', error)
+    res.status(500).json({ success: false, message: 'Gagal ambil data sekolah' });
+  }
+})
+
+// ===== BSI VA MANUAL ENDPOINTS =====
+
+// Ambil VA prefix default dari config payment_gateways (default '2231')
+async function getBsiVaPrefix(tenantId) {
+  try {
+    const [gw] = await db.query(
+      'SELECT config FROM payment_gateways WHERE tenant_id = ? AND gateway = ? AND is_active = 1',
+      [tenantId, 'bsi_manual']
+    );
+    if (gw && gw.config) {
+      const cfg = typeof gw.config === 'string' ? JSON.parse(gw.config) : gw.config;
+      if (cfg && cfg.va_prefix) return String(cfg.va_prefix);
+    }
+    const [def] = await db.query(
+      'SELECT config FROM payment_gateways WHERE gateway = ? AND is_active = 1 LIMIT 1',
+      ['bsi_manual']
+    );
+    if (def && def.config) {
+      const cfg = typeof def.config === 'string' ? JSON.parse(def.config) : def.config;
+      if (cfg && cfg.va_prefix) return String(cfg.va_prefix);
+    }
+  } catch (e) { /* fallback ke default */ }
+  return '2231';
+}
+
+// Ambil Parent Account dari config payment_gateways (default '1029129123')
+async function getBsiParentAccount(tenantId) {
+  try {
+    // Parent Account diambil dari bank_account_number tenant (sesuai kebutuhan BSI CUZ).
+    const [t] = await db.query('SELECT bank_account_number FROM tenants WHERE tenant_id = ? LIMIT 1', [tenantId]);
+    if (t && t.bank_account_number) return String(t.bank_account_number);
+
+    // Fallback ke config payment_gateways bila bank_account_number kosong.
+    const [gw] = await db.query(
+      'SELECT config FROM payment_gateways WHERE tenant_id = ? AND gateway = ? AND is_active = 1',
+      [tenantId, 'bsi_manual']
+    );
+    if (gw && gw.config) {
+      const cfg = typeof gw.config === 'string' ? JSON.parse(gw.config) : gw.config;
+      if (cfg && cfg.parent_account) return String(cfg.parent_account);
+    }
+    const [def] = await db.query(
+      'SELECT config FROM payment_gateways WHERE gateway = ? AND is_active = 1 LIMIT 1',
+      ['bsi_manual']
+    );
+    if (def && def.config) {
+      const cfg = typeof def.config === 'string' ? JSON.parse(def.config) : def.config;
+      if (cfg && cfg.parent_account) return String(cfg.parent_account);
+    }
+  } catch (e) { /* fallback ke default */ }
+  return '1029129123';
+}
+
+// POST /api/treasurer/bsi/create-single - buat VA BSI manual per siswa
+// body: { tenant_id, student_id } -> VA = prefix + student_id, insert payment_transactions pending
+router.post('/treasurer/bsi/create-single', authenticateOperator, async (req, res) => {
+  try {
+    const { tenant_id, student_id, amount } = req.body;
+    if (!tenant_id || !student_id) {
+      return res.status(400).json({ success: false, message: 'tenant_id dan student_id wajib' });
+    }
+    if (!verifyTenantAccess(req, tenant_id)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+
+    const [student] = await db.query(
+      'SELECT id, nama_siswa, tenant_id, iuran_bulanan FROM students WHERE id = ? AND tenant_id = ?',
+      [student_id, tenant_id]
+    );
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Siswa tidak ditemukan' });
+    }
+
+    // Generate 10 digit acak untuk kolom VA di CUZ BSI (tanpa prefix).
+    const vaSuffix = String(Math.floor(1000000000 + Math.random() * 9000000000));
+    // Di database ditambah prefix dari env BSI_VA_PREFIX (default 832231).
+    const vaPrefix = process.env.BSI_VA_PREFIX || '832231';
+    const vaNumber = `${vaPrefix}${vaSuffix}`;
+
+    // Simpan va_number (ber-prefix) ke tabel students
+    await db.query(
+      'UPDATE students SET va_number = ?, va_name = ? WHERE id = ?',
+      [vaNumber, student.nama_siswa, student_id]
+    );
+
+    // Insert ke payment_transactions status pending
+    const finalAmount = amount !== undefined && amount !== null && !isNaN(parseFloat(amount))
+      ? parseFloat(amount)
+      : parseFloat(student.iuran_bulanan) || 0;
+
+    await db.query(
+      `INSERT INTO payment_transactions (tenant_id, student_id, gateway, external_id, amount, status, payment_method, description, metadata)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        tenant_id,
+        student_id,
+        'bsi_manual',
+        vaNumber,
+        finalAmount,
+        'pending',
+        'BSI VA',
+        `VA BSI ${vaNumber} - ${student.nama_siswa}`,
+        JSON.stringify({ student_name: student.nama_siswa })
+      ]
+    );
+
+    res.json({
+      success: true,
+      message: 'VA BSI berhasil dibuat',
+      data: { student_id, va_number: vaNumber, va_name: student.nama_siswa, amount: finalAmount }
+    });
+  } catch (error) {
+    console.error('Create BSI VA error:', error);
+    res.status(500).json({ success: false, message: 'Gagal buat VA BSI' });
+  }
+});
+
+// GET /api/treasurer/bsi/generate-csv?tenant_id=XXX - download CSV sesuai format BSI CUZ
+// Header: Type,Parent Account,Virtual Account Number,Virtual Account Name,Amount,Remark,Transaction Date
+router.get('/treasurer/bsi/generate-csv', authenticateOperator, async (req, res) => {
+  try {
+    const tenantId = req.query.tenant_id;
+    if (tenantId && !verifyTenantAccess(req, tenantId)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+
+    const vaPrefix = process.env.BSI_VA_PREFIX || '832231';
+    const parentAccount = await getBsiParentAccount(tenantId);
+
+    let query = `
+      SELECT s.id, s.nama_siswa, s.tenant_id, tn.nama_sekolah, s.iuran_bulanan, s.va_number
+      FROM students s
+      JOIN tenants tn ON s.tenant_id = tn.tenant_id
+      WHERE (s.status = 'active' OR s.status = 'aktif' OR s.status IS NULL)
+    `;
+    const params = [];
+    if (tenantId) {
+      query += ' AND s.tenant_id = ?';
+      params.push(tenantId);
+    }
+    query += ' ORDER BY tn.nama_sekolah, s.nama_siswa';
+
+    const students = await db.query(query, params);
+
+    // CUZ BSI mengharapkan kolom "Virtual Account Number" berisi 10 digit (tanpa prefix).
+    // Prefix (mis. 2231) ditambahkan otomatis oleh sistem BSI, sehingga kita strip prefix saat export.
+    const stripPrefix = (va, prefix) => {
+      if (!va) return '';
+      if (prefix && va.startsWith(prefix)) return va.slice(prefix.length);
+      // Fallback: jika diawali digit angka dan lebih dari 10, ambil 10 digit terakhir
+      return va.replace(/[^0-9]/g, '').slice(-10);
+    };
+
+    const header = 'Type,Parent Account,Virtual Account Number,Virtual Account Name,Amount,Remark,Transaction Date';
+    const tgl = new Date().toLocaleDateString('id-ID');
+    const rows = (students || []).map(s => {
+      const fullVa = s.va_number || `${vaPrefix}${s.id}`;
+      const va = stripPrefix(fullVa, vaPrefix);
+      const amount = parseFloat(s.iuran_bulanan) || 0;
+      return [
+        'Debit',
+        parentAccount,
+        va,
+        s.nama_siswa,
+        amount,
+        `SPP ${s.nama_siswa}`,
+        tgl
+      ].map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',');
+    });
+
+    const csv = [header, ...rows].join('\n');
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=BSI_VA_${tenantId || 'all'}_${Date.now()}.csv`);
+    res.send(csv);
+  } catch (error) {
+    console.error('Generate BSI CSV error:', error);
+    res.status(500).json({ success: false, message: 'Gagal generate CSV BSI' });
+  }
+});
+
+// POST /api/treasurer/bsi/import-report - import laporan BSI, update payment_transactions -> paid
+// body: { records: [{ "Virtual Account Number", Jumlah, Keterangan }] }
+router.post('/treasurer/bsi/import-report', authenticateOperator, async (req, res) => {
+  try {
+    const { records } = req.body;
+    if (!Array.isArray(records)) {
+      return res.status(400).json({ success: false, message: 'records wajib array' });
+    }
+
+    let paid = 0, notFound = 0, totalAmount = 0;
+    for (const rec of records) {
+      const rawVa = rec['Virtual Account Number'] || rec['Virtual Account Number (Prefix VA + Number)'] || rec.va_number || rec.VirtualAccountNumber;
+      const amount = parseFloat(rec.Jumlah || rec.Amount || rec.amount) || 0;
+      const remark = rec.Keterangan || rec.Remark || rec.remark || '';
+      const paidAt = rec['Transaction Date'] || rec.Tanggal || rec.transaction_date || null;
+
+      if (!rawVa) { notFound++; continue; }
+
+      // CUZ BSI hanya mengembalikan 10 digit (tanpa prefix). Cari transaksi yang
+      // external_id-nya diakhiri dengan suffix tersebut (prefix ditambahkan BSI).
+      const suffix = String(rawVa).replace(/[^0-9]/g, '').slice(-10);
+      const [existing] = await db.query(
+        "SELECT id, tenant_id, student_id, external_id FROM payment_transactions WHERE gateway = ? AND external_id LIKE ? ORDER BY created_at DESC LIMIT 1",
+        ['bsi_manual', `%${suffix}`]
+      );
+
+      if (existing) {
+        await db.query(
+          `UPDATE payment_transactions
+           SET status = 'paid', amount = ?, description = ?, paid_at = ?
+           WHERE id = ?`,
+          [amount || existing.amount, remark, paidAt, existing.id]
+        );
+      } else {
+        // Insert baru sebagai paid bila belum ada (external_id simpan suffix + prefix default)
+        const vaNumber = `2231${suffix}`;
+        await db.query(
+          `INSERT INTO payment_transactions (tenant_id, student_id, gateway, external_id, amount, status, payment_method, description, paid_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [req.user?.tenant_id || 'YPWILUTIM', null, 'bsi_manual', vaNumber, amount, 'paid', 'BSI VA', remark, paidAt]
+        );
+      }
+      paid++;
+      totalAmount += amount;
+    }
+
+    res.json({
+      success: true,
+      message: `${paid} transaksi diupdate menjadi paid, ${notFound} tidak diproses`,
+      paid,
+      notFound,
+      totalAmount
+    });
+  } catch (error) {
+    console.error('Import BSI report error:', error);
+    res.status(500).json({ success: false, message: 'Gagal import laporan BSI' });
+  }
+});
+
+// GET /api/treasurer/bsi/students-with-va - list siswa beserta VA (untuk tabel)
+router.get('/treasurer/bsi/students-with-va', authenticateOperator, async (req, res) => {
+  try {
+    const tenantId = req.query.tenant_id;
+    if (tenantId && !verifyTenantAccess(req, tenantId)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+    let query = `
+      SELECT s.id, s.nama_siswa, s.nisn, s.tenant_id, tn.nama_sekolah, s.iuran_bulanan, s.va_number,
+        (SELECT status FROM payment_transactions pt WHERE pt.external_id = s.va_number AND pt.gateway = 'bsi_manual' ORDER BY pt.created_at DESC LIMIT 1) as va_status
+      FROM students s
+      JOIN tenants tn ON s.tenant_id = tn.tenant_id
+      WHERE (s.status = 'active' OR s.status = 'aktif' OR s.status IS NULL)
+    `;
+    const params = [];
+    if (tenantId) { query += ' AND s.tenant_id = ?'; params.push(tenantId); }
+    query += ' ORDER BY tn.nama_sekolah, s.nama_siswa';
+    const students = await db.query(query, params);
+    res.json({ success: true, data: students });
+  } catch (error) {
+    console.error('BSI students with VA error:', error);
+    res.status(500).json({ success: false, message: 'Gagal ambil data siswa VA' });
+  }
+});
+
+module.exports = router

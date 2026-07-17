@@ -259,7 +259,9 @@ app.use('/api', require('./src/routes/treasurer'));
 app.use('/api', require('./src/routes/xendit'));
 app.use('/api', require('./src/routes/payments'));
 app.use('/api', require('./src/routes/midtrans'));
+app.use('/api', require('./src/routes/doku'));
 app.use('/api', require('./src/routes/public'));
+app.use('/api', require('./src/routes/whatsapp-inbound'));
 
 const logFilePath = path.join(__dirname, 'logs', 'app.log');
 // Ensure logs directory exists
@@ -1425,36 +1427,65 @@ async function startServer() {
     }
   });
 
-  app.post('/api/whatsapp/webhook', async (req, res) => {
-    const signature = req.headers['x-hub-signature-256'];
-    if (signature && process.env.WHATSAPP_APP_SECRET) {
-      const rawBody = JSON.stringify(req.body);
-      const expected = 'sha256=' + crypto.createHmac('sha256', process.env.WHATSAPP_APP_SECRET).update(rawBody).digest('hex');
-      if (signature !== expected) {
-        console.warn('[WA] Webhook signature mismatch — meneruskan payload untuk testing');
-      }
-    } else if (signature && !process.env.WHATSAPP_APP_SECRET) {
-      console.warn('[WA] Webhook signature mismatch — tambahkan WHATSAPP_APP_SECRET di .env untuk verifikasi penuh');
-    }
+// POST /api/whatsapp/webhook - Webhook untuk menerima pesan dari Meta WhatsApp API
+   app.post('/api/whatsapp/webhook', async (req, res) => {
+     const signature = req.headers['x-hub-signature-256'];
+     if (signature && process.env.WHATSAPP_APP_SECRET) {
+       const rawBody = JSON.stringify(req.body);
+       const expected = 'sha256=' + crypto.createHmac('sha256', process.env.WHATSAPP_APP_SECRET).update(rawBody).digest('hex');
+       if (signature !== expected) {
+         console.warn('[WA] Webhook signature mismatch — meneruskan payload untuk testing');
+       }
+     } else if (signature && !process.env.WHATSAPP_APP_SECRET) {
+       console.warn('[WA] Webhook signature mismatch — tambahkan WHATSAPP_APP_SECRET di .env untuk verifikasi penuh');
+     }
 
-    const payload = req.body;
+     const payload = req.body;
 
-    if (payload.object !== 'whatsapp_business_account') {
-      return res.sendStatus(404);
-    }
+     if (payload.object !== 'whatsapp_business_account') {
+       return res.sendStatus(404);
+     }
 
-    payload.entry?.forEach((entry) => {
-      entry.changes?.forEach((change) => {
-        if (change.field === 'messages') {
-          const value = change.value;
-          value.messages?.forEach((msg) => {
-            const from = msg.from;
-            const messageType = msg.type;
-            const textBody = messageType === 'text' ? msg.text?.body : `[${messageType}]`;
-            console.log(`[WA] Pesan Masuk | Dari: ${from} | Tipe: ${messageType} | Isi: ${textBody}`);
+     payload.entry?.forEach(async (entry) => {
+       entry.changes?.forEach(async (change) => {
+         if (change.field === 'messages') {
+           const value = change.value;
+           const contacts = value.contacts || [];
+           const contactMap = {};
+           contacts.forEach(c => {
+             contactMap[c.wa_id] = c.profile?.name || c.verified_name || null;
+           });
 
-            if (messageType === 'text') {
-              const normalized = String(textBody).trim().toUpperCase();
+           value.messages?.forEach(async (msg) => {
+             const from = msg.from;
+             const messageType = msg.type;
+             const textBody = messageType === 'text' ? msg.text?.body : `[${messageType}]`;
+             const profileName = contactMap[from] || msg.profile?.name || null;
+
+             console.log(`[WA] Pesan Masuk | Dari: ${from} | Tipe: ${messageType} | Isi: ${textBody}`);
+
+             // Simpan ke database
+             try {
+               // Cari parent berdasarkan nomor WA
+               const parent = await db.query(
+                 'SELECT id FROM parents WHERE REPLACE(REPLACE(no_wa, "+", ""), " ", "") LIKE CONCAT("%", REPLACE(REPLACE(?, "+", ""), " ", ""), "%") OR REPLACE(REPLACE(no_wa, "+", ""), " ", "") = ?',
+                 [from, from]
+               );
+
+               const parentId = parent?.[0]?.id || null;
+
+               await db.query(
+                 `INSERT INTO whatsapp_messages 
+                  (from_phone, message, message_type, wa_message_id, profile_name, parent_id) 
+                  VALUES (?, ?, ?, ?, ?, ?)`,
+                 [from, textBody || '', messageType, msg.id, profileName, parentId]
+               );
+             } catch (e) {
+               console.error('[WA] Gagal menyimpan pesan masuk:', e.message);
+             }
+
+             if (messageType === 'text') {
+               const normalized = String(textBody).trim().toUpperCase();
 
               if (normalized === 'STOP') {
                 console.log(`[WA] Stop opt-out request: ${from}`);

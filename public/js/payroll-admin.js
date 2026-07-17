@@ -218,7 +218,7 @@ window.loadTenantFilters = async function() {
     });
     try {
         const token = localStorage.getItem('token');
-        const res = await fetch('/api/admin/tenants', { headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
+        const res = await fetch('/api/treasurer/public/tenants', { headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
         const json = await res.json();
         if (json.success) {
             const opts = (json.data || []).map(t => '<option value="' + t.tenant_id + '">' + t.nama_sekolah + '</option>').join('');

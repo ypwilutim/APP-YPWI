@@ -378,15 +378,21 @@ router.post('/scanner/attendance', async (req, res) => {
     const localDateTime = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 
     try {
-      const [tenantData] = await db.query('SELECT use_central_rules FROM tenants WHERE tenant_id = ?', [tenant_id]);
-      let rulesTenantId = tenant_id;
-      if (tenantData && tenantData.use_central_rules) {
-        rulesTenantId = 'YPWILUTIM';
+      const [tenantData] = await db.query('SELECT use_central_rules, tipe_unit FROM tenants WHERE tenant_id = ?', [tenant_id]);
+      let userTipeUnit = tenantData?.tipe_unit || null;
+      const useCentral = tenantData && tenantData.use_central_rules === 1;
+
+      // Query rules: tenant + central by tipe_unit
+      const ruleConditions = ['(tenant_id = ?)'];
+      const ruleParams = [tenant_id];
+      if (useCentral && userTipeUnit) {
+        ruleConditions.push('(tenant_id IS NULL AND tipe_unit = ?)');
+        ruleParams.push(userTipeUnit);
       }
 
       const allRules = await db.query(
-        'SELECT status_log, hari, jam_mulai FROM attendance_rules WHERE tenant_id = ? AND tipe = ? AND ? BETWEEN jam_mulai AND jam_selesai ORDER BY jam_mulai DESC',
-        [rulesTenantId, type === 'masuk' ? 'Datang' : 'Pulang', scanTimeWITA]
+        `SELECT status_log, hari, jam_mulai, tenant_id FROM attendance_rules WHERE ${ruleConditions.join(' OR ')} AND tipe = ? AND ? BETWEEN jam_mulai AND jam_selesai ORDER BY tenant_id NULLS FIRST, jam_mulai DESC`,
+        [...ruleParams, type === 'masuk' ? 'Datang' : 'Pulang', scanTimeWITA]
       );
 
       const matchingRules = allRules.filter(rule => {

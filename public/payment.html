@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pembayaran SPP - YPWI Lutim</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    .payment-tab { cursor: pointer; padding: 12px 24px; background: #f8f9fa; border: 1px solid #ddd; margin-right: 4px; }
+    .payment-tab.active { background: #066e3a; color: white; border-color: #066e3a; }
+    .gateway-content { display: none; }
+    .gateway-content.active { display: block; }
+    #snap-container { min-height: 300px; }
+    .loading-spinner { display: none; }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-dark bg-success">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="/landing.html">YPWI Lutim - Pembayaran SPP</a>
+    </div>
+  </nav>
+
+  <div class="container mt-4">
+    <h4>Bayar SPP</h4>
+    <div class="row mb-3">
+      <div class="col-md-6">
+        <label class="form-label">Kode Tenant</label>
+        <input type="text" id="tenant_id" class="form-control" placeholder="PPIB / YPI / dll">
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">No. Induk Siswa</label>
+        <input type="text" id="student_nis" class="form-control" placeholder="NIS siswa">
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label">Jumlah (Rp)</label>
+      <input type="number" id="amount" class="form-control" placeholder="Biarkan kosong untuk otomatis dari iuran_bulanan">
+    </div>
+
+    <div class="alert alert-info">
+      <strong>Gateway aktif:</strong> <span id="active-gateway">-</span>
+    </div>
+
+    <div id="payment-tabs" class="mb-3">
+      <span class="payment-tab active" data-gateway="auto">Otomatis</span>
+      <span class="payment-tab" data-gateway="midtrans">Midtrans</span>
+      <span class="payment-tab" data-gateway="xendit">Xendit VA</span>
+    </div>
+
+    <div id="auto-content" class="gateway-content active">
+      <p>Menggunakan gateway yang aktif di dashboard admin.</p>
+    </div>
+
+    <div id="midtrans-content" class="gateway-content">
+      <div id="snap-container"></div>
+      <div class="loading-spinner text-center mt-3">
+        <div class="spinner-border text-success" role="status"></div>
+      </div>
+    </div>
+
+    <div id="xendit-content" class="gateway-content">
+      <div id="xendit-result">Klik "Buat Invoice" untuk mendapatkan link pembayaran.</div>
+    </div>
+
+    <button id="create-btn" class="btn btn-success mt-3">Buat Invoice / Buat Pembayaran</button>
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script>
+    let selectedGateway = 'auto';
+    $('.payment-tab').on('click', function() {
+      $('.payment-tab').removeClass('active');
+      $(this).addClass('active');
+      $('.gateway-content').removeClass('active');
+      $('#' + $(this).data('gateway') + '-content').addClass('active');
+      selectedGateway = $(this).data('gateway');
+    });
+
+    function getBaseUrl() { return window.location.origin; }
+
+    $('#create-btn').on('click', async function() {
+      const tenant_id = $('#tenant_id').val().toUpperCase();
+      const student_nis = $('#student_nis').val();
+      const amount = $('#amount').val() || null;
+      if (!tenant_id || !student_nis) {
+        alert('Isi kode tenant dan NIS siswa');
+        return;
+      }
+
+      $('.loading-spinner').show();
+      $(this).prop('disabled', true);
+
+      try {
+        let result;
+        if (selectedGateway === 'auto') {
+          // Get active gateway first
+          const gwRes = await fetch(getBaseUrl() + '/api/public/active-gateway/' + tenant_id);
+          const gwJson = await gwRes.json();
+          if (!gwJson.success) {
+            alert('Tenant belum mengaktifkan gateway pembayaran');
+            return;
+          }
+          const gw = gwJson.data.gateway;
+
+          // Create invoice via unified endpoint
+          const createRes = await fetch(getBaseUrl() + '/api/payments/create-gateway-invoice', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tenant_id, student_id: student_nis, amount })
+          });
+          result = await createRes.json();
+        } else {
+          // Create via specific gateway endpoint
+          const createRes = await fetch(getBaseUrl() + '/api/' + selectedGateway + '/public/create-transaction', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tenant_id, student_id: student_nis, amount })
+          });
+          result = await createRes.json();
+
+          if (selectedGateway === 'midtrans' && result.success) {
+            const snapScript = document.createElement('script');
+            snapScript.src = result.data.snap_js_url;
+            snapScript.onload = function() {
+              snap.pay(result.data.token, {
+                onSuccess: function(res) { alert('Pembayaran berhasil!'); window.location.href = '/landing.html'; },
+                onPending: function(res) { alert('Menunggu pembayaran...'); },
+                onError: function(res) { alert('Pembayaran gagal'); }
+              });
+            };
+            document.getElementById('snap-container').appendChild(snapScript);
+            $('.loading-spinner').hide();
+            $('#create-btn').prop('disabled', false);
+            return;
+          }
+
+          if (selectedGateway === 'xendit' && result.success) {
+            $('#xendit-result').html('<a href="' + result.data.invoice_url + '" target="_blank" class="btn btn-primary">Buka Halaman Pembayaran Xendit</a>');
+          }
+        }
+
+        if (result.success) {
+          alert('Invoice dibuat: ' + (result.data.payment_url || result.data.invoice_url));
+          window.open(result.data.payment_url || result.data.invoice_url, '_blank');
+        } else {
+          alert('Gagal: ' + result.message);
+        }
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
+
+      $('.loading-spinner').hide();
+      $('#create-btn').prop('disabled', false);
+    });
+  </script>
+</body>
+</html>

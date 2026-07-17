@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat WhatsApp - Admin YPWI Lutim</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <style>
+    .messages-container { 
+      height: calc(100vh - 140px); 
+      overflow-y: auto; 
+      background: #efeae2 url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="234" height="234" viewBox="0 0 234 234"><rect fill="%23eae5dd" width="234" height="234"/><path fill="%23d8d3c9" d="M0 0h128v128H0zM128 128h106v106H128zM128 0h106v106H128zM0 128h128v106H0z"/></svg>');
+    }
+    .message-outgoing { background-color: #d1e7db; }
+    .message-incoming { background-color: white; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.2); border-radius: 3px; }
+  </style>
+</head>
+<body class="bg-gray-100">
+  <div class="flex h-screen">
+    <!-- Sidebar - Contacts -->
+    <div class="w-80 bg-white border-r border-gray-200 flex flex-col">
+      <div class="p-4 bg-green-700 text-white">
+        <h2 class="text-lg font-semibold">WhatsApp Admin</h2>
+        <p class="text-xs opacity-80">SDIT YPWI Lutim</p>
+      </div>
+      
+      <div class="p-3 bg-gray-50 border-b">
+        <div class="relative">
+          <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+          <input type="text" id="searchContact" placeholder="Cari percakapan..." 
+            class="w-full pl-10 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-500"
+            onkeyup="if(event.key==='Enter') loadConversations()">
+        </div>
+      </div>
+      
+      <div id="contactsList" class="flex-1 overflow-y-auto">
+        <div class="p-4 text-center text-gray-500 text-sm">
+          <i class="fas fa-spinner fa-spin"></i> Memuat...
+        </div>
+      </div>
+    </div>
+    
+    <!-- Main Chat Area -->
+    <div class="flex-1 flex flex-col">
+      <!-- Chat Header -->
+      <div class="bg-gray-50 border-b border-gray-200 p-4 flex items-center" id="chatHeader">
+        <div class="w-10 h-10 bg-gray-300 rounded-full flex items-center justify-center mr-3 overflow-hidden" id="contactAvatar">
+          <i class="fas fa-user text-gray-600"></i>
+        </div>
+        <div>
+          <h3 class="font-medium text-gray-800" id="chatTitle">Pilih percakapan</h3>
+          <p class="text-xs text-gray-500" id="chatPhone">-</p>
+        </div>
+      </div>
+      
+      <!-- Messages -->
+      <div class="messages-container p-4" id="messagesContainer">
+        <p class="text-center text-gray-600 text-sm mt-8">Pilih percakapan untuk melihat pesan</p>
+      </div>
+      
+      <!-- Message Input -->
+      <div class="bg-gray-50 border-t border-gray-200 p-3 flex space-x-2" id="messageInputArea">
+        <button class="p-2 text-gray-500 hover:text-gray-700" disabled>
+          <i class="fas fa-paperclip"></i>
+        </button>
+        <input type="text" id="messageInput" placeholder="Ketik pesan..." 
+          class="flex-1 px-4 py-2 text-sm border border-gray-300 rounded-full bg-white focus:outline-none focus:ring-1 focus:ring-green-500 disabled:bg-gray-100"
+          onkeypress="if(event.key==='Enter') sendMessage()" disabled>
+        <button onclick="sendMessage()" class="p-2 bg-green-600 text-white rounded-full hover:bg-green-700 disabled:opacity-50" disabled id="sendBtn">
+          <i class="fas fa-paper-plane"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    let selectedPhone = null;
+    let contactProfile = null;
+    const authToken = localStorage.getItem('token') || '';
+    
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+    
+    function formatTime(dateStr) {
+      if (!dateStr) return '';
+      const d = new Date(dateStr);
+      return d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+    }
+    
+    function formatDate(dateStr) {
+      if (!dateStr) return '';
+      const d = new Date(dateStr);
+      const now = new Date();
+      const yesterday = new Date(now);
+      yesterday.setDate(yesterday.getDate() - 1);
+      
+      if (d.toDateString() === now.toDateString()) return 'Hari ini';
+      if (d.toDateString() === yesterday.toDateString()) return 'Kemarin';
+      return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+    }
+    
+    async function loadConversations() {
+      const container = document.getElementById('contactsList');
+      const search = document.getElementById('searchContact')?.value || '';
+      
+      container.innerHTML = '<div class="p-4 text-center text-gray-500 text-sm"><i class="fas fa-spinner fa-spin"></i></div>';
+      
+      try {
+        const res = await fetch(`/api/whatsapp/inbound/conversations?search=${encodeURIComponent(search)}`, {
+          headers: { 'Authorization': 'Bearer ' + authToken }
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+          container.innerHTML = data.conversations?.length 
+            ? data.conversations.map(c => `
+              <div class="flex items-center p-3 hover:bg-gray-100 cursor-pointer border-b border-gray-100" 
+                   onclick="selectConversation('${c.phone_number}')">
+                <div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mr-3 flex-shrink-0 overflow-hidden">
+                  ${c.contact_photo 
+                    ? `<img src="${c.contact_photo}" class="w-full h-full object-cover" alt="Avatar">` 
+                    : `<i class="fas fa-user text-green-600 text-lg"></i>`
+                  }
+                </div>
+                <div class="flex-1 min-w-0">
+                  <p class="font-medium text-gray-800 truncate text-sm">${c.contact_name || c.phone_number}</p>
+                  <p class="text-xs text-gray-500 truncate">${c.last_message || 'Belum ada pesan'}</p>
+                </div>
+                <div class="text-right">
+                  <span class="text-xs text-gray-400">${formatTime(c.last_time)}</span>
+                </div>
+              </div>
+            `).join('')
+            : '<p class="p-4 text-center text-gray-500 text-sm">Belum ada percakapan</p>';
+        }
+      } catch (e) {
+        container.innerHTML = '<p class="p-4 text-center text-red-500 text-sm">Gagal memuat</p>';
+      }
+    }
+    
+    async function selectConversation(phone) {
+      selectedPhone = phone;
+      document.getElementById('messageInput').disabled = false;
+      document.getElementById('sendBtn').disabled = false;
+      document.getElementById('messageInput').focus();
+      
+      try {
+        const res = await fetch(`/api/whatsapp/inbound/conversations/${phone}/messages`, {
+          headers: { 'Authorization': 'Bearer ' + authToken }
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+          contactProfile = data.contact;
+          
+          document.getElementById('chatTitle').textContent = data.contact?.name || phone;
+          document.getElementById('chatPhone').textContent = phone;
+          
+          document.getElementById('contactAvatar').innerHTML = data.contact?.photo
+            ? `<img src="${data.contact.photo}" class="w-full h-full object-cover" alt="Avatar">`
+            : '<i class="fas fa-user text-gray-600 text-lg"></i>';
+          
+          const container = document.getElementById('messagesContainer');
+          let html = '';
+          let lastDate = '';
+          
+          if (data.messages?.length) {
+            html = data.messages.map(m => {
+              const dateStr = formatDate(m.created_at);
+              const dateHtml = dateStr !== lastDate 
+                ? `<div class="text-center text-xs text-gray-600 my-2"><span class="bg-white px-3 py-1 rounded">${dateStr}</span></div>` 
+                : '';
+              lastDate = dateStr;
+              
+              const isOutgoing = m.is_outgoing === true;
+              return dateHtml + `
+                <div class="flex mb-1 ${isOutgoing ? 'justify-end' : 'justify-start'}">
+                  <div class="max-w-xs lg:max-w-md px-3 py-2 rounded-md shadow-sm ${isOutgoing ? 'message-outgoing' : 'message-incoming'}">
+                    ${m.message_type !== 'text' && m.message_type !== 'unknown'
+                      ? `<div class="text-xs mb-1 text-gray-600">[${m.message_type}]</div>`
+                      : ''
+                    }
+                    <p class="text-sm text-gray-800">${escapeHtml(m.message || '')}</p>
+                    <div class="flex items-center justify-end mt-1 space-x-1">
+                      <span class="text-xs text-gray-600">${formatTime(m.created_at)}</span>
+                      ${isOutgoing ? `<i class="fas fa-check text-gray-500 text-xs"></i>` : ''}
+                    </div>
+                  </div>
+                </div>
+              `;
+            }).join('');
+          } else {
+            html = '<p class="text-center text-gray-600 text-sm mt-8">Belum ada pesan</p>';
+          }
+          
+          container.innerHTML = html;
+          container.scrollTop = container.scrollHeight;
+        }
+      } catch (e) {
+        document.getElementById('messagesContainer').innerHTML = '<p class="text-center text-red-500">Gagal memuat pesan</p>';
+      }
+    }
+    
+    async function sendMessage() {
+      const input = document.getElementById('messageInput');
+      const msg = input.value.trim();
+      if (!msg || !selectedPhone) return;
+      
+      const btn = document.getElementById('sendBtn');
+      btn.disabled = true;
+      
+      try {
+        const res = await fetch('/api/whatsapp/inbound/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+          body: JSON.stringify({ to: selectedPhone, message: msg })
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+          input.value = '';
+          selectConversation(selectedPhone);
+        } else {
+          alert(data.message || 'Gagal mengirim balasan');
+        }
+      } catch (e) {
+        alert('Gagal mengirim balasan');
+      }
+      btn.disabled = false;
+    }
+    
+    document.addEventListener('DOMContentLoaded', loadConversations);
+  </script>
+</body>
+</html>

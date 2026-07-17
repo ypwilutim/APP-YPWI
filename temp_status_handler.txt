@@ -1,0 +1,22 @@
+if (change.field === 'messaging_status') {
+          const statusData = change.value;
+          const statuses = statusData?.statuses || [];
+          
+          for (const status of statuses) {
+            const waMsgId = status.id;
+            const newStatus = status.status; // 'delivered' or 'read'
+            
+            console.log(`[WA] Status Update: ${waMsgId} -> ${newStatus}`);
+            
+            // Update status in database
+            try {
+              await db.query(
+                'UPDATE whatsapp_messages SET status = ? WHERE wa_message_id = ?',
+                [newStatus === 'delivered' ? 'replied' : newStatus, waMsgId]
+              );
+            } catch (e) {
+              console.error('[WA] Gagal update status:', e.message);
+            }
+          }
+        }
+      });

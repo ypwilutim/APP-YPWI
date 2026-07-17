@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pembayaran SPP - YPWI Payment</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <div class="max-w-2xl mx-auto p-4">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
+      <div class="flex items-center space-x-3 mb-6">
+        <div class="w-12 h-12 bg-emerald-600 rounded-lg flex items-center justify-center">
+          <i class="fas fa-wallet text-white text-xl"></i>
+        </div>
+        <div>
+          <h1 class="text-xl font-bold text-gray-900">YPWI Payment Gateway</h1>
+          <p class="text-sm text-gray-600">Pembayaran SPP & Biaya Pendidikan</p>
+        </div>
+      </div>
+
+      <div id="paymentContent" class="hidden">
+        <div class="border-b border-gray-100 pb-4 mb-4">
+          <table class="w-full text-sm">
+            <tr><td class="py-1 text-gray-600">Nama Siswa</td><td class="py-1 font-medium" id="studentName">-</td></tr>
+            <tr><td class="py-1 text-gray-600">Sekolah</td><td class="py-1 font-medium" id="schoolName">-</td></tr>
+            <tr><td class="py-1 text-gray-600">Jumlah Tagihan</td><td class="py-1 font-bold text-emerald-600" id="amount">-</td></tr>
+          </table>
+        </div>
+        
+        <div id="gatewayOptions" class="space-y-3 mb-6">
+          <h3 class="text-sm font-semibold text-gray-700 mb-2">Pilih Metode Pembayaran</h3>
+          <label class="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50" data-gateway="doku">
+            <input type="radio" name="gateway" value="doku" class="mr-3" checked>
+            <i class="fas fa-credit-card mr-2 text-blue-600"></i>
+            <span>DOKU Payment Gateway</span>
+          </label>
+          <label class="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50" data-gateway="xendit">
+            <input type="radio" name="gateway" value="xendit" class="mr-3">
+            <i class="fas fa-wallet mr-2 text-purple-600"></i>
+            <span>Xendit VA/QR</span>
+          </label>
+          <label class="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50" data-gateway="bsi_manual">
+            <input type="radio" name="gateway" value="bsi_manual" class="mr-3">
+            <i class="fas fa-university mr-2 text-green-600"></i>
+            <span>BSI Transfer (VA)</span>
+          </label>
+        </div>
+        
+        <button id="payBtn" class="w-full px-4 py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium">
+          <i class="fas fa-external-link-alt mr-2"></i>Lanjutkan Pembayaran
+        </button>
+      </div>
+      
+      <div id="errorContent" class="hidden text-center py-8">
+        <i class="fas fa-exclamation-circle text-red-500 text-3xl mb-3"></i>
+        <p class="text-red-600" id="errorMessage">Gagal memuat data</p>
+        <a href="/" class="inline-block mt-4 px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400">Kembali ke Beranda</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const tenantId = urlParams.get('tenant');
+    const studentId = urlParams.get('student');
+
+    if (tenantId && studentId) {
+      loadPaymentData(tenantId, studentId);
+    } else {
+      showError('Parameter tenant dan student diperlukan');
+    }
+
+    async function loadPaymentData(tenant, student) {
+      try {
+        const res = await fetch(`/api/treasurer/public/students?tenant_id=${tenant}`);
+        const json = await res.json();
+        
+        if (json.success) {
+          const studentData = json.data.find(s => s.id == student);
+          if (studentData) {
+            document.getElementById('studentName').textContent = studentData.nama_siswa;
+            document.getElementById('schoolName').textContent = studentData.nama_sekolah || tenant;
+            document.getElementById('amount').textContent = 'Rp ' + (studentData.iuran_bulanan || 500000).toLocaleString('id-ID');
+            document.getElementById('paymentContent').classList.remove('hidden');
+          } else {
+            showError('Siswa tidak ditemukan');
+          }
+        }
+      } catch (e) {
+        showError('Gagal memuat data');
+      }
+    }
+
+    function showError(msg) {
+      document.getElementById('errorMessage').textContent = msg;
+      document.getElementById('errorContent').classList.remove('hidden');
+    }
+
+    document.getElementById('payBtn').addEventListener('click', () => {
+      const gateway = document.querySelector('input[name="gateway"]:checked').value;
+      
+      if (gateway === 'doku') {
+        createDokuInvoice();
+      } else if (gateway === 'xendit') {
+        createXenditInvoice();
+      } else if (gateway === 'bsi_manual') {
+        showBsiVa();
+      }
+    });
+
+    async function createDokuInvoice() {
+      const res = await fetch('/api/doku/create-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenant_id: tenantId, student_id: parseInt(studentId) })
+      });
+      const json = await res.json();
+      if (json.success) window.open(json.invoice_url, '_blank');
+    }
+
+    async function createXenditInvoice() {
+      const res = await fetch('/api/xendit/public/create-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenant_id: tenantId, student_id: parseInt(studentId) })
+      });
+      const json = await res.json();
+      if (json.success) window.open(json.invoice_url, '_blank');
+    }
+
+    async function showBsiVa() {
+      const [gw] = await fetch('/api/treasurer/gateway/settings?tenant_id=' + tenantId).then(r => r.json());
+      const vaPrefix = gw?.config?.va_prefix || '2231';
+      alert('Virtual Account BSI: ' + vaPrefix + studentId + '\n\nTransfer ke BSI 102910210192');
+    }
+  </script>
+</body>
+</html>

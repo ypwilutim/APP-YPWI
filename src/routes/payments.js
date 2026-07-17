@@ -806,4 +806,133 @@ router.post('/payments/settings', authenticateAdmin, async (req, res) => {
   }
 });
 
+async function ensurePaymentTransactionsTable() {
+  try {
+    await db.query(`CREATE TABLE IF NOT EXISTS payment_transactions (
+      id BIGINT AUTO_INCREMENT PRIMARY KEY,
+      tenant_id VARCHAR(20) NOT NULL,
+      student_id INT,
+      gateway VARCHAR(20) NOT NULL,
+      external_id VARCHAR(100),
+      amount DECIMAL(12,2),
+      status VARCHAR(20),
+      payment_method VARCHAR(50),
+      description TEXT,
+      metadata JSON,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      paid_at TIMESTAMP NULL,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_tenant_gateway (tenant_id, gateway),
+      INDEX idx_external (external_id),
+      INDEX idx_student (student_id),
+      INDEX idx_status (status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    await db.query(`CREATE TABLE IF NOT EXISTS payment_gateways (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      tenant_id VARCHAR(20) NOT NULL,
+      gateway VARCHAR(20) NOT NULL,
+      api_key VARCHAR(255),
+      api_secret VARCHAR(255),
+      client_key VARCHAR(255),
+      is_active TINYINT(1) DEFAULT 0,
+      config JSON,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY unique_gateway_per_tenant (tenant_id, gateway)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`)
+  } catch (e) {
+    console.error('[PAYMENTS] ensure tables error:', e.message)
+  }
+}
+
+router.get('/payments/gateways', authenticateAdmin, async (req, res) => {
+  try {
+    const tenantId = req.query.tenant_id
+    if (!tenantId) return res.status(400).json({ success: false, message: 'tenant_id required' })
+    if (!verifyTenantAccess(req, tenantId)) return res.status(403).json({ success: false, message: 'Akses ditolak' })
+    await ensurePaymentTransactionsTable()
+    const [gateways] = await db.query('SELECT gateway, is_active, config FROM payment_gateways WHERE tenant_id = ? ORDER BY gateway ASC', [tenantId])
+    res.json({ success: true, data: gateways })
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error fetching gateways' })
+  }
+})
+
+router.post('/payments/gateways/toggle', authenticateAdmin, async (req, res) => {
+  try {
+    const { tenant_id, gateway, enabled } = req.body
+    if (!tenant_id || !gateway) return res.status(400).json({ success: false, message: 'tenant_id dan gateway required' })
+    if (!verifyTenantAccess(req, tenant_id)) return res.status(403).json({ success: false, message: 'Akses ditolak' })
+    await ensurePaymentTransactionsTable()
+    const [existing] = await db.query('SELECT id FROM payment_gateways WHERE tenant_id = ? AND gateway = ?', [tenant_id, gateway])
+    if (existing) {
+      await db.query('UPDATE payment_gateways SET is_active = ? WHERE tenant_id = ? AND gateway = ?', [enabled ? 1 : 0, tenant_id, gateway])
+    } else {
+      await db.query('INSERT INTO payment_gateways (tenant_id, gateway, is_active) VALUES (?, ?, ?)', [tenant_id, gateway, enabled ? 1 : 0])
+    }
+    res.json({ success: true, message: `Gateway ${gateway} ${enabled ? 'diaktifkan' : 'dinonaktifkan'}` })
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error toggling gateway' })
+  }
+})
+
+router.get('/payments/gateway-transactions', authenticateOperator, async (req, res) => {
+  try {
+    const tenantId = req.query.tenant_id
+    const gateway = req.query.gateway
+    const status = req.query.status
+    if (!tenantId) return res.status(400).json({ success: false, message: 'tenant_id required' })
+    if (!verifyTenantAccess(req, tenantId)) return res.status(403).json({ success: false, message: 'Akses ditolak' })
+    await ensurePaymentTransactionsTable()
+    let query = 'SELECT pt.*, s.nama_siswa FROM payment_transactions pt JOIN students s ON pt.student_id = s.id WHERE pt.tenant_id = ?'
+    const params = [tenantId]
+    if (gateway) { query += ' AND pt.gateway = ?'; params.push(gateway) }
+    if (status) { query += ' AND pt.status = ?'; params.push(status) }
+    query += ' ORDER BY pt.created_at DESC LIMIT 100'
+    const [transactions] = await db.query(query, params)
+    res.json({ success: true, data: transactions })
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Error fetching gateway transactions' })
+  }
+})
+
+router.post('/payments/create-gateway-invoice', authenticateOperator, async (req, res) => {
+  try {
+    const { tenant_id, student_id, amount, description } = req.body
+    if (!tenant_id || !student_id) return res.status(400).json({ success: false, message: 'tenant_id dan student_id required' })
+    if (!verifyTenantAccess(req, tenant_id)) return res.status(403).json({ success: false, message: 'Akses ditolak' })
+    await ensurePaymentTransactionsTable()
+    const [activeGw] = await db.query('SELECT * FROM payment_gateways WHERE tenant_id = ? AND is_active = 1 LIMIT 1', [tenant_id])
+    if (!activeGw) return res.status(400).json({ success: false, message: 'Tidak ada gateway aktif untuk tenant ini' })
+    const finalAmount = await computeInvoiceAmount(student_id, tenant_id, amount)
+    const date = now()
+    const periode = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+    const externalId = `GW-${tenant_id}-${periode}-${student_id}-${Date.now().toString(36).toUpperCase()}`
+    const [student] = await db.query('SELECT nama_siswa, nisn FROM students WHERE id = ? AND tenant_id = ?', [student_id, tenant_id])
+    if (!student) return res.status(404).json({ success: false, message: 'Siswa tidak ditemukan' })
+    let paymentUrl = null
+    let gatewayResponse = null
+    if (activeGw.gateway === 'midtrans') {
+      const midtransRouter = require('./midtrans')
+      const snapResult = await midtransRouter.createSnapTransaction({ tenant_id: tenant_id, student_id, amount: finalAmount, order_id: externalId, student_name: student.nama_siswa })
+      paymentUrl = snapResult.redirect_url
+      gatewayResponse = snapResult
+    } else if (activeGw.gateway === 'xendit') {
+      const xenditRouter = require('./xendit')
+      const xvResult = await xenditRouter.createVaPayment({ tenant_id: tenant_id, student_id, amount: finalAmount, external_id: externalId })
+      paymentUrl = xvResult.invoice_url
+      gatewayResponse = xvResult
+    }
+    await db.query(
+      `INSERT INTO payment_transactions (tenant_id, student_id, gateway, external_id, amount, status, payment_method, description, metadata)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [tenant_id, student_id, activeGw.gateway, externalId, finalAmount, 'pending', activeGw.gateway === 'midtrans' ? 'snap' : 'va', description || `SPP ${student.nama_siswa} - ${periode}`, JSON.stringify(gatewayResponse || {})]
+    )
+    res.json({ success: true, data: { external_id: externalId, amount: finalAmount, gateway: activeGw.gateway, payment_url: paymentUrl } })
+  } catch (error) {
+    console.error('Create gateway invoice error:', error)
+    res.status(500).json({ success: false, message: 'Error creating gateway invoice' })
+  }
+})
+
 module.exports = router;

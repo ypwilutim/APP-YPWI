@@ -1,0 +1,26 @@
+-- Tabel pesan WhatsApp (gabungan incoming + outgoing) - Versi final
+CREATE TABLE IF NOT EXISTS whatsapp_messages (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    phone_number VARCHAR(20) NOT NULL,
+    message TEXT,
+    message_type ENUM('text', 'image', 'audio', 'video', 'document', 'location', 'contacts', 'interactive', 'unknown') DEFAULT 'text',
+    media_url TEXT,
+    media_filename VARCHAR(255),
+    wa_message_id VARCHAR(100),
+    status ENUM('sent', 'delivered', 'read', 'received', 'failed') DEFAULT 'sent',
+    direction ENUM('outgoing', 'incoming') DEFAULT 'incoming',
+    contact_name VARCHAR(100),
+    contact_photo_url TEXT,
+    parent_id INT DEFAULT NULL,
+    teacher_id INT DEFAULT NULL,
+    student_id INT DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_phone (phone_number),
+    INDEX idx_created_at (created_at),
+    INDEX idx_status (status),
+    INDEX idx_direction (direction),
+    INDEX idx_parent (parent_id),
+    INDEX idx_teacher (teacher_id),
+    INDEX idx_student (student_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

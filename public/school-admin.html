@@ -331,7 +331,8 @@
               style="font-size: 1.3rem; display: block; margin-bottom: 2px; color: #93c3d2;"></i><span
               style="font-size: 0.65rem; font-weight: 600;">Absen</span>
           </button>
-          <button class="mobile-tab-btn flex-1 py-1 px-1 text-center text-gray-600 rounded-lg" data-tab="rules" style="display:none;">
+          <button class="mobile-tab-btn flex-1 py-1 px-1 text-center text-gray-600 rounded-lg" data-tab="rules"
+            style="display:none;">
             <i class="fas fa-clock"
               style="font-size: 1.3rem; display: block; margin-bottom: 2px; color: #f59e0b;"></i><span
               style="font-size: 0.65rem; font-weight: 600;">Aturan</span>
@@ -499,15 +500,18 @@
                 class="px-3 py-2 bg-indigo-600 text-white rounded-md text-sm hover:bg-indigo-700">
                 <i class="fas fa-list mr-1"></i>List Mutasi
               </button>
+              <button onclick="showImportModal()"
+                class="px-3 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700">
+                <i class="fas fa-file-import mr-1"></i>Import Data
+              </button>
               <button onclick="exportAllStudents()"
                 class="px-3 py-2 bg-green-600 text-white rounded-md text-sm hover:bg-green-700">
                 <i class="fas fa-file-excel mr-1"></i>Export Perbaikan
               </button>
-              <label class="px-3 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700 cursor-pointer">
-                <i class="fas fa-upload mr-1"></i>Import Perbaikan
-                <input type="file" id="studentImportInput" accept=".xlsx,.xls,.csv" class="hidden"
-                  onchange="importIncompleteStudents(this)">
-              </label>
+              <input type="file" id="studentImportInput" accept=".xlsx,.xls,.csv" class="hidden"
+                onchange="importIncompleteStudents(this)">
+              <input type="file" id="studentNewImportInput" accept=".xlsx,.xls,.csv" class="hidden"
+                onchange="importNewStudents(this)">
               <button onclick="showAddStudentModal()"
                 class="btn-primary text-white px-4 py-2 rounded-lg text-sm flex items-center"><i
                   class="fas fa-plus mr-2"></i>Tambah Siswa</button>
@@ -587,12 +591,10 @@
           </div>
 
           <!-- Promote All Class Button -->
-          <div class="mb-4 flex justify-end">
-            <button onclick="showPromoteClassModal()"
+          <button onclick="showPromoteClassModal()"
               class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">
               <i class="fas fa-level-up-alt mr-2"></i>Naik Kelas Massal
             </button>
-          </div>
 
           <div class="overflow-x-auto">
             <table class="w-full modern-table">
@@ -797,7 +799,8 @@
             </div>
             <div class="flex items-center gap-3">
               <label class="flex items-center text-sm font-medium text-gray-700 cursor-pointer select-none">
-                <input type="checkbox" id="aturanCentralToggle" class="mr-2 h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500" />
+                <input type="checkbox" id="aturanCentralToggle"
+                  class="mr-2 h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500" />
                 Gunakan Aturan Pusat
               </label>
               <button onclick="showAddAturanModal()"
@@ -812,7 +815,8 @@
                 <h5 class="font-medium text-blue-900">Informasi Aturan</h5>
                 <p class="text-sm text-blue-700 mt-1">Aturan di bawah hanya berlaku untuk tenant ini. Jika
                   <strong>"Gunakan Aturan Pusat"</strong> dicentang, aturan pusat YPWILUTIM akan ditampilkan secara
-                  <strong>read-only</strong> (tidak dapat diedit) dan berlaku bersama aturan tenant ini.</p>
+                  <strong>read-only</strong> (tidak dapat diedit) dan berlaku bersama aturan tenant ini.
+                </p>
               </div>
             </div>
           </div>
@@ -947,21 +951,50 @@
               </table>
             </div>
 
-            <form id="promoteForm">
-              <div class="flex justify-end space-x-3">
-                <button type="button" onclick="hidePromoteClassModal()"
-                  class="px-4 py-2 text-gray-600 hover:text-gray-800 text-sm">Batal</button>
-                <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm"
-                  id="promoteSubmitBtn" disabled>
-                  <i class="fas fa-rocket mr-2"></i>Proses Naik Kelas
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      </div>
+<form id="promoteForm">
+                <div class="flex justify-between items-center mb-3">
+                  <button type="button" onclick="createNewClassForPromote()"
+                    class="px-3 py-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm">
+                    <i class="fas fa-plus mr-1"></i>Buat Kelas Baru
+                  </button>
+                </div>
+                <div class="flex justify-end space-x-3">
+                  <button type="button" onclick="hidePromoteClassModal()"
+                    class="px-4 py-2 text-gray-600 hover:text-gray-800 text-sm">Batal</button>
+                  <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm"
+                    id="promoteSubmitBtn" disabled>
+                    <i class="fas fa-rocket mr-2"></i>Proses Naik Kelas
+                  </button>
+                </div>
+</form>
+             </div>
+           </div>
+         </div>
 
-      <!-- Location Modal (sama seperti admin-dashboard.html) -->
+         <!-- Import Options Modal -->
+         <div id="importOptionsModal" class="modal fixed inset-0 bg-black bg-opacity-50 z-50 justify-center items-center hidden">
+           <div class="main-card w-full max-w-md mx-4 bg-white">
+             <div class="p-6">
+               <div class="flex items-center justify-between mb-4">
+                 <h3 class="text-lg font-semibold">Import Data Siswa</h3>
+                 <button onclick="hideImportOptionsModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
+               </div>
+               <div class="space-y-3">
+                 <button onclick="openIncompleteImport()" class="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center">
+                   <i class="fas fa-upload mr-2"></i>Import Perbaikan Data
+                 </button>
+                 <button onclick="openNewStudentImport()" class="w-full px-4 py-3 bg-amber-600 text-white rounded-lg hover:bg-amber-700 flex items-center justify-center">
+                   <i class="fas fa-user-plus mr-2"></i>Import Siswa Baru
+                 </button>
+                 <button onclick="downloadStudentImportTemplate()" class="w-full px-4 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center justify-center">
+                   <i class="fas fa-download mr-2"></i>Download Template Import
+                 </button>
+               </div>
+             </div>
+           </div>
+         </div>
+
+         <!-- Location Modal (sama seperti admin-dashboard.html) -->
       <div id="locationModal" class="modal fixed inset-0 bg-black bg-opacity-50 z-50 justify-center items-center">
         <div class="main-card max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto bg-white">
           <div class="p-6">
@@ -1110,8 +1143,8 @@
           window.location.href = 'dashboard.html';
         }
 
-        const tenantId = window.tenantId;
-        const schoolName = urlParams.get('school') || userAssignments[0]?.nama_sekolah;
+const tenantId = window.tenantId;
+         const schoolName = urlParams.get('school') || userAssignments.find(a => a.tenant_id === window.tenantId)?.nama_sekolah || window.tenantId;
         if (!tenantId) { alert('Parameter tenant tidak ditemukan.'); window.location.href = 'dashboard.html'; }
 
         document.getElementById('schoolNameHeader').textContent = schoolName || tenantId;
@@ -1220,10 +1253,10 @@
           } catch (e) { console.error('[DASHBOARD]', e); }
         }
 
-        async function loadAttendanceChart() {
-          try {
-            const r = await fetch(apiUrl('/admin/attendance-logs'), { headers: { 'Authorization': `Bearer ${authToken}` } });
-            if (!r.ok) return;
+async function loadAttendanceChart() {
+           try {
+             const r = await fetch(apiUrl('/admin/attendance-logs?tenant_id=' + tenantId), { headers: { 'Authorization': `Bearer ${authToken}` } });
+             if (!r.ok) return;
             const d = await r.json();
             if (!d.success) return;
             const days = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
@@ -1738,12 +1771,12 @@
           document.getElementById('promoteSubmitBtn').disabled = !hasMappings;
         }
 
-        function hidePromoteClassModal() {
-          document.getElementById('promoteClassModal').classList.remove('show');
-          window.promoteMappings = {};
-        }
+function hidePromoteClassModal() {
+           document.getElementById('promoteClassModal').classList.remove('show');
+           window.promoteMappings = {};
+         }
 
-        async function createNewClassForPromote() {
+         async function createNewClassForPromote() {
           const { value: namaKelas } = await Swal.fire({
             title: 'Buat Kelas Baru',
             input: 'text',
@@ -1987,16 +2020,57 @@
         };
 
         // Auto-show only if there are incomplete students
-        window.autoShowIncompleteStudentsModal = async function () {
-          const students = await fetchIncompleteStudents();
-          if (students && students.length > 0) {
-            renderIncompleteStudents(students);
-            const modal = document.getElementById('incompleteStudentsModal');
-            if (modal) modal.classList.add('show');
-          }
-        };
+window.autoShowIncompleteStudentsModal = async function () {
+           const students = await fetchIncompleteStudents();
+           if (students && students.length > 0) {
+             renderIncompleteStudents(students);
+             const modal = document.getElementById('incompleteStudentsModal');
+             if (modal) modal.classList.add('show');
+           }
+         };
 
-        // Export incomplete students to Excel (authenticated download)
+         // Download template import siswa baru
+window.downloadStudentImportTemplate = async function () {
+           try {
+             const url = apiUrl('/admin/students/import-template?tenant_id=' + tenantId);
+             const r = await fetch(url, { headers: { 'Authorization': `Bearer ${authToken}` } });
+             if (!r.ok) { Swal.fire('Gagal', 'Tidak dapat mengunduh template', 'error'); return; }
+             const blob = await r.blob();
+             const downloadUrl = window.URL.createObjectURL(blob);
+             const a = document.createElement('a');
+             a.href = downloadUrl;
+             a.download = 'template_import_siswa_baru.xlsx';
+             document.body.appendChild(a);
+             a.click();
+             a.remove();
+             window.URL.revokeObjectURL(downloadUrl);
+           } catch (e) {
+             console.error('[TEMPLATE]', e);
+             Swal.fire('Error', 'Terjadi kesalahan saat download template', 'error');
+           }
+         };
+
+         // Import Options Modal
+         window.showImportModal = function () {
+           document.getElementById('importOptionsModal').classList.remove('hidden');
+           document.getElementById('importOptionsModal').classList.add('show');
+         };
+
+         window.hideImportOptionsModal = function () {
+           document.getElementById('importOptionsModal').classList.remove('show');
+         };
+
+         window.openIncompleteImport = function () {
+           hideImportOptionsModal();
+           document.getElementById('studentImportInput').click();
+         };
+
+         window.openNewStudentImport = function () {
+           hideImportOptionsModal();
+           document.getElementById('studentNewImportInput').click();
+         };
+
+         // Export incomplete students to Excel (authenticated download)
         window.exportIncompleteStudents = async function () {
           try {
             const url = apiUrl('/admin/students/incomplete/export');
@@ -2040,46 +2114,104 @@
           }
         };
 
-        // Import edited Excel to update students
-        window.importIncompleteStudents = async function (input) {
-          const file = input.files && input.files[0];
-          if (!file) return;
-          const formData = new FormData();
-          formData.append('file', file);
-          formData.append('tenant_id', tenantId);
+// Import edited Excel to update students with progress percentage
+         window.importIncompleteStudents = function (input) {
+           const file = input.files && input.files[0];
+           if (!file) return;
+           const formData = new FormData();
+           formData.append('file', file);
+           formData.append('tenant_id', tenantId);
 
-          Swal.fire({ title: 'Mengupload...', text: 'Memproses file excel', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-          try {
-            const r = await fetch(apiUrl('/admin/students/incomplete/import'), {
-              method: 'POST',
-              headers: { 'Authorization': `Bearer ${authToken}` },
-              body: formData
-            });
-            const d = await r.json();
-            if (d.success) {
-              let msg = `${d.updated} siswa berhasil diperbarui.`;
-              if (d.errors && d.errors.length) msg += `\n${d.errors.length} baris gagal:\n` + d.errors.slice(0, 10).join('\n');
-              await Swal.fire('Selesai', msg, d.errors && d.errors.length ? 'warning' : 'success');
-              // Refresh student list
-              loadStudents(currentStudentPage);
-              // Also refresh incomplete modal if open
-              const modal = document.getElementById('incompleteStudentsModal');
-              if (modal && modal.classList.contains('show')) {
-                const students = await fetchIncompleteStudents();
-                renderIncompleteStudents(students);
-              }
-            } else {
-              Swal.fire('Gagal', d.message || 'Import gagal', 'error');
-            }
-          } catch (e) {
-            console.error('[IMPORT]', e);
-            Swal.fire('Error', 'Terjadi kesalahan saat import', 'error');
-          } finally {
-            input.value = '';
-          }
-        };
+           const swalProgress = Swal.fire({
+             title: 'Mengupload...',
+             html: '<div id="importProgress">Memulai upload...<br><progress class="w-full h-2" value="0" max="100"></progress><div id="progressPercent" class="text-sm text-gray-600 mt-1">0%</div></div>',
+             allowOutsideClick: false,
+             showConfirmButton: false
+           });
 
-        // Edit student - opens modal with all fields (delegates to window.editStudent from admin-dashboard.js)
+           const xhr = new XMLHttpRequest();
+           xhr.upload.addEventListener('progress', function (e) {
+             if (e.lengthComputable) {
+               const percent = Math.round((e.loaded / e.total) * 100);
+               const progressBar = document.querySelector('#importProgress progress');
+               const progressText = document.getElementById('progressPercent');
+               if (progressBar) progressBar.value = percent;
+               if (progressText) progressText.textContent = percent + '%';
+             }
+           });
+
+           xhr.onreadystatechange = async function () {
+             if (xhr.readyState === 4) {
+               const d = xhr.responseText ? JSON.parse(xhr.responseText) : {};
+               if (xhr.status === 200 && d.success) {
+                 let msg = `${d.updated} siswa berhasil diperbarui.`;
+                 if (d.errors && d.errors.length) msg += `\n${d.errors.length} baris gagal:\n` + d.errors.slice(0, 10).join('\n');
+                 await Swal.fire('Selesai', msg, d.errors && d.errors.length ? 'warning' : 'success');
+                 loadStudents(currentStudentPage);
+                 const modal = document.getElementById('incompleteStudentsModal');
+                 if (modal && modal.classList.contains('show')) {
+                   const students = await fetchIncompleteStudents();
+                   renderIncompleteStudents(students);
+                 }
+               } else {
+                 Swal.fire('Gagal', d.message || 'Import gagal', 'error');
+               }
+               input.value = '';
+             }
+           };
+
+           xhr.open('POST', apiUrl('/admin/students/incomplete/import'));
+           xhr.setRequestHeader('Authorization', 'Bearer ' + authToken);
+           xhr.send(formData);
+         };
+
+         // Import new students from Excel with progress percentage
+         window.importNewStudents = function (input) {
+           const file = input.files && input.files[0];
+           if (!file) return;
+           const formData = new FormData();
+           formData.append('file', file);
+           formData.append('tenant_id', tenantId);
+
+           const swalProgress = Swal.fire({
+             title: 'Mengupload...',
+             html: '<div id="importProgress">Memulai upload...<br><progress class="w-full h-2" value="0" max="100"></progress><div id="progressPercent" class="text-sm text-gray-600 mt-1">0%</div></div>',
+             allowOutsideClick: false,
+             showConfirmButton: false
+           });
+
+           const xhr = new XMLHttpRequest();
+           xhr.upload.addEventListener('progress', function (e) {
+             if (e.lengthComputable) {
+               const percent = Math.round((e.loaded / e.total) * 100);
+               const progressBar = document.querySelector('#importProgress progress');
+               const progressText = document.getElementById('progressPercent');
+               if (progressBar) progressBar.value = percent;
+               if (progressText) progressText.textContent = percent + '%';
+             }
+           });
+
+           xhr.onreadystatechange = async function () {
+             if (xhr.readyState === 4) {
+               const d = xhr.responseText ? JSON.parse(xhr.responseText) : {};
+               if (xhr.status === 200 && d.success) {
+                 let msg = `${d.created} siswa baru berhasil ditambahkan.`;
+                 if (d.errors && d.errors.length) msg += `\n${d.errors.length} baris gagal:\n` + d.errors.slice(0, 10).join('\n');
+                 await Swal.fire('Selesai', msg, d.errors && d.errors.length ? 'warning' : 'success');
+                 loadStudents(currentStudentPage);
+               } else {
+                 Swal.fire('Gagal', d.message || 'Import gagal', 'error');
+               }
+               input.value = '';
+             }
+           };
+
+           xhr.open('POST', apiUrl('/admin/students/import'));
+           xhr.setRequestHeader('Authorization', 'Bearer ' + authToken);
+xhr.send(formData);
+          };
+
+         // Edit student - opens modal with all fields (delegates to window.editStudent from admin-dashboard.js)
         async function editStudent(id) {
           if (typeof window.editStudent === 'function') {
             window.editStudent(id);
@@ -2497,22 +2629,27 @@
         });
 
         // ===== ATTENDANCE =====
-        async function loadAttendanceLogs() {
-          try {
-            const df = document.getElementById('attendanceDateFilter')?.value || '';
-            const sf = document.getElementById('attendanceStatusFilter')?.value || '';
-            let url = apiUrl('/admin/attendance-logs');
-            if (df) url += `&date_filter=${df}`;
-            if (sf) url += `&status_filter=${sf}`;
-            const r = await fetch(url, { headers: { 'Authorization': `Bearer ${authToken}` } });
-            if (checkAuth401403(r)) return;
-            const d = await r.json();
-            const tb = document.getElementById('attendanceTable');
-            if (d.success && d.data.length > 0) {
-              tb.innerHTML = d.data.map(a => `<tr class="hover:bg-gray-50"><td class="px-4 py-3 text-sm text-gray-900">${a.nama || '-'}</td><td class="px-4 py-3 text-sm text-gray-500">${a.jenis === 'masuk' ? 'Masuk' : 'Pulang'}</td><td class="px-4 py-3 text-sm text-gray-500">${new Date(a.waktu_scan).toLocaleString('id-ID')}</td><td class="px-4 py-3 text-sm"><span class="px-2 py-1 rounded-full text-xs font-semibold ${a.status === 'tepat_waktu' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">${a.status === 'tepat_waktu' ? 'Tepat Waktu' : 'Terlambat'}</span></td><td class="px-4 py-3 text-sm text-gray-500">${a.metode || '-'}</td></tr>`).join('');
-            } else tb.innerHTML = '<tr><td colspan="5" class="px-4 py-12 text-center text-gray-500">Belum ada data kehadiran</td></tr>';
-          } catch (e) { console.error('[ATTENDANCE LOGS]', e); }
-        }
+async function loadAttendanceLogs() {
+            try {
+              const df = document.getElementById('attendanceDateFilter');
+              if (df && !df.value) {
+                const today = new Date().toISOString().slice(0, 10);
+                df.value = today;
+              }
+              const dateVal = df?.value || '';
+              const sf = document.getElementById('attendanceStatusFilter')?.value || '';
+              let url = apiUrl('/admin/attendance-logs');
+              if (dateVal) url += '&date=' + encodeURIComponent(dateVal);
+              if (sf) url += '&status=' + encodeURIComponent(sf);
+              const r = await fetch(url, { headers: { 'Authorization': `Bearer ${authToken}` } });
+              if (checkAuth401403(r)) return;
+              const d = await r.json();
+              const tb = document.getElementById('attendanceTable');
+              if (d.success && d.data.length > 0) {
+                tb.innerHTML = d.data.map(a => `<tr class="hover:bg-gray-50"><td class="px-4 py-3 text-sm text-gray-900">${a.nama || '-'}</td><td class="px-4 py-3 text-sm text-gray-500">${a.jenis === 'masuk' ? 'Masuk' : 'Pulang'}</td><td class="px-4 py-3 text-sm text-gray-500">${new Date(a.waktu_scan).toLocaleString('id-ID')}</td><td class="px-4 py-3 text-sm"><span class="px-2 py-1 rounded-full text-xs font-semibold ${a.status === 'tepat_waktu' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">${a.status === 'tepat_waktu' ? 'Tepat Waktu' : 'Terlambat'}</span></td><td class="px-4 py-3 text-sm text-gray-500">${a.metode || '-'}</td></tr>`).join('');
+              } else tb.innerHTML = '<tr><td colspan="5" class="px-4 py-12 text-center text-gray-500">Belum ada data kehadiran untuk tanggal ini</td></tr>';
+            } catch (e) { console.error('[ATTENDANCE LOGS]', e); }
+          }
 
         document.getElementById('attendanceDateFilter')?.addEventListener('change', loadAttendanceLogs);
         document.getElementById('attendanceStatusFilter')?.addEventListener('change', loadAttendanceLogs);

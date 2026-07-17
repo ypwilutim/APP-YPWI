@@ -122,6 +122,43 @@ async function ensureMidtransSchema() {
 }
 ensureMidtransSchema().catch(() => {});
 
+async function createSnapTransaction(opts) {
+  const { tenantId, studentId, amount, orderId: customOrderId, student_name } = opts
+  const tenant_id = tenantId
+  const student_id = studentId
+  const description = `SPP ${student_name}`
+  
+  const config = await getMidtransConfig(tenant_id)
+  if (!config.serverKey || !config.enabled) {
+    throw { response: { data: { error_messages: ['Midtrans belum dikonfigurasi'] } } }
+  }
+  
+  const grossAmount = await computeAmount(student_id, tenant_id, amount)
+  const orderId = customOrderId || `SPP-${tenant_id}-${student_id}-${Date.now()}`
+  
+  const itemName = description.slice(0, 50)
+  const payload = {
+    transaction_details: { order_id: orderId, gross_amount: grossAmount },
+    item_details: [{ id: 'SPP', name: itemName, price: grossAmount, quantity: 1 }],
+    customer_details: { first_name: (student_name || 'Siswa').slice(0, 20) }
+  }
+  
+  const response = await axios.post(
+    `${snapBase(config.isProduction)}/snap/v1/transactions`,
+    payload,
+    { headers: { Authorization: authHeader(config.serverKey), 'Content-Type': 'application/json' } }
+  )
+  
+  return {
+    order_id: orderId,
+    token: response.data.token,
+    redirect_url: response.data.redirect_url,
+    amount: grossAmount,
+    client_key: config.clientKey,
+    snap_js_url: snapJsUrl(config.isProduction)
+  }
+}
+
 async function buildAndCreate({ tenantId, studentId, amount, description, redirectUrl, req }) {
   const config = await getMidtransConfig(tenantId);
   if (!config.serverKey || !config.enabled) {
@@ -401,3 +438,5 @@ router.get('/midtrans/sync-all-pending', authenticateOperator, async (req, res) 
 });
 
 module.exports = router;
+module.exports.createSnapTransaction = createSnapTransaction
+module.exports.ensureMidtransSchema = ensureMidtransSchema

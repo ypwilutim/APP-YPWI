@@ -161,7 +161,7 @@
         <button onclick="openWhatsAppMessenger()"
           class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100">
           <i class="fas fa-comments"></i>
-          <span>WhatsApp Messenger</span>
+          <span>WhatsApp Messenger</span></button>
         </button>
         <button
           class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
@@ -2066,8 +2066,22 @@
         <form id="ruleForm">
           <input type="hidden" id="ruleId">
           <div class="mb-4">
-            <label class="block text-sm font-medium text-gray-700 mb-1">SEKOLAH</label>
-            <select name="tenant_id"
+            <label class="block text-sm font-medium text-gray-700 mb-1">Target Aturan</label>
+            <select id="ruleTargetSelect"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              required onchange="adminOnTargetChange(this.value)">
+              <option value="">-- Pilih Target --</option>
+              <option value="tenant">Tenant Spesifik</option>
+              <option value="central_TKIT">Aturan Pusat Global (TKIT)</option>
+              <option value="central_SDIT">Aturan Pusat Global (SDIT)</option>
+              <option value="central_SMPIT">Aturan Pusat Global (SMPIT)</option>
+              <option value="central_SMAIT">Aturan Pusat Global (SMAIT)</option>
+              <option value="central_pondok">Aturan Pusat Global (Pondok)</option>
+            </select>
+          </div>
+          <div class="mb-4" id="tenantSelectorSection">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Sekolah</label>
+            <select name="tenant_id" id="ruleTenantSelect"
               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               required>
               <option value="">Pilih Sekolah</option>
@@ -2111,21 +2125,18 @@
                   value="sabtu" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"> Sabtu</label>
               <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="hari"
                   value="minggu" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"> Minggu</label>
+              </div>
             </div>
-          </div>
-          <div class="mb-4">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Keterangan</label>
-            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500
-            focus:border-transparent">
-            <input type="text" name="keterangan" </div>
+            <div class="mb-4">
+              <label class="block text-sm font-medium text-gray-700 mb-1">Keterangan</label>
+              <input type="text" name="keterangan"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+            </div>
             <div class="mb-4">
               <label class="block text-sm font-medium text-gray-700 mb-1">Status Log</label>
-              <select name="status_log"
+              <select name="status_log" id="adminStatusLogSelect"
                 class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                required>
-                <option value="tepat_waktu">Tepat Waktu</option>
-                <option value="terlambat">Terlambat</option>
-              </select>
+                required></select>
             </div>
             <div class="flex justify-end space-x-3">
               <button type="button" onclick="hideRuleModal()"
@@ -2898,8 +2909,32 @@
       <div class="p-4 border-t border-gray-100 flex justify-end space-x-2">
         <button onclick="closeAccountModal()" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-md text-sm font-medium hover:bg-gray-200">Tutup</button>
       </div>
-    </div>
-  </div>
+</div>
+   </div>
+
+<script>
+      function adminOnTargetChange(value) {
+        const tenantSection = document.getElementById('tenantSelectorSection');
+        const tenantSelect = document.getElementById('ruleTenantSelect');
+        if (value && value.startsWith('central_')) {
+          tenantSection.style.display = 'none';
+          tenantSelect.required = false;
+          tenantSelect.value = '';
+        } else {
+          tenantSection.style.display = 'block';
+          tenantSelect.required = true;
+        }
+      }
+
+      function adminUpdateStatusLogOptions(tipe) {
+        const sel = document.getElementById('adminStatusLogSelect');
+        if (!sel) return;
+        const opts = tipe === 'Pulang'
+          ? [['tepat_waktu', 'Tepat Waktu'], ['pulang_cepat', 'Pulang Cepat'], ['lembur', 'Lembur']]
+          : [['tepat_waktu', 'Tepat Waktu'], ['terlambat', 'Terlambat']];
+        sel.innerHTML = opts.map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+      }
+    </script>
 
   </body>
 

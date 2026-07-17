@@ -245,7 +245,8 @@ document.addEventListener('DOMContentLoaded', () => {
 async function loadAttendanceLogs(page = 1) {
     try {
         console.log('Memuat log absensi halaman:', page);
-        const response = await fetch(`/api/admin/attendance-logs?page=${page}&limit=10`, {
+        const tenant_id = window.tenantId || getUrlParams().get('tenant') || '';
+        const response = await fetch(`/api/admin/attendance-logs?page=${page}&limit=10&tenant_id=${tenant_id}`, {
             headers: { 'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}` }
         });
 

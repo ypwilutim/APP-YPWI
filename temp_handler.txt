@@ -1,0 +1,7 @@
+
+        if (change.field === 'messaging_status') {
+          const status = change.value;
+          console.log('[WA] Status Update:', JSON.stringify(status));
+        }
+      });
+    });
