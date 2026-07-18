@@ -158,14 +158,15 @@ window.importBsiReport = async function(input) {
     try {
       if (btn) { btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Mengimport...'; btn.disabled = true; }
       
-      const token = localStorage.getItem('token');
-      const res = await fetch('/api/bsi/import-report', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-        body: JSON.stringify({ csv })
-      });
-      
-      if (json.success) {
+const token = localStorage.getItem('token');
+       const res = await fetch('/api/bsi/import-report', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+         body: JSON.stringify({ csv })
+       });
+       const json = await res.json();
+       
+       if (json.success) {
         if (json.data.unmatched && json.data.unmatched.length > 0) {
           showToast('Import: ' + json.data.paid + ' paid, ' + json.data.unmatched.length + ' unmatched (VA tidak ditemukan)', 'success');
         } else {

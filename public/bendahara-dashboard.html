@@ -70,18 +70,23 @@
           <i class="fas fa-chart-line"></i>
           <span>Dashboard</span>
         </button>
-        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
-          data-tab="payments">
-          <i class="fas fa-file-invoice-dollar"></i>
-          <span>Pembayaran Siswa</span>
-        </button>
-        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
-          data-tab="payment-gateway">
-          <i class="fas fa-credit-card"></i>
-          <span>Payment Gateway</span>
-        </button>
-      </nav>
-    </aside>
+<button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+           data-tab="payments">
+           <i class="fas fa-file-invoice-dollar"></i>
+           <span>Pembayaran Siswa</span>
+         </button>
+         <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+           data-tab="payroll">
+           <i class="fas fa-wallet"></i>
+           <span>Penggajian Guru</span>
+         </button>
+         <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+           data-tab="payment-gateway">
+           <i class="fas fa-credit-card"></i>
+           <span>Payment Gateway</span>
+         </button>
+       </nav>
+     </aside>
 
     <!-- Main Content -->
     <main class="flex-1 p-8">
@@ -236,11 +241,58 @@
         <!-- Recent Activity -->
         <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <h3 class="text-lg font-semibold text-gray-900 mb-4">Aktivitas Terbaru</h3>
-          <div id="recentActivity" class="space-y-3 max-h-64 overflow-y-auto">
-            <p class="text-center text-gray-500 py-8">Memuat aktivitas...</p>
-          </div>
-        </div>
-      </div>
+<div id="recentActivity" class="space-y-3 max-h-64 overflow-y-auto">
+             <p class="text-center text-gray-500 py-8">Memuat aktivitas...</p>
+           </div>
+         </div>
+       </div>
+
+       <!-- Payroll Tab -->
+       <div id="payrollTab" class="tab-content hidden">
+         <div class="bg-white rounded-xl shadow-sm border-2 border-emerald-200 p-6 mb-4">
+           <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+             <h3 class="text-lg font-semibold text-gray-900">Sistem Penggajian Guru</h3>
+             <div class="flex flex-wrap items-end gap-2">
+               <div><label class="block text-xs font-medium text-gray-600 mb-1">Sekolah</label>
+                 <select id="payrollTenantSelect" class="px-3 py-2 border border-gray-300 rounded-md text-sm"><option value="">Semua Sekolah</option></select>
+               </div>
+               <div><label class="block text-xs font-medium text-gray-600 mb-1">Bulan</label>
+                 <select id="payrollBulan" class="px-3 py-2 border border-gray-300 rounded-md text-sm">
+                   <option value="1">Januari</option><option value="2">Februari</option><option value="3">Maret</option><option value="4">April</option>
+                   <option value="5">Mei</option><option value="6">Juni</option><option value="7" selected>Juli</option><option value="8">Agustus</option>
+                   <option value="9">September</option><option value="10">Oktober</option><option value="11">November</option><option value="12">Desember</option>
+                 </select>
+               </div>
+               <div><label class="block text-xs font-medium text-gray-600 mb-1">Tahun</label>
+                 <select id="payrollTahun" class="px-3 py-2 border border-gray-300 rounded-md text-sm"></select>
+               </div>
+               <button onclick="loadPayroll()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm"><i class="fas fa-calculator mr-1"></i>Hitung</button>
+               <button onclick="generatePayroll()" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm"><i class="fas fa-save mr-1"></i>Simpan Slip</button>
+               <button onclick="exportPayrollBsiCUZ()" class="bg-orange-600 text-white px-4 py-2 rounded-lg text-sm"><i class="fas fa-file-export mr-1"></i>BSI CUZ</button>
+             </div>
+           </div>
+           <div class="overflow-x-auto"><table class="w-full text-sm divide-y divide-gray-100"><thead class="bg-gray-50"><tr class="border-b">
+               <th class="px-3 py-2 text-center text-xs font-semibold text-gray-600 uppercase" style="width:40px"><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)"></th>
+               <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">#</th>
+               <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Nama</th>
+               <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">NIK</th>
+               <th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Status</th>
+               <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Gaji Pokok</th>
+               <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">T. Kinerja</th>
+               <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">T. Umum</th>
+               <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">T. Istri</th>
+               <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">T. Anak</th>
+               <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">T. KepSek</th>
+               <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">T. WaliKelas</th>
+               <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Honor</th>
+               <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Potongan</th>
+               <th class="px-3 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Total</th>
+             </tr></thead><tbody id="payrollTable" class="divide-y divide-gray-100"><tr><td colspan="15" class="px-4 py-8 text-center text-gray-500">
+                   <i class="fas fa-spinner fa-spin text-xl mb-2"></i>
+                   <p>Pilih periode lalu klik Hitung</p>
+               </td></tr></tbody></table></div>
+         </div>
+       </div>
 
 <!-- Pembayaran Siswa Tab -->
        <div id="paymentsTab" class="tab-content hidden">
@@ -546,11 +598,12 @@
       location.reload();
     }
 
-    function initDashboard() {
-      loadTenantFilters();
-      loadDashboardData();
+function initDashboard() {
+       loadTenantFilters();
+       loadDashboardData();
+       populateYears('payrollTahun');
 
-      document.querySelectorAll('[data-tab]').forEach(btn => {
+       document.querySelectorAll('[data-tab]').forEach(btn => {
         btn.addEventListener('click', function () {
           const tabName = this.dataset.tab;
           document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
@@ -561,19 +614,31 @@
           document.getElementById(tabName + 'Tab').classList.remove('hidden');
           this.classList.add('bg-emerald-600', 'text-white');
 
-          if (tabName === 'dashboard') loadDashboardData();
-          if (tabName === 'payments') loadSaldo();
-          if (tabName === 'payment-gateway') loadBsiTenants();
+if (tabName === 'dashboard') loadDashboardData();
+           if (tabName === 'payments') loadSaldo();
+           if (tabName === 'payroll') loadPayroll();
+           if (tabName === 'payment-gateway') loadBsiTenants();
         });
       });
     }
 
-    function formatCurrency(value) {
-      const num = parseFloat(value) || 0;
-      return `Rp ${num.toLocaleString('id-ID')}`;
-    }
+function formatCurrency(value) {
+       const num = parseFloat(value) || 0;
+       return `Rp ${num.toLocaleString('id-ID')}`;
+     }
 
-    async function loadDashboardData() {
+     function populateYears(selectId) {
+       const el = document.getElementById(selectId);
+       if (!el || el.options.length > 1) return;
+       const curYear = new Date().getFullYear();
+       for (let y = curYear - 2; y <= curYear + 1; y++) {
+         const opt = document.createElement('option'); opt.value = y; opt.textContent = y;
+         if (y === curYear) opt.selected = true;
+         el.appendChild(opt);
+       }
+     }
+
+     async function loadDashboardData() {
        const tenantId = document.getElementById('dashboardTenantFilter').value;
 
        try {
@@ -657,21 +722,21 @@
        }
      }
 
-    async function loadTenantFilters() {
-      try {
-        const res = await fetch('/api/treasurer/public/tenants');
-        const data = await res.json();
-        if (data.success) {
-          const options = data.data.map(t => `<option value="${t.tenant_id}">${t.nama_sekolah}</option>`).join('');
-          const sel = document.getElementById('dashboardTenantFilter');
-          if (sel) sel.innerHTML = '<option value="">Semua Sekolah</option>' + options;
-          const paySel = document.getElementById('paymentsTenantFilter');
-          if (paySel) paySel.innerHTML = '<option value="">Semua Sekolah</option>' + options;
-        }
-      } catch (e) {
-        console.error('loadTenantFilters', e);
-      }
-    }
+async function loadTenantFilters() {
+       try {
+         const res = await fetch('/api/treasurer/public/tenants');
+         const data = await res.json();
+         if (data.success) {
+           const options = data.data.map(t => `<option value="${t.tenant_id}">${t.nama_sekolah}</option>`).join('');
+           ['dashboardTenantFilter', 'paymentsTenantFilter', 'payrollTenantSelect'].forEach(id => {
+             const el = document.getElementById(id);
+             if (el) el.innerHTML = '<option value="">Semua Sekolah</option>' + options;
+           });
+         }
+       } catch (e) {
+         console.error('loadTenantFilters', e);
+       }
+     }
 
     function showToast(msg, type) {
       const t = document.createElement('div');
