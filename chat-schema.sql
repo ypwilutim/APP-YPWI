@@ -40,14 +40,14 @@ CREATE INDEX idx_sender ON chat_messages(sender_id);
 
 -- Migration: add advanced chat features
 -- Reply/quote messages
-ALTER TABLE chat_messages ADD COLUMN reply_to_message_id INT DEFAULT NULL AFTER message;
+ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS reply_to_message_id INT DEFAULT NULL AFTER message;
 
 -- Read receipts (mark as read per participant)
-ALTER TABLE conversation_participants ADD COLUMN last_read_at TIMESTAMP NULL DEFAULT NULL AFTER user_type;
+ALTER TABLE conversation_participants ADD COLUMN IF NOT EXISTS last_read_at TIMESTAMP NULL DEFAULT NULL AFTER user_type;
 
 -- Typing status
-ALTER TABLE conversation_participants ADD COLUMN is_typing TINYINT(1) DEFAULT 0 AFTER last_read_at;
-ALTER TABLE conversation_participants ADD COLUMN typing_expires_at TIMESTAMP NULL DEFAULT NULL AFTER is_typing;
+ALTER TABLE conversation_participants ADD COLUMN IF NOT EXISTS is_typing TINYINT(1) DEFAULT 0 AFTER last_read_at;
+ALTER TABLE conversation_participants ADD COLUMN IF NOT EXISTS typing_expires_at TIMESTAMP NULL DEFAULT NULL AFTER is_typing;
 
 -- Online status / last seen
-ALTER TABLE conversation_participants ADD COLUMN last_seen_at TIMESTAMP NULL DEFAULT NULL AFTER typing_expires_at;
+ALTER TABLE conversation_participants ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMP NULL DEFAULT NULL AFTER typing_expires_at;

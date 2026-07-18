@@ -505,6 +505,25 @@
   </style>
 
   <div class="dashboard-container">
+    <div id="locationPermissionBanner" style="display: none; background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%); border: 1px solid #fdba74; border-radius: 1rem; padding: 1rem 1.25rem; margin-bottom: 1.5rem; box-shadow: 0 4px 15px rgba(0,0,0,0.02);">
+      <div style="display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;">
+        <div style="width: 40px; height: 40px; background: #fff; border-radius: 0.75rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+          <i class="fas fa-map-marker-alt" style="color: #ea580b; font-size: 1.1rem;"></i>
+        </div>
+        <div style="flex: 1; min-width: 200px;">
+          <p style="margin: 0; font-size: 0.9rem; font-weight: 700; color: #7c2d12;">Izin Lokasi Diperlukan</p>
+          <p style="margin: 0.25rem 0 0; font-size: 0.85rem; color: #9a3412;">Aktifkan akses lokasi agar sistem absensi berbasis GPS dapat berjalan dengan benar.</p>
+        </div>
+        <div style="display: flex; gap: 0.5rem; flex-shrink: 0;">
+          <button onclick="retryLocationPermission()" style="padding: 0.5rem 1rem; border-radius: 0.5rem; background: #ea580b; color: white; border: none; font-weight: 600; font-size: 0.85rem; cursor: pointer; display: inline-flex; align-items: center; gap: 0.4rem;">
+            <i class="fas fa-redo"></i> Coba Lagi
+          </button>
+          <button onclick="dismissLocationBanner()" style="padding: 0.5rem 1rem; border-radius: 0.5rem; background: #fff; color: #9a3412; border: 1px solid #fdba74; font-weight: 600; font-size: 0.85rem; cursor: pointer;">
+            Tutup
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- ==========================================
          1. DYNAMIC PROFILE HEADER CARD
@@ -585,6 +604,22 @@
       <p id="ruleNextInfo" style="margin: 0.5rem 0 0; font-size: 0.8rem; color: #94a3b8;"></p>
     </div>
 
+    <div id="unitSelectorCard" style="display: none; background: #ffffff; border-radius: 1.25rem; padding: 1rem 1.25rem; box-shadow: 0 4px 15px rgba(0,0,0,0.02); border: 1px solid #e2e8f0; margin-bottom: 1.5rem;">
+      <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+        <div style="width: 36px; height: 36px; background: #f0fdf4; border-radius: 0.75rem; display: flex; align-items: center; justify-content: center;">
+          <i class="fas fa-school" style="color: #16a34a; font-size: 1rem;"></i>
+        </div>
+        <div style="flex: 1; min-width: 180px;">
+          <p style="margin: 0; font-size: 0.75rem; color: #64748b; font-weight: 600;">Pilih Unit Sekolah</p>
+          <select id="unitSelector" onchange="onUnitSelectorChange(this.value)"
+            style="margin-top: 0.25rem; width: 100%; padding: 0.5rem 0.75rem; border-radius: 0.5rem; border: 1px solid #cbd5e1; font-size: 0.9rem; background: #fff; color: #0f172a;">
+            <option value="">-- Pilih Unit --</option>
+          </select>
+        </div>
+        <div id="unitSelectorInfo" style="font-size: 0.8rem; color: #64748b;"></div>
+      </div>
+    </div>
+
     <!-- ==========================================
          SISTEM LAYOUT UTAMA (RESPONSIVE HYBRID)
          ========================================== -->
@@ -628,6 +663,16 @@
                 style="display: none; width: 100%; padding: 1rem; border-radius: 0.75rem; font-size: 1rem; font-weight: 700; background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); color: #fff; border: none; box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2); cursor: pointer;">
                 <i class="fas fa-file-medical" style="margin-right: 0.4rem;"></i> Ajukan Izin
               </button>
+            </div>
+
+            <div id="attendanceLoading" style="display: none; margin-bottom: 1.5rem; padding: 1.25rem; border-radius: 0.75rem; background: #eff6ff; border: 1px solid #bfdbfe; text-align: center;">
+              <div style="display: flex; align-items: center; justify-content: center; gap: 0.75rem;">
+                <i class="fas fa-circle-notch fa-spin" style="font-size: 1.5rem; color: #2563eb;"></i>
+                <div>
+                  <p style="margin: 0; font-size: 0.95rem; font-weight: 700; color: #1e40af;">Memproses Absensi</p>
+                  <p style="margin: 0.25rem 0 0; font-size: 0.8rem; color: #1e3a8a;">Mohon tunggu, jangan tutup halaman ini...</p>
+                </div>
+              </div>
             </div>
 
             <!-- Hardware Mini Bar Info -->

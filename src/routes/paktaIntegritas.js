@@ -187,7 +187,8 @@ router.post('/pakta/sign', authenticateToken, requireSignAccess, async (req, res
           '<p style="color:#64748b;font-size:13px;">Email ini dikirim otomatis oleh sistem YPWI Lutim.</p>' +
           '</div>',
           'Dokumen Surat Pernyataan Komitmen periode ' + periode + ' terlampir.',
-          [{ filename: 'surat-pernyataan-komitmen-' + periode + '.pdf', path: outPath }]
+          [{ filename: 'surat-pernyataan-komitmen-' + periode + '.pdf', path: outPath }],
+          'documents'
         );
       }
     } catch (emailErr) {

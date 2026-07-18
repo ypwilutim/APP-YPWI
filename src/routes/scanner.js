@@ -391,7 +391,7 @@ router.post('/scanner/attendance', async (req, res) => {
       }
 
       const allRules = await db.query(
-        `SELECT status_log, hari, jam_mulai, tenant_id FROM attendance_rules WHERE ${ruleConditions.join(' OR ')} AND tipe = ? AND ? BETWEEN jam_mulai AND jam_selesai ORDER BY tenant_id NULLS FIRST, jam_mulai DESC`,
+        `SELECT status_log, hari, jam_mulai, tenant_id FROM attendance_rules WHERE ${ruleConditions.join(' OR ')} AND tipe = ? AND ? BETWEEN jam_mulai AND jam_selesai ORDER BY tenant_id IS NULL, jam_mulai DESC`,
         [...ruleParams, type === 'masuk' ? 'Datang' : 'Pulang', scanTimeWITA]
       );
 
@@ -513,7 +513,7 @@ Terima kasih.`;
 </html>`;
 
         if (typeof global.sendEmail === 'function') {
-          await global.sendEmail(teacherNotif.email, `Absensi ${type.toUpperCase()} Scanner - YPWI Lutim`, htmlMessage);
+          await global.sendEmail(teacherNotif.email, `Absensi ${type.toUpperCase()} Scanner - YPWI Lutim`, htmlMessage, '', [], 'scanner');
         }
       }
     } catch (waError) {

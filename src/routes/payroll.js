@@ -333,20 +333,10 @@ async function sendSalarySlipEmail(teacherId, periode) {
     COMPONENTS.forEach(f => comps[f] = t[f]);
     gaji.total_gaji = computeTotal(comps);
   }
-  const nodemailer = require('nodemailer');
-  const transporter = nodemailer.createTransport({
-    host: process.env.EMAIL_HOST || 'mail.ypwilutim.com', port: parseInt(process.env.EMAIL_PORT) || 465, secure: true,
-    auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }
-  });
   if (!t.email) return { success: true, message: 'Guru tidak punya email' };
-  const htmlBody = '<div style="font-family:Arial;max-width:600px;margin:0 auto"><div style="text-align:center;margin-bottom:20px"><img src="https://app.ypwilutim.com/assets/images/header-yayasan.png" width="400" style="max-width:100%"></div><h2 style="color:#059669;text-align:center">Slip Gaji Guru</h2><p>Assalamu alaikum Bapak/Ibu ' + t.nama + ',</p><p>Slip gaji Anda untuk ' + monthNames[parseInt(month)] + ' ' + year + ':</p><table style="width:100%;border-collapse:collapse;margin:20px 0;border:2px solid #059669"><tr style="background:#f3f4f6"><td style="padding:10px;border:1px solid #ddd">Keterangan</td><td style="padding:10px;border:1px solid #ddd;text-align:right">Jumlah</td></tr><tr><td style="padding:10px;border:1px solid #ddd">Gaji Pokok</td><td style="padding:10px;border:1px solid #ddd;text-align:right">Rp ' + num(gaji.gaji_pokok).toLocaleString('id-ID') + '</td></tr><tr><td style="padding:10px;border:1px solid #ddd">Tunjangan Kinerja</td><td style="padding:10px;border:1px solid #ddd;text-align:right">Rp ' + num(gaji.tunj_kinerja).toLocaleString('id-ID') + '</td></tr><tr><td style="padding:10px;border:1px solid #ddd">Tunjangan Umum</td><td style="padding:10px;border:1px solid #ddd;text-align:right">Rp ' + num(gaji.tunj_umum).toLocaleString('id-ID') + '</td></tr><tr><td style="padding:10px;border:1px solid #ddd">Tunjangan Istri</td><td style="padding:10px;border:1px solid #ddd;text-align:right">Rp ' + num(gaji.tunj_istri).toLocaleString('id-ID') + '</td></tr><tr><td style="padding:10px;border:1px solid #ddd">Tunjangan Anak</td><td style="padding:10px;border:1px solid #ddd;text-align:right">Rp ' + num(gaji.tunj_anak).toLocaleString('id-ID') + '</td></tr><tr><td style="padding:10px;border:1px solid #ddd">Tunjangan Kepala Sekolah</td><td style="padding:10px;border:1px solid #ddd;text-align:right">Rp ' + num(gaji.tunj_kepala_sekolah).toLocaleString('id-ID') + '</td></tr><tr><td style="padding:10px;border:1px solid #ddd">Tunjangan Wali Kelas</td><td style="padding:10px;border:1px solid #ddd;text-align:right">Rp ' + num(gaji.tunj_wali_kelas).toLocaleString('id-ID') + '</td></tr><tr><td style="padding:10px;border:1px solid #ddd">Honor Bendahara</td><td style="padding:10px;border:1px solid #ddd;text-align:right">Rp ' + num(gaji.honor_bendahara).toLocaleString('id-ID') + '</td></tr><tr><td style="padding:10px;border:1px solid #ddd">Potongan</td><td style="padding:10px;border:1px solid #ddd;text-align:right">Rp ' + num(gaji.potongan).toLocaleString('id-ID') + '</td></tr><tr style="background:#dcfce7"><td style="padding:10px;border:1px solid #ddd;font-weight:bold">Total Gaji</td><td style="padding:10px;border:1px solid #ddd;text-align:right;font-weight:bold;color:#059669">Rp ' + num(gaji.total_gaji).toLocaleString('id-ID') + '</td></tr></table><p style="font-size:12px;color:#666">Hormat kami,<br><strong>Yayasan Pendidikan Wahdah Islamiyah Luwu Timur</strong></p></div>';
-  try {
-    await transporter.sendMail({ from: process.env.EMAIL_USER, to: t.email, subject: 'Slip Gaji ' + monthNames[parseInt(month)] + ' ' + year, html: htmlBody });
-    return { success: true, message: 'Email terkirim ke ' + t.email };
-  } catch (emailError) {
-    console.error('Email send error:', emailError.message);
-    return { success: true, message: 'Email gagal (mode simulasi) ke ' + t.email };
-  }
+  const subject = 'Slip Gaji ' + monthNames[parseInt(month)] + ' ' + year;
+  const result = await global.sendEmail(t.email, subject, htmlBody, '', [], 'payroll');
+  return { success: result.success, message: result.success ? 'Email terkirim ke ' + t.email : result.message };
 }
 
 router.post('/admin/payroll/send-slip-email', authenticateOperator, async (req, res) => {

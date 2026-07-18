@@ -463,31 +463,88 @@ async function sendWhatsAppMessage(number, message) {
 global.sendWhatsAppMessage = sendWhatsAppMessage;
 
 // Export email function to global for use in route modules
-global.sendEmail = async (to, subject, htmlContent, textContent = '', attachments = []) => {
+global.sendEmail = async (to, subject, htmlContent, textContent = '', attachments = [], category = 'system', relatedId = null, cc = null, bcc = null) => {
   if (!process.env.EMAIL_ENABLED || process.env.EMAIL_ENABLED !== 'true') {
     console.log('📧 Email disabled, skipping email to:', to);
     return { success: true, message: 'Email disabled' };
   }
-  
+
   const transporter = createEmailTransporter();
   if (!transporter) {
     return { success: false, message: 'Email transporter not configured' };
   }
-  
+
   try {
-    const info = await transporter.sendMail({
-      from: `"YPWI Lutim" <${process.env.EMAIL_USER}>`,
-      to: to,
-      subject: subject,
-      html: htmlContent,
-      text: textContent,
-      attachments: attachments
-    });
-    
-    console.log('✅ Email sent: %s', info.messageId);
-    return { success: true, message: 'Email sent successfully', messageId: info.messageId };
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS email_logs (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        from_email VARCHAR(255) NOT NULL,
+        to_email VARCHAR(255) NOT NULL,
+        cc VARCHAR(255) DEFAULT NULL,
+        bcc VARCHAR(255) DEFAULT NULL,
+        subject VARCHAR(255) NOT NULL,
+        category VARCHAR(100) DEFAULT 'system',
+        related_id INT DEFAULT NULL,
+        status ENUM('pending', 'sent', 'failed', 'draft') DEFAULT 'pending',
+        message_id VARCHAR(255) DEFAULT NULL,
+        error_message TEXT DEFAULT NULL,
+        body_text TEXT DEFAULT NULL,
+        body_html LONGTEXT DEFAULT NULL,
+        has_attachments TINYINT(1) DEFAULT 0,
+        is_read TINYINT(1) DEFAULT 0,
+        sent_at TIMESTAMP NULL DEFAULT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    const logResult = await db.query(
+      'INSERT INTO email_logs (from_email, to_email, subject, category, related_id, status, body_text, body_html, has_attachments, cc, bcc) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        process.env.EMAIL_USER || 'noreply@ypwilutim.com',
+        to,
+        subject,
+        category,
+        relatedId,
+        'pending',
+        textContent || null,
+        htmlContent || null,
+        attachments && attachments.length > 0 ? 1 : 0,
+        cc || null,
+        bcc || null
+      ]
+    );
+    const logId = logResult.insertId;
+
+    try {
+      const info = await transporter.sendMail({
+        from: `"YPWI Lutim" <${process.env.EMAIL_USER}>`,
+        to: to,
+        cc: cc || undefined,
+        bcc: bcc || undefined,
+        subject: subject,
+        html: htmlContent,
+        text: textContent,
+        attachments: attachments
+      });
+
+      await db.query(
+        'UPDATE email_logs SET status = ?, message_id = ?, sent_at = CURRENT_TIMESTAMP WHERE id = ?',
+        ['sent', info.messageId, logId]
+      );
+
+      console.log('✅ Email sent: %s', info.messageId);
+      return { success: true, message: 'Email sent successfully', messageId: info.messageId, logId };
+    } catch (error) {
+      await db.query(
+        'UPDATE email_logs SET status = ?, error_message = ? WHERE id = ?',
+        ['failed', error.message, logId]
+      );
+
+      console.error('❌ Email error:', error.message);
+      return { success: false, message: `Email error: ${error.message}`, logId };
+    }
   } catch (error) {
-    console.error('❌ Email error:', error.message);
+    console.error('❌ Email log error:', error.message);
     return { success: false, message: `Email error: ${error.message}` };
   }
 };
@@ -1528,3 +1585,5 @@ startServer().catch(err => {
   process.exit(1);
 });
 
+app.use('/api', require('./src/routes/bsi-import'));
+app.use('/api', require('./src/routes/spp-summary'));

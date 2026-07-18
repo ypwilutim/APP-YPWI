@@ -29,6 +29,10 @@ async function ensureTables() {
         user_id INT NOT NULL,
         user_type ENUM('guru', 'parent') DEFAULT 'guru',
         joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_read_at TIMESTAMP NULL DEFAULT NULL,
+        is_typing TINYINT(1) DEFAULT 0,
+        typing_expires_at TIMESTAMP NULL DEFAULT NULL,
+        last_seen_at TIMESTAMP NULL DEFAULT NULL,
         FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
         UNIQUE KEY unique_participant (conversation_id, user_id),
         INDEX idx_user (user_id)
@@ -42,10 +46,12 @@ async function ensureTables() {
         sender_name VARCHAR(100) NOT NULL,
         sender_type ENUM('guru', 'parent') DEFAULT 'guru',
         message TEXT NOT NULL,
+        reply_to_message_id INT DEFAULT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
         INDEX idx_conversation (conversation_id),
-        INDEX idx_created_at (created_at)
+        INDEX idx_created_at (created_at),
+        INDEX idx_sender (sender_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
   } catch (e) { console.error('Chat table error:', e.message); }
@@ -63,12 +69,16 @@ router.get('/chat/conversations', authenticateToken, async (req, res) => {
         GROUP_CONCAT(cp.user_id) as participant_ids,
         (SELECT message FROM chat_messages cm WHERE cm.conversation_id = c.id ORDER BY cm.created_at DESC LIMIT 1) as last_message,
         (SELECT created_at FROM chat_messages cm WHERE cm.conversation_id = c.id ORDER BY cm.created_at DESC LIMIT 1) as last_time,
-        (SELECT t.nama FROM teachers t JOIN conversation_participants cp_other ON t.id = cp_other.user_id WHERE cp_other.conversation_id = c.id AND cp_other.user_id != ? LIMIT 1) as other_name
+        COALESCE(
+          (SELECT nama FROM teachers t JOIN conversation_participants cp_other ON t.id = cp_other.user_id WHERE cp_other.conversation_id = c.id AND cp_other.user_id != ? LIMIT 1),
+          (SELECT username FROM users u JOIN conversation_participants cp_other ON u.id = cp_other.user_id WHERE cp_other.conversation_id = c.id AND cp_other.user_id != ? LIMIT 1),
+          'Percakapan'
+        ) as other_name
       FROM conversations c
       JOIN conversation_participants cp ON c.id = cp.conversation_id
       WHERE cp.user_id = ?
       GROUP BY c.id ORDER BY last_time DESC
-    `, [userId, userId]);
+    `, [userId, userId, userId]);
     
     res.json({ success: true, conversations });
   } catch (error) {
@@ -175,13 +185,19 @@ router.post('/chat/conversations/:id/messages', authenticateToken, async (req, r
     const userId = req.user.id;
     const { message } = req.body;
 
-    // Validasi pesan tidak kosong
     if (!message || message.trim().length === 0) {
       return res.json({ success: false, message: 'Pesan kosong' });
     }
 
-    // Get user name
-    let senderName = req.user.username || 'User';
+    const participant = await db.query(
+      'SELECT id FROM conversation_participants WHERE conversation_id = ? AND user_id = ?',
+      [conversationId, userId]
+    );
+    if (participant.length === 0) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+
+    let senderName = req.user.username || req.user.nama || 'User';
     if (req.user.guru_id) {
       const teacher = await db.query('SELECT nama FROM teachers WHERE id = ?', [req.user.guru_id]);
       if (teacher?.[0]) senderName = teacher[0].nama;

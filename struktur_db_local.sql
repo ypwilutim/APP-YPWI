@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Waktu pembuatan: 05 Jul 2026 pada 01.14
+-- Waktu pembuatan: 17 Jul 2026 pada 23.52
 -- Versi server: 10.4.32-MariaDB
 -- Versi PHP: 8.2.12
 
@@ -62,7 +62,8 @@ CREATE TABLE `attendance_rules` (
   `status_log` enum('tepat_waktu','terlambat') NOT NULL,
   `hari` varchar(100) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `tipe_unit` varchar(20) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
@@ -101,6 +102,24 @@ CREATE TABLE `bill_settings` (
 -- --------------------------------------------------------
 
 --
+-- Struktur dari tabel `bsi_va_records`
+--
+
+CREATE TABLE `bsi_va_records` (
+  `id` int(11) NOT NULL,
+  `tenant_id` varchar(50) NOT NULL,
+  `student_id` int(11) NOT NULL,
+  `va_number` varchar(50) NOT NULL,
+  `va_name` varchar(255) DEFAULT NULL,
+  `amount` decimal(15,2) DEFAULT NULL,
+  `status` enum('active','paid','expired') DEFAULT 'active',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `paid_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Struktur dari tabel `chat_messages`
 --
 
@@ -124,7 +143,8 @@ CREATE TABLE `chat_messages` (
 CREATE TABLE `classes` (
   `id` int(11) NOT NULL,
   `tenant_id` varchar(50) DEFAULT NULL,
-  `nama_kelas` varchar(50) DEFAULT NULL
+  `nama_kelas` varchar(50) DEFAULT NULL,
+  `tingkatan` varchar(20) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
@@ -158,6 +178,32 @@ CREATE TABLE `conversation_participants` (
   `last_seen_at` timestamp NULL DEFAULT NULL,
   `joined_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `email_logs`
+--
+
+CREATE TABLE `email_logs` (
+  `id` int(11) NOT NULL,
+  `from_email` varchar(255) NOT NULL,
+  `to_email` varchar(255) NOT NULL,
+  `cc` varchar(255) DEFAULT NULL,
+  `bcc` varchar(255) DEFAULT NULL,
+  `subject` varchar(255) NOT NULL,
+  `category` varchar(100) DEFAULT 'system',
+  `related_id` int(11) DEFAULT NULL,
+  `status` enum('pending','sent','failed','draft') DEFAULT 'pending',
+  `message_id` varchar(255) DEFAULT NULL,
+  `error_message` text DEFAULT NULL,
+  `body_text` text DEFAULT NULL,
+  `body_html` longtext DEFAULT NULL,
+  `has_attachments` tinyint(1) DEFAULT 0,
+  `is_read` tinyint(1) DEFAULT 0,
+  `sent_at` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
 
@@ -243,13 +289,241 @@ CREATE TABLE `leave_requests` (
 -- --------------------------------------------------------
 
 --
+-- Struktur dari tabel `midtrans_transactions`
+--
+
+CREATE TABLE `midtrans_transactions` (
+  `id` int(11) NOT NULL,
+  `tenant_id` varchar(20) DEFAULT NULL,
+  `student_id` int(11) DEFAULT NULL,
+  `order_id` varchar(100) NOT NULL,
+  `gross_amount` decimal(12,2) DEFAULT 0.00,
+  `transaction_status` varchar(50) DEFAULT NULL,
+  `payment_type` varchar(50) DEFAULT NULL,
+  `status` varchar(30) DEFAULT NULL,
+  `snap_token` varchar(255) DEFAULT NULL,
+  `redirect_url` varchar(512) DEFAULT NULL,
+  `raw` text DEFAULT NULL,
+  `paid_at` datetime DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `mutasi_students`
+--
+
+CREATE TABLE `mutasi_students` (
+  `id` int(11) NOT NULL,
+  `student_id` int(11) NOT NULL,
+  `old_tenant_id` varchar(50) DEFAULT NULL,
+  `new_tenant_id` varchar(50) DEFAULT NULL,
+  `reason` text DEFAULT NULL,
+  `created_at` datetime DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `pakta_config`
+--
+
+CREATE TABLE `pakta_config` (
+  `id` int(11) NOT NULL DEFAULT 1,
+  `judul` varchar(255) NOT NULL DEFAULT 'Pakta Integritas',
+  `teks_pakta` text NOT NULL COMMENT 'Teks isi pakta (HTML aman / plain)',
+  `klausul_sanksi` text DEFAULT NULL COMMENT 'Teks klausul sanksi',
+  `nominal_sanksi` decimal(12,2) NOT NULL DEFAULT 1500000.00 COMMENT 'Rp 1.500.000',
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `pakta_integritas`
+--
+
+CREATE TABLE `pakta_integritas` (
+  `id` int(11) NOT NULL,
+  `teacher_id` int(11) NOT NULL COMMENT 'FK ke teachers.id (penandatangan)',
+  `tenant_id` varchar(20) NOT NULL COMMENT 'Tenant sekolah penandatangan',
+  `periode` varchar(7) NOT NULL COMMENT 'YYYY-MM periode pakta',
+  `status` enum('belum','sudah','ditolak') NOT NULL DEFAULT 'belum',
+  `pdf_path` varchar(255) DEFAULT NULL COMMENT 'Path relatif file PDF hasil tanda tangan',
+  `signature_data` longtext DEFAULT NULL COMMENT 'Data URL tanda tangan (PNG base64)',
+  `signed_at` timestamp NULL DEFAULT NULL COMMENT 'Waktu penandatanganan',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Struktur dari tabel `parents`
 --
 
 CREATE TABLE `parents` (
   `id` int(11) NOT NULL,
   `nama_orang_tua` varchar(255) DEFAULT NULL,
-  `no_wa` varchar(30) DEFAULT NULL
+  `no_wa` varchar(30) DEFAULT NULL,
+  `email` varchar(255) DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `payment_gateways`
+--
+
+CREATE TABLE `payment_gateways` (
+  `id` int(11) NOT NULL,
+  `tenant_id` varchar(20) NOT NULL,
+  `gateway` varchar(20) NOT NULL,
+  `api_key` varchar(255) DEFAULT NULL,
+  `api_secret` varchar(255) DEFAULT NULL,
+  `client_key` varchar(255) DEFAULT NULL,
+  `is_active` tinyint(1) DEFAULT 0,
+  `config` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`config`)),
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `payment_invoices`
+--
+
+CREATE TABLE `payment_invoices` (
+  `id` int(11) NOT NULL,
+  `tenant_id` varchar(20) NOT NULL,
+  `student_id` int(11) NOT NULL,
+  `invoice_number` varchar(50) NOT NULL,
+  `amount` decimal(12,2) NOT NULL,
+  `description` text DEFAULT NULL,
+  `periode` varchar(20) NOT NULL,
+  `status` enum('pending','approved','paid','expired','cancelled') DEFAULT 'pending',
+  `due_date` date DEFAULT NULL,
+  `paid_at` datetime DEFAULT NULL,
+  `paid_amount` decimal(12,2) DEFAULT NULL,
+  `payment_method` varchar(50) DEFAULT NULL,
+  `payment_channel` varchar(50) DEFAULT NULL,
+  `approved_by` int(11) DEFAULT NULL,
+  `approved_at` datetime DEFAULT NULL,
+  `payment_proof_url` varchar(255) DEFAULT NULL,
+  `notes` text DEFAULT NULL,
+  `metadata` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`metadata`)),
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `payment_settings`
+--
+
+CREATE TABLE `payment_settings` (
+  `tenant_id` varchar(20) NOT NULL,
+  `monthly_amount` decimal(12,2) DEFAULT NULL,
+  `due_day` int(11) DEFAULT 10,
+  `is_enabled` tinyint(1) DEFAULT 1,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `payment_status_history`
+--
+
+CREATE TABLE `payment_status_history` (
+  `id` int(11) NOT NULL,
+  `invoice_id` int(11) NOT NULL,
+  `old_status` varchar(50) DEFAULT NULL,
+  `new_status` varchar(50) NOT NULL,
+  `changed_by` int(11) DEFAULT NULL,
+  `notes` text DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `payment_transactions`
+--
+
+CREATE TABLE `payment_transactions` (
+  `id` bigint(20) NOT NULL,
+  `tenant_id` varchar(20) NOT NULL,
+  `student_id` int(11) DEFAULT NULL,
+  `gateway` varchar(20) NOT NULL,
+  `external_id` varchar(100) DEFAULT NULL,
+  `amount` decimal(12,2) DEFAULT NULL,
+  `status` varchar(20) DEFAULT NULL,
+  `payment_method` varchar(50) DEFAULT NULL,
+  `description` text DEFAULT NULL,
+  `metadata` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`metadata`)),
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `paid_at` timestamp NULL DEFAULT NULL,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `payroll`
+--
+
+CREATE TABLE `payroll` (
+  `id` int(11) NOT NULL,
+  `teacher_id` int(11) NOT NULL,
+  `tenant_id` varchar(50) DEFAULT NULL,
+  `periode` varchar(7) NOT NULL,
+  `gaji_pokok` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `tunj_kinerja` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `tunj_umum` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `tunj_istri` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `tunj_anak` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `tunj_kepala_sekolah` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `tunj_wali_kelas` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `honor_bendahara` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `tunj_kehadiran` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `potongan` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `total_gaji` decimal(14,2) NOT NULL DEFAULT 0.00,
+  `hadir` int(11) NOT NULL DEFAULT 0,
+  `terlambat` int(11) NOT NULL DEFAULT 0,
+  `izin` int(11) NOT NULL DEFAULT 0,
+  `sakit` int(11) NOT NULL DEFAULT 0,
+  `tanpa_keterangan` int(11) NOT NULL DEFAULT 0,
+  `tidak_hadir` int(11) NOT NULL DEFAULT 0,
+  `dinas_luar` int(11) NOT NULL DEFAULT 0,
+  `cuti` int(11) NOT NULL DEFAULT 0,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `created_by` int(11) DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `payroll_settings`
+--
+
+CREATE TABLE `payroll_settings` (
+  `id` int(11) NOT NULL DEFAULT 1,
+  `potongan_terlambat` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT 'Rupiah potongan per kali terlambat',
+  `potongan_izin` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT 'Rupiah potongan per hari izin/cuti',
+  `potongan_sakit` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT 'Rupiah potongan per hari sakit',
+  `potongan_tanpa_keterangan` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT 'Rupiah potongan per hari tanpa keterangan (alpha)',
+  `potongan_tidak_hadir` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT 'Rupiah potongan per hari tidak hadir',
+  `tunj_kehadiran` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT 'T. Kehadiran (nominal tetap, semua guru aktif)',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
@@ -273,6 +547,25 @@ CREATE TABLE `qr_attendance_logs` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `synced_at` datetime DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `relief_requests`
+--
+
+CREATE TABLE `relief_requests` (
+  `id` int(11) NOT NULL,
+  `student_id` int(11) NOT NULL,
+  `invoice_id` int(11) NOT NULL,
+  `requested_amount` decimal(10,2) DEFAULT NULL,
+  `reason` text DEFAULT NULL,
+  `status` enum('pending','approved','rejected') NOT NULL DEFAULT 'pending',
+  `relief_amount` decimal(10,2) DEFAULT 0.00,
+  `reviewed_by` int(11) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `reviewed_at` timestamp NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
 
@@ -361,7 +654,10 @@ CREATE TABLE `students` (
   `nisn` varchar(50) DEFAULT NULL,
   `jenis_kelamin` enum('L','P') DEFAULT NULL,
   `iuran_bulanan` decimal(10,2) DEFAULT NULL,
-  `nis` varchar(50) DEFAULT NULL
+  `nis` varchar(50) DEFAULT NULL,
+  `va_number` varchar(50) DEFAULT NULL,
+  `va_name` varchar(100) DEFAULT NULL,
+  `status` enum('aktif','alumni','mutasi','keluar') NOT NULL DEFAULT 'aktif'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
@@ -390,6 +686,8 @@ CREATE TABLE `tagihan_siswa` (
 CREATE TABLE `teachers` (
   `id` int(11) NOT NULL,
   `nama` varchar(100) NOT NULL,
+  `BANK` varchar(50) DEFAULT NULL,
+  `nomor_rekening` varchar(50) DEFAULT NULL,
   `nik` varchar(20) NOT NULL,
   `tempat_lahir` varchar(50) DEFAULT NULL,
   `tanggal_lahir` date DEFAULT NULL,
@@ -405,7 +703,17 @@ CREATE TABLE `teachers` (
   `status_aktif` tinyint(1) DEFAULT 1,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  `pendidikan_terakhir` varchar(100) DEFAULT NULL
+  `pendidikan_terakhir` varchar(100) DEFAULT NULL,
+  `gaji_pokok` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `tunj_kinerja` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `tunj_umum` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `tunj_istri` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `tunj_anak` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `tunj_kepala_sekolah` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `tunj_wali_kelas` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `honor_bendahara` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `potongan` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `tunj_kehadiran` decimal(12,2) NOT NULL DEFAULT 0.00
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --
@@ -503,7 +811,7 @@ CREATE TABLE `temp_teachers` (
 CREATE TABLE `tenants` (
   `id` int(11) NOT NULL,
   `tenant_id` varchar(20) NOT NULL,
-  `tipe_unit` enum('yayasan','sekolah','pondok') NOT NULL DEFAULT 'sekolah',
+  `tipe_unit` enum('yayasan','sekolah','pondok','TKIT','SDIT','SMPIT','SMAIT') NOT NULL DEFAULT 'sekolah',
   `nama_sekolah` varchar(100) NOT NULL,
   `nomor_rekening` varchar(50) DEFAULT NULL,
   `absensi_method` enum('personal','gateway') NOT NULL DEFAULT 'personal',
@@ -515,7 +823,17 @@ CREATE TABLE `tenants` (
   `location_radius` int(11) DEFAULT 100,
   `location_name` varchar(255) DEFAULT NULL,
   `use_central_rules` tinyint(1) DEFAULT 0,
-  `registration_token` varchar(255) DEFAULT NULL
+  `registration_token` varchar(255) DEFAULT NULL,
+  `bank_account_number` varchar(50) DEFAULT NULL,
+  `bank_account_name` varchar(100) DEFAULT NULL,
+  `xendit_api_key` varchar(255) DEFAULT NULL,
+  `xendit_public_key` varchar(255) DEFAULT NULL,
+  `xendit_webhook_token` varchar(255) DEFAULT NULL,
+  `xendit_enabled` tinyint(1) DEFAULT 0,
+  `midtrans_server_key` varchar(255) DEFAULT NULL,
+  `midtrans_client_key` varchar(255) DEFAULT NULL,
+  `midtrans_enabled` tinyint(1) DEFAULT 0,
+  `midtrans_is_production` tinyint(1) DEFAULT 0
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
@@ -553,6 +871,57 @@ CREATE TABLE `users` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   `is_default_password` tinyint(1) DEFAULT 0
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `whatsapp_messages`
+--
+
+CREATE TABLE `whatsapp_messages` (
+  `id` int(11) NOT NULL,
+  `from_phone` varchar(20) NOT NULL,
+  `message` text DEFAULT NULL,
+  `message_type` enum('text','image','audio','video','document','location','contacts','interactive','unknown') DEFAULT 'text',
+  `wa_message_id` varchar(100) DEFAULT NULL,
+  `profile_name` varchar(100) DEFAULT NULL,
+  `status` enum('received','read','replied','archived') DEFAULT 'received',
+  `reply_to_id` int(11) DEFAULT NULL,
+  `parent_id` int(11) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `xendit_invoices`
+--
+
+CREATE TABLE `xendit_invoices` (
+  `id` int(11) NOT NULL,
+  `tenant_id` varchar(20) NOT NULL,
+  `student_id` int(11) DEFAULT NULL,
+  `xendit_invoice_id` varchar(100) DEFAULT NULL,
+  `external_id` varchar(100) DEFAULT NULL,
+  `periode` char(7) DEFAULT NULL,
+  `amount` decimal(10,2) DEFAULT NULL,
+  `description` text DEFAULT NULL,
+  `status` varchar(50) DEFAULT 'PENDING',
+  `due_date` date DEFAULT NULL,
+  `is_arrears` tinyint(1) NOT NULL DEFAULT 0,
+  `type` enum('spp','keringanan') NOT NULL DEFAULT 'spp',
+  `arrears_base` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `superseded` tinyint(1) NOT NULL DEFAULT 0,
+  `payment_method` varchar(50) DEFAULT NULL,
+  `payment_channel` varchar(50) DEFAULT NULL,
+  `callback_url` varchar(255) DEFAULT NULL,
+  `invoice_url` varchar(255) DEFAULT NULL,
+  `paid_at` datetime DEFAULT NULL,
+  `expiry_date` datetime DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
@@ -596,7 +965,8 @@ ALTER TABLE `attendance_logs`
 --
 ALTER TABLE `attendance_rules`
   ADD PRIMARY KEY (`id`),
-  ADD KEY `idx_tenant_id` (`tenant_id`);
+  ADD KEY `idx_tenant_id` (`tenant_id`),
+  ADD KEY `idx_tipe_unit` (`tipe_unit`);
 
 --
 -- Indeks untuk tabel `attendance_summary`
@@ -610,6 +980,13 @@ ALTER TABLE `attendance_summary`
 --
 ALTER TABLE `bill_settings`
   ADD PRIMARY KEY (`id`);
+
+--
+-- Indeks untuk tabel `bsi_va_records`
+--
+ALTER TABLE `bsi_va_records`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `unique_student_va` (`student_id`);
 
 --
 -- Indeks untuk tabel `chat_messages`
@@ -640,6 +1017,12 @@ ALTER TABLE `conversation_participants`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `unique_participant` (`conversation_id`,`user_id`),
   ADD KEY `idx_user` (`user_id`);
+
+--
+-- Indeks untuk tabel `email_logs`
+--
+ALTER TABLE `email_logs`
+  ADD PRIMARY KEY (`id`);
 
 --
 -- Indeks untuk tabel `employment_rules`
@@ -677,9 +1060,96 @@ ALTER TABLE `leave_requests`
   ADD KEY `fk_leave_teacher` (`teacher_id`);
 
 --
+-- Indeks untuk tabel `midtrans_transactions`
+--
+ALTER TABLE `midtrans_transactions`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_order` (`order_id`),
+  ADD KEY `idx_tenant` (`tenant_id`),
+  ADD KEY `idx_student` (`student_id`);
+
+--
+-- Indeks untuk tabel `mutasi_students`
+--
+ALTER TABLE `mutasi_students`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `student_id` (`student_id`);
+
+--
+-- Indeks untuk tabel `pakta_config`
+--
+ALTER TABLE `pakta_config`
+  ADD PRIMARY KEY (`id`);
+
+--
+-- Indeks untuk tabel `pakta_integritas`
+--
+ALTER TABLE `pakta_integritas`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uniq_teacher_periode` (`teacher_id`,`periode`),
+  ADD KEY `tenant_id` (`tenant_id`),
+  ADD KEY `status` (`status`);
+
+--
 -- Indeks untuk tabel `parents`
 --
 ALTER TABLE `parents`
+  ADD PRIMARY KEY (`id`);
+
+--
+-- Indeks untuk tabel `payment_gateways`
+--
+ALTER TABLE `payment_gateways`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `unique_gateway_per_tenant` (`tenant_id`,`gateway`);
+
+--
+-- Indeks untuk tabel `payment_invoices`
+--
+ALTER TABLE `payment_invoices`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uniq_invoice_number` (`invoice_number`),
+  ADD KEY `idx_tenant_id` (`tenant_id`),
+  ADD KEY `idx_student_id` (`student_id`),
+  ADD KEY `idx_periode` (`periode`),
+  ADD KEY `idx_status` (`status`);
+
+--
+-- Indeks untuk tabel `payment_settings`
+--
+ALTER TABLE `payment_settings`
+  ADD PRIMARY KEY (`tenant_id`);
+
+--
+-- Indeks untuk tabel `payment_status_history`
+--
+ALTER TABLE `payment_status_history`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_invoice_id` (`invoice_id`);
+
+--
+-- Indeks untuk tabel `payment_transactions`
+--
+ALTER TABLE `payment_transactions`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_tenant_gateway` (`tenant_id`,`gateway`),
+  ADD KEY `idx_external` (`external_id`),
+  ADD KEY `idx_student` (`student_id`),
+  ADD KEY `idx_status` (`status`);
+
+--
+-- Indeks untuk tabel `payroll`
+--
+ALTER TABLE `payroll`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uniq_teacher_periode` (`teacher_id`,`periode`),
+  ADD KEY `periode` (`periode`),
+  ADD KEY `tenant_id` (`tenant_id`);
+
+--
+-- Indeks untuk tabel `payroll_settings`
+--
+ALTER TABLE `payroll_settings`
   ADD PRIMARY KEY (`id`);
 
 --
@@ -693,6 +1163,14 @@ ALTER TABLE `qr_attendance_logs`
   ADD KEY `idx_tenant_id` (`tenant_id`),
   ADD KEY `idx_sync_status` (`sync_status`),
   ADD KEY `idx_waktu_scan` (`waktu_scan`);
+
+--
+-- Indeks untuk tabel `relief_requests`
+--
+ALTER TABLE `relief_requests`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_relief_student` (`student_id`),
+  ADD KEY `idx_relief_status` (`status`);
 
 --
 -- Indeks untuk tabel `scanner_devices`
@@ -733,7 +1211,8 @@ ALTER TABLE `students`
   ADD UNIQUE KEY `nis` (`nis`),
   ADD KEY `parent_id` (`parent_id`),
   ADD KEY `class_id` (`class_id`),
-  ADD KEY `fk_students_tenant` (`tenant_id`);
+  ADD KEY `fk_students_tenant` (`tenant_id`),
+  ADD KEY `idx_status` (`status`);
 
 --
 -- Indeks untuk tabel `tagihan_siswa`
@@ -760,7 +1239,8 @@ ALTER TABLE `teacher_assignments`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `unique_teacher_unit_job` (`teacher_id`,`tenant_id`,`jabatan_di_unit`),
   ADD KEY `idx_teacher_id` (`teacher_id`),
-  ADD KEY `idx_tenant_id` (`tenant_id`);
+  ADD KEY `idx_tenant_id` (`tenant_id`),
+  ADD KEY `idx_class_id` (`class_id`);
 
 --
 -- Indeks untuk tabel `teacher_attendance_stats`
@@ -797,6 +1277,27 @@ ALTER TABLE `users`
   ADD KEY `idx_role` (`role`);
 
 --
+-- Indeks untuk tabel `whatsapp_messages`
+--
+ALTER TABLE `whatsapp_messages`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_from_phone` (`from_phone`),
+  ADD KEY `idx_created_at` (`created_at`),
+  ADD KEY `idx_status` (`status`),
+  ADD KEY `idx_parent` (`parent_id`);
+
+--
+-- Indeks untuk tabel `xendit_invoices`
+--
+ALTER TABLE `xendit_invoices`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_tenant_id` (`tenant_id`),
+  ADD KEY `idx_student_id` (`student_id`),
+  ADD KEY `idx_xendit_invoice_id` (`xendit_invoice_id`),
+  ADD KEY `idx_external_id` (`external_id`),
+  ADD KEY `idx_status` (`status`);
+
+--
 -- AUTO_INCREMENT untuk tabel yang dibuang
 --
 
@@ -816,6 +1317,12 @@ ALTER TABLE `attendance_rules`
 -- AUTO_INCREMENT untuk tabel `attendance_summary`
 --
 ALTER TABLE `attendance_summary`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `bsi_va_records`
+--
+ALTER TABLE `bsi_va_records`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
@@ -840,6 +1347,12 @@ ALTER TABLE `conversations`
 -- AUTO_INCREMENT untuk tabel `conversation_participants`
 --
 ALTER TABLE `conversation_participants`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `email_logs`
+--
+ALTER TABLE `email_logs`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
@@ -873,15 +1386,69 @@ ALTER TABLE `leave_requests`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
+-- AUTO_INCREMENT untuk tabel `midtrans_transactions`
+--
+ALTER TABLE `midtrans_transactions`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `mutasi_students`
+--
+ALTER TABLE `mutasi_students`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `pakta_integritas`
+--
+ALTER TABLE `pakta_integritas`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT untuk tabel `parents`
 --
 ALTER TABLE `parents`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
+-- AUTO_INCREMENT untuk tabel `payment_gateways`
+--
+ALTER TABLE `payment_gateways`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `payment_invoices`
+--
+ALTER TABLE `payment_invoices`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `payment_status_history`
+--
+ALTER TABLE `payment_status_history`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `payment_transactions`
+--
+ALTER TABLE `payment_transactions`
+  MODIFY `id` bigint(20) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `payroll`
+--
+ALTER TABLE `payroll`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT untuk tabel `qr_attendance_logs`
 --
 ALTER TABLE `qr_attendance_logs`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `relief_requests`
+--
+ALTER TABLE `relief_requests`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
@@ -951,6 +1518,18 @@ ALTER TABLE `users`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
+-- AUTO_INCREMENT untuk tabel `whatsapp_messages`
+--
+ALTER TABLE `whatsapp_messages`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `xendit_invoices`
+--
+ALTER TABLE `xendit_invoices`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
 -- Ketidakleluasaan untuk tabel pelimpahan (Dumped Tables)
 --
 
@@ -992,6 +1571,24 @@ ALTER TABLE `evaluations`
 --
 ALTER TABLE `leave_requests`
   ADD CONSTRAINT `fk_leave_teacher` FOREIGN KEY (`teacher_id`) REFERENCES `teachers` (`id`);
+
+--
+-- Ketidakleluasaan untuk tabel `mutasi_students`
+--
+ALTER TABLE `mutasi_students`
+  ADD CONSTRAINT `mutasi_students_ibfk_1` FOREIGN KEY (`student_id`) REFERENCES `students` (`id`) ON DELETE CASCADE;
+
+--
+-- Ketidakleluasaan untuk tabel `payment_settings`
+--
+ALTER TABLE `payment_settings`
+  ADD CONSTRAINT `fk_payment_settings_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`tenant_id`) ON DELETE CASCADE;
+
+--
+-- Ketidakleluasaan untuk tabel `payment_status_history`
+--
+ALTER TABLE `payment_status_history`
+  ADD CONSTRAINT `fk_payment_status_history_invoice` FOREIGN KEY (`invoice_id`) REFERENCES `payment_invoices` (`id`) ON DELETE CASCADE;
 
 --
 -- Ketidakleluasaan untuk tabel `qr_attendance_logs`

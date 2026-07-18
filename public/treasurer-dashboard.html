@@ -567,10 +567,13 @@
                   <i class="fas fa-plus-circle mr-1"></i>Buat VA BSI
                 </button>
                 <button onclick="generateBsiCsv()" class="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium">
-                  <i class="fas fa-file-csv mr-1"></i>Buat VA Semua (CSV)
+                  <i class="fas fa-file-alt mr-1"></i>Buat VA Semua (TXT)
                 </button>
                 <button onclick="document.getElementById('bsiReportFile').click()" class="bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-medium">
                   <i class="fas fa-file-import mr-1"></i>Import Laporan BSI
+                </button>
+                <button onclick="loadBsiTransactions()" class="bg-cyan-600 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                  <i class="fas fa-list mr-1"></i>Lihat Transaksi BSI
                 </button>
                 <input type="file" id="bsiReportFile" accept=".csv,.json" class="hidden" onchange="importBsiReport(this)">
               </div>
@@ -1408,7 +1411,7 @@ async function createIndividualConcessionInvoice() {
           const url = window.URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
-          a.download = 'BSI_VA_' + tenantId + '.csv';
+          a.download = 'BSI_VA_' + tenantId + '.txt';
           document.body.appendChild(a);
           a.click();
           a.remove();
@@ -1431,7 +1434,7 @@ async function createIndividualConcessionInvoice() {
           } else {
             records = parseBsiCsv(text);
           }
-          const res = await fetch('/api/treasurer/bsi/import-report', {
+          const res = await fetch('/api/bsi/import-report', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
             body: JSON.stringify({ records })
@@ -1484,3 +1487,13 @@ async function createIndividualConcessionInvoice() {
   </body>
 
 </html>
+
+<script>
+function showToast(msg, type) {
+  const t = document.createElement('div');
+  t.className = 'fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm text-sm ' + (type === 'success' ? 'bg-green-500 text-white' : type === 'error' ? 'bg-red-500 text-white' : 'bg-blue-500 text-white');
+  t.innerHTML = '<div class="flex items-center"><i class="fas ' + (type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle') + ' mr-2"></i><span>' + msg + '</span></div>';
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
+</script>

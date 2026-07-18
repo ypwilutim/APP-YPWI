@@ -339,6 +339,21 @@
     }
     document.getElementById('teacherId').value = teacherId;
 
+    // Check for rejection reason from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const rejected = urlParams.get('rejected');
+    if (rejected === '1') {
+      const userData = JSON.parse(localStorage.getItem('user') || '{}');
+      const reason = userData.profile_rejected_reason || 'Tidak ada alasan yang diberikan';
+      Swal.fire({
+        title: 'Profil Ditolak!',
+        text: reason,
+        icon: 'error',
+        confirmButtonText: 'Mengerti',
+        confirmButtonColor: '#dc2626'
+      });
+    }
+
     fetchTeacherData();
     fetchTenants();
 
@@ -587,8 +602,8 @@ setValue('nomor_rekening', teacher.nomor_rekening);
 
         if (response.ok) {
           await fetch('/api/profile-complete/' + teacherId, { method: 'PUT', headers: { 'Content-Type': 'application/json' } });
-          Swal.fire({ title: 'Berhasil!', text: 'Profil berhasil diperbarui!', icon: 'success', timer: 3000, showConfirmButton: false }).then(() => {
-            window.location.href = 'login.html';
+          Swal.fire({ title: 'Berhasil!', text: 'Profil berhasil diperbarui! Menunggu persetujuan admin.', icon: 'success', timer: 3000, showConfirmButton: false }).then(() => {
+            window.location.href = 'profile-pending.html';
           });
         } else {
           throw new Error('Update failed');

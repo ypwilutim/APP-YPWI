@@ -111,6 +111,27 @@ if (!token) {
     window.location.href = 'login.html';
 }
 
+// Check profile approval status
+async function checkProfileApproval() {
+    try {
+        const response = await fetch('/api/auth/check-approval', {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const data = await response.json();
+        if (data.success && !data.approved) {
+            if (data.rejected) {
+                window.location.href = 'complete-profile.html?rejected=1';
+            } else {
+                window.location.href = 'profile-pending.html';
+            }
+        }
+    } catch (error) {
+        console.error('Approval check error:', error);
+    }
+}
+
+checkProfileApproval();
+
 // Decode JWT token and extract payload
 function parseJwt(token) {
     try {
@@ -291,12 +312,38 @@ async function initPaktaIntegritas() {
 }
 
 let currentAttendanceRule = null;
+let currentLocation = null;
     window.isLocationValid = false;
 
 function updateLocationDisplay(success, message) {
     const locationInfo = document.getElementById('locationInfo');
     locationInfo.className = success ? 'location-info success' : 'location-info error';
     locationInfo.innerHTML = `<span>${message}</span>`;
+}
+
+function showLocationPermissionBanner() {
+    const banner = document.getElementById('locationPermissionBanner');
+    if (banner) banner.style.display = 'block';
+}
+
+function dismissLocationBanner() {
+    const banner = document.getElementById('locationPermissionBanner');
+    if (banner) banner.style.display = 'none';
+}
+
+function retryLocationPermission() {
+    dismissLocationBanner();
+    requestLocationPermission();
+}
+
+function showAttendanceLoading() {
+    const loading = document.getElementById('attendanceLoading');
+    if (loading) loading.style.display = 'block';
+}
+
+function hideAttendanceLoading() {
+    const loading = document.getElementById('attendanceLoading');
+    if (loading) loading.style.display = 'none';
 }
 
 function getLocationErrorMessage(error) {
@@ -842,6 +889,7 @@ function requestLocationPermission() {
 
                 await waitForAssignments;
                 await loadRecentAttendance();
+                await updateUnitSelector();
                 await loadAttendanceRules();
                 await updateAttendanceButtonsState();
                 await detectNearbyUnits(position.coords.latitude, position.coords.longitude);
@@ -851,6 +899,8 @@ function requestLocationPermission() {
             function (error) {
                 console.error('Location error:', error);
                 updateLocationDisplay(false, getLocationErrorMessage(error));
+                showLocationPermissionBanner();
+                
                 // Tunggu userAssignments terisi dulu baru panggil
                 const waitForAssignments = new Promise(resolve => {
                     if (window.userAssignments?.length) return resolve();
@@ -863,6 +913,7 @@ function requestLocationPermission() {
                     setTimeout(() => { clearInterval(check); resolve(); }, 3000);
                 });
 waitForAssignments.then(async () => {
+                    await updateUnitSelector();
                     await loadAttendanceRules();
                     await loadRecentAttendance();
                     updateAttendanceButtonsState();
@@ -886,6 +937,7 @@ waitForAssignments.then(async () => {
         updateLocationDisplay(false, 'Geolokasi tidak didukung oleh browser ini.');
         // Tunggu userAssignments terisi dulu baru panggil loadRecentAttendance
         setTimeout(() => {
+            updateUnitSelector();
             loadAttendanceRules();
             loadRecentAttendance();
         }, 100);
@@ -936,102 +988,94 @@ function startLocationWatcher() {
 
 async function recordAttendance(jenis) {
     if (!currentLocation) { alert('Lokasi belum didapatkan.'); return; }
+    showAttendanceLoading();
 
     const checkInBtn = document.getElementById('checkInBtn');
     const checkOutBtn = document.getElementById('checkOutBtn');
 
-    // Disable buttons immediately to prevent double-click
     if (checkInBtn) { checkInBtn.disabled = true; checkInBtn.style.opacity = '0.6'; }
     if (checkOutBtn) { checkOutBtn.disabled = true; checkOutBtn.style.opacity = '0.6'; }
 
-    const radiusCheck = await validateLocationRadius(currentLocation.latitude, currentLocation.longitude);
-    if (!radiusCheck.withinRadius && !radiusCheck.isDinasLuarAllowed) {
-        if (checkInBtn) { checkInBtn.disabled = false; checkInBtn.style.opacity = ''; }
-        if (checkOutBtn) { checkOutBtn.disabled = false; checkOutBtn.style.opacity = ''; }
-        alert(`Anda di luar radius: ${radiusCheck.schoolName}. Pilih "Ajukan Izin" untuk absen dinas luar.`);
-        return;
-    }
-
-    // Update currentNearestTenantId from radius check result
-    if (radiusCheck.tenant_id) {
-        window.currentNearestTenantId = radiusCheck.tenant_id;
-    }
-
-    const now = new Date();
-    const currentMin = now.getHours() * 60 + now.getMinutes();
-
-    const matchedRule = window.currentAttendanceRules.find(r => {
-        const [h1, m1] = r.jam_mulai.split(':');
-        const [h2, m2] = r.jam_selesai.split(':');
-        const startMin = h1 * 60 + +m1;
-        const endMin = h2 * 60 + +m2;
-        const inTimeRange = startMin <= endMin
-            ? currentMin >= startMin && currentMin <= endMin
-            : currentMin >= startMin || currentMin <= endMin;
-        return inTimeRange && r.tipe.toLowerCase() === (jenis === 'masuk' ? 'datang' : 'pulang');
-    });
-
-    if (!matchedRule) {
-        if (checkInBtn) { checkInBtn.disabled = false; checkInBtn.style.opacity = ''; }
-        if (checkOutBtn) { checkOutBtn.disabled = false; checkOutBtn.style.opacity = ''; }
-        alert("Saat ini bukan jam absen yang diizinkan.");
-        return;
-    }
-
-    if (jenis === 'pulang' && !window.hasCheckedInToday) {
-        if (checkInBtn) { checkInBtn.disabled = false; checkInBtn.style.opacity = ''; }
-        if (checkOutBtn) { checkOutBtn.disabled = false; checkOutBtn.style.opacity = ''; }
-        alert("Anda tidak bisa absen pulang karena belum melakukan absen masuk hari ini.");
-        return;
-    }
-
-    const formData = new FormData();
-    formData.append('jenis', jenis);
-    formData.append('metode', 'dashboard');
-    formData.append('tenant_id', window.currentNearestTenantId || window.currentRulesTenantId || window.userAssignments?.[0]?.tenant_id || '');
-    formData.append('latitude', currentLocation.latitude);
-    formData.append('longitude', currentLocation.longitude);
-    formData.append('waktu_absen', now.toISOString());
-    formData.append('client_timezone', Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Makassar');
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, '0');
-    const d = String(now.getDate()).padStart(2, '0');
-    const h = String(now.getHours()).padStart(2, '0');
-    const min = String(now.getMinutes()).padStart(2, '0');
-    const s = String(now.getSeconds()).padStart(2, '0');
-    const localDateTime = `${y}-${m}-${d} ${h}:${min}:${s}`;
-    formData.append('waktu_scan', localDateTime);
-    formData.append('rule_id', matchedRule.id);
-    formData.append('status', matchedRule.status_log.toLowerCase().replace(' ', '_'));
-
-    // Handle offline mode - save to localStorage if no internet
-    if (!navigator.onLine) {
-        const offlineData = {
-            id: Date.now(),
-            jenis,
-            metode: 'dashboard',
-            latitude: currentLocation.latitude,
-            longitude: currentLocation.longitude,
-            waktu_scan: `${y}-${m}-${d} ${h}:${min}:${s}`,
-            timestamp: now.toISOString(),
-            token: window.token || localStorage.getItem('token'),
-            rule_id: matchedRule.id,
-            status: matchedRule.status_log.toLowerCase().replace(' ', '_'),
-            tenant_id: window.currentNearestTenantId || window.userAssignments?.[0]?.tenant_id
-        };
-        const stored = JSON.parse(localStorage.getItem('offlineAttendance') || '[]');
-        stored.push(offlineData);
-        localStorage.setItem('offlineAttendance', JSON.stringify(stored));
-        Swal.fire({
-            title: 'Offline',
-            text: 'Absensi tersimpan offline. Akan dikirim otomatis saat online.',
-            icon: 'info',
-            confirmButtonColor: '#066e3a'
-        });
-        return;
-    }
-
     try {
+        const radiusCheck = await validateLocationRadius(currentLocation.latitude, currentLocation.longitude);
+        if (!radiusCheck.withinRadius && !radiusCheck.isDinasLuarAllowed) {
+            alert(`Anda di luar radius: ${radiusCheck.schoolName}. Pilih "Ajukan Izin" untuk absen dinas luar.`);
+            return;
+        }
+
+        if (radiusCheck.tenant_id) {
+            window.currentNearestTenantId = radiusCheck.tenant_id;
+        }
+
+        const now = new Date();
+        const currentMin = now.getHours() * 60 + now.getMinutes();
+
+        const matchedRule = window.currentAttendanceRules.find(r => {
+            const [h1, m1] = r.jam_mulai.split(':');
+            const [h2, m2] = r.jam_selesai.split(':');
+            const startMin = h1 * 60 + +m1;
+            const endMin = h2 * 60 + +m2;
+            const inTimeRange = startMin <= endMin
+                ? currentMin >= startMin && currentMin <= endMin
+                : currentMin >= startMin || currentMin <= endMin;
+            return inTimeRange && r.tipe.toLowerCase() === (jenis === 'masuk' ? 'datang' : 'pulang');
+        });
+
+        if (!matchedRule) {
+            alert("Saat ini bukan jam absen yang diizinkan.");
+            return;
+        }
+
+        if (jenis === 'pulang' && !window.hasCheckedInToday) {
+            alert("Anda tidak bisa absen pulang karena belum melakukan absen masuk hari ini.");
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('jenis', jenis);
+        formData.append('metode', 'dashboard');
+        formData.append('tenant_id', window.currentNearestTenantId || window.currentRulesTenantId || window.userAssignments?.[0]?.tenant_id || '');
+        formData.append('latitude', currentLocation.latitude);
+        formData.append('longitude', currentLocation.longitude);
+        formData.append('waktu_absen', now.toISOString());
+        formData.append('client_timezone', Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Makassar');
+        const y = now.getFullYear();
+        const m = String(now.getMonth() + 1).padStart(2, '0');
+        const d = String(now.getDate()).padStart(2, '0');
+        const h = String(now.getHours()).padStart(2, '0');
+        const min = String(now.getMinutes()).padStart(2, '0');
+        const s = String(now.getSeconds()).padStart(2, '0');
+        const localDateTime = `${y}-${m}-${d} ${h}:${min}:${s}`;
+        formData.append('waktu_scan', localDateTime);
+        formData.append('rule_id', matchedRule.id);
+        formData.append('status', matchedRule.status_log.toLowerCase().replace(' ', '_'));
+
+        if (!navigator.onLine) {
+            const offlineData = {
+                id: Date.now(),
+                jenis,
+                metode: 'dashboard',
+                latitude: currentLocation.latitude,
+                longitude: currentLocation.longitude,
+                waktu_scan: `${y}-${m}-${d} ${h}:${min}:${s}`,
+                timestamp: now.toISOString(),
+                token: window.token || localStorage.getItem('token'),
+                rule_id: matchedRule.id,
+                status: matchedRule.status_log.toLowerCase().replace(' ', '_'),
+                tenant_id: window.currentNearestTenantId || window.userAssignments?.[0]?.tenant_id
+            };
+            const stored = JSON.parse(localStorage.getItem('offlineAttendance') || '[]');
+            stored.push(offlineData);
+            localStorage.setItem('offlineAttendance', JSON.stringify(stored));
+            Swal.fire({
+                title: 'Offline',
+                text: 'Absensi tersimpan offline. Akan dikirim otomatis saat online.',
+                icon: 'info',
+                confirmButtonColor: '#066e3a'
+            });
+            return;
+        }
+
         console.log('[DEBUG_ATTENDANCE] Sending attendance with tenant_id:', window.currentNearestTenantId || window.currentRulesTenantId || window.userAssignments?.[0]?.tenant_id);
         console.log('[DEBUG_ATTENDANCE] formData tenant_id:', formData.get('tenant_id'));
         const response = await fetch('/api/attendance', {
@@ -1044,16 +1088,13 @@ async function recordAttendance(jenis) {
 
         const result = await response.json();
 
-        // Refresh UI
         await new Promise(r => setTimeout(r, 500));
         await loadRecentAttendance();
         loadTodaySummary();
 
         requestAnimationFrame(async () => {
             if (result.success) {
-                // Small delay to ensure UI updates
                 await new Promise(r => setTimeout(r, 100));
-
                 Swal.fire({
                     title: 'Berhasil',
                     text: result.message,
@@ -1061,10 +1102,6 @@ async function recordAttendance(jenis) {
                     confirmButtonColor: '#066e3a'
                 });
             } else {
-                // Re-enable buttons on failure
-                if (checkInBtn) { checkInBtn.disabled = false; checkInBtn.style.opacity = ''; }
-                if (checkOutBtn) { checkOutBtn.disabled = false; checkOutBtn.style.opacity = ''; }
-
                 Swal.fire({
                     title: 'Gagal',
                     text: result.message,
@@ -1075,9 +1112,6 @@ async function recordAttendance(jenis) {
         });
     } catch (error) {
         console.error('Submit error:', error);
-        // Re-enable buttons on error
-        if (checkInBtn) { checkInBtn.disabled = false; checkInBtn.style.opacity = ''; }
-        if (checkOutBtn) { checkOutBtn.disabled = false; checkOutBtn.style.opacity = ''; }
         loadTodaySummary();
         loadRecentAttendance();
         requestAnimationFrame(() => {
@@ -1088,6 +1122,10 @@ async function recordAttendance(jenis) {
                 confirmButtonColor: '#dc2626'
             });
         });
+    } finally {
+        hideAttendanceLoading();
+        if (checkInBtn) { checkInBtn.disabled = false; checkInBtn.style.opacity = ''; }
+        if (checkOutBtn) { checkOutBtn.disabled = false; checkOutBtn.style.opacity = ''; }
     }
 }
 
@@ -1258,6 +1296,49 @@ async function loadLeaveStatus() {
     }
 }
 
+async function updateUnitSelector() {
+    const container = document.getElementById('unitSelectorCard');
+    const select = document.getElementById('unitSelector');
+    const info = document.getElementById('unitSelectorInfo');
+    if (!container || !select) return;
+
+    if (!window.userAssignments || window.userAssignments.length <= 1) {
+        container.style.display = 'none';
+        return;
+    }
+
+    container.style.display = 'block';
+    select.innerHTML = '<option value="">-- Pilih Unit --</option>';
+    window.userAssignments.forEach(a => {
+        const option = document.createElement('option');
+        option.value = a.tenant_id;
+        option.textContent = a.nama_sekolah || a.tenant_id;
+        select.appendChild(option);
+    });
+
+    const current = window.currentRulesTenantId || window.userAssignments[0]?.tenant_id;
+    if (current) {
+        select.value = current;
+    }
+    if (info) {
+        info.textContent = current ? `Unit aktif: ${window.userAssignments.find(a => a.tenant_id === current)?.nama_sekolah || current}` : '';
+    }
+}
+
+function onUnitSelectorChange(value) {
+    const info = document.getElementById('unitSelectorInfo');
+    if (!value) {
+        window.currentRulesTenantId = window.userAssignments?.[0]?.tenant_id || '';
+        if (info) info.textContent = '';
+    } else {
+        window.currentRulesTenantId = value;
+        const assignment = window.userAssignments.find(a => a.tenant_id === value);
+        if (info) info.textContent = `Unit aktif: ${assignment?.nama_sekolah || value}`;
+    }
+    loadAttendanceRules();
+    updateAttendanceButtonsState();
+}
+
 async function loadAttendanceRules() {
     try {
         const url = new URL('/api/attendance-rules', window.location.origin);
@@ -1275,7 +1356,13 @@ async function loadAttendanceRules() {
             const result = await response.json();
             if (result.success) {
                 window.currentAttendanceRules = result.rules;
-                window.currentRulesTenantId = result.source_tenant || tenantId;
+                if (result.source_tenant && result.source_tenant !== 'universal') {
+                    window.currentRulesTenantId = result.source_tenant || tenantId;
+                } else if (window.userAssignments && window.userAssignments.length > 0) {
+                    window.currentRulesTenantId = window.userAssignments[0]?.tenant_id;
+                } else {
+                    window.currentRulesTenantId = '';
+                }
                 console.log('[DASHBOARD] Aturan absensi berhasil dimuat:', result.source_tenant, window.currentAttendanceRules);
             } else {
                 window.currentAttendanceRules = [];

@@ -50,12 +50,12 @@ router.get('/treasurer/public/spp-summary', async (req, res) => {
         tn.tenant_id,
         tn.nama_sekolah,
         COUNT(s.id) as total_siswa,
-        COALESCE(SUM(CASE WHEN xi.status = 'PAID' THEN xi.amount ELSE 0 END), 0) as total_pemasukan,
-        COUNT(CASE WHEN xi.status = 'PAID' THEN 1 END) as sudah_bayar,
-        COUNT(CASE WHEN xi.status != 'PAID' OR xi.status IS NULL THEN 1 END) as belum_bayar
+        COALESCE(SUM(CASE WHEN pi.status = 'paid' THEN pi.amount ELSE 0 END), 0) as total_pemasukan,
+        COUNT(CASE WHEN pi.status = 'paid' THEN 1 END) as sudah_bayar,
+        COUNT(CASE WHEN pi.status != 'paid' OR pi.status IS NULL THEN 1 END) as belum_bayar
       FROM tenants tn
       LEFT JOIN students s ON tn.tenant_id = s.tenant_id
-      LEFT JOIN xendit_invoices xi ON s.id = xi.student_id AND xi.status = 'PAID'
+      LEFT JOIN payment_invoices pi ON s.id = pi.student_id AND pi.status = 'paid'
       WHERE 1=1
     `;
     let params = [];
@@ -252,7 +252,7 @@ router.post('/treasurer/public/send-spp-reminder', async (req, res) => {
       message: 'Pengingat SPP berhasil dikirim via WhatsApp',
       messageId: result.messageId
     });
-} catch (error) {
+  } catch (error) {
     console.error('Send SPP reminder error:', error.message);
     res.status(500).json({ success: false, message: error.message });
   }
@@ -279,7 +279,7 @@ router.post('/treasurer/public/send-all-spp-reminders', async (req, res) => {
     defaulterQuery += ' AND (COALESCE(CASE WHEN s.kelas = "PI" THEN s.arrears_pi WHEN s.kelas = "XI" THEN s.arrears_xi ELSE 0 END, 0) > 0)';
 
     const [defaulters] = await db.query(defaulterQuery, params);
-    
+
     if (!defaulters || defaulters.length === 0) {
       return res.json({ success: true, message: 'Tidak ada siswa yang belum bayar', sent: 0, failed: 0 });
     }
@@ -293,9 +293,9 @@ router.post('/treasurer/public/send-all-spp-reminders', async (req, res) => {
 
     for (const student of defaulters) {
       if (!student.no_wa) { failed++; continue; }
-      
+
       const number = student.no_wa.replace(/[^0-9]/g, '');
-      
+
       let invoiceUrl = null;
       const [inv] = await db.query(
         'SELECT external_id FROM xendit_invoices WHERE student_id = ? AND status = "PENDING" ORDER BY created_at DESC LIMIT 1',
@@ -559,7 +559,8 @@ router.post('/treasurer/public/create-invoice', async (req, res) => {
 });
 
 // Public endpoint to check BSI payment by virtual account
-router.get('/treasurer/public/check-bsi-payment', async (req, res) => {  try {
+router.get('/treasurer/public/check-bsi-payment', async (req, res) => {
+  try {
     const { va_number } = req.query;
     if (!va_number) {
       return res.json({ success: true, data: null });
@@ -567,7 +568,7 @@ router.get('/treasurer/public/check-bsi-payment', async (req, res) => {  try {
 
     const bsiPrefix = process.env.BSI_VA_PREFIX || '832231';
     const vaWithoutPrefix = va_number.replace(bsiPrefix, '');
-    
+
     const query = `
       SELECT s.id, s.nama_siswa, s.nisn, s.iuran_bulanan, s.tenant_id, tn.nama_sekolah, s.va_number, s.nis
       FROM students s
@@ -740,9 +741,9 @@ router.get('/treasurer/public/financial-report', async (req, res) => {
     const month = req.query.month || new Date().toISOString().slice(0, 7);
 
     let incomeQuery = `
-      SELECT SUM(xi.amount) as total_income
+      SELECT SUM(pi.amount) as total_income
       FROM xendit_invoices xi
-      WHERE xi.status = 'PAID' AND DATE_FORMAT(xi.created_at, '%Y-%m') = ?
+      WHERE pi.status = 'paid' AND DATE_FORMAT(xi.created_at, '%Y-%m') = ?
     `;
     let incomeParams = [month];
 
@@ -921,12 +922,12 @@ router.get('/treasurer/spp-summary', authenticateOperator, async (req, res) => {
         tn.tenant_id,
         tn.nama_sekolah,
         COUNT(s.id) as total_siswa,
-        COALESCE(SUM(CASE WHEN xi.status = 'PAID' THEN xi.amount ELSE 0 END), 0) as total_pemasukan,
-        COUNT(CASE WHEN xi.status = 'PAID' THEN 1 END) as sudah_bayar,
-        COUNT(CASE WHEN xi.status != 'PAID' OR xi.status IS NULL THEN 1 END) as belum_bayar
+        COALESCE(SUM(CASE WHEN pi.status = 'paid' THEN pi.amount ELSE 0 END), 0) as total_pemasukan,
+        COUNT(CASE WHEN pi.status = 'paid' THEN 1 END) as sudah_bayar,
+        COUNT(CASE WHEN pi.status != 'paid' OR pi.status IS NULL THEN 1 END) as belum_bayar
       FROM tenants tn
       LEFT JOIN students s ON tn.tenant_id = s.tenant_id
-      LEFT JOIN xendit_invoices xi ON s.id = xi.student_id
+      LEFT JOIN payment_invoices pi ON s.id = pi.student_id
       WHERE 1=1
     `;
     let params = [];
@@ -977,9 +978,9 @@ router.get('/treasurer/financial-report', authenticateOperator, async (req, res)
     }
 
     let incomeQuery = `
-      SELECT SUM(xi.amount) as total_income
+      SELECT SUM(pi.amount) as total_income
       FROM xendit_invoices xi
-      WHERE xi.status = 'PAID' AND DATE_FORMAT(xi.created_at, '%Y-%m') = ?
+      WHERE pi.status = 'paid' AND DATE_FORMAT(xi.created_at, '%Y-%m') = ?
     `;
     let incomeParams = [month];
 
@@ -1455,7 +1456,7 @@ router.get('/treasurer/bsi/export', authenticateOperator, async (req, res) => {
     let vaPrefix = '2231'
     const [gw] = await db.query('SELECT config FROM payment_gateways WHERE tenant_id = ? AND gateway = ? AND is_active = 1', [tenantId || 'YPWILUTIM', 'bsi_manual'])
     if (gw && gw.config) {
-      try { const cfg = JSON.parse(gw.config); vaPrefix = cfg.va_prefix || '2231' } catch (e) {}
+      try { const cfg = JSON.parse(gw.config); vaPrefix = cfg.va_prefix || '2231' } catch (e) { }
     }
     let query = 'SELECT pt.*, s.nama_siswa, s.nisn FROM payment_transactions pt LEFT JOIN students s ON pt.student_id = s.id WHERE gateway = ?'
     const params = ['bsi_manual']
@@ -1514,7 +1515,7 @@ async function getBsiParentAccount(tenantId) {
   try {
     // Parent Account diambil dari bank_account_number tenant (sesuai kebutuhan BSI CUZ).
     const [t] = await db.query('SELECT bank_account_number FROM tenants WHERE tenant_id = ? LIMIT 1', [tenantId]);
-    if (t && t.bank_account_number) return String(t.bank_account_number);
+    if (t && t.bank_account_number) return String(t.bank_account_number).replace(/\s/g, '');
 
     // Fallback ke config payment_gateways bila bank_account_number kosong.
     const [gw] = await db.query(
@@ -1523,15 +1524,7 @@ async function getBsiParentAccount(tenantId) {
     );
     if (gw && gw.config) {
       const cfg = typeof gw.config === 'string' ? JSON.parse(gw.config) : gw.config;
-      if (cfg && cfg.parent_account) return String(cfg.parent_account);
-    }
-    const [def] = await db.query(
-      'SELECT config FROM payment_gateways WHERE gateway = ? AND is_active = 1 LIMIT 1',
-      ['bsi_manual']
-    );
-    if (def && def.config) {
-      const cfg = typeof def.config === 'string' ? JSON.parse(def.config) : def.config;
-      if (cfg && cfg.parent_account) return String(cfg.parent_account);
+      if (cfg && cfg.parent_account) return String(cfg.parent_account).replace(/\s/g, '');
     }
   } catch (e) { /* fallback ke default */ }
   return '1029129123';
@@ -1614,10 +1607,12 @@ router.get('/treasurer/bsi/generate-csv', authenticateOperator, async (req, res)
     const parentAccount = await getBsiParentAccount(tenantId);
 
     let query = `
-      SELECT s.id, s.nama_siswa, s.tenant_id, tn.nama_sekolah, s.iuran_bulanan, s.va_number
+      SELECT s.id, s.nama_siswa, s.tenant_id, tn.nama_sekolah, s.iuran_bulanan, s.va_number, p.nama_orang_tua, p.no_wa as parent_wa
       FROM students s
       JOIN tenants tn ON s.tenant_id = tn.tenant_id
+      LEFT JOIN parents p ON s.parent_id = p.id
       WHERE (s.status = 'active' OR s.status = 'aktif' OR s.status IS NULL)
+        AND s.va_number IS NOT NULL AND s.va_number != ''
     `;
     const params = [];
     if (tenantId) {
@@ -1628,98 +1623,67 @@ router.get('/treasurer/bsi/generate-csv', authenticateOperator, async (req, res)
 
     const students = await db.query(query, params);
 
-    // CUZ BSI mengharapkan kolom "Virtual Account Number" berisi 10 digit (tanpa prefix).
-    // Prefix (mis. 2231) ditambahkan otomatis oleh sistem BSI, sehingga kita strip prefix saat export.
-    const stripPrefix = (va, prefix) => {
-      if (!va) return '';
-      if (prefix && va.startsWith(prefix)) return va.slice(prefix.length);
-      // Fallback: jika diawali digit angka dan lebih dari 10, ambil 10 digit terakhir
-      return va.replace(/[^0-9]/g, '').slice(-10);
-    };
-
-    const header = 'Type,Parent Account,Virtual Account Number,Virtual Account Name,Amount,Remark,Transaction Date';
-    const tgl = new Date().toLocaleDateString('id-ID');
+    const header1 = 'Type,Parent Account,Virtual Account Number (Prefix VA + Number),Virtual Account Name,Virtual Account Scheme,Limit Debit,Limit Credit,Limit Transaction,Physical Card,Auto Renewal Limit,,Expire Date,KYC,,,,,Additional Info,,,,,,,,,,';
+    const header2 = ',,,,,,,,,,Every,Date / Day,,Name,Mobile Phone,ID Type,ID Number,Address,Label1;Value1,Label2;Value2,Label3;Value3,Label4;Value4,Label5;Value5,Label6;Value6,Label7;Value7,Label8;Value8,Label9;Value10;Value10';
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth(); // 0-indexed
+    const lastDay = new Date(year, month + 1, 0).getDate();
+    const expireDate = `${String(lastDay).padStart(2, '0')}/${String(month + 1).padStart(2, '0')}/${year}`;
     const rows = (students || []).map(s => {
-      const fullVa = s.va_number || `${vaPrefix}${s.id}`;
-      const va = stripPrefix(fullVa, vaPrefix);
+      const rawVa = (s.va_number || `${vaPrefix}${String(s.id).padStart(10, '0')}`).replace(/[^0-9]/g, '');
+      const va = rawVa.padStart(16, '0').slice(-16); // Pastikan 16 digit tanpa spasi
       const amount = parseFloat(s.iuran_bulanan) || 0;
+      const limitDebit = amount + 2000;
+      const kycName = (s.nama_orang_tua || s.nama_siswa).replace(/,/g, ' ');
+      const vaName = (s.nama_siswa || '').replace(/,/g, ' ');
+      const autoRenewal = 'Monthly';
+      const every = '1';
+      const idType = 'KTP';
+      const idNumber = '1293000299101000'; // NIK dummy 16 digit valid
+      const mobilePhone = (() => {
+        const raw = (s.parent_wa || '').replace(/[^0-9]/g, '');
+        if (!raw) return '6287766263637';
+        if (raw.startsWith('0')) return '62' + raw.slice(1);
+        if (raw.startsWith('62')) return raw;
+        return '62' + raw;
+      })();
       return [
         'Debit',
-        parentAccount,
+        parentAccount.replace(/\s/g, ''),
         va,
-        s.nama_siswa,
-        amount,
-        `SPP ${s.nama_siswa}`,
-        tgl
-      ].map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',');
+        vaName,
+        'One Time',
+        limitDebit,
+        '',
+        '',
+        'Yes',
+        '',
+        '',
+        expireDate,
+        kycName,
+        mobilePhone,
+        'KTP',
+        '1293000299101000',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '',
+        '', ''
+      ].join(',');
     });
 
-    const csv = [header, ...rows].join('\n');
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename=BSI_VA_${tenantId || 'all'}_${Date.now()}.csv`);
-    res.send(csv);
+    const txt = [header1, header2, ...rows].join('\n');
+    res.setHeader('Content-Type', 'text/plain');
+    res.setHeader('Content-Disposition', `attachment; filename=BSI_VA_${tenantId || 'all'}_${Date.now()}.txt`);
+    res.send(txt);
   } catch (error) {
     console.error('Generate BSI CSV error:', error);
     res.status(500).json({ success: false, message: 'Gagal generate CSV BSI' });
-  }
-});
-
-// POST /api/treasurer/bsi/import-report - import laporan BSI, update payment_transactions -> paid
-// body: { records: [{ "Virtual Account Number", Jumlah, Keterangan }] }
-router.post('/treasurer/bsi/import-report', authenticateOperator, async (req, res) => {
-  try {
-    const { records } = req.body;
-    if (!Array.isArray(records)) {
-      return res.status(400).json({ success: false, message: 'records wajib array' });
-    }
-
-    let paid = 0, notFound = 0, totalAmount = 0;
-    for (const rec of records) {
-      const rawVa = rec['Virtual Account Number'] || rec['Virtual Account Number (Prefix VA + Number)'] || rec.va_number || rec.VirtualAccountNumber;
-      const amount = parseFloat(rec.Jumlah || rec.Amount || rec.amount) || 0;
-      const remark = rec.Keterangan || rec.Remark || rec.remark || '';
-      const paidAt = rec['Transaction Date'] || rec.Tanggal || rec.transaction_date || null;
-
-      if (!rawVa) { notFound++; continue; }
-
-      // CUZ BSI hanya mengembalikan 10 digit (tanpa prefix). Cari transaksi yang
-      // external_id-nya diakhiri dengan suffix tersebut (prefix ditambahkan BSI).
-      const suffix = String(rawVa).replace(/[^0-9]/g, '').slice(-10);
-      const [existing] = await db.query(
-        "SELECT id, tenant_id, student_id, external_id FROM payment_transactions WHERE gateway = ? AND external_id LIKE ? ORDER BY created_at DESC LIMIT 1",
-        ['bsi_manual', `%${suffix}`]
-      );
-
-      if (existing) {
-        await db.query(
-          `UPDATE payment_transactions
-           SET status = 'paid', amount = ?, description = ?, paid_at = ?
-           WHERE id = ?`,
-          [amount || existing.amount, remark, paidAt, existing.id]
-        );
-      } else {
-        // Insert baru sebagai paid bila belum ada (external_id simpan suffix + prefix default)
-        const vaNumber = `2231${suffix}`;
-        await db.query(
-          `INSERT INTO payment_transactions (tenant_id, student_id, gateway, external_id, amount, status, payment_method, description, paid_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [req.user?.tenant_id || 'YPWILUTIM', null, 'bsi_manual', vaNumber, amount, 'paid', 'BSI VA', remark, paidAt]
-        );
-      }
-      paid++;
-      totalAmount += amount;
-    }
-
-    res.json({
-      success: true,
-      message: `${paid} transaksi diupdate menjadi paid, ${notFound} tidak diproses`,
-      paid,
-      notFound,
-      totalAmount
-    });
-  } catch (error) {
-    console.error('Import BSI report error:', error);
-    res.status(500).json({ success: false, message: 'Gagal import laporan BSI' });
   }
 });
 
@@ -1745,6 +1709,52 @@ router.get('/treasurer/bsi/students-with-va', authenticateOperator, async (req, 
   } catch (error) {
     console.error('BSI students with VA error:', error);
     res.status(500).json({ success: false, message: 'Gagal ambil data siswa VA' });
+  }
+});
+
+
+// GET summary pendapatan per parent account (nomor VA tenant)
+router.get('/treasurer/bsi/summary', authenticateToken, authenticateOperator, verifyTenantAccess, async (req, res) => {
+  try {
+    const tenantId = req.tenant_id;
+    const [tenant] = await db.query(
+      'SELECT bsi_va_number FROM tenants WHERE tenant_id = ?', [tenantId]
+    );
+
+    const [summary] = await db.query(
+      `SELECT 
+        SUM(amount) as total_pendapatan,
+        COUNT(*) as jumlah_transaksi,
+        MIN(transaction_date) as transaksi_pertama,
+        MAX(transaction_date) as transaksi_terakhir
+       FROM payment_bsi_transactions 
+       WHERE beneficiary_va IN (SELECT va_number FROM students WHERE tenant_id = ?) AND status = 'Success'`,
+      [tenantId]
+    );
+
+    res.json({ success: true, data: summary[0] });
+  } catch (e) {
+    res.status(500).json({ success: false, message: 'Gagal ambil summary BSI' });
+  }
+});
+
+// GET list transaksi BSI
+router.get('/treasurer/bsi/transactions', authenticateToken, authenticateOperator, verifyTenantAccess, async (req, res) => {
+  try {
+    const tenantId = req.tenant_id;
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = parseInt(req.query.offset) || 0;
+
+    const [transactions] = await db.query(
+      `SELECT t.*, s.nama_siswa FROM payment_bsi_transactions t 
+       LEFT JOIN students s ON t.beneficiary_va = s.va_number 
+       WHERE s.tenant_id = ? ORDER BY t.created_at DESC LIMIT ? OFFSET ?`,
+      [tenantId, limit, offset]
+    );
+
+    res.json({ success: true, data: transactions });
+  } catch (e) {
+    res.status(500).json({ success: false, message: 'Gagal ambil transaksi BSI' });
   }
 });
 

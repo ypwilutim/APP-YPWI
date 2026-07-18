@@ -3,19 +3,19 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Demo Pembayaran SPP - YPWI Lutim</title>
+  <title>Demo DOKU Payment - YPWI Lutim</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 <body class="bg-gray-50 min-h-screen flex items-center justify-center p-4">
   <div class="max-w-md w-full bg-white rounded-xl shadow-sm border border-gray-100 p-6">
     <div class="flex items-center space-x-3 mb-6">
-      <div class="w-10 h-10 bg-emerald-600 rounded-lg flex items-center justify-center">
-        <i class="fas fa-wallet text-white"></i>
+      <div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+        <i class="fas fa-credit-card text-white"></i>
       </div>
       <div>
-        <h1 class="text-xl font-bold text-gray-900">Demo Pembayaran SPP</h1>
-        <p class="text-sm text-gray-600">Mode Demo - Orang Tua</p>
+        <h1 class="text-xl font-bold text-gray-900">DOKU Payment Demo</h1>
+        <p class="text-sm text-gray-600">Mode Demo - Tidak Ada Transaksi Nyata</p>
       </div>
     </div>
 
@@ -24,8 +24,6 @@
         <label class="block text-sm font-medium text-gray-700 mb-2">Pilih Sekolah</label>
         <select id="demoSchool" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500">
           <option value="">-- Pilih Sekolah --</option>
-          <option value="PPIB">Pondok Pesantren Informatika dan Bahasa Wahdah Islamiyah</option>
-          <option value="YPWILUTIM">YPWI Lutim</option>
         </select>
       </div>
       <div class="mb-4">
@@ -34,8 +32,8 @@
           <option value="">-- Pilih Sekolah Dulu --</option>
         </select>
       </div>
-      <button onclick="createDemoInvoice()" class="w-full px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
-        <i class="fas fa-credit-card mr-2"></i>Bayar SPP Sekarang
+      <button onclick="createDemoInvoice()" class="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+        <i class="fas fa-credit-card mr-2"></i>Lanjutkan ke Pembayaran
       </button>
     </div>
 
@@ -44,23 +42,9 @@
         <p class="text-sm text-gray-600">Kepada</p>
         <p class="font-medium" id="studentName">-</p>
         <p class="text-sm text-gray-600 mt-2">Jumlah Tagihan</p>
-        <p class="text-2xl font-bold text-emerald-600" id="invoiceAmount">Rp 500.000</p>
+        <p class="text-2xl font-bold text-blue-600" id="invoiceAmount">Rp 500.000</p>
       </div>
-      
-      <div class="border-t pt-4 mb-4">
-        <h3 class="font-semibold mb-2">Metode Pembayaran</h3>
-        <div class="space-y-2">
-          <label class="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
-            <input type="radio" name="payment" value="doku" class="mr-3" checked>
-            <span><i class="fas fa-credit-card mr-2"></i>DOKU Payment Gateway</span>
-          </label>
-          <label class="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
-            <input type="radio" name="payment" value="bsi" class="mr-3">
-            <span><i class="fas fa-university mr-2"></i>BSI Transfer (VA Manual)</span>
-          </label>
-        </div>
-      </div>
-      
+
       <button onclick="payWithDoku()" class="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 mb-2">
         <i class="fas fa-external-link-alt mr-2"></i>Buka Halaman DOKU
       </button>
@@ -71,6 +55,9 @@
   </div>
 
   <script>
+    let selectedStudentId = null;
+    let selectedAmount = 500000;
+
     async function loadStudents() {
       const school = document.getElementById('demoSchool').value;
       const studentSelect = document.getElementById('demoStudent');
@@ -88,7 +75,7 @@
         
         if (json.success) {
           studentSelect.innerHTML = '<option value="">-- Pilih Siswa --</option>' + 
-            json.data.map(s => '<option value="' + s.id + '" data-name="' + s.nama_siswa + '">' + s.nama_siswa + '</option>').join('');
+            json.data.map(s => '<option value="' + s.id + '" data-amount="' + (s.iuran_bulanan || 500000) + '">' + s.nama_siswa + '</option>').join('');
         } else {
           studentSelect.innerHTML = '<option value="">Gagal memuat siswa</option>';
         }
@@ -107,29 +94,36 @@
       }
       
       const selectedOption = document.getElementById('demoStudent').selectedOptions[0];
-      const studentName = selectedOption.dataset.name || selectedOption.textContent;
+      const studentName = selectedOption.textContent;
+      selectedAmount = selectedOption.dataset.amount || 500000;
       
       document.getElementById('studentName').textContent = studentName;
+      document.getElementById('invoiceAmount').textContent = 'Rp ' + parseInt(selectedAmount).toLocaleString('id-ID');
+      selectedStudentId = studentId;
+      
       document.getElementById('demoStep1').classList.add('hidden');
       document.getElementById('demoStep2').classList.remove('hidden');
     }
 
     async function payWithDoku() {
-      const studentId = document.getElementById('demoStudent').value;
       const school = document.getElementById('demoSchool').value;
       
       try {
         const res = await fetch('/api/doku/create-invoice', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tenant_id: school, student_id: parseInt(studentId) })
+          body: JSON.stringify({ tenant_id: school, student_id: parseInt(selectedStudentId), amount: parseFloat(selectedAmount) })
         });
         const json = await res.json();
         
         if (json.success && json.invoice_url) {
+          // Cek apakah URL ke mock atau DOKU asli
+          if (json.invoice_url.includes('mock-payment')) {
+            alert('Mock payment - DOKU API belum aktif');
+          }
           window.open(json.invoice_url, '_blank');
         } else {
-          alert(json.message || 'Gagal membuat invoice DOKU');
+          alert('Gagal buat invoice DOKU');
         }
       } catch (e) {
         alert('Error: ' + e.message);
@@ -139,6 +133,7 @@
     function resetDemo() {
       document.getElementById('demoStep2').classList.add('hidden');
       document.getElementById('demoStep1').classList.remove('hidden');
+      selectedStudentId = null;
     }
 
     document.getElementById('demoSchool').addEventListener('change', loadStudents);

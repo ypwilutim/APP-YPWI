@@ -1,4 +1,4 @@
-﻿// Payroll & Monthly Recap Functions (no redirect)
+// Payroll & Monthly Recap Functions (no redirect)
 function fmtRp(v) { return 'Rp ' + (parseFloat(v || 0)).toLocaleString('id-ID'); }
 
 function showToast(msg, type) {
@@ -102,8 +102,88 @@ function getTokenTenantId() {
         return (bend && bend.tenant_id) || (assignments[0] && assignments[0].tenant_id) || '';
     } catch (e) {
         return '';
-    }
 }
+};
+
+window.loadBsiTransactions = async function() {
+  try {
+    const tbody = document.getElementById('bsiTransactionTable') || createBsiTransactionTable();
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4">Memuat...</td></tr>';
+    const res = await fetch('/api/treasurer/bsi/transactions', {
+      headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') }
+    });
+    const json = await res.json();
+    if (!json.success) {
+      showToast(json.message || 'Gagal ambil transaksi BSI', 'error');
+      return;
+    }
+    tbody.innerHTML = json.data.length ? json.data.map((d, i) => 
+      `<tr><td class="px-3 py-2">${i + 1}</td><td class="px-3 py-2">${d.beneficiary_va}</td><td class="px-3 py-2">${d.nama_siswa || '-'}</td><td class="px-3 py-2 text-right">${fmtRp(d.amount)}</td><td class="px-3 py-2">${d.transaction_date}</td></tr>`
+    ).join('') : '<tr><td colspan="5" class="text-center py-4 text-gray-500">Belum ada transaksi</td></tr>';
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  }
+};
+
+function createBsiTransactionTable() {
+  const sec = document.createElement('div');
+  sec.className = 'bg-white rounded-xl shadow-sm border-2 border-amber-200 p-6 mb-4';
+  sec.innerHTML = `
+    <h3 class="text-lg font-semibold mb-4">Transaksi BSI</h3>
+    <div class="overflow-x-auto"><table class="w-full text-sm">
+      <thead class="bg-gray-50"><tr><th class="px-3 py-2">#</th><th class="px-3 py-2">VA Tujuan</th><th class="px-3 py-2">Nama Siswa</th><th class="px-3 py-2 text-right">Jumlah</th><th class="px-3 py-2">Tanggal</th></tr></thead>
+      <tbody id="bsiTransactionTable"></tbody>
+    </table></div>`;
+  document.querySelector('#payment-gatewayTab').appendChild(sec);
+  return document.getElementById('bsiTransactionTable');
+}
+
+window.importBsiReport = async function(input) {
+  const file = input.files[0];
+  if (!file) return;
+  
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    let csv = e.target.result;
+    // Handle Excel file (xlsx)
+    if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+      const data = XLSX.read(e.target.result, { type: 'binary' });
+      const sheet = data.Sheets[data.SheetNames[0]];
+      csv = XLSX.utils.sheet_to_csv(sheet);
+    }
+    
+    const btn = event?.target?.previousElementSibling;
+    const originalText = btn?.innerHTML;
+    
+    try {
+      if (btn) { btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Mengimport...'; btn.disabled = true; }
+      
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/bsi/import-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ csv })
+      });
+      
+      if (json.success) {
+        if (json.data.unmatched && json.data.unmatched.length > 0) {
+          showToast('Import: ' + json.data.paid + ' paid, ' + json.data.unmatched.length + ' unmatched (VA tidak ditemukan)', 'success');
+        } else {
+          showToast('Import selesai: ' + json.data.paid + ' tunggakan lunas', 'success');
+        }
+        loadPaymentDefaulters();
+      } else {
+        showToast(json.message || 'Gagal import', 'error');
+      }
+    } catch (error) {
+      showToast('Error: ' + error.message, 'error');
+    } finally {
+      if (btn) { btn.innerHTML = originalText; btn.disabled = false; }
+      input.value = '';
+    }
+  };
+  reader.readAsText(file);
+};
 
 function extractPeriode(d) {
     const m = (d.external_id || '').match(/(20\d{2}-\d{2})/);

@@ -1,0 +1,32 @@
+[
+  {
+    "Transaction ID#": "TEST001",
+    "Source Account": "8322311234567890 (IDR) / YAYASAN",
+    "Beneficiary Account": "8322317710469959 (IDR) / A. Alif Al Amin Ibrahim",
+    "Billing Number": "'-",
+    "Source Additional Info(1)": "Label = Pembayaran - Value = SPP Bulan April 2026",
+    "Source Additional Info(2)": "'-",
+    "Source Additional Info(3)": "'-",
+    "Source Additional Info(4)": "'-",
+    "Source Additional Info(5)": "'-",
+    "Source Additional Info(6)": "'-",
+    "Source Additional Info(7)": "'-",
+    "Source Additional Info(8)": "'-",
+    "Source Additional Info(9)": "'-",
+    "Beneficiary Additional Info(1)": "'-",
+    "Beneficiary Additional Info(2)": "'-",
+    "Beneficiary Additional Info(3)": "'-",
+    "Beneficiary Additional Info(4)": "'-",
+    "Beneficiary Additional Info(5)": "'-",
+    "Beneficiary Additional Info(6)": "'-",
+    "Beneficiary Additional Info(7)": "'-",
+    "Beneficiary Additional Info(8)": "'-",
+    "Beneficiary Additional Info(9)": "'-",
+    "Remarks": "'-",
+    "Transaction Date-Time": "16 Apr 2026 10:58",
+    "Total Amount": "IDR 50.000,00",
+    "Channel": "Mobile Banking (Super Apps)",
+    "Transfer Type": "PB",
+    "Status": "Success"
+  }
+]

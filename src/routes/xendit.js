@@ -361,9 +361,9 @@ const xenditInvoice = response.data;
 
     console.log(`[PUBLIC] Invoice created: ${xenditInvoice.id} for student ${student_id}, tenant ${tenant_id}`);
 
-await db.query(
-       `INSERT INTO xendit_invoices (tenant_id, student_id, xendit_invoice_id, external_id, amount, description, status, payment_method, callback_url, invoice_url, expiry_date, installment_type)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    await db.query(
+       `INSERT INTO xendit_invoices (tenant_id, student_id, xendit_invoice_id, external_id, amount, description, status, payment_method, callback_url, invoice_url, expiry_date)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
        [
          tenant_id,
          student_id,
@@ -375,8 +375,7 @@ await db.query(
          payment_method || 'MULTIPLE',
          callbackUrl,
          xenditInvoice.invoice_url,
-         xenditInvoice.expiry_date,
-         installment_type || null
+         xenditInvoice.expiry_date
        ]
      );
 
@@ -391,8 +390,7 @@ await db.query(
         amount: finalAmount,
         status: xenditInvoice.status,
         expiry_date: xenditInvoice.expiry_date,
-        payment_methods: xenditInvoice.available_payment_methods,
-        installment_type: installment_type || null
+        payment_methods: xenditInvoice.available_payment_methods
       }
     });
    } catch (error) {
@@ -1054,24 +1052,23 @@ router.post('/treasurer/public/create-concession-invoice', async (req, res) => {
 
     console.log(`[CONCESSION] Invoice created: ${xenditInvoice.id} for student ${student_id}, tenant ${student.tenant_id}`);
 
-    await db.query(
-      `INSERT INTO xendit_invoices (tenant_id, student_id, xendit_invoice_id, external_id, amount, description, status, payment_method, callback_url, invoice_url, expiry_date, installment_type)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        student.tenant_id,
-        student_id,
-        xenditInvoice.id,
-        externalId,
-        finalAmount,
-        invoicePayload.description,
-        xenditInvoice.status,
-        payment_method || 'MULTIPLE',
-        callbackUrl,
-        xenditInvoice.invoice_url,
-        xenditInvoice.expiry_date,
-        'concession'
-      ]
-    );
+await db.query(
+       `INSERT INTO xendit_invoices (tenant_id, student_id, xendit_invoice_id, external_id, amount, description, status, payment_method, callback_url, invoice_url, expiry_date)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       [
+         tenant_id,
+         student_id,
+         xenditInvoice.id,
+         externalId,
+         finalAmount,
+         invoicePayload.description,
+         xenditInvoice.status,
+         payment_method || 'MULTIPLE',
+         callbackUrl,
+         xenditInvoice.invoice_url,
+         xenditInvoice.expiry_date
+       ]
+     );
 
     res.json({
       success: true,

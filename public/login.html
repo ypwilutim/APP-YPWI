@@ -319,18 +319,42 @@
 
                 console.log('💾 [LOGIN DEBUG] Stored token and user data:', { token: !!data.token, user: userData });
 
-                // Check profile completion and redirect
+                // Check profile status and redirect
                 if (data.redirect === 'complete-profile.html' && data.teacherId) {
+                  if (data.rejection_reason) {
+                    Swal.fire({
+                      title: 'Profil Ditolak!',
+                      text: data.rejection_reason,
+                      icon: 'error',
+                      confirmButtonText: 'Perbaiki Profil',
+                      confirmButtonColor: '#dc2626'
+                    }).then((result) => {
+                      if (result.isConfirmed) {
+                        window.location.href = `complete-profile.html?teacher_id=${data.teacherId}`;
+                      }
+                    });
+                  } else {
+                    Swal.fire({
+                      title: 'Profil Belum Lengkap!',
+                      text: 'Silakan lengkapi profil Anda untuk melanjutkan.',
+                      icon: 'info',
+                      confirmButtonText: 'Lengkapi Profil',
+                      confirmButtonColor: '#066e3a'
+                    }).then((result) => {
+                      if (result.isConfirmed) {
+                        window.location.href = `complete-profile.html?teacher_id=${data.teacherId}`;
+                      }
+                    });
+                  }
+                } else if (data.redirect === 'profile-pending.html') {
                   Swal.fire({
-                    title: 'Profil Belum Lengkap!',
-                    text: 'Silakan lengkapi profil Anda untuk melanjutkan.',
+                    title: 'Menunggu Persetujuan',
+                    text: data.message || 'Profil Anda sedang menunggu persetujuan admin.',
                     icon: 'info',
-                    confirmButtonText: 'Lengkapi Profil',
-                    confirmButtonColor: '#066e3a'
+                    confirmButtonText: 'Lanjutkan',
+                    confirmButtonColor: '#f59e0b'
                   }).then((result) => {
-                    if (result.isConfirmed) {
-                      window.location.href = `complete-profile.html?teacher_id=${data.teacherId}`;
-                    }
+                    window.location.href = 'profile-pending.html';
                   });
                 } else {
                   Swal.fire({
@@ -340,7 +364,6 @@
                     timer: 1500,
                     showConfirmButton: false
                   }).then(() => {
-                    // Semua role guru -> dashboard.html apapun assignmentnya
                     let targetRedirect = data.redirect;
                     if (data.user.role === 'guru') {
                       targetRedirect = 'dashboard.html';

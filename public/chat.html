@@ -81,6 +81,10 @@ body.delete-mode .chat-header .delete-btn{display:block}
     return d.innerHTML;
   }
 
+  function jsStringEscape(t) {
+    return String(t).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"');
+  }
+
   function authedFetch(u, i) {
     i = i || {};
     i.headers = Object.assign({}, i.headers, { Authorization: 'Bearer ' + token });
@@ -138,7 +142,7 @@ body.delete-mode .chat-header .delete-btn{display:block}
       const d = await r.json();
       if (d.success && d.users) {
         document.getElementById('conversationsContainer').innerHTML = d.users.map(u =>
-          '<div class="conversation-item" onclick="checkExisting('+u.user_id+",'"+escapeHtml(u.name)+"')"><div class='conversation-name'>"+escapeHtml(u.name)+'</div><div class="conversation-preview">Guru - ' + u.tenant_id + '</div></div>'
+          '<div class="conversation-item" onclick="checkExisting('+u.user_id+",'"+jsStringEscape(u.name)+"')\"><div class='conversation-name'>"+escapeHtml(u.name)+'</div><div class="conversation-preview">Guru - ' + u.tenant_id + '</div></div>'
         ).join('');
       }
     } catch (e) {
@@ -204,10 +208,12 @@ body.delete-mode .chat-header .delete-btn{display:block}
       const r = await authedFetch('/api/chat/conversations/' + activeConversationId + '/messages');
       const d = await r.json();
       if (d.success) {
-        document.getElementById('messagesContainer').innerHTML = d.messages.length
+        document.getElementById('messagesContainer').innerHTML = d.messages && d.messages.length
           ? d.messages.map(m => '<div class="message ' + (m.sender_id == currentUserId ? 'own' : 'other') + '"><div>' + escapeHtml(m.message) + '</div><div style="font-size:0.7rem;opacity:0.7;margin-top:0.25rem;">' + new Date(m.created_at).toLocaleTimeString('id-ID') + '</div></div>').join('')
           : '<div style="text-align:center;color:#64748b;padding:2rem;">Belum ada pesan</div>';
         document.getElementById('messagesContainer').scrollTop = document.getElementById('messagesContainer').scrollHeight;
+      } else {
+        document.getElementById('messagesContainer').innerHTML = '<div style="text-align:center;color:#dc2626;padding:1rem;">' + escapeHtml(d.message || 'Gagal memuat pesan') + '</div>';
       }
     } catch (e) {
       console.error(e);
@@ -238,7 +244,7 @@ body.delete-mode .chat-header .delete-btn{display:block}
   function renderConversations(c) {
     document.getElementById('conversationsContainer').innerHTML = c.length
       ? c.map(v =>
-          '<div class="conversation-item" onclick="openConversation(' + v.id + ",'" + escapeHtml(v.other_name) + "')\"><input type=\"checkbox\" class=\"conv-checkbox\" onchange=\"updateSelectedCount()\" value=\"" + v.id + "\"><div><div class=\"conversation-name\">" + escapeHtml(v.other_name || 'Percakapan') + '</div><div class="conversation-preview">' + escapeHtml(v.last_message || 'Belum ada pesan') + '</div></div></div>'
+          '<div class="conversation-item" onclick="openConversation(' + v.id + ",'" + jsStringEscape(v.other_name) + "')\"><input type=\"checkbox\" class=\"conv-checkbox\" onchange=\"updateSelectedCount()\" value=\"" + v.id + "\"><div><div class=\"conversation-name\">" + escapeHtml(v.other_name || 'Percakapan') + '</div><div class="conversation-preview">' + escapeHtml(v.last_message || 'Belum ada pesan') + '</div></div></div>'
         ).join('')
       : '<div style="text-align:center;color:#94a3b8;padding:1rem;">Tidak ada percakapan ditemukan</div>';
   }
@@ -254,8 +260,14 @@ body.delete-mode .chat-header .delete-btn{display:block}
         }
       }, 500);
     }
-  });
+  }, { passive: true });
+  document.addEventListener('touchmove', () => {
+    clearTimeout(longPressTimer);
+  }, { passive: true });
   document.addEventListener('touchend', () => {
+    clearTimeout(longPressTimer);
+  });
+  document.addEventListener('touchcancel', () => {
     clearTimeout(longPressTimer);
   });
 
@@ -279,9 +291,7 @@ body.delete-mode .chat-header .delete-btn{display:block}
   async function deleteSelected() {
     const c = document.querySelectorAll('.conv-checkbox:checked');
     if (!c.length) return;
-    for (const cb of c) {
-      await authedFetch('/api/chat/conversations/' + cb.value, { method: 'DELETE' });
-    }
+    await Promise.all(Array.from(c).map(cb => authedFetch('/api/chat/conversations/' + cb.value, { method: 'DELETE' })));
     cancelDelete();
     loadConversations();
   }

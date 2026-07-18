@@ -164,7 +164,7 @@ Terima kasih atas dedikasi dan kedisiplinan Anda. Semoga Allah SWT memberkahi se
 </html>`;
 
         if (typeof global.sendEmail === 'function') {
-          await global.sendEmail(teacher.email, `Presensi ${jenis.toUpperCase()} Berhasil - YPWI Lutim`, htmlMessage);
+          await global.sendEmail(teacher.email, `Presensi ${jenis.toUpperCase()} Berhasil - YPWI Lutim`, htmlMessage, '', [], 'attendance');
         }
       }
     } catch (waError) {
@@ -270,21 +270,36 @@ router.get('/attendance-rules', authenticateToken, async (req, res) => {
     const ruleConditions = [];
     const ruleParams = [];
 
-    // Tenant-specific rules
-    ruleConditions.push('(tenant_id = ?)');
-    ruleParams.push(targetTenantId);
+    // Tenant-specific rules (jika ada targetTenantId)
+    if (targetTenantId) {
+      ruleConditions.push('(tenant_id = ?)');
+      ruleParams.push(targetTenantId);
+    } else if (req.user?.role === 'admin') {
+      ruleConditions.push('(tenant_id IS NOT NULL)');
+    }
 
     // Central rules by tipe_unit (jika useCentral)
     if (useCentral && userTipeUnit) {
       ruleConditions.push('(tenant_id IS NULL AND tipe_unit = ?)');
       ruleParams.push(userTipeUnit);
+    } else if (req.user?.role === 'admin') {
+      ruleConditions.push('(tenant_id IS NULL)');
+    }
+
+    if (ruleConditions.length === 0) {
+      return res.status(200).json({
+        success: true,
+        rules: [],
+        source_tenant: targetTenantId || 'universal',
+        use_central: useCentral
+      });
     }
 
     if (ruleConditions.length > 0) {
       query += ' WHERE ' + ruleConditions.join(' OR ');
     }
 
-    query += ' ORDER BY tenant_id NULLS FIRST, tipe, jam_mulai';
+    query += ' ORDER BY tenant_id IS NULL, tipe, jam_mulai';
 
     const rules = await db.query(query, ruleParams);
 
@@ -676,7 +691,7 @@ Pesan akan otomatis terkirim ke admin untuk review.`;
 </html>`;
 
         if (typeof global.sendEmail === 'function') {
-          await global.sendEmail(teacher.email, `Pengajuan Izin ${jenis.toUpperCase()} - YPWI Lutim`, htmlMessage);
+          await global.sendEmail(teacher.email, `Pengajuan Izin ${jenis.toUpperCase()} - YPWI Lutim`, htmlMessage, '', [], 'leave');
         }
       }
     } catch (waError) {

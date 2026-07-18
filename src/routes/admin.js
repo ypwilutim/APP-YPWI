@@ -252,8 +252,12 @@ router.get('/admin/rules', authenticateOperator, async (req, res) => {
     } else {
       // Default: aturan tenant user (legacy)
       tenantId = req.user.tenant_id || (req.user.assignments && req.user.assignments[0] && req.user.assignments[0].tenant_id);
-      query += ' WHERE tenant_id = ?';
-      params.push(tenantId);
+      if (tenantId) {
+        query += ' WHERE tenant_id = ?';
+        params.push(tenantId);
+      } else if (req.user.role !== 'admin') {
+        return res.status(400).json({ success: false, message: 'Tenant ID tidak ditemukan untuk user ini.' });
+      }
     }
     query += ' ORDER BY tenant_id, tipe, jam_mulai';
     const rules = await db.query(query, params);
@@ -935,6 +939,182 @@ router.delete('/admin/teachers/:id', authenticateOperator, async (req, res) => {
 });
 
 // ==========================================
+// PROFILE APPROVAL ROUTES
+// ==========================================
+
+// GET /api/admin/profile-approvals - List pending profile approvals
+router.get('/admin/profile-approvals', authenticateOperator, async (req, res) => {
+  try {
+    const tenantId = req.query.tenant_id;
+    const search = req.query.search || '';
+
+    let query = `
+      SELECT u.id as user_id, u.guru_id, u.profile_approved, u.profile_rejected_reason, u.profile_approved_at, u.created_at,
+             t.nama, t.nik, t.nip, t.email, t.no_wa, t.status_kepegawaian,
+             GROUP_CONCAT(DISTINCT CONCAT(ta.tenant_id, ':', ta.jabatan_di_unit, ':', tn.nama_sekolah)) as assignments
+      FROM users u
+      JOIN teachers t ON u.guru_id = t.id
+      LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id
+      LEFT JOIN tenants tn ON ta.tenant_id = tn.tenant_id
+      WHERE u.profile_approved = 0 AND t.status_aktif = 1
+    `;
+    const params = [];
+
+    if (tenantId) {
+      query += ' AND EXISTS (SELECT 1 FROM teacher_assignments ta2 WHERE ta2.teacher_id = t.id AND ta2.tenant_id = ?)';
+      params.push(tenantId);
+    }
+
+    if (search) {
+      query += ' AND (t.nama LIKE ? OR t.nik LIKE ? OR t.nip LIKE ? OR t.email LIKE ?)';
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+    }
+
+    query += ' GROUP BY u.id, t.id ORDER BY u.created_at ASC';
+    const approvals = await db.query(query, params);
+    const formatted = approvals.map(a => ({
+      ...a,
+      assignments: a.assignments ? a.assignments.split(',').map(x => {
+        const [tenant_id, jabatan, nama_sekolah] = x.split(':');
+        return { tenant_id, jabatan_di_unit: jabatan, nama_sekolah };
+      }) : []
+    }));
+    res.json({ success: true, data: formatted });
+  } catch (error) {
+    console.error('Profile approvals error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching profile approvals' });
+  }
+});
+
+// POST /api/admin/profile-approvals/:teacherId/approve - Approve a profile
+router.post('/admin/profile-approvals/:teacherId/approve', authenticateOperator, async (req, res) => {
+  try {
+    const teacherId = req.params.teacherId;
+
+    const [user] = await db.query('SELECT id, guru_id, username FROM users WHERE guru_id = ?', [teacherId]);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User tidak ditemukan' });
+    }
+
+    await db.query(
+      'UPDATE users SET is_profile_complete = 1, profile_approved = 1, profile_rejected_reason = NULL, profile_approved_at = NOW() WHERE guru_id = ?',
+      [teacherId]
+    );
+
+    // Send notification email to teacher
+    const [teacher] = await db.query('SELECT nama, email FROM teachers WHERE id = ?', [teacherId]);
+    if (teacher && teacher.email) {
+      const htmlMessage = `<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Profil Disetujui - YPWI Lutim</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5;">
+  <div style="max-width: 600px; margin: 20px auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+    <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 30px; text-align: center;">
+      <h1 style="margin: 0; color: white; font-size: 24px;">YPWI LUTIM</h1>
+      <p style="margin: 5px 0 0 0; color: rgba(255,255,255,0.9); font-size: 14px;">Notifikasi Profil</p>
+    </div>
+    <div style="padding: 30px;">
+      <h2 style="margin: 0 0 20px 0; color: #333; font-size: 20px;">✅ Profil Berhasil Disetujui</h2>
+      <p style="margin: 0 0 15px 0; color: #555; font-size: 16px; line-height: 1.6;">
+        Assalamu'alaikum <strong>${teacher.nama || 'Guru'}</strong>,
+      </p>
+      <p style="margin: 0 0 20px 0; color: #555; font-size: 16px; line-height: 1.6;">
+        Profil Anda telah disetujui oleh admin. Anda sekarang dapat login dan mengakses dashboard untuk melakukan presensi.
+      </p>
+      <p style="margin: 0 0 20px 0; color: #555; font-size: 16px; line-height: 1.6;">
+        Silakan login dengan username: <strong>${teacher.email || user.username}</strong>
+      </p>
+      <p style="margin: 20px 0 0 0; color: #888; font-size: 14px;">Email ini dikirim otomatis oleh sistem.</p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+      if (typeof global.sendEmail === 'function') {
+        await global.sendEmail(teacher.email, 'Profil Disetujui - YPWI Lutim', htmlMessage, '', [], 'account_activation');
+      }
+    }
+
+    res.json({ success: true, message: 'Profil berhasil disetujui' });
+  } catch (error) {
+    console.error('Approve profile error:', error);
+    res.status(500).json({ success: false, message: 'Error approving profile' });
+  }
+});
+
+// POST /api/admin/profile-approvals/:teacherId/reject - Reject a profile with reason
+router.post('/admin/profile-approvals/:teacherId/reject', authenticateOperator, async (req, res) => {
+  try {
+    const teacherId = req.params.teacherId;
+    const { reason } = req.body;
+
+    if (!reason || reason.trim() === '') {
+      return res.status(400).json({ success: false, message: 'Alasan penolakan wajib diisi' });
+    }
+
+    const [user] = await db.query('SELECT id, guru_id, username FROM users WHERE guru_id = ?', [teacherId]);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User tidak ditemukan' });
+    }
+
+    await db.query(
+      'UPDATE users SET is_profile_complete = 0, profile_approved = -1, profile_rejected_reason = ?, profile_approved_at = NOW() WHERE guru_id = ?',
+      [reason.trim(), teacherId]
+    );
+
+    // Send notification email to teacher
+    const [teacher] = await db.query('SELECT nama, email FROM teachers WHERE id = ?', [teacherId]);
+    if (teacher && teacher.email) {
+      const htmlMessage = `<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Profil Ditolak - YPWI Lutim</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5;">
+  <div style="max-width: 600px; margin: 20px auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+    <div style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); padding: 30px; text-align: center;">
+      <h1 style="margin: 0; color: white; font-size: 24px;">YPWI LUTIM</h1>
+      <p style="margin: 5px 0 0 0; color: rgba(255,255,255,0.9); font-size: 14px;">Notifikasi Profil</p>
+    </div>
+    <div style="padding: 30px;">
+      <h2 style="margin: 0 0 20px 0; color: #333; font-size: 20px;">❌ Profil Ditolak</h2>
+      <p style="margin: 0 0 15px 0; color: #555; font-size: 16px; line-height: 1.6;">
+        Assalamu'alaikum <strong>${teacher.nama || 'Guru'}</strong>,
+      </p>
+      <p style="margin: 0 0 20px 0; color: #555; font-size: 16px; line-height: 1.6;">
+        Profil Anda ditolak oleh admin dengan alasan:
+      </p>
+      <div style="background: #fef2f2; border-left: 4px solid #ef4444; padding: 1rem; border-radius: 6px; margin: 1rem 0;">
+        <p style="margin: 0; color: #991b1b; font-size: 0.95rem;">${reason}</p>
+      </div>
+      <p style="margin: 0 0 20px 0; color: #555; font-size: 16px; line-height: 1.6;">
+        Silakan perbaiki data sesuai alasan penolakan dan submit ulang profil Anda.
+      </p>
+      <p style="margin: 20px 0 0 0; color: #888; font-size: 14px;">Email ini dikirim otomatis oleh sistem.</p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+      if (typeof global.sendEmail === 'function') {
+        await global.sendEmail(teacher.email, 'Profil Ditolak - YPWI Lutim', htmlMessage, '', [], 'account_activation');
+      }
+    }
+
+    res.json({ success: true, message: 'Profil berhasil ditolak' });
+  } catch (error) {
+    console.error('Reject profile error:', error);
+    res.status(500).json({ success: false, message: 'Error rejecting profile' });
+  }
+});
+
+// ==========================================
 // ASSIGNMENT ROUTES - Pembagian Tugas Guru/Staf
 // ==========================================
 
@@ -1272,7 +1452,7 @@ router.post('/admin/send-email-no-account', authenticateOperator, async (req, re
 
       try {
         if (typeof global.sendEmail === 'function') {
-          await global.sendEmail(teacher.email, 'Pemberitahuan Aktivasi Akun - YPWI Lutim', htmlMessage);
+          await global.sendEmail(teacher.email, 'Pemberitahuan Aktivasi Akun - YPWI Lutim', htmlMessage, '', [], 'account_activation');
           sentCount++;
         } else {
           errorMessages.push(`${teacher.nama}: email tidak terkirim`);
@@ -2761,6 +2941,56 @@ router.get('/teacher/info', authenticateToken, async (req, res) => {
   }
 });
 
+// GET /api/admin/email-logs - Get email sending history
+router.get('/admin/email-logs', authenticateOperator, async (req, res) => {
+  try {
+    const { page = 1, limit = 50, status, category, search } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    let whereClause = 'WHERE 1=1';
+    const params = [];
+
+    if (status) {
+      whereClause += ' AND status = ?';
+      params.push(status);
+    }
+    if (category) {
+      whereClause += ' AND category = ?';
+      params.push(category);
+    }
+    if (search) {
+      whereClause += ' AND (to_email LIKE ? OR subject LIKE ?)';
+      params.push(`%${search}%`, `%${search}%`);
+    }
+
+    const [countResult] = await db.query(`SELECT COUNT(*) as total FROM email_logs ${whereClause}`, params);
+    const total = countResult[0]?.total || 0;
+
+    const logs = await db.query(
+      `SELECT id, to_email, subject, category, related_id, status, message_id, error_message, sent_at, created_at
+       FROM email_logs
+       ${whereClause}
+       ORDER BY created_at DESC
+       LIMIT ? OFFSET ?`,
+      [...params, parseInt(limit), offset]
+    );
+
+    res.json({
+      success: true,
+      data: logs,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        totalPages: Math.ceil(total / parseInt(limit)) || 1
+      }
+    });
+  } catch (error) {
+    console.error('Email logs error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching email logs' });
+  }
+});
+
 // GET /api/admin/backup - Get backup history
 router.get('/admin/backup', authenticateToken, async (req, res) => {
   try {
@@ -2994,12 +3224,11 @@ router.put('/public/teachers/:teacherId', teacherUpload.single('foto'), async (r
       const hashedPassword = await bcrypt.hash(defaultPassword, 10);
       
       await db.query(
-        'INSERT INTO users (username, password, guru_id, role, is_profile_complete, is_default_password) VALUES (?, ?, ?, ?, 1, 1)',
+        'INSERT INTO users (username, password, guru_id, role, is_profile_complete, is_default_password, profile_approved) VALUES (?, ?, ?, ?, 0, 1, 0)',
         [email, hashedPassword, teacherId, 'guru']
       );
     } else if (existingUser.length > 0) {
-      // Update existing user to mark profile complete
-      await db.query('UPDATE users SET is_profile_complete = 1 WHERE guru_id = ?', [teacherId]);
+      await db.query('UPDATE users SET is_profile_complete = 0, profile_approved = 0, profile_rejected_reason = NULL, profile_approved_at = NULL WHERE guru_id = ?', [teacherId]);
     }
 
     // Send email notification for profile completion
@@ -3010,35 +3239,44 @@ router.put('/public/teachers/:teacherId', teacherUpload.single('foto'), async (r
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Profil Selesai - YPWI Lutim</title>
+  <title>Profil Menunggu Persetujuan - YPWI Lutim</title>
 </head>
 <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5;">
   <div style="max-width: 600px; margin: 20px auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-    <div style="background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); padding: 30px; text-align: center;">
+    <div style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 30px; text-align: center;">
       <h1 style="margin: 0; color: white; font-size: 24px;">YPWI LUTIM</h1>
       <p style="margin: 5px 0 0 0; color: rgba(255,255,255,0.9); font-size: 14px;">Notifikasi Profil</p>
     </div>
     <div style="padding: 30px;">
-      <h2 style="margin: 0 0 20px 0; color: #333; font-size: 20px;">✅ Profil Akun Selesai Diisi</h2>
+      <h2 style="margin: 0 0 20px 0; color: #333; font-size: 20px;">⏳ Profil Menunggu Persetujuan Admin</h2>
       <p style="margin: 0 0 15px 0; color: #555; font-size: 16px; line-height: 1.6;">
         Assalamu'alaikum <strong>${nama || 'Guru'}</strong>,
       </p>
       <p style="margin: 0 0 20px 0; color: #555; font-size: 16px; line-height: 1.6;">
-        Profil akun YPWI Lutim Anda telah berhasil dilengkapi.
+        Profil akun YPWI Lutim Anda telah berhasil dilengkapi dan sedang menunggu persetujuan dari admin.
+      </p>
+      <p style="margin: 0 0 20px 0; color: #555; font-size: 16px; line-height: 1.6;">
+        Setelah admin menyetujui profil Anda, Anda akan dapat mengakses dashboard dan melakukan presensi.
       </p>
       <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
         <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee; color: #666;">Username:</td><td style="padding: 8px 0; border-bottom: 1px solid #eee; font-weight: 600;">${email}</td></tr>
         <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee; color: #666;">Password:</td><td style="padding: 8px 0; border-bottom: 1px solid #eee; font-weight: 600;">${passwordText}</td></tr>
         <tr><td style="padding: 8px 0; color: #666;">Tanggal:</td><td style="padding: 8px 0; font-weight: 600;">${new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</td></tr>
       </table>
-      <p style="margin: 20px 0 0 0; color: #888; font-size: 14px;">Email ini dikirim otomatis oleh sistem. Silakan login dengan password di atas.</p>
+      <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 1rem; border-radius: 6px; margin: 1rem 0;">
+        <p style="margin: 0; color: #92400e; font-size: 0.9rem;">
+          <strong>Status:</strong> Menunggu persetujuan admin<br>
+          <small>Profil Anda akan ditinjau oleh admin secepatnya.</small>
+        </p>
+      </div>
+      <p style="margin: 20px 0 0 0; color: #888; font-size: 14px;">Email ini dikirim otomatis oleh sistem.</p>
     </div>
   </div>
 </body>
 </html>`;
 
       if (typeof global.sendEmail === 'function') {
-        await global.sendEmail(email, 'Profil Akun Aktif - YPWI Lutim', htmlMessage);
+        await global.sendEmail(email, 'Profil Menunggu Persetujuan Admin - YPWI Lutim', htmlMessage, '', [], 'account_activation');
       }
     }
 
@@ -3534,6 +3772,143 @@ router.get('/admin/bendahara', authenticateOperator, async (req, res) => {
     return res.json({ success: true, nama: '-', nik: '-' });
   } catch (e) {
     res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+// GET /api/admin/emails - List emails
+router.get('/admin/emails', authenticateOperator, async (req, res) => {
+  try {
+    const { folder = 'sent', page = 1, limit = 20, search, status, category } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    let whereClause = 'WHERE 1=1';
+    const params = [];
+
+    if (folder === 'drafts') {
+      whereClause += ' AND status = ?';
+      params.push('draft');
+    } else if (folder === 'sent') {
+      whereClause += ' AND status = ?';
+      params.push('sent');
+    } else if (folder === 'failed') {
+      whereClause += ' AND status = ?';
+      params.push('failed');
+    }
+
+    if (status) {
+      whereClause += ' AND status = ?';
+      params.push(status);
+    }
+    if (category) {
+      whereClause += ' AND category = ?';
+      params.push(category);
+    }
+    if (search) {
+      whereClause += ' AND (to_email LIKE ? OR subject LIKE ? OR body_text LIKE ?)';
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+    }
+
+    const [countResult] = await db.query(`SELECT COUNT(*) as total FROM email_logs ${whereClause}`, params);
+    const total = countResult[0]?.total || 0;
+
+    const emails = await db.query(
+      `SELECT id, from_email, to_email, cc, bcc, subject, category, status, message_id, error_message,
+              has_attachments, is_read, sent_at, created_at
+       FROM email_logs
+       ${whereClause}
+       ORDER BY created_at DESC
+       LIMIT ? OFFSET ?`,
+      [...params, parseInt(limit), offset]
+    );
+
+    res.json({
+      success: true,
+      data: emails,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        totalPages: Math.ceil(total / parseInt(limit)) || 1
+      }
+    });
+  } catch (error) {
+    console.error('List emails error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching emails' });
+  }
+});
+
+// GET /api/admin/emails/:id - View email detail
+router.get('/admin/emails/:id', authenticateOperator, async (req, res) => {
+  try {
+    const email = await db.query('SELECT * FROM email_logs WHERE id = ?', [req.params.id]);
+    if (!email.length) return res.status(404).json({ success: false, message: 'Email tidak ditemukan' });
+
+    await db.query('UPDATE email_logs SET is_read = 1 WHERE id = ?', [req.params.id]);
+
+    res.json({ success: true, data: email[0] });
+  } catch (error) {
+    console.error('View email error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching email detail' });
+  }
+});
+
+// POST /api/admin/emails/send - Send new email
+router.post('/admin/emails/send', authenticateOperator, async (req, res) => {
+  try {
+    const { to, cc, bcc, subject, body, category } = req.body;
+
+    if (!to || !subject || !body) {
+      return res.status(400).json({ success: false, message: 'Penerima, subjek, dan isi email diperlukan' });
+    }
+
+    const htmlBody = body.replace(/\n/g, '<br>');
+    const result = await global.sendEmail(to, subject, htmlBody, body, [], category || 'system', null, cc, bcc);
+
+    if (result.success) {
+      res.json({ success: true, message: 'Email berhasil dikirim', logId: result.logId });
+    } else {
+      res.status(500).json({ success: false, message: result.message, logId: result.logId });
+    }
+  } catch (error) {
+    console.error('Send email error:', error);
+    res.status(500).json({ success: false, message: 'Error sending email: ' + error.message });
+  }
+});
+
+// POST /api/admin/emails/draft - Save draft email
+router.post('/admin/emails/draft', authenticateOperator, async (req, res) => {
+  try {
+    const { to, cc, bcc, subject, body } = req.body;
+
+    const result = await db.query(
+      'INSERT INTO email_logs (from_email, to_email, cc, bcc, subject, body_text, body_html, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        process.env.EMAIL_USER || 'noreply@ypwilutim.com',
+        to || '',
+        cc || null,
+        bcc || null,
+        subject || '(Tanpa Subjek)',
+        body || null,
+        body ? body.replace(/\n/g, '<br>') : null,
+        'draft'
+      ]
+    );
+
+    res.json({ success: true, message: 'Draft tersimpan', draftId: result.insertId });
+  } catch (error) {
+    console.error('Save draft error:', error);
+    res.status(500).json({ success: false, message: 'Error saving draft' });
+  }
+});
+
+// PUT /api/admin/emails/:id/read - Mark email as read
+router.put('/admin/emails/:id/read', authenticateOperator, async (req, res) => {
+  try {
+    await db.query('UPDATE email_logs SET is_read = 1 WHERE id = ?', [req.params.id]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Mark read error:', error);
+    res.status(500).json({ success: false, message: 'Error marking email as read' });
   }
 });
 

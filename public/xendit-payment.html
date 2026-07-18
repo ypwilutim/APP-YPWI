@@ -8,7 +8,9 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
   <style>
-    body { font-family: 'Inter', sans-serif; }
+    body {
+      font-family: 'Inter', sans-serif;
+    }
   </style>
 </head>
 
@@ -159,12 +161,16 @@
       const btn = document.getElementById('testPayBtn');
       btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Membuat invoice...';
       try {
-        const res = await fetch('/api/xendit/public/create-invoice', {
+        const res = await fetch('/api/treasurer/public/students?tenant_id=PPIB');
+        const students = await res.json();
+        const studentId = students.success && students.data.length ? students.data[0].id : '2311';
+        
+        const res2 = await fetch('/api/xendit/public/create-invoice', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tenant_id: 'TKITWI04', student_id: '120' })
+          body: JSON.stringify({ tenant_id: 'PPIB', student_id: parseInt(studentId) })
         });
-        const data = await res.json();
+        const data = await res2.json();
         if (data.success) {
           const params = new URLSearchParams(window.location.search);
           params.set('external_id', data.data.external_id);

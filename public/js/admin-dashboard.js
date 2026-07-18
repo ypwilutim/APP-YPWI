@@ -103,6 +103,267 @@ async function loadQRLogs() {
         tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-red-500">Error memuat logs</td></tr>';
     }
 }
+
+let currentEmailFolder = 'sent';
+let currentEmailPage = 1;
+const EMAIL_PAGE_LIMIT = 20;
+
+async function loadEmailList(folder = 'sent', page = 1) {
+    currentEmailFolder = folder;
+    currentEmailPage = page;
+    const list = document.getElementById('emailList');
+    if (!list) return;
+
+    list.innerHTML = '<div class="px-3 py-6 text-center text-gray-500 text-sm"><i class="fas fa-spinner fa-spin mr-2"></i>Memuat email...</div>';
+
+    const search = document.getElementById('emailSearch')?.value || '';
+
+    const params = new URLSearchParams({
+        folder,
+        page: page.toString(),
+        limit: EMAIL_PAGE_LIMIT.toString(),
+        search
+    });
+
+    try {
+        const response = await fetch(`/api/admin/emails?${params.toString()}`, {
+            headers: { 'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}` }
+        });
+
+        if (response.status === 401 || response.status === 403) {
+            list.innerHTML = '<div class="px-3 py-6 text-center text-gray-500 text-sm">Akses ditolak</div>';
+            return;
+        }
+
+        const json = await response.json();
+
+        if (json.success && json.data && json.data.length > 0) {
+            list.innerHTML = json.data.map(email => `
+                <div onclick="viewEmailDetail(${email.id})" class="px-3 py-3 cursor-pointer hover:bg-gray-50 border-b border-gray-100 last:border-b-0 ${email.is_read ? '' : 'bg-blue-50'}">
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-sm font-medium text-gray-900 truncate mr-2">${escapeHtml(email.to_email)}</span>
+                        <span class="text-xs text-gray-500 whitespace-nowrap">${formatEmailDate(email.created_at)}</span>
+                    </div>
+                    <div class="text-sm text-gray-700 font-medium truncate mb-1">${escapeHtml(email.subject || '(Tanpa Subjek)')}</div>
+                    <div class="text-xs text-gray-500 truncate">${escapeHtml(email.body_text || '')}</div>
+                    <div class="flex items-center gap-2 mt-1">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${email.status === 'sent' ? 'bg-green-100 text-green-800' : email.status === 'failed' ? 'bg-red-100 text-red-800' : email.status === 'draft' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'}">
+                            ${email.status === 'sent' ? 'Terkirim' : email.status === 'failed' ? 'Gagal' : email.status === 'draft' ? 'Draft' : email.status}
+                        </span>
+                        ${email.has_attachments ? '<span class="text-xs text-gray-500"><i class="fas fa-paperclip mr-1"></i>Lampiran</span>' : ''}
+                    </div>
+                </div>
+            `).join('');
+        } else {
+            list.innerHTML = '<div class="px-3 py-6 text-center text-gray-500 text-sm">Tidak ada email di folder ini</div>';
+        }
+    } catch (error) {
+        console.error('Error loading email list:', error);
+        list.innerHTML = '<div class="px-3 py-6 text-center text-red-500 text-sm">Error memuat email</div>';
+    }
+}
+
+async function viewEmailDetail(emailId) {
+    const detail = document.getElementById('emailDetail');
+    if (!detail) return;
+
+    detail.innerHTML = '<div class="text-center text-gray-500 py-12"><i class="fas fa-spinner fa-spin mr-2"></i>Memuat detail email...</div>';
+
+    try {
+        const response = await fetch(`/api/admin/emails/${emailId}`, {
+            headers: { 'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}` }
+        });
+
+        if (response.status === 401 || response.status === 403) {
+            detail.innerHTML = '<div class="text-center text-gray-500 py-12">Akses ditolak</div>';
+            return;
+        }
+
+        const json = await response.json();
+
+        if (json.success && json.data) {
+            const email = json.data;
+            detail.innerHTML = `
+                <div class="border-b border-gray-100 pb-4 mb-4">
+                    <div class="flex items-start justify-between mb-3">
+                        <h4 class="text-lg font-semibold text-gray-900">${escapeHtml(email.subject || '(Tanpa Subjek)')}</h4>
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${email.status === 'sent' ? 'bg-green-100 text-green-800' : email.status === 'failed' ? 'bg-red-100 text-red-800' : email.status === 'draft' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-800'}">
+                            ${email.status === 'sent' ? 'Terkirim' : email.status === 'failed' ? 'Gagal' : email.status === 'draft' ? 'Draft' : email.status}
+                        </span>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-gray-600">
+                        <div><span class="font-medium">Dari:</span> ${escapeHtml(email.from_email)}</div>
+                        <div><span class="font-medium">Kepada:</span> ${escapeHtml(email.to_email)}</div>
+                        ${email.cc ? `<div><span class="font-medium">CC:</span> ${escapeHtml(email.cc)}</div>` : ''}
+                        ${email.bcc ? `<div><span class="font-medium">BCC:</span> ${escapeHtml(email.bcc)}</div>` : ''}
+                        <div><span class="font-medium">Kategori:</span> ${email.category || '-'}</div>
+                        <div><span class="font-medium">Dibuat:</span> ${new Date(email.created_at).toLocaleString('id-ID')}</div>
+                        ${email.sent_at ? `<div><span class="font-medium">Dikirim:</span> ${new Date(email.sent_at).toLocaleString('id-ID')}</div>` : ''}
+                    </div>
+                    ${email.error_message ? `<div class="mt-3 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700"><strong>Error:</strong> ${escapeHtml(email.error_message)}</div>` : ''}
+                </div>
+                <div class="prose max-w-none">
+                    <div class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">${email.body_html || escapeHtml(email.body_text || 'Tidak ada isi')}</div>
+                </div>
+            `;
+        } else {
+            detail.innerHTML = '<div class="text-center text-gray-500 py-12">Email tidak ditemukan</div>';
+        }
+    } catch (error) {
+        console.error('Error loading email detail:', error);
+        detail.innerHTML = '<div class="text-center text-red-500 py-12">Error memuat detail email</div>';
+    }
+}
+
+function switchEmailFolder(folder) {
+    document.querySelectorAll('[id^="folder-"]').forEach(btn => {
+        btn.classList.remove('bg-blue-50', 'text-blue-700');
+        btn.classList.add('text-gray-700', 'hover:bg-gray-100');
+    });
+    const activeBtn = document.getElementById('folder-' + folder);
+    if (activeBtn) {
+        activeBtn.classList.remove('text-gray-700', 'hover:bg-gray-100');
+        activeBtn.classList.add('bg-blue-50', 'text-blue-700');
+    }
+    loadEmailList(folder, 1);
+}
+
+function refreshEmailList() {
+    loadEmailList(currentEmailFolder, currentEmailPage);
+}
+
+function openComposeModal() {
+    const modal = document.getElementById('composeEmailModal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('show');
+    }
+}
+
+function closeComposeModal() {
+    const modal = document.getElementById('composeEmailModal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('show');
+    }
+}
+
+async function sendComposedEmail() {
+    const to = document.getElementById('composeTo')?.value?.trim();
+    const cc = document.getElementById('composeCc')?.value?.trim();
+    const bcc = document.getElementById('composeBcc')?.value?.trim();
+    const subject = document.getElementById('composeSubject')?.value?.trim();
+    const body = document.getElementById('composeBody')?.value?.trim();
+
+    if (!to || !subject || !body) {
+        alert('Penerima, subjek, dan isi email diperlukan');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/admin/emails/send', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}`
+            },
+            body: JSON.stringify({ to, cc, bcc, subject, body })
+        });
+
+        const json = await response.json();
+
+        if (json.success) {
+            alert('Email berhasil dikirim');
+            closeComposeModal();
+            document.getElementById('composeTo').value = '';
+            document.getElementById('composeCc').value = '';
+            document.getElementById('composeBcc').value = '';
+            document.getElementById('composeSubject').value = '';
+            document.getElementById('composeBody').value = '';
+            refreshEmailList();
+        } else {
+            alert('Gagal mengirim email: ' + json.message);
+        }
+    } catch (error) {
+        console.error('Send email error:', error);
+        alert('Error mengirim email');
+    }
+}
+
+async function saveDraft() {
+    const to = document.getElementById('composeTo')?.value?.trim();
+    const cc = document.getElementById('composeCc')?.value?.trim();
+    const bcc = document.getElementById('composeBcc')?.value?.trim();
+    const subject = document.getElementById('composeSubject')?.value?.trim();
+    const body = document.getElementById('composeBody')?.value?.trim();
+
+    if (!to && !subject && !body) {
+        alert('Draft kosong');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/admin/emails/draft', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}`
+            },
+            body: JSON.stringify({ to, cc, bcc, subject, body })
+        });
+
+        const json = await response.json();
+
+        if (json.success) {
+            alert('Draft tersimpan');
+            closeComposeModal();
+            document.getElementById('composeTo').value = '';
+            document.getElementById('composeCc').value = '';
+            document.getElementById('composeBcc').value = '';
+            document.getElementById('composeSubject').value = '';
+            document.getElementById('composeBody').value = '';
+            refreshEmailList();
+        } else {
+            alert('Gagal menyimpan draft: ' + json.message);
+        }
+    } catch (error) {
+        console.error('Save draft error:', error);
+        alert('Error menyimpan draft');
+    }
+}
+
+function formatEmailDate(dateString) {
+    if (!dateString) return '-';
+    const date = new Date(dateString);
+    const now = new Date();
+    const diff = now - date;
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+    if (days === 0) {
+        return date.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+    } else if (days === 1) {
+        return 'Kemarin';
+    } else if (days < 7) {
+        return days + ' hari lalu';
+    } else {
+        return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+window.loadEmailList = loadEmailList;
+window.viewEmailDetail = viewEmailDetail;
+window.switchEmailFolder = switchEmailFolder;
+window.refreshEmailList = refreshEmailList;
+window.openComposeModal = openComposeModal;
+window.closeComposeModal = closeComposeModal;
+window.sendComposedEmail = sendComposedEmail;
+window.saveDraft = saveDraft;
 window.loadTenantLocations = fetchTenantLocations;
 window.updateToggleVisual = updateToggleVisual;
 window.showAddTenantModal = function () {
@@ -641,6 +902,7 @@ async function fetchTenantLocations() {
 
 // Function to update toggle visual appearance
 function updateToggleVisual(checkbox) {
+    if (!checkbox) return;
     const track = checkbox.closest('.relative')?.querySelector('.toggle-track');
     const thumb = checkbox.closest('.relative')?.querySelector('.toggle-thumb');
 
@@ -798,7 +1060,9 @@ function showTab(tabName) {
         settings: 'Pengaturan',
         evaluations: 'Penilaian Guru Otomatis',
         whatsapp: 'Pesan WhatsApp',
-        'qr-generator': 'QR Scanner & Generator'
+        email: 'Email',
+        'qr-generator': 'QR Scanner & Generator',
+        'profile-approvals': 'Persetujuan Profil'
     };
     setEl('pageTitle', titles[tabName]);
 
@@ -806,12 +1070,16 @@ function showTab(tabName) {
     else if (tabName === 'teachers') { fetchTeachers(1); loadTeacherTenants(); }
     else if (tabName === 'students') { loadStudents(); loadStudentClasses(); }
     else if (tabName === 'attendance') fetchAttendanceLogs();
+    else if (tabName === 'email') loadEmailList('sent', 1);
     else if (tabName === 'qr-generator') {
         loadScannerDevices();
         loadQRLogs();
     }
     else if (tabName === 'settings') {
         showSettingsTab('locations');
+    }
+    else if (tabName === 'profile-approvals') {
+        loadProfileApprovals();
     }
 }
 
@@ -854,6 +1122,12 @@ function showAddRuleModal() {
     document.getElementById('ruleModalTitle').textContent = 'Tambah Aturan';
     document.getElementById('ruleForm').reset();
 
+    document.querySelectorAll('input[name="target"]').forEach(cb => {
+        cb.checked = false;
+        cb.disabled = false;
+    });
+    adminOnTargetChange();
+
     // Populate tenant options
     const tenantSelect = document.querySelector('select[name="tenant_id"]');
     tenantSelect.innerHTML = '<option value="">Pilih Tenant</option>';
@@ -889,10 +1163,11 @@ function showLocationModal() {
 
 function hideLocationModal() {
     document.getElementById('locationModal').classList.remove('show');
-    // Reset toggle to unchecked when modal is closed
     const checkbox = document.getElementById('useCentralRulesInput');
-    checkbox.checked = false;
-    updateToggleVisual(checkbox);
+    if (checkbox) {
+        checkbox.checked = false;
+        updateToggleVisual(checkbox);
+    }
 }
 
 async function editTeacher(id) {
@@ -943,22 +1218,33 @@ async function editRule(id) {
         const res = await response.json();
 
         if (res.success) {
-            // PERBAIKAN: Set variabel global id agar sistem tahu form ini sedang dalam mode EDIT
             currentRuleId = id;
 
             const rule = res.data;
             document.getElementById('ruleModalTitle').textContent = 'Edit Aturan';
             const form = document.getElementById('ruleForm');
-            form.tenant_id.value = rule.tenant_id;
+
+            document.querySelectorAll('input[name="target"]').forEach(cb => {
+                cb.checked = false;
+                cb.disabled = true;
+            });
+
+            if (rule.tenant_id) {
+                const tenantCb = document.querySelector('input[name="target"][value="tenant"]');
+                if (tenantCb) tenantCb.checked = true;
+            } else if (rule.tipe_unit) {
+                const centralCb = document.querySelector(`input[name="target"][value="central_${rule.tipe_unit}"]`);
+                if (centralCb) centralCb.checked = true;
+            }
+
+            adminOnTargetChange();
+
             form.tipe.value = rule.tipe;
             form.jam_mulai.value = rule.jam_mulai;
             form.jam_selesai.value = rule.jam_selesai;
             form.keterangan.value = rule.keterangan;
             form.status_log.value = rule.status_log;
 
-            // ... sisa kode pengisian tenant option Anda di bawahnya tetap sama ...
-
-            // Populate tenant options if not already done
             const tenantSelect = document.querySelector('select[name="tenant_id"]');
             if (tenantSelect.options.length <= 1) {
                 fetch('/api/admin/tenants', {
@@ -977,6 +1263,8 @@ async function editRule(id) {
                             tenantSelect.value = rule.tenant_id;
                         }
                     });
+            } else {
+                tenantSelect.value = rule.tenant_id;
             }
 
             document.getElementById('ruleModal').classList.add('show');
@@ -1006,8 +1294,10 @@ async function editTenantLocation(tenantId) {
                 form.location_name.value = tenant.location_name || '';
                 // Set toggle for use_central_rules
                 const useCentralRulesCheckbox = document.getElementById('useCentralRulesInput');
-                useCentralRulesCheckbox.checked = tenant.use_central_rules === true;
-                updateToggleVisual(useCentralRulesCheckbox);
+                if (useCentralRulesCheckbox) {
+                    useCentralRulesCheckbox.checked = tenant.use_central_rules === true;
+                    updateToggleVisual(useCentralRulesCheckbox);
+                }
 
                 // Update coordinate preview
                 updateCoordinatePreview();
@@ -1175,6 +1465,134 @@ async function createUser(teacherId) {
     } catch (error) {
         console.error('Create user error:', error);
         alert('Terjadi kesalahan');
+    }
+}
+
+// ==========================================
+// PROFILE APPROVAL FUNCTIONS
+// ==========================================
+
+async function loadProfileApprovals() {
+    const tbody = document.getElementById('profileApprovalsTable');
+    if (!tbody) return;
+
+    tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-12 text-center text-gray-500"><i class="fas fa-spinner fa-spin text-xl mb-2"></i><p>Memuat data...</p></td></tr>';
+
+    try {
+        const token = window.authToken || localStorage.getItem('token') || '';
+        const response = await fetch('/api/admin/profile-approvals', {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+
+        if (response.status === 401 || response.status === 403) {
+            tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-12 text-center text-gray-500">Akses ditolak</td></tr>';
+            return;
+        }
+
+        const result = await response.json();
+        if (result.success && result.data.length > 0) {
+            tbody.innerHTML = result.data.map(item => {
+                const assignments = (item.assignments || []).map(a => `${a.nama_sekolah || a.tenant_id} (${a.jabatan_di_unit || '-'})`).join(', ') || '-';
+                const submitDate = item.created_at ? new Date(item.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-';
+                return `
+                <tr class="hover:bg-gray-50">
+                    <td class="px-6 py-4 text-sm font-medium text-gray-900">${item.nama || '-'}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">${item.nik || '-'}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">${item.email || '-'}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">${item.no_wa || '-'}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">${assignments}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">${submitDate}</td>
+                    <td class="px-6 py-4 text-sm">
+                        <div class="flex space-x-2">
+                            <button onclick="approveProfile(${item.guru_id})" class="bg-green-600 text-white px-3 py-1.5 rounded-md hover:bg-green-700 text-xs font-medium">
+                                <i class="fas fa-check mr-1"></i>Setujui
+                            </button>
+                            <button onclick="rejectProfile(${item.guru_id})" class="bg-red-600 text-white px-3 py-1.5 rounded-md hover:bg-red-700 text-xs font-medium">
+                                <i class="fas fa-times mr-1"></i>Tolak
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                `;
+            }).join('');
+        } else {
+            tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-12 text-center text-gray-500">Tidak ada profil yang menunggu persetujuan</td></tr>';
+        }
+    } catch (error) {
+        console.error('Load profile approvals error:', error);
+        tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-12 text-center text-red-500">Error memuat data</td></tr>';
+    }
+}
+
+async function approveProfile(teacherId) {
+    if (!confirm('Setujui profil guru ini?')) return;
+
+    try {
+        const token = window.authToken || localStorage.getItem('token') || '';
+        const response = await fetch(`/api/admin/profile-approvals/${teacherId}/approve`, {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const result = await response.json();
+        if (result.success) {
+            alert('Profil berhasil disetujui');
+            loadProfileApprovals();
+            updateProfileApprovalBadge();
+        } else {
+            alert('Error: ' + result.message);
+        }
+    } catch (error) {
+        console.error('Approve profile error:', error);
+        alert('Terjadi kesalahan');
+    }
+}
+
+async function rejectProfile(teacherId) {
+    const reason = prompt('Masukkan alasan penolakan profil:');
+    if (!reason || reason.trim() === '') return;
+
+    try {
+        const token = window.authToken || localStorage.getItem('token') || '';
+        const response = await fetch(`/api/admin/profile-approvals/${teacherId}/reject`, {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + token,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ reason: reason.trim() })
+        });
+        const result = await response.json();
+        if (result.success) {
+            alert('Profil berhasil ditolak');
+            loadProfileApprovals();
+            updateProfileApprovalBadge();
+        } else {
+            alert('Error: ' + result.message);
+        }
+    } catch (error) {
+        console.error('Reject profile error:', error);
+        alert('Terjadi kesalahan');
+    }
+}
+
+async function updateProfileApprovalBadge() {
+    try {
+        const token = window.authToken || localStorage.getItem('token') || '';
+        const response = await fetch('/api/admin/profile-approvals', {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const result = await response.json();
+        const badge = document.getElementById('profileApprovalBadge');
+        if (badge && result.success) {
+            if (result.data.length > 0) {
+                badge.textContent = result.data.length;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+        }
+    } catch (error) {
+        console.error('Update badge error:', error);
     }
 }
 
@@ -1595,48 +2013,107 @@ document.getElementById('teacherForm').addEventListener('submit', async (e) => {
 
 document.getElementById('ruleForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const formData = new FormData(e.target);
-    const data = Object.fromEntries(formData);
+    const form = e.target;
+    const formData = new FormData(form);
 
-    const submitBtn = e.target.querySelector('button[type="submit"]');
+    const tipe = formData.get('tipe');
+    const jam_mulai = formData.get('jam_mulai');
+    const jam_selesai = formData.get('jam_selesai');
+    const keterangan = formData.get('keterangan') || '';
+    const status_log = formData.get('status_log');
+    const hari = Array.from(form.querySelectorAll('input[name="hari"]:checked')).map(cb => cb.value).join(',');
+    const checkedTargets = Array.from(form.querySelectorAll('input[name="target"]:checked')).map(cb => cb.value);
+
+    if (checkedTargets.length === 0) {
+      showToast('Pilih minimal satu target aturan', 'error');
+      return;
+    }
+
+    if (checkedTargets.includes('tenant') && !formData.get('tenant_id')) {
+      showToast('Pilih sekolah untuk target Tenant Spesifik', 'error');
+      return;
+    }
+
+    const submitBtn = form.querySelector('button[type="submit"]');
     const originalText = submitBtn.textContent;
     submitBtn.disabled = true;
     submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menyimpan...';
 
     try {
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (const target of checkedTargets) {
+        const payload = {
+          tipe,
+          jam_mulai,
+          jam_selesai,
+          keterangan,
+          status_log,
+          hari: hari || null
+        };
+
+        if (target === 'tenant') {
+          payload.tenant_id = formData.get('tenant_id');
+        } else {
+          payload.tipe_unit = target.replace('central_', '');
+        }
+
         const method = currentRuleId ? 'PUT' : 'POST';
         const url = currentRuleId ? `/api/admin/rules/${currentRuleId}` : '/api/admin/rules';
 
         const response = await fetch(url, {
-            method,
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}`
-            },
-            body: JSON.stringify(data)
+          method,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}`
+          },
+          body: JSON.stringify(payload)
         });
 
         const res = await response.json();
         if (res.success) {
-            hideRuleModal();
-            fetchRules();
+          successCount++;
+        } else {
+          errorCount++;
+          console.error(`Error saving rule for target ${target}:`, res.message);
         }
+      }
+
+      if (errorCount === 0) {
+        hideRuleModal();
+        fetchRules();
+        showToast(`${successCount} aturan berhasil disimpan`, 'success');
+      } else {
+        showToast(`${successCount} berhasil, ${errorCount} gagal disimpan`, 'error');
+      }
     } catch (error) {
-        console.error('Rule form submit error:', error);
+      console.error('Rule form submit error:', error);
+      showToast('Terjadi kesalahan saat menyimpan aturan', 'error');
     } finally {
-        submitBtn.disabled = false;
-        submitBtn.textContent = originalText;
+      submitBtn.disabled = false;
+      submitBtn.textContent = originalText;
     }
 });
 
-document.getElementById('locationForm').addEventListener('submit', async (e) => {
+document.getElementById('locationForm')?.addEventListener('submit', async (e) => {
     e.preventDefault();
+    
+    const useCentralRulesInput = document.getElementById('useCentralRulesInput');
+    if (!useCentralRulesInput) {
+        return;
+    }
+    
     const formData = new FormData(e.target);
     const data = Object.fromEntries(formData);
     const tenantId = data.tenant_id;
 
-    // Pastikan use_central_rules selalu ada (checkbox tidak terkirim jika unchecked)
-    data.use_central_rules = document.getElementById('useCentralRulesInput').checked;
+    if (!tenantId) {
+        showToast('Tenant ID tidak ditemukan', 'error');
+        return;
+    }
+
+    data.use_central_rules = useCentralRulesInput.checked;
 
     const submitBtn = e.target.querySelector('button[type="submit"]');
     const originalText = submitBtn.textContent;
@@ -1770,6 +2247,9 @@ function initAllUI() {
         });
     });
 
+    // Email filter listeners
+    document.getElementById('emailSearch')?.addEventListener('input', () => loadEmailList(currentEmailFolder, 1));
+
     // Add settings navigation event listeners
     document.querySelectorAll('.settings-nav-item').forEach(item => {
         item.addEventListener('click', function () {
@@ -1823,6 +2303,9 @@ function initAllUI() {
     // Initialize PDF report and recap view
     initPdfReport();
     initRecapView();
+
+    // Update profile approval badge
+    updateProfileApprovalBadge();
 
     // WhatsApp functionality
     setupWhatsApp();
