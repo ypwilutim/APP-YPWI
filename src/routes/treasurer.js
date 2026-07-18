@@ -4,6 +4,7 @@ const nodemailer = require('nodemailer');
 const axios = require('axios');
 const { authenticateToken, authenticateOperator, authenticateBendahara, verifyTenantAccess } = require('../middleware/auth');
 const { sendBillTemplate } = require('../utils/whatsappTemplate');
+const billing = require('../utils/billing');
 
 const router = express.Router();
 
@@ -40,22 +41,41 @@ async function getTenantXenditConfig(tenantId) {
 }
 
 // Public endpoints for development/testing (no auth required)
-// GET /api/treasurer/public/spp-summary - Ringkasan pembayaran SPP (Xendit)
+// GET /api/treasurer/public/spp-summary - Ringkasan pembayaran SPP (dari billing_payment + incoming_payments)
 router.get('/treasurer/public/spp-summary', async (req, res) => {
   try {
     let tenantId = req.query.tenant_id;
 
+    // Query pendapatan dari incoming_payments per tenant
+    let incomeQuery = `
+      SELECT 
+        s.tenant_id,
+        COALESCE(SUM(CASE WHEN ip.status = 'Success' THEN ip.total_amount ELSE 0 END), 0) as total_pemasukan
+      FROM incoming_payments ip
+      LEFT JOIN students s ON ip.matched_student_id = s.id
+    `;
+    let incomeParams = [];
+
+    if (tenantId) {
+      incomeQuery += ' WHERE s.tenant_id = ?';
+      incomeParams.push(tenantId);
+    }
+
+    incomeQuery += ' GROUP BY s.tenant_id';
+
+    // Query tunggakan dari saldo_siswa
     let query = `
       SELECT 
         tn.tenant_id,
         tn.nama_sekolah,
         COUNT(s.id) as total_siswa,
-        COALESCE(SUM(CASE WHEN pi.status = 'paid' THEN pi.amount ELSE 0 END), 0) as total_pemasukan,
-        COUNT(CASE WHEN pi.status = 'paid' THEN 1 END) as sudah_bayar,
-        COUNT(CASE WHEN pi.status != 'paid' OR pi.status IS NULL THEN 1 END) as belum_bayar
+        COALESCE(SUM(CASE WHEN ss.saldo < 0 THEN -ss.saldo ELSE 0 END), 0) as total_tunggakan,
+        COALESCE(SUM(CASE WHEN ss.saldo > 0 THEN ss.saldo ELSE 0 END), 0) as total_kelebihan,
+        COUNT(CASE WHEN ss.saldo < 0 THEN 1 END) as jumlah_tunggakan,
+        COUNT(CASE WHEN ss.saldo > 0 THEN 1 END) as jumlah_kelebihan
       FROM tenants tn
       LEFT JOIN students s ON tn.tenant_id = s.tenant_id
-      LEFT JOIN payment_invoices pi ON s.id = pi.student_id AND pi.status = 'paid'
+      LEFT JOIN saldo_siswa ss ON ss.student_id = s.id
       WHERE 1=1
     `;
     let params = [];
@@ -67,6 +87,16 @@ router.get('/treasurer/public/spp-summary', async (req, res) => {
 
     query += ' GROUP BY tn.tenant_id, tn.nama_sekolah ORDER BY tn.nama_sekolah ASC';
     const summary = await db.query(query, params);
+    const incomeData = await db.query(incomeQuery, incomeParams);
+
+    // Map pemasukan ke tiap tenant
+    const pemasukanMap = {};
+    if (incomeData && incomeData.length > 0) {
+      incomeData.forEach(row => {
+        const tid = tenantId || row.tenant_id;
+        pemasukanMap[tid] = parseFloat(row.total_pemasukan) || 0;
+      });
+    }
 
     res.json({
       success: true,
@@ -74,9 +104,10 @@ router.get('/treasurer/public/spp-summary', async (req, res) => {
         tenant_id: s.tenant_id,
         nama_sekolah: s.nama_sekolah,
         total_siswa: s.total_siswa || 0,
-        total_pemasukan: s.total_pemasukan || 0,
-        sudah_bayar: s.sudah_bayar || 0,
-        belum_bayar: s.belum_bayar || 0
+        sudah_bayar: s.total_siswa - (s.jumlah_tunggakan || 0),
+        belum_bayar: s.jumlah_tunggakan || 0,
+        total_pemasukan: pemasukanMap[s.tenant_id] || 0,
+        total_tunggakan: s.total_tunggakan || 0
       }))
     });
   } catch (error) {
@@ -178,13 +209,12 @@ router.get('/treasurer/public/payment-defaulters', async (req, res) => {
 
     let query = `
       SELECT s.id, s.nama_siswa, s.nisn, s.iuran_bulanan, tn.nama_sekolah, p.no_wa,
-        (SELECT COALESCE(SUM(amount),0) FROM payment_invoices pi WHERE pi.student_id = s.id AND pi.status NOT IN ('paid','cancelled')) as arrears_pi,
-        (SELECT COALESCE(SUM(amount),0) FROM xendit_invoices xi WHERE xi.student_id = s.id AND xi.status NOT IN ('PAID','EXPIRED')) as arrears_xi
+        COALESCE(ss.saldo, 0) as arrears_billing
       FROM students s
       JOIN tenants tn ON s.tenant_id = tn.tenant_id
       LEFT JOIN parents p ON s.parent_id = p.id
-      WHERE s.iuran_bulanan IS NOT NULL
-    `;
+      LEFT JOIN saldo_siswa ss ON ss.student_id = s.id
+      WHERE s.iuran_bulanan IS NOT NULL`;
     let params = [];
 
     if (tenantId) {
@@ -192,12 +222,12 @@ router.get('/treasurer/public/payment-defaulters', async (req, res) => {
       params.push(tenantId);
     }
 
-    query += ' ORDER BY tn.nama_sekolah ASC, s.nama_siswa ASC';
+    query += ' AND COALESCE(ss.saldo, 0) < 0 ORDER BY tn.nama_sekolah ASC, s.nama_siswa ASC';
     const defaulters = await db.query(query, params);
 
-    const data = defaulters.map(s => ({
+const data = defaulters.map(s => ({
       ...s,
-      total_arrears: parseFloat(s.arrears_pi || 0) + parseFloat(s.arrears_xi || 0),
+      total_arrears: Math.abs(parseFloat(s.arrears_billing || 0)),
       arrears_months: s.total_arrears > 0 ? Math.ceil(s.total_arrears / parseFloat(s.iuran_bulanan || 1)) : 0
     }));
 
@@ -1505,84 +1535,10 @@ router.get('/treasurer/bendahara/profile', authenticateBendahara, async (req, re
   }
 });
 
-// GET /api/treasurer/bendahara/payment-invoices - Daftar pembayaran siswa dari payment_invoices
-router.get('/treasurer/bendahara/payment-invoices', authenticateBendahara, async (req, res) => {
-  try {
-    const tenantId = req.query.tenant_id || '';
-    const status = req.query.status || '';
-    const periode = req.query.periode || '';
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 100;
-
-    let query = `SELECT pi.*, s.nama_siswa, s.nisn, s.tenant_id, tn.nama_sekolah
-                 FROM payment_invoices pi
-                 JOIN students s ON pi.student_id = s.id
-                 JOIN tenants tn ON s.tenant_id = tn.tenant_id
-                 WHERE 1=1`;
-    const params = [];
-
-    if (tenantId) {
-      query += ' AND pi.tenant_id = ?';
-      params.push(tenantId);
-    }
-    if (status) {
-      query += ' AND pi.status = ?';
-      params.push(status);
-    }
-    if (periode) {
-      query += ' AND pi.periode = ?';
-      params.push(periode);
-    }
-
-    query += ' ORDER BY pi.created_at DESC LIMIT ? OFFSET ?';
-    params.push(limit, (page - 1) * limit);
-
-    const invoices = await db.query(query, params);
-
-    // Hitung total untuk ringkasan
-    let sumQuery = `SELECT
-        COUNT(*) as total_invoice,
-        COALESCE(SUM(CASE WHEN pi.status = 'paid' THEN pi.amount ELSE 0 END), 0) as total_paid,
-        COALESCE(SUM(CASE WHEN pi.status != 'paid' THEN pi.amount ELSE 0 END), 0) as total_unpaid
-      FROM payment_invoices pi
-      JOIN students s ON pi.student_id = s.id
-      JOIN tenants tn ON s.tenant_id = tn.tenant_id
-      WHERE 1=1`;
-    const sumParams = [];
-    if (tenantId) { sumQuery += ' AND pi.tenant_id = ?'; sumParams.push(tenantId); }
-    if (status) { sumQuery += ' AND pi.status = ?'; sumParams.push(status); }
-    if (periode) { sumQuery += ' AND pi.periode = ?'; sumParams.push(periode); }
-    const [summary] = await db.query(sumQuery, sumParams);
-
-    res.json({
-      success: true,
-      data: invoices,
-      summary: {
-        total_invoice: summary.total_invoice || 0,
-        total_paid: summary.total_paid || 0,
-        total_unpaid: summary.total_unpaid || 0
-      },
-      pagination: { page, limit }
-    });
-  } catch (error) {
-    console.error('Bendahara payment invoices error:', error);
-    res.status(500).json({ success: false, message: 'Gagal mengambil data pembayaran siswa' });
-  }
-});
-
-// GET /api/treasurer/bendahara/saldo - Saldo berjalan siswa (tunggakan / kelebihan)
+// GET /api/treasurer/bendahara/saldo - Saldo berjalan siswa (tunggakan / kelebihan) — baca dari billing_payment + incoming_payments
 router.get('/treasurer/bendahara/saldo', authenticateBendahara, async (req, res) => {
   try {
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS saldo_siswa (
-        id INT(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
-        student_id INT(11) NOT NULL,
-        tenant_id VARCHAR(20) DEFAULT NULL,
-        saldo DECIMAL(12,2) NOT NULL DEFAULT 0.00 COMMENT '- = tunggakan, + = kelebihan',
-        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        UNIQUE KEY uniq_student (student_id)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    `);
+    await billing.ensureBillingTables();
 
     const tenantId = req.query.tenant_id || '';
     const statusFilter = req.query.status || ''; // 'tunggakan' | 'kelebihan' | '' (semua)
@@ -1609,7 +1565,7 @@ router.get('/treasurer/bendahara/saldo', authenticateBendahara, async (req, res)
     `;
     const data = await db.query(query, [...params, limit, (page - 1) * limit]);
 
-    // Ringkasan global (seluruh siswa, abaikan filter status tapi hormati filter tenant)
+    // Ringkasan global (dari saldo_siswa)
     const [summary] = await db.query(`
       SELECT
         COUNT(*) as total_siswa,
@@ -1644,7 +1600,86 @@ router.get('/treasurer/bendahara/saldo', authenticateBendahara, async (req, res)
   }
 });
 
+// POST /api/treasurer/bendahara/billing/generate - Generate billing dari tanggal_masuk ke bulan ini
+router.post('/treasurer/bendahara/billing/generate', authenticateBendahara, async (req, res) => {
+  try {
+    await billing.ensureBillingTables();
+    const { tenant_id } = req.body;
+    if (!tenant_id) {
+      return res.status(400).json({ success: false, message: 'tenant_id required' });
+    }
+    const result = await billing.generateBilling(tenant_id);
+    res.json({
+      success: true,
+      message: `Billing dibuat: ${result.created} baris, ${result.skipped} dilewati`,
+      created: result.created,
+      skipped: result.skipped
+    });
+  } catch (error) {
+    console.error('Generate billing error:', error);
+    res.status(500).json({ success: false, message: 'Gagal generate billing' });
+  }
+});
+
+// POST /api/treasurer/bendahara/billing/recalc - Hitung ulang saldo semua siswa di tenant
+router.post('/treasurer/bendahara/billing/recalc', authenticateBendahara, async (req, res) => {
+  try {
+    await billing.ensureBillingTables();
+    const { tenant_id } = req.body;
+    if (!tenant_id) {
+      return res.status(400).json({ success: false, message: 'tenant_id required' });
+    }
+    const result = await billing.recalcTenant(tenant_id);
+    res.json({
+      success: true,
+      message: `Saldo dihitung ulang untuk ${result.updated} siswa`,
+      updated: result.updated
+    });
+  } catch (error) {
+    console.error('Recalc billing error:', error);
+    res.status(500).json({ success: false, message: 'Gagal hitung ulang saldo' });
+  }
+});
+
 // ===== BSI VA MANUAL ENDPOINTS =====
+
+// GET /api/treasurer/bendahara/student-billing/:student_id - Detail billing siswa
+router.get('/treasurer/bendahara/student-billing/:student_id', authenticateBendahara, async (req, res) => {
+  try {
+    await billing.ensureBillingTables();
+    const studentId = req.params.student_id;
+    const [student] = await db.query('SELECT s.id, s.nama_siswa, s.nisn, s.tenant_id, s.iuran_bulanan, tn.nama_sekolah FROM students s LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id WHERE s.id = ?', [studentId]);
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Siswa tidak ditemukan' });
+    }
+    const bills = await db.query('SELECT * FROM billing_payment WHERE student_id = ? ORDER BY bulan DESC', [studentId]);
+    const [saldoRow] = await db.query('SELECT saldo FROM saldo_siswa WHERE student_id = ?', [studentId]);
+    res.json({
+      success: true,
+      data: {
+        student: {
+          id: student.id,
+          nama_siswa: student.nama_siswa,
+          nisn: student.nisn,
+          tenant_id: student.tenant_id,
+          nama_sekolah: student.nama_sekolah,
+          iuran_bulanan: student.iuran_bulanan
+        },
+        billing: bills.map(b => ({
+          bulan: b.bulan,
+          spp_bulanan: parseFloat(b.spp_bulanan) || 0,
+          transaksi: parseFloat(b.transaksi) || 0,
+          keterangan_spp: parseFloat(b.keterangan_spp) || 0,
+          status: b.status
+        })),
+        saldo: parseFloat(saldoRow?.saldo) || 0
+      }
+    });
+  } catch (error) {
+    console.error('Student billing error:', error);
+    res.status(500).json({ success: false, message: 'Gagal mengambil data billing siswa' });
+  }
+});
 
 // Ambil VA prefix default dari config payment_gateways (default '2231')
 async function getBsiVaPrefix(tenantId) {

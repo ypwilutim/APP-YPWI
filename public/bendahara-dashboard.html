@@ -242,10 +242,10 @@
         </div>
       </div>
 
-      <!-- Pembayaran Siswa Tab -->
-      <div id="paymentsTab" class="tab-content hidden">
-        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-4">
-          <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
+<!-- Pembayaran Siswa Tab -->
+       <div id="paymentsTab" class="tab-content hidden">
+         <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-4">
+<div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
             <h3 class="text-lg font-semibold text-gray-900">Pembayaran Siswa (Saldo)</h3>
             <div class="flex flex-wrap items-end gap-2">
               <div>
@@ -263,6 +263,17 @@
                   <option value="lunas">Lunas</option>
                 </select>
               </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Cari Siswa</label>
+                <input type="text" id="paymentsSearch" onkeyup="searchStudents()" placeholder="Nama/NISN..."
+                  class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 w-48">
+              </div>
+              <button onclick="generateBilling()" class="bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-800">
+                <i class="fas fa-plus-circle mr-1"></i>Generate Billing
+              </button>
+              <button onclick="recalcBilling()" class="bg-cyan-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-cyan-700">
+                <i class="fas fa-calculator mr-1"></i>Hitung Saldo
+              </button>
               <button onclick="loadSaldo()" class="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium">
                 <i class="fas fa-sync-alt mr-1"></i>Tampilkan
               </button>
@@ -301,15 +312,16 @@
                 </tr>
               </thead>
               <tbody id="paymentsTable" class="divide-y divide-gray-100">
-                <tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">
-                  <i class="fas fa-spinner fa-spin text-xl mb-2"></i>
-                  <p>Klik Tampilkan untuk memuat saldo siswa</p>
-                </td></tr>
-              </tbody>
-            </table>
+                 <tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">
+                   <i class="fas fa-spinner fa-spin text-xl mb-2"></i>
+                   <p>Klik Tampilkan untuk memuat saldo siswa</p>
+                 </td></tr>
+</tbody>
+              </table>
+            </div>
+            <div id="paymentsPagination" class="mt-4"></div>
           </div>
         </div>
-      </div>
 
       <!-- Payment Gateway Tab (BSI VA Manual) -->
       <div id="payment-gatewayTab" class="tab-content hidden">
@@ -683,14 +695,15 @@
       return `<span class="text-xs px-2 py-1 rounded bg-gray-100 text-gray-800">Lunas</span>`;
     }
 
-    async function loadSaldo() {
+    async function loadSaldo(page = 1) {
       const tenantId = document.getElementById('paymentsTenantFilter').value;
       const statusFilter = document.getElementById('paymentsStatus').value;
       const tbody = document.getElementById('paymentsTable');
+      const limit = 25;
 
       tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-500"><i class="fas fa-spinner fa-spin"></i> Memuat...</td></tr>';
       try {
-        const params = new URLSearchParams({ limit: '1000' });
+        const params = new URLSearchParams({ limit, page });
         if (tenantId) params.set('tenant_id', tenantId);
         if (statusFilter) params.set('status', statusFilter);
 
@@ -724,9 +737,9 @@
               ? `<span class="text-emerald-600 font-medium">+${fmtRp(saldo)}</span>`
               : `<span class="text-gray-500">Rp 0</span>`;
           return `
-            <tr class="border-b">
-              <td class="px-4 py-2">${i + 1}</td>
-              <td class="px-4 py-2">${d.nama_siswa || '-'}</td>
+            <tr class="border-b hover:bg-gray-50 cursor-pointer" onclick="showStudentBilling(${d.id})">
+              <td class="px-4 py-2">${(page - 1) * limit + i + 1}</td>
+              <td class="px-4 py-2"><span class="text-emerald-600 hover:underline">${d.nama_siswa || '-'}</span></td>
               <td class="px-4 py-2">${d.nisn || '-'}</td>
               <td class="px-4 py-2">${d.nama_sekolah || d.tenant_id || '-'}</td>
               <td class="px-4 py-2 text-right">${fmtRp(d.iuran_bulanan)}</td>
@@ -735,9 +748,129 @@
             </tr>
           `;
         }).join('');
+
+        // Render pagination controls
+        const totalPages = Math.ceil((data.summary?.total_siswa || 0) / limit);
+        renderPagination(page, totalPages, tenantId, statusFilter);
       } catch (e) {
         tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-red-500">Error: ' + e.message + '</td></tr>';
       }
+    }
+
+    function renderPagination(currentPage, totalPages, tenantId, statusFilter) {
+      const pagDiv = document.getElementById('paymentsPagination');
+      if (totalPages <= 1) {
+        pagDiv.innerHTML = '';
+        return;
+      }
+      let html = '<div class="flex justify-center items-center mt-4 space-x-2">';
+      for (let i = Math.max(1, currentPage - 2); i <= Math.min(totalPages, currentPage + 2); i++) {
+        html += `<button onclick="loadSaldo(${i})" class="px-3 py-1 rounded ${i === currentPage ? 'bg-emerald-600 text-white' : 'bg-gray-200 hover:bg-gray-300'}">${i}</button>`;
+      }
+html += '</div>';
+       pagDiv.innerHTML = html;
+    }
+
+    async function searchStudents() {
+      const search = document.getElementById('paymentsSearch').value.toLowerCase();
+      const rows = document.querySelectorAll('#paymentsTable tr');
+      rows.forEach(row => {
+        const nama = row.cells[1].textContent.toLowerCase();
+        const nisn = row.cells[2].textContent.toLowerCase();
+        row.style.display = nama.includes(search) || nisn.includes(search) ? '' : 'none';
+      });
+    }
+
+    async function showStudentBilling(studentId) {
+      try {
+        const res = await fetch('/api/treasurer/bendahara/student-billing/' + studentId, {
+          headers: getAuthHeader()
+        });
+        const data = await res.json();
+        if (!data.success) { showToast(data.message || 'Gagal ambil data', 'error'); return; }
+
+        const modal = document.getElementById('studentBillingModal');
+        const content = document.getElementById('studentBillingContent');
+        const s = data.data.student;
+        const billing = data.data.billing;
+        const saldo = data.data.saldo;
+
+        content.innerHTML = `
+          <div class="mb-4">
+            <h4 class="font-bold text-lg">${s.nama_siswa}</h4>
+            <p class="text-sm text-gray-600">NISN: ${s.nisn || '-'} | ${s.nama_sekolah}</p>
+            <p class="text-sm text-gray-600">Iuran/Bln: ${fmtRp(s.iuran_bulanan)}</p>
+          </div>
+          <div class="overflow-x-auto max-h-96">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50 border-b">
+                <tr>
+                  <th class="px-3 py-2 text-left">Bulan</th>
+                  <th class="px-3 py-2 text-right">Iuran</th>
+                  <th class="px-3 py-2 text-right">Bayar</th>
+                  <th class="px-3 py-2 text-right">Keterangan</th>
+                  <th class="px-3 py-2 text-center">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${billing.map(b => `
+                  <tr class="border-b">
+                    <td class="px-3 py-2">${b.bulan}</td>
+                    <td class="px-3 py-2 text-right">${fmtRp(b.spp_bulanan)}</td>
+                    <td class="px-3 py-2 text-right">${fmtRp(b.transaksi)}</td>
+                    <td class="px-3 py-2 text-right ${b.keterangan_spp > 0 ? 'text-orange-600' : 'text-emerald-600'}">${b.keterangan_spp > 0 ? '-' + fmtRp(b.keterangan_spp) : 'Lunas'}</td>
+                    <td class="px-3 py-2 text-center"><span class="text-xs px-2 py-1 rounded ${b.status === 'lunas' ? 'bg-emerald-100 text-emerald-800' : 'bg-orange-100 text-orange-800'}">${b.status}</span></td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+          <div class="mt-4 pt-3 border-t">
+            <div class="flex justify-between items-center">
+              <span class="font-medium">Saldo Akhir:</span>
+              <span class="font-bold text-lg ${saldo > 0 ? 'text-emerald-600' : saldo < 0 ? 'text-orange-600' : 'text-gray-600'}">${saldo !== 0 ? (saldo > 0 ? '+' : '-') + fmtRp(Math.abs(saldo)) : 'Rp 0'}</span>
+            </div>
+          </div>
+        `;
+
+        modal.classList.remove('hidden');
+      } catch (e) {
+        showToast('Error: ' + e.message, 'error');
+      }
+    }
+
+    function closeStudentBilling() {
+      document.getElementById('studentBillingModal').classList.add('hidden');
+    }
+
+    async function generateBilling() {
+      const tenantId = document.getElementById('paymentsTenantFilter').value;
+      if (!tenantId) { showToast('Pilih sekolah terlebih dahulu', 'error'); return; }
+      try {
+        const res = await fetch('/api/treasurer/bendahara/billing/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+          body: JSON.stringify({ tenant_id: tenantId })
+        });
+        const d = await res.json();
+        if (d.success) showToast(d.message, 'success');
+        else showToast(d.message || 'Gagal generate billing', 'error');
+      } catch (e) { showToast('Gagal: ' + e.message, 'error'); }
+    }
+
+    async function recalcBilling() {
+      const tenantId = document.getElementById('paymentsTenantFilter').value;
+      if (!tenantId) { showToast('Pilih sekolah terlebih dahulu', 'error'); return; }
+      try {
+        const res = await fetch('/api/treasurer/bendahara/billing/recalc', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+          body: JSON.stringify({ tenant_id: tenantId })
+        });
+        const d = await res.json();
+        if (d.success) { showToast(d.message, 'success'); loadSaldo(); }
+        else showToast(d.message || 'Gagal hitung saldo', 'error');
+      } catch (e) { showToast('Gagal: ' + e.message, 'error'); }
     }
 
     // ===================== BSI VA MANUAL =====================
@@ -1034,6 +1167,18 @@
         tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-8 text-center text-red-500">Error: ' + e.message + '</td></tr>';
       }
     }
-  </script>
-</body>
+</script>
+
+   <!-- Student Billing Detail Modal -->
+   <div id="studentBillingModal" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+     <div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+       <div class="flex justify-between items-center p-4 border-b sticky top-0 bg-white z-10">
+         <h4 class="font-semibold text-lg">Detail Billing Siswa</h4>
+         <button onclick="closeStudentBilling()" class="text-gray-500 hover:text-gray-700 text-2xl leading-none">&times;</button>
+       </div>
+       <div id="studentBillingContent" class="p-4 overflow-auto flex-1"></div>
+     </div>
+   </div>
+
+ </body>
 </html>
