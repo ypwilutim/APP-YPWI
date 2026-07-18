@@ -90,9 +90,6 @@ router.post('/auth/login', async (req, res) => {
     }
 
     const isProfileComplete = user.is_profile_complete === 1;
-    const profileApproved = user.profile_approved === 1;
-    const profileRejected = user.profile_approved === -1;
-    const profilePending = user.profile_approved === 0;
     const absensiMethod = user.tenant_id === 'SDIT' ? 'hp' : 'scanner';
 
     const tokenPayload = {
@@ -127,33 +124,8 @@ router.post('/auth/login', async (req, res) => {
     const token = jwt.sign(tokenPayload, SECRET_KEY, { expiresIn: '8h' });
 
     // Debug: Log what we're sending to client
-    console.log('[LOGIN_DEBUG] Login result:', { role: user.role, isProfileComplete, profileApproved, profileRejected, profilePending });
-    logToFile(`AUTH_LOGIN: user=${username}, role=${user.role}, isProfileComplete=${isProfileComplete}, profileApproved=${profileApproved}`);
-
-    // Check profile approval status
-    if (profileRejected) {
-      return res.json({
-        success: true,
-        redirect: 'complete-profile.html',
-        teacherId: user.guru_id,
-        role: user.role,
-        tenant_id: user.tenant_id,
-        message: 'Profil Anda ditolak oleh admin. Silakan perbaiki dan submit ulang.',
-        rejection_reason: user.profile_rejected_reason || 'Tidak ada alasan yang diberikan',
-        user: {
-          id: user.id,
-          username: user.username,
-          role: user.role,
-          tenant_id: user.tenant_id,
-          guru_id: user.guru_id,
-          is_profile_complete: user.is_profile_complete,
-          profile_approved: user.profile_approved,
-          profile_rejected_reason: user.profile_rejected_reason,
-          is_default_password: user.is_default_password,
-          assignments: tokenPayload.assignments
-        }
-      });
-    }
+    console.log('[LOGIN_DEBUG] Login result:', { role: user.role, isProfileComplete });
+    logToFile(`AUTH_LOGIN: user=${username}, role=${user.role}, isProfileComplete=${isProfileComplete}`);
 
     if (!isProfileComplete) {
       return res.json({
@@ -170,31 +142,6 @@ router.post('/auth/login', async (req, res) => {
           tenant_id: user.tenant_id,
           guru_id: user.guru_id,
           is_profile_complete: user.is_profile_complete,
-          profile_approved: user.profile_approved,
-          profile_rejected_reason: user.profile_rejected_reason,
-          is_default_password: user.is_default_password,
-          assignments: tokenPayload.assignments
-        }
-      });
-    }
-
-    if (profilePending) {
-      return res.json({
-        success: true,
-        redirect: 'profile-pending.html',
-        teacherId: user.guru_id,
-        role: user.role,
-        tenant_id: user.tenant_id,
-        message: 'Profil Anda sedang menunggu persetujuan admin. Silakan tunggu hingga admin menyetujui profil Anda.',
-        user: {
-          id: user.id,
-          username: user.username,
-          role: user.role,
-          tenant_id: user.tenant_id,
-          guru_id: user.guru_id,
-          is_profile_complete: user.is_profile_complete,
-          profile_approved: user.profile_approved,
-          profile_rejected_reason: user.profile_rejected_reason,
           is_default_password: user.is_default_password,
           assignments: tokenPayload.assignments
         }
@@ -227,8 +174,6 @@ router.post('/auth/login', async (req, res) => {
         tenant_id: user.tenant_id,
         guru_id: user.guru_id,
         is_profile_complete: user.is_profile_complete,
-        profile_approved: user.profile_approved,
-        profile_rejected_reason: user.profile_rejected_reason,
         is_default_password: user.is_default_password,
         assignments: tokenPayload.assignments
       }
@@ -267,11 +212,12 @@ router.put('/profile-complete/:teacherId', async (req, res) => {
   const { teacherId } = req.params;
 
 try {
-    await db.query('UPDATE users SET is_profile_complete = 0, profile_approved = 0, profile_rejected_reason = NULL, profile_approved_at = NULL WHERE guru_id = ?', [teacherId]);
+    // Endpoint ini hanya update status, email sudah dikirim di /api/public/teachers
+    await db.query('UPDATE users SET is_profile_complete = 1 WHERE guru_id = ?', [teacherId]);
     
     res.json({
       success: true,
-      message: 'Profil berhasil diperbarui dan sedang menunggu persetujuan admin'
+      message: 'Status profil diperbarui'
     });
   } catch (error) {
     console.error('[PROFILE COMPLETE ERROR]', error.message);
@@ -442,26 +388,6 @@ router.post('/forgot-password/reset', async (req, res) => {
   } catch (error) {
     console.error('[RESET PASSWORD ERROR]', error.message);
     res.status(500).json({ success: false, message: 'Terjadi kesalahan sistem' });
-  }
-});
-
-// GET /api/auth/check-approval - Check current user profile approval status
-router.get('/auth/check-approval', authenticateToken, async (req, res) => {
-  try {
-    const users = await db.query('SELECT profile_approved, profile_rejected_reason FROM users WHERE id = ?', [req.user.id]);
-    if (users.length === 0) {
-      return res.status(404).json({ success: false, message: 'User tidak ditemukan' });
-    }
-    const user = users[0];
-    res.json({
-      success: true,
-      approved: user.profile_approved === 1,
-      rejected: user.profile_approved === -1,
-      rejection_reason: user.profile_rejected_reason || null
-    });
-  } catch (error) {
-    console.error('[CHECK APPROVAL ERROR]', error.message);
-    res.status(500).json({ success: false, message: 'Error checking approval status' });
   }
 });
 

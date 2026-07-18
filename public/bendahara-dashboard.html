@@ -1,0 +1,1039 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard Bendahara - YPWI Lutim</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="css/admin-dashboard.css">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .nav-active { background-color: #059669; color: white; }
+    .modal { display: none; }
+    .financial-card { transition: transform 0.2s; }
+    .financial-card:hover { transform: translateY(-2px); }
+    .chart-container { position: relative; height: 200px; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <!-- Login Overlay -->
+  <div id="loginOverlay" class="fixed inset-0 z-50 flex items-center justify-center bg-gray-50">
+    <div class="bg-white rounded-xl shadow-lg border border-gray-100 p-8 w-full max-w-sm">
+      <div class="flex items-center space-x-3 mb-6">
+        <div class="w-10 h-10 bg-emerald-600 rounded-lg flex items-center justify-center">
+          <i class="fas fa-wallet text-white"></i>
+        </div>
+        <div>
+          <h1 class="text-xl font-bold text-gray-900">YPWI Lutim</h1>
+          <p class="text-sm text-gray-500">Login Bendahara</p>
+        </div>
+      </div>
+      <form onsubmit="doLogin(event)">
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Username</label>
+          <input id="loginUsername" type="text" required autocomplete="username"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
+        </div>
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+          <input id="loginPassword" type="password" required autocomplete="current-password"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
+        </div>
+        <div id="loginError" class="hidden mb-4 text-sm text-red-600 bg-red-50 p-2 rounded"></div>
+        <button id="loginBtn" type="submit"
+          class="w-full px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium">
+          Masuk
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div class="flex min-h-screen">
+    <!-- Sidebar -->
+    <aside class="w-64 bg-white shadow-lg border-r">
+      <div class="p-6 border-b">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 bg-emerald-600 rounded-lg flex items-center justify-center">
+            <i class="fas fa-wallet text-white"></i>
+          </div>
+          <div>
+            <h1 class="text-xl font-bold text-gray-900">YPWI Lutim</h1>
+            <p class="text-sm text-gray-500">Dashboard Bendahara</p>
+          </div>
+        </div>
+      </div>
+
+      <nav class="p-4 space-y-2">
+        <button class="nav-item nav-active w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg hover:bg-gray-100"
+          data-tab="dashboard">
+          <i class="fas fa-chart-line"></i>
+          <span>Dashboard</span>
+        </button>
+        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+          data-tab="payments">
+          <i class="fas fa-file-invoice-dollar"></i>
+          <span>Pembayaran Siswa</span>
+        </button>
+        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+          data-tab="payment-gateway">
+          <i class="fas fa-credit-card"></i>
+          <span>Payment Gateway</span>
+        </button>
+      </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 p-8">
+      <!-- Header -->
+      <div class="flex justify-between items-center mb-8">
+        <div>
+          <h2 id="pageTitle" class="text-3xl font-bold text-gray-900">Dashboard Bendahara</h2>
+          <p class="text-gray-600 mt-1">Selamat datang, <span id="bendaharaName">Bendahara</span></p>
+        </div>
+        <div class="flex items-center space-x-4">
+          <span class="text-sm text-gray-500" id="currentDate"></span>
+          <div class="flex items-center space-x-2">
+            <div class="w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center">
+              <i class="fas fa-user text-white text-sm"></i>
+            </div>
+            <span class="text-sm font-medium" id="bendaharaRole">Bendahara</span>
+            <button onclick="logout()" title="Keluar"
+              class="ml-1 w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full flex items-center justify-center text-gray-600">
+              <i class="fas fa-sign-out-alt text-sm"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Dashboard Tab -->
+      <div id="dashboardTab" class="tab-content">
+        <!-- Financial Summary Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <div class="financial-card bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Pendapatan SPP</p>
+                <p class="text-3xl font-bold text-emerald-600 mt-2" id="totalIncome">Rp 0</p>
+              </div>
+              <div class="w-12 h-12 bg-emerald-100 rounded-lg flex items-center justify-center">
+                <i class="fas fa-arrow-down text-emerald-600"></i>
+              </div>
+            </div>
+          </div>
+
+          <div class="financial-card bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Gaji Guru</p>
+                <p class="text-3xl font-bold text-red-600 mt-2" id="totalExpense">Rp 0</p>
+              </div>
+              <div class="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
+                <i class="fas fa-arrow-up text-red-600"></i>
+              </div>
+            </div>
+          </div>
+
+          <div class="financial-card bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Saldo Kas</p>
+                <p class="text-3xl font-bold text-blue-600 mt-2" id="currentBalance">Rp 0</p>
+              </div>
+              <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                <i class="fas fa-wallet text-blue-600"></i>
+              </div>
+            </div>
+          </div>
+
+          <div class="financial-card bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Belum Bayar SPP</p>
+                <p class="text-3xl font-bold text-orange-600 mt-2" id="unpaidCount">0 Siswa</p>
+              </div>
+              <div class="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                <i class="fas fa-exclamation-triangle text-orange-600"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- School Filter -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-6">
+          <div class="flex items-center space-x-3">
+            <label class="text-sm font-medium text-gray-700">Filter Sekolah:</label>
+            <select id="dashboardTenantFilter"
+              class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
+              <option value="">Semua Sekolah</option>
+            </select>
+            <button onclick="loadDashboardData()"
+              class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
+              <i class="fas fa-sync-alt mr-2"></i>Refresh
+            </button>
+          </div>
+        </div>
+
+        <!-- Tenant Summary Cards -->
+        <div id="tenantCards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+          <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 text-center">
+            <i class="fas fa-spinner fa-spin text-3xl text-gray-400"></i>
+            <p class="text-gray-500 mt-2">Memuat data...</p>
+          </div>
+        </div>
+
+        <!-- Overall Summary -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <div class="financial-card bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Pendapatan SPP</p>
+                <p class="text-3xl font-bold text-emerald-600 mt-2" id="totalIncome2">Rp 0</p>
+              </div>
+              <div class="w-12 h-12 bg-emerald-100 rounded-lg flex items-center justify-center">
+                <i class="fas fa-arrow-down text-emerald-600"></i>
+              </div>
+            </div>
+          </div>
+
+          <div class="financial-card bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Gaji Guru</p>
+                <p class="text-3xl font-bold text-red-600 mt-2" id="totalExpense2">Rp 0</p>
+              </div>
+              <div class="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
+                <i class="fas fa-arrow-up text-red-600"></i>
+              </div>
+            </div>
+          </div>
+
+          <div class="financial-card bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Saldo Kas</p>
+                <p class="text-3xl font-bold text-blue-600 mt-2" id="currentBalance2">Rp 0</p>
+              </div>
+              <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                <i class="fas fa-wallet text-blue-600"></i>
+              </div>
+            </div>
+          </div>
+
+          <div class="financial-card bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Belum Bayar SPP</p>
+                <p class="text-3xl font-bold text-orange-600 mt-2" id="unpaidCount2">0 Siswa</p>
+              </div>
+              <div class="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                <i class="fas fa-exclamation-triangle text-orange-600"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent Activity -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <h3 class="text-lg font-semibold text-gray-900 mb-4">Aktivitas Terbaru</h3>
+          <div id="recentActivity" class="space-y-3 max-h-64 overflow-y-auto">
+            <p class="text-center text-gray-500 py-8">Memuat aktivitas...</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pembayaran Siswa Tab -->
+      <div id="paymentsTab" class="tab-content hidden">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-4">
+          <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
+            <h3 class="text-lg font-semibold text-gray-900">Pembayaran Siswa (Saldo)</h3>
+            <div class="flex flex-wrap items-end gap-2">
+              <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Sekolah</label>
+                <select id="paymentsTenantFilter" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500">
+                  <option value="">Semua Sekolah</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Status</label>
+                <select id="paymentsStatus" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500">
+                  <option value="">Semua</option>
+                  <option value="tunggakan">Tunggakan</option>
+                  <option value="kelebihan">Kelebihan</option>
+                  <option value="lunas">Lunas</option>
+                </select>
+              </div>
+              <button onclick="loadSaldo()" class="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                <i class="fas fa-sync-alt mr-1"></i>Tampilkan
+              </button>
+            </div>
+          </div>
+
+          <!-- Summary -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+              <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Tunggakan</p>
+              <p class="text-2xl font-bold text-orange-600 mt-1" id="payTotalTunggakan">Rp 0</p>
+              <p class="text-xs text-gray-400 mt-1" id="payJumlahTunggakan">0 siswa</p>
+            </div>
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+              <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Kelebihan</p>
+              <p class="text-2xl font-bold text-emerald-600 mt-1" id="payTotalKelebihan">Rp 0</p>
+              <p class="text-xs text-gray-400 mt-1" id="payJumlahKelebihan">0 siswa</p>
+            </div>
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+              <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Siswa</p>
+              <p class="text-2xl font-bold text-gray-900 mt-1" id="payTotalSiswa">0</p>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50 border-b border-gray-100">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">#</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Nama Siswa</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">NISN</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Sekolah</th>
+                  <th class="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Iuran/Bln</th>
+                  <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Status Saldo</th>
+                  <th class="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Saldo</th>
+                </tr>
+              </thead>
+              <tbody id="paymentsTable" class="divide-y divide-gray-100">
+                <tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">
+                  <i class="fas fa-spinner fa-spin text-xl mb-2"></i>
+                  <p>Klik Tampilkan untuk memuat saldo siswa</p>
+                </td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Payment Gateway Tab (BSI VA Manual) -->
+      <div id="payment-gatewayTab" class="tab-content hidden">
+        <div class="bg-white rounded-xl shadow-sm border-2 border-indigo-200 p-6 mb-4">
+          <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
+            <h3 class="text-lg font-semibold text-gray-900">Payment Gateway - BSI VA Manual</h3>
+            <div class="flex flex-wrap items-end gap-2">
+              <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Pilih Sekolah</label>
+                <select id="bsiTenantSelect"
+                  class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  onchange="loadBsiStudents()">
+                  <option value="">Pilih Sekolah</option>
+                </select>
+              </div>
+              <button onclick="openBsiVaModal()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                <i class="fas fa-plus-circle mr-1"></i>Buat VA BSI
+              </button>
+              <button onclick="generateBsiCsv()" class="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                <i class="fas fa-file-alt mr-1"></i>Buat VA Semua (TXT)
+              </button>
+              <button onclick="document.getElementById('bsiReportFile').click()" class="bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                <i class="fas fa-file-import mr-1"></i>Import Laporan BSI
+              </button>
+              <button onclick="loadBsiTransactions()" class="bg-cyan-600 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                <i class="fas fa-list mr-1"></i>Lihat Transaksi BSI
+              </button>
+              <input type="file" id="bsiReportFile" accept=".csv,.json" class="hidden" onchange="importBsiReport(this)">
+            </div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50 border-b border-gray-100">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Nama Siswa</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">NISN</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Sekolah</th>
+                  <th class="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Iuran</th>
+                  <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">VA Number</th>
+                  <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Status</th>
+                  <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="bsiStudentTable" class="divide-y divide-gray-100">
+                <tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">
+                  <i class="fas fa-spinner fa-spin text-xl mb-2"></i>
+                  <p>Pilih sekolah untuk melihat siswa</p>
+                </td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- BSI Transactions Section -->
+        <div id="bsiTransactionsSection" class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hidden">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold text-gray-900">Transaksi BSI (Siswa dengan VA)</h3>
+            <button onclick="document.getElementById('bsiTransactionsSection').classList.add('hidden')" class="text-gray-500 hover:text-gray-700 text-2xl leading-none">&times;</button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50 border-b border-gray-100">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Siswa</th>
+                  <th class="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Iuran</th>
+                  <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">VA Number</th>
+                  <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Status</th>
+                </tr>
+              </thead>
+              <tbody id="bsiTransactionTable" class="divide-y divide-gray-100">
+                <tr><td colspan="4" class="px-4 py-8 text-center text-gray-500">Memuat transaksi...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- BSI VA Modal -->
+  <div id="bsiVaModal" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+      <div class="flex justify-between items-center p-4 border-b sticky top-0 bg-white z-10">
+        <div>
+          <h4 class="font-semibold text-lg">Buat Virtual Account BSI</h4>
+          <p id="bsiModalSchool" class="text-xs text-gray-500"></p>
+        </div>
+        <button onclick="closeBsiVaModal()" class="text-gray-500 hover:text-gray-700 text-2xl leading-none">&times;</button>
+      </div>
+      <div class="p-4 border-b">
+        <div class="flex items-center gap-2">
+          <input type="text" id="bsiStudentSearch" onkeyup="filterBsiStudents()" placeholder="Cari nama siswa..."
+            class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
+          <label class="flex items-center gap-1 text-sm text-gray-600 whitespace-nowrap">
+            <input type="checkbox" id="bsiSelectAll" onchange="bsiToggleSelectAll(this)"> Pilih Semua
+          </label>
+        </div>
+      </div>
+      <div class="overflow-auto flex-1">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 border-b border-gray-100 sticky top-0">
+            <tr>
+              <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase" style="width:40px">#</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Nama Siswa</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">NISN</th>
+              <th class="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Iuran</th>
+              <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">VA</th>
+            </tr>
+          </thead>
+          <tbody id="bsiModalStudentList" class="divide-y divide-gray-100"></tbody>
+        </table>
+      </div>
+      <div class="p-4 border-t flex justify-between items-center sticky bottom-0 bg-white z-10">
+        <span id="bsiSelectedCount" class="text-sm text-gray-600">0 siswa dipilih</span>
+        <div class="flex gap-2">
+          <button onclick="closeBsiVaModal()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400">Batal</button>
+          <button onclick="createBsiVaSelected()" id="bsiCreateBtn" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium">
+            <i class="fas fa-plus-circle mr-1"></i>Buat VA Terpilih
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BSI VA Progress Modal -->
+  <div id="bsiProgressModal" class="hidden fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+      <h4 class="font-semibold text-lg mb-1">Membuat Virtual Account BSI</h4>
+      <p id="bsiProgressText" class="text-sm text-gray-600 mb-4">0 / 0 siswa</p>
+      <div class="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+        <div id="bsiProgressBar" class="bg-indigo-600 h-4 rounded-full transition-all duration-200" style="width:0%"></div>
+      </div>
+      <p id="bsiProgressPercent" class="text-center text-2xl font-bold text-indigo-600 mt-3">0%</p>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="js/payroll-admin.js"></script>
+  <script>
+    let currentMonth = new Date().toISOString().slice(0, 7);
+
+    function getAuthHeader() {
+      const token = localStorage.getItem('token');
+      return token ? { 'Authorization': 'Bearer ' + token } : {};
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+      const today = new Date();
+      document.getElementById('currentDate').textContent = today.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+      const token = localStorage.getItem('token');
+      if (!token) {
+        document.getElementById('loginOverlay').classList.remove('hidden');
+        return;
+      }
+      document.getElementById('loginOverlay').classList.add('hidden');
+      verifyAccess();
+    });
+
+    async function verifyAccess() {
+      try {
+        const res = await fetch('/api/treasurer/bendahara/profile', { headers: getAuthHeader() });
+        if (!res.ok) {
+          localStorage.removeItem('token');
+          document.getElementById('loginOverlay').classList.remove('hidden');
+          return;
+        }
+        const data = await res.json();
+        if (!data.success) {
+          localStorage.removeItem('token');
+          document.getElementById('loginOverlay').classList.remove('hidden');
+          return;
+        }
+        const u = data.data;
+        document.getElementById('bendaharaName').textContent = u.name || 'Bendahara';
+        document.getElementById('bendaharaRole').textContent = u.role === 'admin' ? 'Admin' : 'Bendahara';
+        initDashboard();
+      } catch (e) {
+        localStorage.removeItem('token');
+        document.getElementById('loginOverlay').classList.remove('hidden');
+      }
+    }
+
+    async function doLogin(e) {
+      e.preventDefault();
+      const btn = document.getElementById('loginBtn');
+      const err = document.getElementById('loginError');
+      err.classList.add('hidden');
+      btn.disabled = true;
+      btn.textContent = 'Memproses...';
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: document.getElementById('loginUsername').value,
+            password: document.getElementById('loginPassword').value
+          })
+        });
+        const data = await res.json();
+        if (data.success && data.token) {
+          localStorage.setItem('token', data.token);
+          document.getElementById('loginOverlay').classList.add('hidden');
+          verifyAccess();
+        } else {
+          err.textContent = data.message || 'Login gagal';
+          err.classList.remove('hidden');
+        }
+      } catch (error) {
+        err.textContent = 'Terjadi kesalahan jaringan';
+        err.classList.remove('hidden');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Masuk';
+      }
+    }
+
+    function logout() {
+      localStorage.removeItem('token');
+      location.reload();
+    }
+
+    function initDashboard() {
+      loadTenantFilters();
+      loadDashboardData();
+
+      document.querySelectorAll('[data-tab]').forEach(btn => {
+        btn.addEventListener('click', function () {
+          const tabName = this.dataset.tab;
+          document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
+          document.querySelectorAll('[data-tab]').forEach(n => {
+            n.classList.remove('bg-emerald-600', 'text-white');
+            n.classList.add('text-gray-600');
+          });
+          document.getElementById(tabName + 'Tab').classList.remove('hidden');
+          this.classList.add('bg-emerald-600', 'text-white');
+
+          if (tabName === 'dashboard') loadDashboardData();
+          if (tabName === 'payments') loadSaldo();
+          if (tabName === 'payment-gateway') loadBsiTenants();
+        });
+      });
+    }
+
+    function formatCurrency(value) {
+      const num = parseFloat(value) || 0;
+      return `Rp ${num.toLocaleString('id-ID')}`;
+    }
+
+    async function loadDashboardData() {
+       const tenantId = document.getElementById('dashboardTenantFilter').value;
+
+       try {
+         const [incomeRes, expenseRes, defaulterRes] = await Promise.all([
+           fetch(`/api/treasurer/public/spp-summary?tenant_id=${tenantId}`),
+           fetch(`/api/treasurer/public/salary-summary?tenant_id=${tenantId}`),
+           fetch(`/api/treasurer/public/payment-defaulters?tenant_id=${tenantId}`)
+         ]);
+
+         const incomeData = await incomeRes.json();
+         const expenseData = await expenseRes.json();
+         const defaulterData = await defaulterRes.json();
+
+         let totalIncome = 0, totalExpense = 0;
+
+         const tenantCards = document.getElementById('tenantCards');
+         if (incomeData.success && incomeData.data?.length) {
+           incomeData.data.forEach(item => {
+             totalIncome += parseFloat(item.total_pemasukan) || 0;
+           });
+           document.getElementById('totalIncome').textContent = formatCurrency(totalIncome);
+           document.getElementById('totalIncome2').textContent = formatCurrency(totalIncome);
+
+           tenantCards.innerHTML = incomeData.data.map(d => `
+             <div class="bg-white rounded-xl shadow-sm border border-emerald-200 p-5 hover:shadow-md transition-shadow">
+               <div class="border-b border-gray-100 pb-3 mb-3">
+                 <h4 class="font-semibold text-gray-900">${d.nama_sekolah || 'Tidak diketahui'}</h4>
+                 <p class="text-xs text-gray-500 mt-1">${d.total_siswa || 0} siswa</p>
+               </div>
+               <div class="space-y-2 text-sm">
+                 <div class="flex justify-between"><span class="text-gray-600">Pendapatan</span><span class="font-medium text-emerald-600">${formatCurrency(d.total_pemasukan || 0)}</span></div>
+                 <div class="flex justify-between"><span class="text-gray-600">Bayar</span><span class="font-medium text-green-600">${d.sudah_bayar || 0}</span></div>
+                 <div class="flex justify-between"><span class="text-gray-600">Belum Bayar</span><span class="font-medium text-orange-600">${d.belum_bayar || 0}</span></div>
+               </div>
+             </div>
+           `).join('');
+         } else {
+           tenantCards.innerHTML = '<div class="col-span-full text-center py-8 text-gray-500">Tidak ada data sekolah</div>';
+         }
+
+         if (expenseData.success) {
+           expenseData.data.forEach(item => {
+             totalExpense += parseFloat(item.total_gaji) || 0;
+           });
+           document.getElementById('totalExpense').textContent = formatCurrency(totalExpense);
+           document.getElementById('totalExpense2').textContent = formatCurrency(totalExpense);
+         }
+
+         if (defaulterData.success) {
+           document.getElementById('unpaidCount').innerHTML = `${defaulterData.data.length} <span class="text-sm font-normal">Siswa</span>`;
+           document.getElementById('unpaidCount2').innerHTML = `${defaulterData.data.length} <span class="text-sm font-normal">Siswa</span>`;
+         }
+
+         const balance = totalIncome - totalExpense;
+         document.getElementById('currentBalance').textContent = formatCurrency(balance);
+         document.getElementById('currentBalance2').textContent = formatCurrency(balance);
+
+         // Recent activity
+         const recentActivity = document.getElementById('recentActivity');
+         if (incomeData.success && incomeData.data?.length) {
+           const activities = incomeData.data.slice(0, 5).map(d => `
+             <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+               <div class="flex items-center space-x-3">
+                 <div class="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center">
+                   <i class="fas fa-school text-emerald-600 text-sm"></i>
+                 </div>
+                 <div>
+                   <p class="text-sm font-medium text-gray-900">${d.nama_sekolah || 'Sekolah'}</p>
+                   <p class="text-xs text-gray-500">Pendapatan SPP</p>
+                 </div>
+               </div>
+               <span class="text-sm font-medium text-emerald-600">${formatCurrency(d.total_pemasukan || 0)}</span>
+             </div>
+           `).join('');
+           recentActivity.innerHTML = activities || '<p class="text-center text-gray-500 py-8">Tidak ada aktivitas</p>';
+         } else {
+           recentActivity.innerHTML = '<p class="text-center text-gray-500 py-8">Tidak ada aktivitas</p>';
+         }
+       } catch (error) {
+         console.error('Dashboard load error:', error);
+       }
+     }
+
+    async function loadTenantFilters() {
+      try {
+        const res = await fetch('/api/treasurer/public/tenants');
+        const data = await res.json();
+        if (data.success) {
+          const options = data.data.map(t => `<option value="${t.tenant_id}">${t.nama_sekolah}</option>`).join('');
+          const sel = document.getElementById('dashboardTenantFilter');
+          if (sel) sel.innerHTML = '<option value="">Semua Sekolah</option>' + options;
+          const paySel = document.getElementById('paymentsTenantFilter');
+          if (paySel) paySel.innerHTML = '<option value="">Semua Sekolah</option>' + options;
+        }
+      } catch (e) {
+        console.error('loadTenantFilters', e);
+      }
+    }
+
+    function showToast(msg, type) {
+      const t = document.createElement('div');
+      t.className = 'fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm text-sm ' + (type === 'success' ? 'bg-green-500 text-white' : type === 'error' ? 'bg-red-500 text-white' : 'bg-blue-500 text-white');
+      t.innerHTML = '<div class="flex items-center"><i class="fas ' + (type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle') + ' mr-2"></i><span>' + msg + '</span></div>';
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 3000);
+    }
+
+    function fmtRp(v) {
+      const n = parseFloat(v) || 0;
+      return 'Rp ' + n.toLocaleString('id-ID');
+    }
+
+    function saldoBadge(saldo, iuran) {
+      if (saldo < 0) {
+        return `<span class="text-xs px-2 py-1 rounded bg-orange-100 text-orange-800">Tunggakan</span>`;
+      } else if (saldo > 0) {
+        return `<span class="text-xs px-2 py-1 rounded bg-emerald-100 text-emerald-800">Kelebihan</span>`;
+      }
+      return `<span class="text-xs px-2 py-1 rounded bg-gray-100 text-gray-800">Lunas</span>`;
+    }
+
+    async function loadSaldo() {
+      const tenantId = document.getElementById('paymentsTenantFilter').value;
+      const statusFilter = document.getElementById('paymentsStatus').value;
+      const tbody = document.getElementById('paymentsTable');
+
+      tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-500"><i class="fas fa-spinner fa-spin"></i> Memuat...</td></tr>';
+      try {
+        const params = new URLSearchParams({ limit: '1000' });
+        if (tenantId) params.set('tenant_id', tenantId);
+        if (statusFilter) params.set('status', statusFilter);
+
+        const res = await fetch('/api/treasurer/bendahara/saldo?' + params.toString(), {
+          headers: getAuthHeader()
+        });
+        const data = await res.json();
+        if (!data.success) {
+          tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-red-500">' + (data.message || 'Gagal memuat') + '</td></tr>';
+          return;
+        }
+
+        const s = data.summary || {};
+        document.getElementById('payTotalTunggakan').textContent = fmtRp(s.total_tunggakan || 0);
+        document.getElementById('payTotalKelebihan').textContent = fmtRp(s.total_kelebihan || 0);
+        document.getElementById('payTotalSiswa').textContent = s.total_siswa || 0;
+        document.getElementById('payJumlahTunggakan').textContent = (s.jumlah_tunggakan || 0) + ' siswa';
+        document.getElementById('payJumlahKelebihan').textContent = (s.jumlah_kelebihan || 0) + ' siswa';
+
+        const rows = data.data || [];
+        if (!rows.length) {
+          tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">Tidak ada data siswa</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = rows.map((d, i) => {
+          const saldo = parseFloat(d.saldo) || 0;
+          const saldoText = saldo < 0
+            ? `<span class="text-orange-600 font-medium">-${fmtRp(Math.abs(saldo))}</span>`
+            : saldo > 0
+              ? `<span class="text-emerald-600 font-medium">+${fmtRp(saldo)}</span>`
+              : `<span class="text-gray-500">Rp 0</span>`;
+          return `
+            <tr class="border-b">
+              <td class="px-4 py-2">${i + 1}</td>
+              <td class="px-4 py-2">${d.nama_siswa || '-'}</td>
+              <td class="px-4 py-2">${d.nisn || '-'}</td>
+              <td class="px-4 py-2">${d.nama_sekolah || d.tenant_id || '-'}</td>
+              <td class="px-4 py-2 text-right">${fmtRp(d.iuran_bulanan)}</td>
+              <td class="px-4 py-2 text-center">${saldoBadge(saldo, d.iuran_bulanan)}</td>
+              <td class="px-4 py-2 text-right">${saldoText}</td>
+            </tr>
+          `;
+        }).join('');
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-red-500">Error: ' + e.message + '</td></tr>';
+      }
+    }
+
+    // ===================== BSI VA MANUAL =====================
+    let bsiStudentCache = [];
+
+    async function loadBsiTenants() {
+      try {
+        const res = await fetch('/api/treasurer/public/tenants');
+        const data = await res.json();
+        const sel = document.getElementById('bsiTenantSelect');
+        sel.innerHTML = '<option value="">Pilih Sekolah</option>' +
+          (data.data || []).map(t => `<option value="${t.tenant_id}">${t.nama_sekolah}</option>`).join('');
+      } catch (e) {
+        console.error('loadBsiTenants', e);
+      }
+    }
+
+    async function loadBsiStudents() {
+      const tenantId = document.getElementById('bsiTenantSelect').value;
+      const tbody = document.getElementById('bsiStudentTable');
+      if (!tenantId) {
+        tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">Pilih sekolah untuk melihat siswa</td></tr>';
+        return;
+      }
+      tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-500"><i class="fas fa-spinner fa-spin"></i> Memuat...</td></tr>';
+      try {
+        const res = await fetch('/api/treasurer/public/students?tenant_id=' + tenantId);
+        const data = await res.json();
+        if (!data.success || !data.data.length) {
+          tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">Tidak ada siswa aktif</td></tr>';
+          return;
+        }
+        tbody.innerHTML = data.data.map(s => {
+          const hasVa = s.va_number && s.va_number !== 'null' && s.va_number !== '';
+          const status = s.va_status || (hasVa ? 'pending' : '-');
+          const badge = {
+            paid: 'bg-green-100 text-green-800',
+            pending: 'bg-amber-100 text-amber-800',
+            failed: 'bg-red-100 text-red-800',
+            '-': 'bg-gray-100 text-gray-800'
+          }[status] || 'bg-gray-100 text-gray-800';
+          return `
+            <tr class="border-b">
+              <td class="px-4 py-2">${s.nama_siswa || ''}</td>
+              <td class="px-4 py-2">${s.nisn || '-'}</td>
+              <td class="px-4 py-2">${s.nama_sekolah || s.tenant_id || '-'}</td>
+              <td class="px-4 py-2 text-right">${s.iuran_bulanan ? 'Rp ' + Number(s.iuran_bulanan).toLocaleString('id-ID') : '-'}</td>
+              <td class="px-4 py-2 text-center font-mono text-xs">${hasVa ? s.va_number : '<span class="text-gray-400">-</span>'}</td>
+              <td class="px-4 py-2 text-center"><span class="text-xs px-2 py-1 rounded ${badge}">${status}</span></td>
+              <td class="px-4 py-2 text-center">
+                ${hasVa ? '' : `<button onclick="createBsiVaSingle(${s.id})" class="px-2 py-1 bg-indigo-600 text-white rounded text-xs hover:bg-indigo-700">Buat VA</button>`}
+              </td>
+            </tr>`;
+        }).join('');
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-red-500">Error: ' + e.message + '</td></tr>';
+      }
+    }
+
+    async function openBsiVaModal() {
+      const tenantId = document.getElementById('bsiTenantSelect').value;
+      if (!tenantId) { showToast('Pilih sekolah terlebih dahulu', 'error'); return; }
+      const schoolName = document.getElementById('bsiTenantSelect').selectedOptions[0]?.text || '';
+      document.getElementById('bsiModalSchool').textContent = schoolName;
+      document.getElementById('bsiVaModal').classList.remove('hidden');
+      document.getElementById('bsiSelectAll').checked = false;
+      document.getElementById('bsiSelectedCount').textContent = '0 siswa dipilih';
+
+      const tbody = document.getElementById('bsiModalStudentList');
+      tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-gray-500"><i class="fas fa-spinner fa-spin"></i> Memuat...</td></tr>';
+      try {
+        const res = await fetch('/api/treasurer/public/students?tenant_id=' + tenantId);
+        const data = await res.json();
+        bsiStudentCache = data.data || [];
+        renderBsiModalStudents();
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-red-500">Error: ' + e.message + '</td></tr>';
+      }
+    }
+
+    function renderBsiModalStudents(filter) {
+      const q = (filter || '').toLowerCase();
+      const tbody = document.getElementById('bsiModalStudentList');
+      const list = bsiStudentCache.filter(s =>
+        !q || (s.nama_siswa || '').toLowerCase().includes(q) || (s.nisn || '').includes(q)
+      );
+      if (!list.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-gray-500">Tidak ada siswa</td></tr>';
+        return;
+      }
+      tbody.innerHTML = list.map((s, i) => `
+        <tr class="border-b">
+          <td class="px-4 py-2 text-center"><input type="checkbox" class="bsi-checkbox" value="${s.id}" onchange="updateBsiCount()"></td>
+          <td class="px-4 py-2">${s.nama_siswa || ''}</td>
+          <td class="px-4 py-2">${s.nisn || '-'}</td>
+          <td class="px-4 py-2 text-right">${s.iuran_bulanan ? 'Rp ' + Number(s.iuran_bulanan).toLocaleString('id-ID') : '-'}</td>
+          <td class="px-4 py-2 text-center font-mono text-xs">${s.va_number && s.va_number !== 'null' ? s.va_number : '<span class="text-gray-400">-</span>'}</td>
+        </tr>`).join('');
+    }
+
+    function filterBsiStudents() {
+      renderBsiModalStudents(document.getElementById('bsiStudentSearch').value);
+    }
+
+    function bsiToggleSelectAll(cb) {
+      document.querySelectorAll('.bsi-checkbox').forEach(c => c.checked = cb.checked);
+      updateBsiCount();
+    }
+
+    function updateBsiCount() {
+      const n = document.querySelectorAll('.bsi-checkbox:checked').length;
+      document.getElementById('bsiSelectedCount').textContent = n + ' siswa dipilih';
+    }
+
+    function closeBsiVaModal() {
+      document.getElementById('bsiVaModal').classList.add('hidden');
+    }
+
+    async function createBsiVaSelected() {
+      const tenantId = document.getElementById('bsiTenantSelect').value;
+      const ids = Array.from(document.querySelectorAll('.bsi-checkbox:checked')).map(c => parseInt(c.value));
+      if (!ids.length) { showToast('Pilih minimal 1 siswa', 'error'); return; }
+
+      const btn = document.getElementById('bsiCreateBtn');
+      btn.disabled = true;
+
+      const progModal = document.getElementById('bsiProgressModal');
+      const bar = document.getElementById('bsiProgressBar');
+      const pct = document.getElementById('bsiProgressPercent');
+      const txt = document.getElementById('bsiProgressText');
+      progModal.classList.remove('hidden');
+      const total = ids.length;
+      let done = 0, ok = 0, fail = 0;
+      const updateProgress = () => {
+        const percent = total ? Math.round((done / total) * 100) : 100;
+        bar.style.width = percent + '%';
+        pct.textContent = percent + '%';
+        txt.textContent = done + ' / ' + total + ' siswa' + (fail ? ' (gagal ' + fail + ')' : '');
+      };
+      updateProgress();
+
+      for (const student_id of ids) {
+        try {
+          const res = await fetch('/api/treasurer/bsi/create-single', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+            body: JSON.stringify({ tenant_id: tenantId, student_id })
+          });
+          const d = await res.json();
+          if (d.success) ok++; else fail++;
+        } catch (e) { fail++; }
+        done++;
+        updateProgress();
+      }
+
+      btn.disabled = false;
+      progModal.classList.add('hidden');
+      showToast(`Berhasil buat ${ok} VA${fail ? ', gagal ' + fail : ''}`, fail ? 'error' : 'success');
+      closeBsiVaModal();
+      loadBsiStudents();
+    }
+
+    async function createBsiVaSingle(studentId) {
+      const tenantId = document.getElementById('bsiTenantSelect').value;
+      try {
+        const res = await fetch('/api/treasurer/bsi/create-single', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+          body: JSON.stringify({ tenant_id: tenantId, student_id })
+        });
+        const d = await res.json();
+        if (d.success) { showToast('VA ' + d.data.va_number + ' berhasil dibuat', 'success'); loadBsiStudents(); }
+        else showToast(d.message || 'Gagal buat VA', 'error');
+      } catch (e) { showToast('Gagal buat VA', 'error'); }
+    }
+
+    async function generateBsiCsv() {
+      const tenantId = document.getElementById('bsiTenantSelect').value;
+      if (!tenantId) { showToast('Pilih sekolah terlebih dahulu', 'error'); return; }
+      try {
+        const res = await fetch('/api/treasurer/bsi/generate-csv?tenant_id=' + encodeURIComponent(tenantId), {
+          headers: getAuthHeader()
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          showToast(err.message || 'Gagal generate CSV', 'error');
+          return;
+        }
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'BSI_VA_' + tenantId + '.txt';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+        showToast('CSV berhasil didownload', 'success');
+      } catch (e) {
+        showToast('Gagal generate CSV', 'error');
+      }
+    }
+
+    async function importBsiReport(input) {
+      const file = input.files[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        let records = [];
+        if (file.name.toLowerCase().endsWith('.json')) {
+          records = JSON.parse(text);
+        } else {
+          records = parseBsiCsv(text);
+        }
+        const res = await fetch('/api/bsi/import-report', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+          body: JSON.stringify({ records })
+        });
+        const d = await res.json();
+        if (d.success) showToast(d.message, 'success');
+        else showToast(d.message || 'Gagal import', 'error');
+        loadBsiStudents();
+      } catch (e) {
+        showToast('Gagal memproses file: ' + e.message, 'error');
+      } finally {
+        input.value = '';
+      }
+    }
+
+    function parseBsiCsv(text) {
+      const lines = text.trim().split(/\r?\n/);
+      if (!lines.length) return [];
+      const headers = splitCsvLine(lines[0]);
+      return lines.slice(1).map(line => {
+        const cols = splitCsvLine(line);
+        const obj = {};
+        headers.forEach((h, i) => obj[h.trim()] = (cols[i] || '').trim());
+        return obj;
+      });
+    }
+
+    function splitCsvLine(line) {
+      const out = [];
+      let cur = '', q = false;
+      for (let i = 0; i < line.length; i++) {
+        const c = line[i];
+        if (c === '"') { if (q && line[i + 1] === '"') { cur += '"'; i++; } else q = !q; }
+        else if (c === ',' && !q) { out.push(cur); cur = ''; }
+        else cur += c;
+      }
+      out.push(cur);
+      return out;
+    }
+
+    async function loadBsiTransactions() {
+      const tenantId = document.getElementById('bsiTenantSelect').value;
+      if (!tenantId) { showToast('Pilih sekolah terlebih dahulu', 'error'); return; }
+      const section = document.getElementById('bsiTransactionsSection');
+      const tbody = document.getElementById('bsiTransactionTable');
+
+      section.classList.remove('hidden');
+      tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-8 text-center text-gray-500"><i class="fas fa-spinner fa-spin"></i> Memuat transaksi...</td></tr>';
+
+      try {
+        const res = await fetch('/api/treasurer/public/students?tenant_id=' + tenantId);
+        const data = await res.json();
+        if (!data.success || !data.data.length) {
+          tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-8 text-center text-gray-500">Tidak ada siswa dengan VA</td></tr>';
+          return;
+        }
+        const withVa = data.data.filter(s => s.va_number && s.va_number !== 'null' && s.va_number !== '');
+        if (!withVa.length) {
+          tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-8 text-center text-gray-500">Belum ada siswa dengan VA BSI</td></tr>';
+          return;
+        }
+        tbody.innerHTML = withVa.map(s => {
+          const status = s.va_status || 'pending';
+          const badge = {
+            paid: 'bg-green-100 text-green-800',
+            pending: 'bg-amber-100 text-amber-800',
+            failed: 'bg-red-100 text-red-800',
+            '-': 'bg-gray-100 text-gray-800'
+          }[status] || 'bg-gray-100 text-gray-800';
+          return `
+            <tr class="border-b">
+              <td class="px-4 py-2">${s.nama_siswa || ''}</td>
+              <td class="px-4 py-2 text-right">${s.iuran_bulanan ? 'Rp ' + Number(s.iuran_bulanan).toLocaleString('id-ID') : '-'}</td>
+              <td class="px-4 py-2 text-center font-mono text-xs">${s.va_number}</td>
+              <td class="px-4 py-2 text-center"><span class="text-xs px-2 py-1 rounded ${badge}">${status}</span></td>
+            </tr>`;
+        }).join('');
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-8 text-center text-red-500">Error: ' + e.message + '</td></tr>';
+      }
+    }
+  </script>
+</body>
+</html>

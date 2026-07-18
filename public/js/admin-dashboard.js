@@ -1060,9 +1060,8 @@ function showTab(tabName) {
         settings: 'Pengaturan',
         evaluations: 'Penilaian Guru Otomatis',
         whatsapp: 'Pesan WhatsApp',
-        email: 'Email',
-        'qr-generator': 'QR Scanner & Generator',
-        'profile-approvals': 'Persetujuan Profil'
+        email: 'Log Email',
+        'qr-generator': 'QR Scanner & Generator'
     };
     setEl('pageTitle', titles[tabName]);
 
@@ -1070,16 +1069,13 @@ function showTab(tabName) {
     else if (tabName === 'teachers') { fetchTeachers(1); loadTeacherTenants(); }
     else if (tabName === 'students') { loadStudents(); loadStudentClasses(); }
     else if (tabName === 'attendance') fetchAttendanceLogs();
-    else if (tabName === 'email') loadEmailList('sent', 1);
+    else if (tabName === 'email') loadEmailLogs();
     else if (tabName === 'qr-generator') {
         loadScannerDevices();
         loadQRLogs();
     }
     else if (tabName === 'settings') {
         showSettingsTab('locations');
-    }
-    else if (tabName === 'profile-approvals') {
-        loadProfileApprovals();
     }
 }
 
@@ -1465,134 +1461,6 @@ async function createUser(teacherId) {
     } catch (error) {
         console.error('Create user error:', error);
         alert('Terjadi kesalahan');
-    }
-}
-
-// ==========================================
-// PROFILE APPROVAL FUNCTIONS
-// ==========================================
-
-async function loadProfileApprovals() {
-    const tbody = document.getElementById('profileApprovalsTable');
-    if (!tbody) return;
-
-    tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-12 text-center text-gray-500"><i class="fas fa-spinner fa-spin text-xl mb-2"></i><p>Memuat data...</p></td></tr>';
-
-    try {
-        const token = window.authToken || localStorage.getItem('token') || '';
-        const response = await fetch('/api/admin/profile-approvals', {
-            headers: { 'Authorization': 'Bearer ' + token }
-        });
-
-        if (response.status === 401 || response.status === 403) {
-            tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-12 text-center text-gray-500">Akses ditolak</td></tr>';
-            return;
-        }
-
-        const result = await response.json();
-        if (result.success && result.data.length > 0) {
-            tbody.innerHTML = result.data.map(item => {
-                const assignments = (item.assignments || []).map(a => `${a.nama_sekolah || a.tenant_id} (${a.jabatan_di_unit || '-'})`).join(', ') || '-';
-                const submitDate = item.created_at ? new Date(item.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-';
-                return `
-                <tr class="hover:bg-gray-50">
-                    <td class="px-6 py-4 text-sm font-medium text-gray-900">${item.nama || '-'}</td>
-                    <td class="px-6 py-4 text-sm text-gray-500">${item.nik || '-'}</td>
-                    <td class="px-6 py-4 text-sm text-gray-500">${item.email || '-'}</td>
-                    <td class="px-6 py-4 text-sm text-gray-500">${item.no_wa || '-'}</td>
-                    <td class="px-6 py-4 text-sm text-gray-500">${assignments}</td>
-                    <td class="px-6 py-4 text-sm text-gray-500">${submitDate}</td>
-                    <td class="px-6 py-4 text-sm">
-                        <div class="flex space-x-2">
-                            <button onclick="approveProfile(${item.guru_id})" class="bg-green-600 text-white px-3 py-1.5 rounded-md hover:bg-green-700 text-xs font-medium">
-                                <i class="fas fa-check mr-1"></i>Setujui
-                            </button>
-                            <button onclick="rejectProfile(${item.guru_id})" class="bg-red-600 text-white px-3 py-1.5 rounded-md hover:bg-red-700 text-xs font-medium">
-                                <i class="fas fa-times mr-1"></i>Tolak
-                            </button>
-                        </div>
-                    </td>
-                </tr>
-                `;
-            }).join('');
-        } else {
-            tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-12 text-center text-gray-500">Tidak ada profil yang menunggu persetujuan</td></tr>';
-        }
-    } catch (error) {
-        console.error('Load profile approvals error:', error);
-        tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-12 text-center text-red-500">Error memuat data</td></tr>';
-    }
-}
-
-async function approveProfile(teacherId) {
-    if (!confirm('Setujui profil guru ini?')) return;
-
-    try {
-        const token = window.authToken || localStorage.getItem('token') || '';
-        const response = await fetch(`/api/admin/profile-approvals/${teacherId}/approve`, {
-            method: 'POST',
-            headers: { 'Authorization': 'Bearer ' + token }
-        });
-        const result = await response.json();
-        if (result.success) {
-            alert('Profil berhasil disetujui');
-            loadProfileApprovals();
-            updateProfileApprovalBadge();
-        } else {
-            alert('Error: ' + result.message);
-        }
-    } catch (error) {
-        console.error('Approve profile error:', error);
-        alert('Terjadi kesalahan');
-    }
-}
-
-async function rejectProfile(teacherId) {
-    const reason = prompt('Masukkan alasan penolakan profil:');
-    if (!reason || reason.trim() === '') return;
-
-    try {
-        const token = window.authToken || localStorage.getItem('token') || '';
-        const response = await fetch(`/api/admin/profile-approvals/${teacherId}/reject`, {
-            method: 'POST',
-            headers: {
-                'Authorization': 'Bearer ' + token,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ reason: reason.trim() })
-        });
-        const result = await response.json();
-        if (result.success) {
-            alert('Profil berhasil ditolak');
-            loadProfileApprovals();
-            updateProfileApprovalBadge();
-        } else {
-            alert('Error: ' + result.message);
-        }
-    } catch (error) {
-        console.error('Reject profile error:', error);
-        alert('Terjadi kesalahan');
-    }
-}
-
-async function updateProfileApprovalBadge() {
-    try {
-        const token = window.authToken || localStorage.getItem('token') || '';
-        const response = await fetch('/api/admin/profile-approvals', {
-            headers: { 'Authorization': 'Bearer ' + token }
-        });
-        const result = await response.json();
-        const badge = document.getElementById('profileApprovalBadge');
-        if (badge && result.success) {
-            if (result.data.length > 0) {
-                badge.textContent = result.data.length;
-                badge.classList.remove('hidden');
-            } else {
-                badge.classList.add('hidden');
-            }
-        }
-    } catch (error) {
-        console.error('Update badge error:', error);
     }
 }
 
@@ -2303,9 +2171,6 @@ function initAllUI() {
     // Initialize PDF report and recap view
     initPdfReport();
     initRecapView();
-
-    // Update profile approval badge
-    updateProfileApprovalBadge();
 
     // WhatsApp functionality
     setupWhatsApp();

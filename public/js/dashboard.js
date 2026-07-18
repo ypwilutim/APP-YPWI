@@ -111,27 +111,6 @@ if (!token) {
     window.location.href = 'login.html';
 }
 
-// Check profile approval status
-async function checkProfileApproval() {
-    try {
-        const response = await fetch('/api/auth/check-approval', {
-            headers: { 'Authorization': 'Bearer ' + token }
-        });
-        const data = await response.json();
-        if (data.success && !data.approved) {
-            if (data.rejected) {
-                window.location.href = 'complete-profile.html?rejected=1';
-            } else {
-                window.location.href = 'profile-pending.html';
-            }
-        }
-    } catch (error) {
-        console.error('Approval check error:', error);
-    }
-}
-
-checkProfileApproval();
-
 // Decode JWT token and extract payload
 function parseJwt(token) {
     try {

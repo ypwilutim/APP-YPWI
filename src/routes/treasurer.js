@@ -2,7 +2,7 @@ const express = require('express');
 const db = require('../../db');
 const nodemailer = require('nodemailer');
 const axios = require('axios');
-const { authenticateToken, authenticateOperator, verifyTenantAccess } = require('../middleware/auth');
+const { authenticateToken, authenticateOperator, authenticateBendahara, verifyTenantAccess } = require('../middleware/auth');
 const { sendBillTemplate } = require('../utils/whatsappTemplate');
 
 const router = express.Router();
@@ -1475,7 +1475,7 @@ router.get('/treasurer/bsi/export', authenticateOperator, async (req, res) => {
   }
 })
 
-router.get('/treasurer/public/tenants', authenticateOperator, async (req, res) => {
+router.get('/treasurer/public/tenants', async (req, res) => {
   try {
     const tenants = await db.query('SELECT tenant_id, nama_sekolah FROM tenants ORDER BY nama_sekolah');
     res.json({ success: true, data: tenants });
@@ -1484,6 +1484,165 @@ router.get('/treasurer/public/tenants', authenticateOperator, async (req, res) =
     res.status(500).json({ success: false, message: 'Gagal ambil data sekolah' });
   }
 })
+
+// GET /api/treasurer/bendahara/profile - Profil bendahara (akses terbatas)
+// Hanya role admin ATAU guru dengan assignment YPWILUTIM jabatan bendahara/admin
+router.get('/treasurer/bendahara/profile', authenticateBendahara, async (req, res) => {
+  try {
+    const user = req.user;
+    res.json({
+      success: true,
+      data: {
+        role: user.role,
+        guru_id: user.guru_id || null,
+        name: user.name || (user.assignments && user.assignments[0] && user.assignments[0].nama_sekolah) || 'Bendahara',
+        assignments: user.assignments || []
+      }
+    });
+  } catch (error) {
+    console.error('Bendahara profile error:', error);
+    res.status(500).json({ success: false, message: 'Gagal memuat profil bendahara' });
+  }
+});
+
+// GET /api/treasurer/bendahara/payment-invoices - Daftar pembayaran siswa dari payment_invoices
+router.get('/treasurer/bendahara/payment-invoices', authenticateBendahara, async (req, res) => {
+  try {
+    const tenantId = req.query.tenant_id || '';
+    const status = req.query.status || '';
+    const periode = req.query.periode || '';
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 100;
+
+    let query = `SELECT pi.*, s.nama_siswa, s.nisn, s.tenant_id, tn.nama_sekolah
+                 FROM payment_invoices pi
+                 JOIN students s ON pi.student_id = s.id
+                 JOIN tenants tn ON s.tenant_id = tn.tenant_id
+                 WHERE 1=1`;
+    const params = [];
+
+    if (tenantId) {
+      query += ' AND pi.tenant_id = ?';
+      params.push(tenantId);
+    }
+    if (status) {
+      query += ' AND pi.status = ?';
+      params.push(status);
+    }
+    if (periode) {
+      query += ' AND pi.periode = ?';
+      params.push(periode);
+    }
+
+    query += ' ORDER BY pi.created_at DESC LIMIT ? OFFSET ?';
+    params.push(limit, (page - 1) * limit);
+
+    const invoices = await db.query(query, params);
+
+    // Hitung total untuk ringkasan
+    let sumQuery = `SELECT
+        COUNT(*) as total_invoice,
+        COALESCE(SUM(CASE WHEN pi.status = 'paid' THEN pi.amount ELSE 0 END), 0) as total_paid,
+        COALESCE(SUM(CASE WHEN pi.status != 'paid' THEN pi.amount ELSE 0 END), 0) as total_unpaid
+      FROM payment_invoices pi
+      JOIN students s ON pi.student_id = s.id
+      JOIN tenants tn ON s.tenant_id = tn.tenant_id
+      WHERE 1=1`;
+    const sumParams = [];
+    if (tenantId) { sumQuery += ' AND pi.tenant_id = ?'; sumParams.push(tenantId); }
+    if (status) { sumQuery += ' AND pi.status = ?'; sumParams.push(status); }
+    if (periode) { sumQuery += ' AND pi.periode = ?'; sumParams.push(periode); }
+    const [summary] = await db.query(sumQuery, sumParams);
+
+    res.json({
+      success: true,
+      data: invoices,
+      summary: {
+        total_invoice: summary.total_invoice || 0,
+        total_paid: summary.total_paid || 0,
+        total_unpaid: summary.total_unpaid || 0
+      },
+      pagination: { page, limit }
+    });
+  } catch (error) {
+    console.error('Bendahara payment invoices error:', error);
+    res.status(500).json({ success: false, message: 'Gagal mengambil data pembayaran siswa' });
+  }
+});
+
+// GET /api/treasurer/bendahara/saldo - Saldo berjalan siswa (tunggakan / kelebihan)
+router.get('/treasurer/bendahara/saldo', authenticateBendahara, async (req, res) => {
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS saldo_siswa (
+        id INT(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        student_id INT(11) NOT NULL,
+        tenant_id VARCHAR(20) DEFAULT NULL,
+        saldo DECIMAL(12,2) NOT NULL DEFAULT 0.00 COMMENT '- = tunggakan, + = kelebihan',
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uniq_student (student_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    const tenantId = req.query.tenant_id || '';
+    const statusFilter = req.query.status || ''; // 'tunggakan' | 'kelebihan' | '' (semua)
+    const limit = parseInt(req.query.limit) || 500;
+    const page = parseInt(req.query.page) || 1;
+
+    let where = 'WHERE 1=1';
+    const params = [];
+    if (tenantId) { where += ' AND s.tenant_id = ?'; params.push(tenantId); }
+
+    if (statusFilter === 'tunggakan') { where += ' AND COALESCE(ss.saldo, 0) < 0'; }
+    else if (statusFilter === 'kelebihan') { where += ' AND COALESCE(ss.saldo, 0) > 0'; }
+    else if (statusFilter === 'lunas') { where += ' AND COALESCE(ss.saldo, 0) = 0'; }
+
+    const query = `
+      SELECT s.id, s.nama_siswa, s.nisn, s.tenant_id, tn.nama_sekolah,
+        s.iuran_bulanan, COALESCE(ss.saldo, 0) as saldo
+      FROM students s
+      JOIN tenants tn ON s.tenant_id = tn.tenant_id
+      LEFT JOIN saldo_siswa ss ON ss.student_id = s.id
+      ${where}
+      ORDER BY saldo ASC
+      LIMIT ? OFFSET ?
+    `;
+    const data = await db.query(query, [...params, limit, (page - 1) * limit]);
+
+    // Ringkasan global (seluruh siswa, abaikan filter status tapi hormati filter tenant)
+    const [summary] = await db.query(`
+      SELECT
+        COUNT(*) as total_siswa,
+        COALESCE(SUM(CASE WHEN COALESCE(ss.saldo,0) < 0 THEN -ss.saldo ELSE 0 END), 0) as total_tunggakan,
+        COALESCE(SUM(CASE WHEN COALESCE(ss.saldo,0) > 0 THEN ss.saldo ELSE 0 END), 0) as total_kelebihan,
+        COUNT(CASE WHEN COALESCE(ss.saldo,0) < 0 THEN 1 END) as jumlah_tunggakan,
+        COUNT(CASE WHEN COALESCE(ss.saldo,0) > 0 THEN 1 END) as jumlah_kelebihan
+      FROM students s
+      LEFT JOIN saldo_siswa ss ON ss.student_id = s.id
+      ${tenantId ? 'WHERE s.tenant_id = ?' : ''}
+    `, tenantId ? [tenantId] : []);
+
+    res.json({
+      success: true,
+      data: data.map(d => ({
+        ...d,
+        saldo: parseFloat(d.saldo) || 0,
+        iuran_bulanan: parseFloat(d.iuran_bulanan) || 0
+      })),
+      summary: {
+        total_siswa: summary.total_siswa || 0,
+        total_tunggakan: summary.total_tunggakan || 0,
+        total_kelebihan: summary.total_kelebihan || 0,
+        jumlah_tunggakan: summary.jumlah_tunggakan || 0,
+        jumlah_kelebihan: summary.jumlah_kelebihan || 0
+      },
+      pagination: { page, limit }
+    });
+  } catch (error) {
+    console.error('Bendahara saldo error:', error);
+    res.status(500).json({ success: false, message: 'Gagal mengambil saldo siswa' });
+  }
+});
 
 // ===== BSI VA MANUAL ENDPOINTS =====
 
@@ -1532,7 +1691,7 @@ async function getBsiParentAccount(tenantId) {
 
 // POST /api/treasurer/bsi/create-single - buat VA BSI manual per siswa
 // body: { tenant_id, student_id } -> VA = prefix + student_id, insert payment_transactions pending
-router.post('/treasurer/bsi/create-single', authenticateOperator, async (req, res) => {
+router.post('/treasurer/bsi/create-single', authenticateBendahara, async (req, res) => {
   try {
     const { tenant_id, student_id, amount } = req.body;
     if (!tenant_id || !student_id) {
@@ -1553,7 +1712,8 @@ router.post('/treasurer/bsi/create-single', authenticateOperator, async (req, re
     // Generate 10 digit acak untuk kolom VA di CUZ BSI (tanpa prefix).
     const vaSuffix = String(Math.floor(1000000000 + Math.random() * 9000000000));
     // Di database ditambah prefix dari env BSI_VA_PREFIX (default 832231).
-    const vaPrefix = process.env.BSI_VA_PREFIX || '832231';
+    // Strip karakter non-digit agar spasi di env tidak ikut tersimpan.
+    const vaPrefix = (process.env.BSI_VA_PREFIX || '832231').replace(/[^0-9]/g, '');
     const vaNumber = `${vaPrefix}${vaSuffix}`;
 
     // Simpan va_number (ber-prefix) ke tabel students
@@ -1596,7 +1756,7 @@ router.post('/treasurer/bsi/create-single', authenticateOperator, async (req, re
 
 // GET /api/treasurer/bsi/generate-csv?tenant_id=XXX - download CSV sesuai format BSI CUZ
 // Header: Type,Parent Account,Virtual Account Number,Virtual Account Name,Amount,Remark,Transaction Date
-router.get('/treasurer/bsi/generate-csv', authenticateOperator, async (req, res) => {
+router.get('/treasurer/bsi/generate-csv', authenticateBendahara, async (req, res) => {
   try {
     const tenantId = req.query.tenant_id;
     if (tenantId && !verifyTenantAccess(req, tenantId)) {
@@ -1688,7 +1848,7 @@ router.get('/treasurer/bsi/generate-csv', authenticateOperator, async (req, res)
 });
 
 // GET /api/treasurer/bsi/students-with-va - list siswa beserta VA (untuk tabel)
-router.get('/treasurer/bsi/students-with-va', authenticateOperator, async (req, res) => {
+router.get('/treasurer/bsi/students-with-va', authenticateBendahara, async (req, res) => {
   try {
     const tenantId = req.query.tenant_id;
     if (tenantId && !verifyTenantAccess(req, tenantId)) {

@@ -136,7 +136,22 @@
       selectedStudentId = null;
     }
 
+    async function loadTenantOptions() {
+      try {
+        const res = await fetch('/api/public/catalog');
+        const json = await res.json();
+        if (json.success) {
+          const select = document.getElementById('demoSchool');
+          select.innerHTML = '<option value="">-- Pilih Sekolah --</option>' + 
+            json.data.map(t => '<option value="' + t.tenant_id + '">' + t.nama + '</option>').join('');
+        }
+      } catch (e) {
+        console.log('Error load tenants');
+      }
+    }
+
     document.getElementById('demoSchool').addEventListener('change', loadStudents);
+    loadTenantOptions();
   </script>
 </body>
 </html>
