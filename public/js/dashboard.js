@@ -2516,13 +2516,15 @@ function setupTreasurerNav() {
     });
 
     if (hasBendahara) {
+        const isYPWILUTIM = assignments.some(a => a.tenant_id === 'YPWILUTIM');
+        const targetPage = isYPWILUTIM ? 'bendahara-dashboard.html' : 'treasurer-dashboard.html';
         if (mobileNav) {
             mobileNav.style.display = 'block';
-            mobileNav.onclick = () => { window.location.href = 'treasurer-dashboard.html'; };
+            mobileNav.onclick = () => { window.location.href = targetPage; };
         }
         if (desktopBtn) {
             desktopBtn.style.display = 'block';
-            desktopBtn.onclick = () => { window.location.href = 'treasurer-dashboard.html'; };
+            desktopBtn.onclick = () => { window.location.href = targetPage; };
         }
     }
 

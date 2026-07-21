@@ -75,16 +75,21 @@
            <i class="fas fa-file-invoice-dollar"></i>
            <span>Pembayaran Siswa</span>
          </button>
-         <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
-           data-tab="payroll">
-           <i class="fas fa-wallet"></i>
-           <span>Penggajian Guru</span>
-         </button>
-         <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
-           data-tab="payment-gateway">
-           <i class="fas fa-credit-card"></i>
-           <span>Payment Gateway</span>
-         </button>
+<button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+            data-tab="payroll">
+            <i class="fas fa-wallet"></i>
+            <span>Penggajian Guru</span>
+          </button>
+          <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+            data-tab="attendanceRecap">
+            <i class="fas fa-calendar-check"></i>
+            <span>Rekap Absensi</span>
+          </button>
+          <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+            data-tab="payment-gateway">
+            <i class="fas fa-credit-card"></i>
+            <span>Payment Gateway</span>
+          </button>
        </nav>
      </aside>
 
@@ -315,11 +320,32 @@
 </tbody>
               </table>
             </div>
-            <div id="paymentsPagination" class="mt-4"></div>
+<div id="paymentsPagination" class="mt-4"></div>
           </div>
         </div>
 
-      <!-- Payment Gateway Tab (BSI VA Manual) -->
+       <!-- Attendance Recap Tab -->
+       <div id="attendanceRecapTab" class="tab-content hidden">
+         <div class="bg-white rounded-xl shadow-sm border-2 border-purple-200 p-6 mb-4">
+           <div class="flex justify-between mb-4">
+             <h3 class="text-lg font-semibold">Rekap Absensi Bulanan</h3>
+           </div>
+           <div class="flex flex-wrap gap-2 mb-4">
+             <select id="recapTenantSelect" class="px-3 py-2 border"><option value="">Memuat...</option></select>
+             <select id="recapMonthSelect" class="px-3 py-2 border">
+               <option value="1">Januari</option><option value="2">Februari</option><option value="3">Maret</option><option value="4">April</option>
+               <option value="5">Mei</option><option value="6">Juni</option><option value="7" selected>Juli</option><option value="8">Agustus</option>
+               <option value="9">September</option><option value="10">Oktober</option><option value="11">November</option><option value="12">Desember</option>
+             </select>
+             <select id="recapYearSelect" class="px-3 py-2 border"></select>
+             <button onclick="loadMonthlyRecap()" class="bg-emerald-600 text-white px-4 py-2 rounded">Tampilkan</button>
+             <button onclick="exportMonthlyPdfFromRecap()" class="bg-red-600 text-white px-4 py-2 rounded">Export PDF</button>
+           </div>
+           <div id="monthlyRecapContent"></div>
+         </div>
+       </div>
+
+       <!-- Payment Gateway Tab (BSI VA Manual)
       <div id="payment-gatewayTab" class="tab-content hidden">
         <div class="bg-white rounded-xl shadow-sm border-2 border-indigo-200 p-6 mb-4">
           <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
@@ -559,14 +585,74 @@ function initDashboard() {
           this.classList.add('bg-emerald-600', 'text-white');
 
 if (tabName === 'dashboard') loadDashboardData();
-           if (tabName === 'payments') loadSaldo();
-           if (tabName === 'payroll') loadPayroll();
-           if (tabName === 'payment-gateway') loadBsiTenants();
+            if (tabName === 'payments') loadSaldo();
+            if (tabName === 'payroll') loadPayroll();
+            if (tabName === 'payment-gateway') loadBsiTenants();
+            if (tabName === 'attendanceRecap') loadAttendanceRecap();
         });
       });
     }
 
-function formatCurrency(value) {
+    async function loadAttendanceRecap() {
+      const tenantSelect = document.getElementById('recapTenantSelect');
+      if (tenantSelect && tenantSelect.options.length <= 1) {
+        tenantSelect.innerHTML = '<option value="">Memuat...</option>';
+      }
+      try {
+        const token = localStorage.getItem('token');
+        const res = await fetch('/api/treasurer/public/tenants', { headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
+        const json = await res.json();
+        if (json.success && json.data) {
+          const opts = json.data.map(t => '<option value="' + t.tenant_id + '">' + t.nama_sekolah + '</option>').join('');
+          tenantSelect.innerHTML = '<option value="">Semua Sekolah</option>' + opts;
+        }
+      } catch (e) {
+        console.error('loadAttendanceRecap error:', e);
+      }
+    }
+
+    window.loadMonthlyRecap = async function() {
+      const monthNames = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+      const tenantId = document.getElementById('recapTenantSelect')?.value;
+      const month = document.getElementById('recapMonthSelect')?.value;
+      const year = document.getElementById('recapYearSelect')?.value;
+      const content = document.getElementById('monthlyRecapContent');
+      if (!tenantId || !month || !year) { showToast('Pilih sekolah, bulan, dan tahun', 'error'); return; }
+      content.innerHTML = '<p class="text-center py-8"><i class="fas fa-spinner fa-spin"></i> Memuat...</p>';
+      try {
+        const res = await fetch('/api/admin/attendance-monthly?tenant_id=' + tenantId + '&bulan=' + month + '&tahun=' + year);
+        const json = await res.json();
+        if (!json.success) { showToast('Gagal memuat data', 'error'); return; }
+        const data = json.data;
+        const daysInMonth = json.daysInMonth || 30;
+        let headerHtml = '<tr><th rowspan="2" class="p-1 border">No</th><th rowspan="2" class="p-1 border">Nama</th><th colspan="' + daysInMonth + '" class="p-1 border">Bulan: ' + monthNames[parseInt(month)] + ' ' + year + '</th><th colspan="7" class="p-1 border">Keterangan</th></tr><tr>';
+        for (let d = 1; d <= daysInMonth; d++) headerHtml += '<th class="p-1 border">' + d + '</th>';
+        headerHtml += '<th class="p-1 border">H</th><th class="p-1 border">T</th><th class="p-1 border">I</th><th class="p-1 border">S</th><th class="p-1 border">D</th><th class="p-1 border">C</th><th class="p-1 border">-</th></tr>';
+        let bodyHtml = '';
+        data.forEach((d, i) => {
+            bodyHtml += '<tr><td class="p-1 text-center border">' + (i + 1) + '</td><td class="p-1 border">' + (d.nama || '') + '</td>';
+            for (let day = 1; day <= daysInMonth; day++) bodyHtml += '<td class="p-1 text-center border">' + (d['tgl_' + day] || '') + '</td>';
+            bodyHtml += '<td class="p-1 text-center border">' + (d.hadir || 0) + '</td><td class="p-1 text-center border">' + (d.terlambat || 0) + '</td><td class="p-1 text-center border">' + (d.izin || 0) + '</td><td class="p-1 text-center border">' + (d.sakit || 0) + '</td><td class="p-1 text-center border">' + (d.dinas_luar || 0) + '</td><td class="p-1 text-center border">' + (d.cuti || 0) + '</td><td class="p-1 text-center border">' + (d.tanpa_keterangan || 0) + '</td></tr>';
+        });
+        content.innerHTML = '<div class="overflow-x-auto"><table class="w-full text-sm border-collapse"><thead>' + headerHtml + '</thead><tbody>' + bodyHtml + '</tbody></table></div>';
+      } catch (e) { content.innerHTML = '<p class="text-red-500 p-4">Error: ' + e.message + '</p>'; }
+    };
+
+    window.exportMonthlyPdfFromRecap = async function() {
+      const tenantId = document.getElementById('recapTenantSelect')?.value;
+      const month = document.getElementById('recapMonthSelect')?.value;
+      const year = document.getElementById('recapYearSelect')?.value;
+      const tenantName = document.getElementById('recapTenantSelect')?.selectedOptions[0]?.text || '';
+      const token = localStorage.getItem('token');
+      const a = document.createElement('a');
+      a.href = '/api/admin/attendance-export-pdf?tenant_id=' + tenantId + '&bulan=' + month + '&tahun=' + year + '&tenant_name=' + encodeURIComponent(tenantName) + '&token=' + token;
+      a.target = '_blank';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    };
+
+    function formatCurrency(value) {
        const num = parseFloat(value) || 0;
        return `Rp ${num.toLocaleString('id-ID')}`;
      }
@@ -670,20 +756,29 @@ async function loadDashboardData() {
       }
 
 async function loadTenantFilters() {
-        try {
-          const res = await fetch('/api/treasurer/public/tenants');
-          const data = await res.json();
-          if (data.success) {
-            const options = data.data.map(t => `<option value="${t.tenant_id}">${t.nama_sekolah}</option>`).join('');
-            ['dashboardTenantFilter', 'paymentsTenantFilter', 'payrollTenantSelect'].forEach(id => {
-              const el = document.getElementById(id);
-              if (el) el.innerHTML = '<option value="">Semua Sekolah</option>' + options;
-            });
-          }
-        } catch (e) {
-          console.error('loadTenantFilters', e);
-        }
-      }
+         try {
+           const res = await fetch('/api/treasurer/public/tenants');
+           const data = await res.json();
+           if (data.success) {
+             const options = data.data.map(t => `<option value="${t.tenant_id}">${t.nama_sekolah}</option>`).join('');
+             ['dashboardTenantFilter', 'paymentsTenantFilter', 'payrollTenantSelect', 'recapTenantSelect'].forEach(id => {
+               const el = document.getElementById(id);
+               if (el) el.innerHTML = '<option value="">Semua Sekolah</option>' + options;
+             });
+             const curYear = new Date().getFullYear();
+             const recapYearSelect = document.getElementById('recapYearSelect');
+             if (recapYearSelect) {
+               for (let y = curYear - 1; y <= curYear + 1; y++) {
+                 const o = document.createElement('option'); o.value = y; o.textContent = y;
+                 if (y === curYear) o.selected = true;
+                 recapYearSelect.appendChild(o);
+               }
+             }
+           }
+         } catch (e) {
+           console.error('loadTenantFilters', e);
+         }
+       }
 
     function formatKelas(tingkatan, nama_kelas) {
       const t = (tingkatan != null && tingkatan !== '') ? String(tingkatan) : '';
