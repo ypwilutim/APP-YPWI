@@ -153,6 +153,20 @@
               <p class="text-3xl font-bold text-blue-600 mt-2" id="currentBalance">Rp 0</p>
             </div>
           </div>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <h4 class="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Tunggakan</h4>
+              <p class="text-3xl font-bold text-orange-600 mt-2" id="totalTunggakan">Rp 0</p>
+            </div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <h4 class="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Kelebihan</h4>
+              <p class="text-3xl font-bold text-emerald-600 mt-2" id="totalKelebihan">Rp 0</p>
+            </div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <h4 class="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Siswa</h4>
+              <p class="text-3xl font-bold text-gray-900 mt-2" id="totalSiswa">0</p>
+            </div>
+          </div>
           
           <!-- Daftar Pembayaran Siswa -->
           <div class="mt-6">
@@ -568,54 +582,57 @@ function formatCurrency(value) {
        }
      }
 
-     async function loadDashboardData() {
-       const tenantId = document.getElementById('dashboardTenantFilter').value;
+async function loadDashboardData() {
+        const tenantId = document.getElementById('dashboardTenantFilter').value;
 
-       try {
-         const [incomeRes, expenseRes, defaulterRes] = await Promise.all([
-           fetch(`/api/treasurer/public/spp-summary?tenant_id=${tenantId}`),
-           fetch(`/api/treasurer/public/salary-summary?tenant_id=${tenantId}`),
-           fetch(`/api/treasurer/public/payment-defaulters?tenant_id=${tenantId}`)
-         ]);
+        try {
+          const [incomeRes, expenseRes, defaulterRes] = await Promise.all([
+            fetch(`/api/treasurer/public/spp-summary?tenant_id=${tenantId}`),
+            fetch(`/api/treasurer/public/salary-summary?tenant_id=${tenantId}`),
+            fetch(`/api/treasurer/public/payment-defaulters?tenant_id=${tenantId}`)
+          ]);
 
-         const incomeData = await incomeRes.json();
-         const expenseData = await expenseRes.json();
-         const defaulterData = await defaulterRes.json();
+          const incomeData = await incomeRes.json();
+          const expenseData = await expenseRes.json();
+          const defaulterData = await defaulterRes.json();
 
-         let totalIncome = 0, totalExpense = 0;
+          let totalIncome = 0, totalExpense = 0;
 
-         const tenantCards = document.getElementById('tenantCards');
-         if (incomeData.success && incomeData.data?.length) {
-incomeData.data.forEach(item => {
+          const tenantCards = document.getElementById('tenantCards');
+          if (incomeData.success && incomeData.data?.length) {
+            incomeData.data.forEach(item => {
               totalIncome += parseFloat(item.total_pemasukan) || 0;
             });
             document.getElementById('totalIncome').textContent = formatCurrency(totalIncome);
 
-           tenantCards.innerHTML = incomeData.data.map(d => `
-             <div class="bg-white rounded-xl shadow-sm border border-emerald-200 p-5 hover:shadow-md transition-shadow">
-               <div class="border-b border-gray-100 pb-3 mb-3">
-                 <h4 class="font-semibold text-gray-900">${d.nama_sekolah || 'Tidak diketahui'}</h4>
-                 <p class="text-xs text-gray-500 mt-1">${d.total_siswa || 0} siswa</p>
-               </div>
-               <div class="space-y-2 text-sm">
-                 <div class="flex justify-between"><span class="text-gray-600">Pendapatan</span><span class="font-medium text-emerald-600">${formatCurrency(d.total_pemasukan || 0)}</span></div>
-                 <div class="flex justify-between"><span class="text-gray-600">Bayar</span><span class="font-medium text-green-600">${d.sudah_bayar || 0}</span></div>
-                 <div class="flex justify-between"><span class="text-gray-600">Belum Bayar</span><span class="font-medium text-orange-600">${d.belum_bayar || 0}</span></div>
-               </div>
-             </div>
-           `).join('');
-         } else {
-           tenantCards.innerHTML = '<div class="col-span-full text-center py-8 text-gray-500">Tidak ada data sekolah</div>';
-         }
+            tenantCards.innerHTML = incomeData.data.map(d => `
+              <div class="bg-white rounded-xl shadow-sm border border-emerald-200 p-5 hover:shadow-md transition-shadow">
+                <div class="border-b border-gray-100 pb-3 mb-3">
+                  <h4 class="font-semibold text-gray-900">${d.nama_sekolah || 'Tidak diketahui'}</h4>
+                  <p class="text-xs text-gray-500 mt-1">${d.total_siswa || 0} siswa</p>
+                </div>
+                <div class="space-y-2 text-sm">
+                  <div class="flex justify-between"><span class="text-gray-600">Pendapatan</span><span class="font-medium text-emerald-600">${formatCurrency(d.total_pemasukan || 0)}</span></div>
+                  <div class="flex justify-between"><span class="text-gray-600">Bayar</span><span class="font-medium text-green-600">${d.sudah_bayar || 0}</span></div>
+                  <div class="flex justify-between"><span class="text-gray-600">Belum Bayar</span><span class="font-medium text-orange-600">${d.belum_bayar || 0}</span></div>
+                </div>
+              </div>
+            `).join('');
+          } else {
+            tenantCards.innerHTML = '<div class="col-span-full text-center py-8 text-gray-500">Tidak ada data sekolah</div>';
+          }
 
-if (expenseData.success) {
+          if (expenseData.success) {
             expenseData.data.forEach(item => {
               totalExpense += parseFloat(item.total_gaji) || 0;
             });
             document.getElementById('totalExpense').textContent = formatCurrency(totalExpense);
           }
 
-if (defaulterData.success) {
+          if (defaulterData.success) {
+            document.getElementById('totalTunggakan').textContent = formatCurrency(defaulterData.data.length * 150000);
+            document.getElementById('totalKelebihan').textContent = formatCurrency(0);
+            document.getElementById('totalSiswa').textContent = defaulterData.data.length;
           }
 
           const balance = totalIncome - totalExpense;
@@ -647,26 +664,34 @@ if (defaulterData.success) {
           } else {
             paymentsTable.innerHTML = '<tr><td colspan="6" class="p-4 text-center">Tidak ada data</td></tr>';
           }
-       } catch (error) {
-         console.error('Dashboard load error:', error);
-       }
-     }
+        } catch (error) {
+          console.error('Dashboard load error:', error);
+        }
+      }
 
 async function loadTenantFilters() {
-       try {
-         const res = await fetch('/api/treasurer/public/tenants');
-         const data = await res.json();
-         if (data.success) {
-           const options = data.data.map(t => `<option value="${t.tenant_id}">${t.nama_sekolah}</option>`).join('');
-           ['dashboardTenantFilter', 'paymentsTenantFilter', 'payrollTenantSelect'].forEach(id => {
-             const el = document.getElementById(id);
-             if (el) el.innerHTML = '<option value="">Semua Sekolah</option>' + options;
-           });
-         }
-       } catch (e) {
-         console.error('loadTenantFilters', e);
-       }
-     }
+        try {
+          const res = await fetch('/api/treasurer/public/tenants');
+          const data = await res.json();
+          if (data.success) {
+            const options = data.data.map(t => `<option value="${t.tenant_id}">${t.nama_sekolah}</option>`).join('');
+            ['dashboardTenantFilter', 'paymentsTenantFilter', 'payrollTenantSelect'].forEach(id => {
+              const el = document.getElementById(id);
+              if (el) el.innerHTML = '<option value="">Semua Sekolah</option>' + options;
+            });
+          }
+        } catch (e) {
+          console.error('loadTenantFilters', e);
+        }
+      }
+
+    function formatKelas(tingkatan, nama_kelas) {
+      const t = (tingkatan != null && tingkatan !== '') ? String(tingkatan) : '';
+      const n = (nama_kelas != null && nama_kelas !== '') ? String(nama_kelas) : '';
+      if (!t && !n) return '-';
+      if (!n) return t;
+      return n.length <= 1 ? `${t}${n}` : `${t} ${n}`;
+    }
 
     function showToast(msg, type) {
       const t = document.createElement('div');

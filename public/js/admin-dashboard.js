@@ -3081,11 +3081,11 @@ if (typeof window.loadAttendanceLogs !== 'function') {
         tbody.innerHTML = items.map(log => `
           <tr class="hover:bg-gray-50">
             <td class="px-6 py-4 text-sm text-gray-900 font-medium">${log.nama_guru || log.teacher_id || '-'}</td>
-            <td class="px-6 py-4 text-sm text-gray-500">${log.nama_sekolah || log.tenant_id || '-'}</td>
-            <td class="px-6 py-4 text-sm text-gray-500">
-              ${log.waktu ? new Date(log.waktu).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'} WITA
-            </td>
+            <td class="px-6 py-4 text-sm text-gray-500">${log.nip || '-'}</td>
             <td class="px-6 py-4 text-sm text-gray-500 capitalize">${log.jenis || '-'}</td>
+            <td class="px-6 py-4 text-sm text-gray-500">
+              ${log.waktu_scan ? new Date(log.waktu_scan).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'} WITA
+            </td>
             <td class="px-6 py-4 text-sm">
               <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
                 ${log.status === 'tepat_waktu' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">

@@ -106,6 +106,8 @@ function showUserPhoto() {
 // JAVASCRIPT UX CONTROLLER
 const token = localStorage.getItem('token');
 const user = JSON.parse(localStorage.getItem('user') || '{}');
+window.token = token;
+window.userRole = (parseJwt(token) || {}).role || user.role || null;
 
 if (!token) {
     window.location.href = 'login.html';
@@ -226,6 +228,10 @@ async function setTeacherInfo() {
                     htmlContent += `<button onclick="showAdminUnitModal.call(null, window.userAssignments ? window.userAssignments.filter(a => ['admin','operator','media','tu','tatausaha'].some(r => (a.jabatan_di_unit||'').toLowerCase().replace(/\\s/g,'').includes(r))) : [])" style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.3rem 0.75rem;background:#059669;color:white;border-radius:0.5rem;font-size:0.8rem;font-weight:600;border:none;cursor:pointer;"><span class="fas fa-user-cog mr-1"></span> Admin Unit</button>`;
                 }
 
+                if (canApproveIzin(assignments)) {
+                    htmlContent += `<button onclick="openApprovalIzinModal()" style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.3rem 0.75rem;background:#7c3aed;color:white;border-radius:0.5rem;font-size:0.8rem;font-weight:600;border:none;cursor:pointer;"><span class="fas fa-user-check mr-1"></span> Approval Izin</button>`;
+                }
+
                 adminSection.innerHTML = htmlContent;
             }
         }
@@ -266,6 +272,268 @@ function closePaktaModal() {
 
 function goToPaktaSign() {
     window.location.href = 'pakta-sign.html';
+}
+
+// ============================================================
+// APPROVAL PERIZINAN (admin / ketua / kepala unit)
+// ============================================================
+const IZIN_LABEL = { izin: 'Izin', sakit: 'Sakit', cuti: 'Cuti', dinas_luar: 'Dinas Luar' };
+const STATUS_LABEL = { pending: 'Menunggu', approved: 'Disetujui', rejected: 'Ditolak' };
+const STATUS_COLOR = { pending: '#d97706', approved: '#15803d', rejected: '#dc2626' };
+
+function openApprovalIzinModal() {
+    const m = document.getElementById('approvalIzinModal');
+    if (m) m.style.display = 'flex';
+    loadApprovalIzin();
+}
+
+function closeApprovalIzinModal() {
+    const m = document.getElementById('approvalIzinModal');
+    if (m) m.style.display = 'none';
+}
+
+let selectedApprovalIds = new Set();
+
+function updateApprovalBulkBar() {
+    const bar = document.getElementById('approvalBulkBar');
+    const count = document.getElementById('approvalSelectedCount');
+    if (!bar) return;
+    const n = selectedApprovalIds.size;
+    if (count) count.textContent = n;
+    bar.style.display = n > 0 ? 'block' : 'none';
+    const selectAll = document.getElementById('approvalSelectAll');
+    const checkboxes = document.querySelectorAll('.approval-check');
+    if (selectAll) {
+        selectAll.checked = checkboxes.length > 0 && [...checkboxes].every(c => c.checked);
+        selectAll.indeterminate = checkboxes.length > 0 && [...checkboxes].some(c => c.checked) && !selectAll.checked;
+    }
+}
+
+function toggleApprovalSelection(id, checked) {
+    if (checked) selectedApprovalIds.add(id);
+    else selectedApprovalIds.delete(id);
+    updateApprovalBulkBar();
+}
+
+function toggleApprovalSelectAll(checked) {
+    document.querySelectorAll('.approval-check').forEach(c => {
+        c.checked = checked;
+        const id = parseInt(c.value, 10);
+        if (checked) selectedApprovalIds.add(id);
+        else selectedApprovalIds.delete(id);
+    });
+    updateApprovalBulkBar();
+}
+
+function clearApprovalSelection() {
+    selectedApprovalIds.clear();
+    document.querySelectorAll('.approval-check').forEach(c => { c.checked = false; });
+    updateApprovalBulkBar();
+}
+
+async function loadApprovalIzin() {
+    const listEl = document.getElementById('approvalIzinList');
+    const subtitleEl = document.getElementById('approvalIzinSubtitle');
+    if (!listEl) return;
+
+    clearApprovalSelection();
+
+    const filter = document.getElementById('approvalIzinFilter')?.value || 'pending';
+    const assignments = window.userAssignments || [];
+    const tenantFilter = getApprovalTenantFilter(assignments);
+
+    if (subtitleEl) {
+        const scope = !tenantFilter ? 'Semua unit sekolah'
+            : 'Unit: ' + assignments.filter(a => tenantFilter.includes(a.tenant_id)).map(a => a.nama_sekolah || a.tenant_id).join(', ');
+        subtitleEl.textContent = tenantFilter ? `Data perizinan ${scope}` : 'Data perizinan seluruh unit';
+    }
+
+    listEl.innerHTML = '<div style="padding:2rem 0;text-align:center;color:#94a3b8;font-size:0.9rem;"><i class="fas fa-spinner spinner" style="font-size:1.25rem;margin-bottom:0.5rem;display:inline-block;"></i><p style="margin:0;">Memuat data perizinan...</p></div>';
+
+    try {
+        const params = new URLSearchParams();
+        params.set('status', filter);
+        if (tenantFilter) tenantFilter.forEach(t => params.append('tenant_id', t));
+
+        const response = await fetch(`/api/admin/leave-requests?${params.toString()}`, {
+            headers: { 'Authorization': 'Bearer ' + (window.token || localStorage.getItem('token')) }
+        });
+        const result = await response.json();
+
+        if (!response.ok || !result.success) {
+            listEl.innerHTML = `<div style="padding:2rem 0;text-align:center;color:#dc2626;font-size:0.9rem;">${result.message || 'Gagal memuat data'}</div>`;
+            return;
+        }
+
+        const data = result.data || [];
+        if (data.length === 0) {
+            listEl.innerHTML = '<div style="padding:2rem 0;text-align:center;color:#94a3b8;font-size:0.9rem;">Tidak ada pengajuan izin pada filter ini.</div>';
+            return;
+        }
+
+        const hasPending = data.some(r => (r.status || 'pending') === 'pending');
+        const selectAllHtml = hasPending
+            ? `<div style="display:flex;align-items:center;gap:0.5rem;padding:0 0.25rem 0.5rem;border-bottom:1px solid #f1f5f9;margin-bottom:0.5rem;">
+                 <input type="checkbox" id="approvalSelectAll" onchange="toggleApprovalSelectAll(this.checked)" style="width:1.1rem;height:1.1rem;accent-color:#7c3aed;cursor:pointer;">
+                 <label for="approvalSelectAll" style="font-size:0.82rem;font-weight:600;color:#475569;cursor:pointer;">Pilih Semua (yang menunggu)</label>
+               </div>`
+            : '';
+
+        listEl.innerHTML = selectAllHtml + data.map(r => {
+            const jenis = IZIN_LABEL[r.jenis] || r.jenis || '-';
+            const status = r.status || 'pending';
+            const tglMulai = r.tanggal_mulai ? new Date(r.tanggal_mulai).toLocaleDateString('id-ID') : '-';
+            const tglSelesai = r.tanggal_selesai ? new Date(r.tanggal_selesai).toLocaleDateString('id-ID') : '-';
+            const created = r.created_at ? new Date(r.created_at).toLocaleString('id-ID') : '-';
+            const isPending = status === 'pending';
+
+            const checkboxHtml = isPending
+                ? `<input type="checkbox" class="approval-check" value="${r.id}" onchange="toggleApprovalSelection(${r.id}, this.checked)" style="width:1.25rem;height:1.25rem;accent-color:#7c3aed;cursor:pointer;flex-shrink:0;margin-top:0.15rem;">`
+                : `<div style="width:1.25rem;flex-shrink:0;"></div>`;
+
+            const actions = isPending
+                ? `<div style="display:flex;gap:0.5rem;margin-top:0.75rem;">
+                     <button onclick="processApprovalIzin(${r.id}, 'approved')" style="flex:1;padding:0.5rem;border-radius:0.5rem;border:none;background:#16a34a;color:white;font-weight:600;font-size:0.8rem;cursor:pointer;"><i class="fas fa-check"></i> Setujui</button>
+                     <button onclick="processApprovalIzin(${r.id}, 'rejected')" style="flex:1;padding:0.5rem;border-radius:0.5rem;border:none;background:#dc2626;color:white;font-weight:600;font-size:0.8rem;cursor:pointer;"><i class="fas fa-times"></i> Tolak</button>
+                   </div>`
+                : `<div style="margin-top:0.75rem;font-size:0.8rem;color:#64748b;">${r.catatan ? 'Catatan: ' + escapeHtml(r.catatan) : 'Tidak ada catatan'}</div>`;
+
+            return `
+            <div style="border:1px solid #e2e8f0;border-radius:0.75rem;padding:1rem;margin-bottom:0.75rem;background:#fff;display:flex;gap:0.75rem;">
+                ${checkboxHtml}
+                <div style="flex:1;min-width:0;">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem;">
+                        <div style="min-width:0;">
+                            <div style="font-weight:700;color:#0f172a;font-size:0.95rem;">${escapeHtml(r.teacher_name || '-')}</div>
+                            <div style="font-size:0.78rem;color:#64748b;margin-top:0.15rem;">${escapeHtml(r.nama_sekolah || r.tenant_id || '-')}</div>
+                        </div>
+                        <span style="flex-shrink:0;padding:0.25rem 0.6rem;border-radius:999px;font-size:0.72rem;font-weight:700;background:${STATUS_COLOR[status]}1a;color:${STATUS_COLOR[status]};">${STATUS_LABEL[status]}</span>
+                    </div>
+                    <div style="margin-top:0.6rem;display:flex;flex-wrap:wrap;gap:0.4rem;">
+                        <span style="background:#f3f4f6;color:#475569;padding:0.2rem 0.55rem;border-radius:0.4rem;font-size:0.75rem;font-weight:600;">${jenis}</span>
+                        <span style="background:#eff6ff;color:#2563eb;padding:0.2rem 0.55rem;border-radius:0.4rem;font-size:0.75rem;">${tglMulai}${tglSelesai && tglSelesai !== tglMulai ? ' s.d. ' + tglSelesai : ''}</span>
+                    </div>
+                    <div style="margin-top:0.6rem;font-size:0.82rem;color:#334155;line-height:1.5;">${escapeHtml(r.keterangan || '-')}</div>
+                    <div style="margin-top:0.4rem;font-size:0.72rem;color:#94a3b8;">Diajukan: ${created}</div>
+                    ${actions}
+                </div>
+            </div>`;
+        }).join('');
+
+        updateApprovalBulkBar();
+    } catch (error) {
+        console.error('Approval izin load error:', error);
+        listEl.innerHTML = '<div style="padding:2rem 0;text-align:center;color:#dc2626;font-size:0.9rem;">Terjadi kesalahan saat memuat data.</div>';
+    }
+}
+
+async function processApprovalIzin(id, status) {
+    const catatan = status === 'rejected'
+        ? prompt('Catatan penolakan (opsional):')
+        : prompt('Catatan persetujuan (opsional):');
+    if (catatan === null) return;
+
+    try {
+        const response = await fetch(`/api/admin/leave-requests/${id}/status`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': 'Bearer ' + (window.token || localStorage.getItem('token')),
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ status, catatan })
+        });
+        const result = await response.json();
+        if (result.success) {
+            if (window.Swal) {
+                Swal.fire({ icon: 'success', title: 'Berhasil', text: result.message, timer: 1500, showConfirmButton: false });
+            }
+            loadApprovalIzin();
+        } else {
+            alert(result.message || 'Gagal memproses izin');
+        }
+    } catch (error) {
+        console.error('Approval izin process error:', error);
+        alert('Terjadi kesalahan saat memproses izin');
+    }
+}
+
+async function bulkProcessApprovalIzin(status) {
+    const ids = [...selectedApprovalIds];
+    if (ids.length === 0) return;
+    const label = status === 'approved' ? 'menyetujui' : 'menolak';
+    if (!confirm(`Yakin ingin ${label} ${ids.length} pengajuan izin yang dipilih?`)) return;
+
+    const catatan = prompt('Catatan (opsional):');
+    if (catatan === null) return;
+
+    try {
+        let successCount = 0;
+        for (const id of ids) {
+            const response = await fetch(`/api/admin/leave-requests/${id}/status`, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': 'Bearer ' + (window.token || localStorage.getItem('token')),
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ status, catatan: catatan || null })
+            });
+            const result = await response.json();
+            if (result.success) successCount++;
+        }
+        if (window.Swal) {
+            Swal.fire({ icon: 'success', title: 'Selesai', text: `${successCount} dari ${ids.length} berhasil ${status === 'approved' ? 'disetujui' : 'ditolak'}`, timer: 1800, showConfirmButton: false });
+        }
+        loadApprovalIzin();
+    } catch (error) {
+        console.error('Bulk approval error:', error);
+        alert('Terjadi kesalahan saat memproses izin terpilih');
+    }
+}
+
+function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function canApproveIzin(assignments) {
+    const list = assignments || [];
+    if (window.userRole === 'admin') return true;
+    if (list.length === 0) return false;
+
+    const isYpwilutimAdmin = list.some(a =>
+        a.tenant_id === 'YPWILUTIM' &&
+        ['admin'].includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''))
+    );
+    if (isYpwilutimAdmin) return true;
+
+    const ketuaRoles = ['kepalasekolah', 'pimpinan', 'ketua', 'kepalapondok'];
+    const isKetuaNonYpwilutim = list.some(a => {
+        const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
+        return a.tenant_id !== 'YPWILUTIM' && ketuaRoles.includes(jabatan);
+    });
+    if (isKetuaNonYpwilutim) return true;
+
+    return false;
+}
+
+function getApprovalTenantFilter(assignments) {
+    const list = assignments || [];
+    if (window.userRole === 'admin') return null;
+
+    const isYpwilutimAdmin = list.some(a =>
+        a.tenant_id === 'YPWILUTIM' &&
+        ['admin'].includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''))
+    );
+    if (isYpwilutimAdmin) return null;
+
+    const ketuaRoles = ['kepalasekolah', 'pimpinan', 'ketua', 'kepalapondok'];
+    const allowed = list
+        .filter(a => {
+            const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
+            return a.tenant_id !== 'YPWILUTIM' && ketuaRoles.includes(jabatan);
+        })
+        .map(a => a.tenant_id);
+    return allowed.length > 0 ? allowed : [];
 }
 
 async function initPaktaIntegritas() {
@@ -1908,8 +2176,11 @@ async function initializeDashboard() {
      checkActiveLeave();
      updateConnectionStatus();
      checkAndShowAllUnitsSummary(); // Check and load all units summary for ketua/admin (after assignments loaded)
-     // loadAttendanceRules() dan loadRecentAttendance() dipanggil dari requestLocationPermission setelah lokasi didapatkan
-     initQuranWidget(); // Initialize Quran widget
+      if (canApproveIzin(window.userAssignments || [])) {
+        openApprovalIzinModal();
+      }
+      // loadAttendanceRules() dan loadRecentAttendance() dipanggil dari requestLocationPermission setelah lokasi didapatkan
+      initQuranWidget(); // Initialize Quran widget
 
      window.attendanceInterval = setInterval(function () {
          checkActiveLeave(); // Cek izin setiap detik
@@ -2261,6 +2532,19 @@ function setupTreasurerNav() {
             mobileAdminNav.onclick = () => { showAdminUnitModal(assignments); };
         }
     }
+
+    if (canApproveIzin(assignments)) {
+        let mobileApproval = document.getElementById('mobileApprovalNav');
+        if (!mobileApproval) {
+            mobileApproval = document.createElement('div');
+            mobileApproval.id = 'mobileApprovalNav';
+            mobileApproval.style.cssText = 'text-align: center; color: #7c3aed; cursor: pointer;';
+            mobileApproval.innerHTML = '<i class="fas fa-user-check" style="font-size: 1.3rem; display: block; margin-bottom: 2px;"></i><span style="font-size: 0.65rem; font-weight: 600;">Approval</span>';
+            const bottomNav = document.querySelector('.mobile-bottom-nav');
+            if (bottomNav) bottomNav.appendChild(mobileApproval);
+        }
+        mobileApproval.onclick = () => { openApprovalIzinModal(); };
+    }
 }
 
 // Menampilkan Modal
@@ -2391,7 +2675,7 @@ async function submitPermission() {
                 keterangan: keterangan,
                 tanggal_mulai: startDate,
                 tanggal_selesai: endDate || startDate,
-            tenant_id: window.currentRulesTenantId || window.userAssignments?.[0]?.tenant_id || ''
+                tenant_id: (window.userAssignments || []).map(a => a.tenant_id).filter(Boolean)
             })
         });
 

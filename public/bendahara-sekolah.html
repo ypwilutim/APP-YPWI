@@ -320,6 +320,14 @@
       }
     }
 
+    function formatKelas(tingkatan, nama_kelas) {
+      const t = (tingkatan != null && tingkatan !== '') ? String(tingkatan) : '';
+      const n = (nama_kelas != null && nama_kelas !== '') ? String(nama_kelas) : '';
+      if (!t && !n) return '-';
+      if (!n) return t;
+      return n.length <= 1 ? `${t}${n}` : `${t} ${n}`;
+    }
+
     function initTabs() {
       document.querySelectorAll('[data-tab]').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -475,28 +483,16 @@
         if (json.success) {
           pagination.spp.total = json.total || 0;
           if (json.data?.length) {
-            tbody.innerHTML = json.data.map((d, i) => {
-              let kelas = '-';
-              if (d.tingkatan && d.nama_kelas) {
-                kelas = `${d.tingkatan} ${d.nama_kelas}`;
-              } else if (d.kelas) {
-                kelas = d.kelas;
-              } else if (d.tingkatan) {
-                kelas = d.tingkatan;
-              } else if (d.nama_kelas) {
-                kelas = d.nama_kelas;
-              }
-              return `
-                <tr class="border-b" data-id="${d.id}">
-                  <td class="px-3 py-2">${d.nama_siswa}</td>
-                  <td class="px-3 py-2">${d.nisn || d.nis || '-'}</td>
-                  <td class="px-3 py-2">${kelas}</td>
-                  <td class="px-3 py-2 text-right editable-iuran" data-field="iuran_bulanan">${fmtRp(d.iuran_bulanan)}</td>
-                  <td class="px-3 py-2 text-center">
-                    <button onclick="editIuranRow(${d.id}, '${d.nama_siswa || ''}')" class="text-emerald-600 hover:text-emerald-800"><i class="fas fa-edit"></i></button>
-                  </td>
-                </tr>`;
-            }).join('');
+            tbody.innerHTML = json.data.map((d, i) => `
+              <tr class="border-b" data-id="${d.id}">
+                <td class="px-3 py-2">${d.nama_siswa}</td>
+                <td class="px-3 py-2">${d.nisn || d.nis || '-'}</td>
+                <td class="px-3 py-2">${formatKelas(d.tingkatan, d.nama_kelas)}</td>
+                <td class="px-3 py-2 text-right editable-iuran" data-field="iuran_bulanan">${fmtRp(d.iuran_bulanan)}</td>
+                <td class="px-3 py-2 text-center">
+                  <button onclick="editIuranRow(${d.id}, '${d.nama_siswa || ''}')" class="text-emerald-600 hover:text-emerald-800"><i class="fas fa-edit"></i></button>
+                </td>
+              </tr>`).join('');
             document.querySelectorAll('.editable-iuran').forEach(td => {
               td.addEventListener('dblclick', function () { editIuranCell(this); });
             });

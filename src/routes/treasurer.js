@@ -1538,7 +1538,11 @@ router.get('/treasurer/bendahara/profile', authenticateBendahara, async (req, re
 // GET /api/treasurer/bendahara/saldo - Saldo berjalan siswa (tunggakan / kelebihan) — baca dari billing_payment + incoming_payments
 router.get('/treasurer/bendahara/saldo', authenticateBendahara, async (req, res) => {
   try {
-    await billing.ensureBillingTables();
+    try {
+      await billing.ensureBillingTables();
+    } catch (e) {
+      console.error('ensureBillingTables error:', e.message);
+    }
 
     const tenantId = req.query.tenant_id || '';
     const statusFilter = req.query.status || ''; // 'tunggakan' | 'kelebihan' | '' (semua)
@@ -1555,9 +1559,10 @@ router.get('/treasurer/bendahara/saldo', authenticateBendahara, async (req, res)
 
     const query = `
       SELECT s.id, s.nama_siswa, s.nisn, s.tenant_id, tn.nama_sekolah,
-        s.iuran_bulanan, COALESCE(ss.saldo, 0) as saldo, s.kelas, s.tingkatan, s.nama_kelas
+        s.iuran_bulanan, COALESCE(ss.saldo, 0) as saldo, c.nama_kelas, c.tingkatan
       FROM students s
       JOIN tenants tn ON s.tenant_id = tn.tenant_id
+      LEFT JOIN classes c ON s.class_id = c.id
       LEFT JOIN saldo_siswa ss ON ss.student_id = s.id
       ${where}
       ORDER BY saldo ASC
