@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard Bendahara Sekolah - YPWI Lutim</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+
+    .nav-active {
+      background-color: #059669;
+      color: white;
+    }
+  </style>
+</head>
+
+<body class="bg-gray-50 min-h-screen">
+  <div class="flex min-h-screen">
+    <aside class="w-64 bg-white shadow-lg border-r">
+      <div class="p-6 border-b">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 bg-emerald-600 rounded-lg flex items-center justify-center">
+            <i class="fas fa-wallet text-white"></i>
+          </div>
+          <div>
+            <h1 class="text-xl font-bold text-gray-900">YPWI Lutim</h1>
+            <p class="text-sm text-gray-500">Bendahara Sekolah</p>
+          </div>
+        </div>
+      </div>
+      <nav class="p-4 space-y-2">
+        <button data-tab="dashboard"
+          class="nav-item nav-active w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg hover:bg-gray-100">
+          <i class="fas fa-chart-line"></i><span>Dashboard</span>
+        </button>
+        <button data-tab="payments"
+          class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100">
+          <i class="fas fa-file-invoice-dollar"></i><span>Pembayaran Siswa</span>
+        </button>
+        <button data-tab="payroll"
+          class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100">
+          <i class="fas fa-wallet"></i><span>Slip Gaji</span>
+        </button>
+        <button data-tab="spp"
+          class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100">
+          <i class="fas fa-money-bill"></i><span>Atur Iuran SPP</span>
+        </button>
+      </nav>
+    </aside>
+
+    <main class="flex-1 p-8">
+      <div class="flex justify-between items-center mb-8">
+        <div>
+          <h2 id="pageTitle" class="text-3xl font-bold text-gray-900">Dashboard Bendahara Sekolah</h2>
+          <p class="text-gray-600 mt-1">Selamat datang, <span id="bendaharaName">Bendahara</span></p>
+        </div>
+        <div class="flex items-center space-x-4">
+          <select id="unitSelector" onchange="switchUnit()"
+            class="px-3 py-2 border rounded-lg bg-white text-sm"></select>
+          <span class="text-sm text-gray-500" id="currentDate"></span>
+          <button onclick="logout()"
+            class="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full flex items-center justify-center text-gray-600">
+            <i class="fas fa-sign-out-alt text-sm"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Dashboard Tab -->
+      <div id="dashboardTab" class="tab-content">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+          <div class="bg-white p-6 rounded-xl shadow-sm border">
+            <p class="text-sm text-gray-500">Total Tunggakan</p>
+            <p class="text-2xl font-bold text-orange-600" id="totalTunggakan">Rp 0</p>
+          </div>
+          <div class="bg-white p-6 rounded-xl shadow-sm border">
+            <p class="text-sm text-gray-500">Total Kelebihan</p>
+            <p class="text-2xl font-bold text-emerald-600" id="totalKelebihan">Rp 0</p>
+          </div>
+          <div class="bg-white p-6 rounded-xl shadow-sm border">
+            <p class="text-sm text-gray-500">Total Siswa</p>
+            <p class="text-2xl font-bold text-gray-900" id="totalSiswa">0</p>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+          <div class="bg-white p-6 rounded-xl shadow-sm border">
+            <p class="text-sm text-gray-500">Total Pendapatan SPP</p>
+            <p class="text-2xl font-bold text-emerald-600" id="totalIncome">Rp 0</p>
+          </div>
+          <div class="bg-white p-6 rounded-xl shadow-sm border">
+            <p class="text-sm text-gray-500">Total Gaji Guru</p>
+            <p class="text-2xl font-bold text-red-600" id="totalExpense">Rp 0</p>
+          </div>
+          <div class="bg-white p-6 rounded-xl shadow-sm border">
+            <p class="text-sm text-gray-500">Saldo Kas</p>
+            <p class="text-2xl font-bold text-blue-600" id="currentBalance">Rp 0</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pembayaran Siswa Tab -->
+      <div id="paymentsTab" class="tab-content hidden">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-4">
+          <div class="flex items-end gap-2 mb-4">
+            <div><label class="block text-xs font-medium mb-1">Status</label>
+              <select id="paymentsStatus" class="px-3 py-2 border rounded-lg">
+                <option value="">Semua</option>
+                <option value="tunggakan">Tunggakan</option>
+                <option value="kelebihan">Kelebihan</option>
+              </select>
+            </div>
+            <button onclick="loadSaldo()" class="bg-emerald-600 text-white px-4 py-2 rounded-lg">Tampilkan</button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-4 py-2 text-left">#</th>
+                  <th class="px-4 py-2 text-left">Nama Siswa</th>
+                  <th class="px-4 py-2 text-left">Sekolah</th>
+                  <th class="px-4 py-2 text-right">Iuran</th>
+                  <th class="px-4 py-2 text-center">Status Saldo</th>
+                  <th class="px-4 py-2 text-right">Saldo</th>
+                </tr>
+              </thead>
+              <tbody id="paymentsTable">
+                <tr>
+                  <td colspan="6" class="p-4">Memuat...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div id="paymentsPagination" class="flex justify-center gap-1 mt-4"></div>
+        </div>
+      </div>
+
+      <!-- Slip Gaji Tab -->
+      <div id="payrollTab" class="tab-content hidden">
+        <div class="bg-white rounded-xl shadow-sm p-6">
+          <h3 class="font-semibold mb-4">Slip Gaji Guru</h3>
+          <div class="flex items-end gap-2 mb-4 flex-wrap">
+            <div><label class="block text-xs mb-1">Sekolah</label>
+              <select id="payrollTenantSelect" class="px-3 py-2 border rounded-lg"></select>
+            </div>
+            <div><label class="block text-xs mb-1">Bulan</label>
+              <select id="payrollBulan" class="px-3 py-2 border rounded-lg">
+                <option value="1">Januari</option>
+                <option value="2">Februari</option>
+                <option value="3">Maret</option>
+                <option value="4">April</option>
+                <option value="5">Mei</option>
+                <option value="6">Juni</option>
+                <option value="7" selected>Juli</option>
+                <option value="8">Agustus</option>
+                <option value="9">September</option>
+                <option value="10">Oktober</option>
+                <option value="11">November</option>
+                <option value="12">Desember</option>
+              </select>
+            </div>
+            <div><label class="block text-xs mb-1">Tahun</label>
+              <select id="payrollTahun" class="px-3 py-2 border rounded-lg"></select>
+            </div>
+            <button onclick="loadPayroll()" class="bg-blue-600 text-white px-4 py-2 rounded-lg">Hitung</button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50">
+                <tr class="border-b">
+                  <th class="px-2 py-2 text-left">#</th>
+                  <th class="px-2 py-2 text-left">Nama</th>
+                  <th class="px-2 py-2 text-right">Gaji Pokok</th>
+                  <th class="px-2 py-2 text-right">T. Kinerja</th>
+                  <th class="px-2 py-2 text-right">T. Umum</th>
+                  <th class="px-2 py-2 text-right">T. Istri</th>
+                  <th class="px-2 py-2 text-right">T. Anak</th>
+                  <th class="px-2 py-2 text-right">T. KepSek</th>
+                  <th class="px-2 py-2 text-right">T. WaliKelas</th>
+                  <th class="px-2 py-2 text-right">Honor</th>
+                  <th class="px-2 py-2 text-right">Potongan</th>
+                  <th class="px-2 py-2 text-right">Total</th>
+                  <th class="px-2 py-2">Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="payrollTable">
+                <tr>
+                  <td colspan="13" class="p-4 text-center">Pilih periode lalu klik Hitung</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div id="payrollPagination" class="flex justify-center gap-1 mt-4"></div>
+        </div>
+      </div>
+
+      <!-- Atur Iuran SPP Tab -->
+      <div id="sppTab" class="tab-content hidden">
+        <div class="bg-white rounded-xl shadow-sm p-6">
+          <h3 class="font-semibold mb-4">Atur Iuran SPP</h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-3 py-2">Nama Siswa</th>
+                  <th class="px-3 py-2">NIS</th>
+                  <th class="px-3 py-2">Kelas</th>
+                  <th class="px-3 py-2 text-right">Iuran</th>
+                  <th class="px-3 py-2">Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="sppTable">
+                <tr>
+                  <td colspan="5" class="p-4 text-center">Memuat...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div id="sppPagination" class="flex justify-center gap-1 mt-4"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="js/payroll-admin.js"></script>
+  <script>
+    let userAssignments = [];
+    let currentTenantId = null;
+
+    function getAuthHeader() {
+      const token = localStorage.getItem('token');
+      return token ? { 'Authorization': 'Bearer ' + token } : {};
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      document.getElementById('currentDate').textContent = new Date().toLocaleDateString('id-ID');
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      document.getElementById('bendaharaName').textContent = user.username || 'Bendahara';
+
+      const token = localStorage.getItem('token');
+      if (token) {
+        try {
+          const payload = JSON.parse(atob(token.split('.')[1]));
+          userAssignments = payload.assignments || [];
+          const bedaharaUnits = userAssignments.filter(a => a.jabatan_di_unit?.toLowerCase().includes('bendahara'));
+          if (bedaharaUnits.length > 0) {
+            currentTenantId = bedaharaUnits[0].tenant_id;
+            loadUnitSelector(bedaharaUnits);
+          }
+        } catch (e) { }
+      }
+      loadYears();
+      initTabs();
+      loadDashboardData();
+    });
+
+    function loadYears() {
+      const sel = document.getElementById('payrollTahun');
+      const curYear = new Date().getFullYear();
+      for (let y = curYear - 2; y <= curYear + 1; y++) {
+        const o = document.createElement('option'); o.value = y; o.textContent = y;
+        if (y === curYear) o.selected = true;
+        sel.appendChild(o);
+      }
+    }
+
+    function loadUnitSelector(units) {
+      const sel = document.getElementById('unitSelector');
+      sel.innerHTML = units.map(u => `<option value="${u.tenant_id}">${u.nama_sekolah || u.tenant_id}</option>`).join('');
+      
+      const payrollSel = document.getElementById('payrollTenantSelect');
+      if (payrollSel) {
+        payrollSel.innerHTML = '<option value="">Semua Sekolah</option>' + units.map(u => `<option value="${u.tenant_id}">${u.nama_sekolah || u.tenant_id}</option>`).join('');
+      }
+    }
+
+    function switchUnit() {
+      currentTenantId = document.getElementById('unitSelector').value;
+    }
+
+    async function loadDashboardData() {
+      try {
+        const res = await fetch('/api/treasurer/public/spp-summary?tenant_id=' + currentTenantId, { headers: getAuthHeader() });
+        const incomeData = await res.json();
+        
+        const expenseRes = await fetch('/api/treasurer/public/salary-summary?tenant_id=' + currentTenantId, { headers: getAuthHeader() });
+        const expenseData = await expenseRes.json();
+        
+        const defaulterRes = await fetch('/api/treasurer/public/payment-defaulters?tenant_id=' + currentTenantId, { headers: getAuthHeader() });
+        const defaulterData = await defaulterRes.json();
+        
+        let totalIncome = 0, totalExpense = 0;
+        
+        if (incomeData.success && incomeData.data?.length) {
+          incomeData.data.forEach(item => {
+            totalIncome += parseFloat(item.total_pemasukan) || 0;
+          });
+        }
+        
+        if (expenseData.success) {
+          expenseData.data.forEach(item => {
+            totalExpense += parseFloat(item.total_gaji_pokok || item.total_gaji || 0) || 0;
+          });
+        }
+        
+        document.getElementById('totalIncome').textContent = fmtRp(totalIncome);
+        document.getElementById('totalExpense').textContent = fmtRp(totalExpense);
+        document.getElementById('currentBalance').textContent = fmtRp(totalIncome - totalExpense);
+        
+        if (defaulterData.success) {
+          document.getElementById('totalTunggakan').textContent = fmtRp(defaulterData.data.length * 150000);
+          document.getElementById('totalKelebihan').textContent = fmtRp(0);
+          document.getElementById('totalSiswa').textContent = defaulterData.data.length;
+        }
+      } catch (e) {
+        console.error('Load dashboard error:', e);
+      }
+    }
+
+    function initTabs() {
+      document.querySelectorAll('[data-tab]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
+          document.querySelectorAll('[data-tab]').forEach(n => n.classList.remove('bg-emerald-600', 'text-white'));
+          document.getElementById(btn.dataset.tab + 'Tab').classList.remove('hidden');
+          btn.classList.add('bg-emerald-600', 'text-white');
+          if (btn.dataset.tab === 'payments') {
+            pagination.payments.page = 1;
+            loadSaldo();
+          }
+          if (btn.dataset.tab === 'payroll') {
+            pagination.payroll.page = 1;
+            const payrollSel = document.getElementById('payrollTenantSelect');
+            if (payrollSel && currentTenantId) {
+              payrollSel.value = currentTenantId;
+            }
+            loadPayroll();
+          }
+          if (btn.dataset.tab === 'spp') {
+            pagination.spp.page = 1;
+            loadSpp();
+          }
+          if (btn.dataset.tab === 'dashboard') {
+            loadDashboardData();
+          }
+        });
+      });
+    }
+
+    let pagination = { payments: { page: 1, limit: 20, total: 0 }, payroll: { page: 1, limit: 20, total: 0 }, spp: { page: 1, limit: 20, total: 0 } };
+
+    function renderPagination(containerId, tab) {
+      const pg = pagination[tab];
+      const totalPages = Math.ceil(pg.total / pg.limit) || 1;
+      const container = document.getElementById(containerId);
+      if (!container || totalPages <= 1) { if (container) container.innerHTML = ''; return; }
+      let html = '<div class="flex items-center justify-center gap-1">';
+      html += '<button onclick="changePage(\'' + tab + '\', 1)" class="pagination-btn px-3 py-1.5 rounded-lg ' + (pg.page === 1 ? 'opacity-30 cursor-not-allowed bg-gray-100' : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700') + '" ' + (pg.page === 1 ? 'disabled' : '') + ' title="Halaman Pertama"><i class="fas fa-angle-double-left text-xs"></i></button>';
+      html += '<button onclick="changePage(\'' + tab + '\', ' + Math.max(1, pg.page - 1) + ')" class="pagination-btn px-3 py-1.5 rounded-lg ' + (pg.page === 1 ? 'opacity-30 cursor-not-allowed bg-gray-100' : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700') + '" ' + (pg.page === 1 ? 'disabled' : '') + ' title="Sebelumnya"><i class="fas fa-angle-left text-sm"></i></button>';
+
+      // Page numbers with ellipsis
+      let startPage = Math.max(1, pg.page - 2);
+      let endPage = Math.min(totalPages, pg.page + 2);
+      if (startPage > 1) {
+        html += '<button onclick="changePage(\'' + tab + '\', 1)" class="pagination-btn px-3 py-1.5 rounded-lg bg-white border border-gray-200 hover:bg-emerald-50 text-gray-700">1</button>';
+        if (startPage > 2) html += '<span class="px-2 text-gray-400">...</span>';
+      }
+      for (let i = startPage; i <= endPage; i++) {
+        html += '<button onclick="changePage(\'' + tab + '\', ' + i + ')" class="pagination-btn px-3 py-1.5 rounded-lg ' + (i === pg.page ? 'bg-emerald-600 text-white shadow-sm' : 'bg-white border border-gray-200 hover:bg-emerald-50 text-gray-700 font-medium') + '">' + i + '</button>';
+      }
+      if (endPage < totalPages) {
+        if (endPage < totalPages - 1) html += '<span class="px-2 text-gray-400">...</span>';
+        html += '<button onclick="changePage(\'' + tab + '\', ' + totalPages + ')" class="pagination-btn px-3 py-1.5 rounded-lg bg-white border border-gray-200 hover:bg-emerald-50 text-gray-700">' + totalPages + '</button>';
+      }
+
+      html += '<button onclick="changePage(\'' + tab + '\', ' + Math.min(totalPages, pg.page + 1) + ')" class="pagination-btn px-3 py-1.5 rounded-lg ' + (pg.page === totalPages ? 'opacity-30 cursor-not-allowed bg-gray-100' : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700') + '" ' + (pg.page === totalPages ? 'disabled' : '') + ' title="Selanjutnya"><i class="fas fa-angle-right text-sm"></i></button>';
+      html += '<button onclick="changePage(\'' + tab + '\', ' + totalPages + ')" class="pagination-btn px-3 py-1.5 rounded-lg ' + (pg.page === totalPages ? 'opacity-30 cursor-not-allowed bg-gray-100' : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700') + '" ' + (pg.page === totalPages ? 'disabled' : '') + ' title="Halaman Terakhir"><i class="fas fa-angle-double-right text-xs"></i></button>';
+
+      html += '</div><div class="text-xs text-gray-500 mt-1 text-center">Halaman ' + pg.page + ' dari ' + totalPages + ' (Total ' + pg.total + ' data)</div>';
+      html += '<button onclick="showAll(\'' + tab + '\')" class="ml-2 text-xs text-emerald-600 underline hover:text-emerald-800">Tampilkan Semua</button>';
+      container.innerHTML = html;
+    }
+
+    function showAll(tab) {
+      pagination[tab].page = 1;
+      pagination[tab].limit = 10000;
+      if (tab === 'payments') loadSaldo();
+      if (tab === 'payroll') loadPayroll();
+      if (tab === 'spp') loadSpp();
+    }
+
+    function changePage(tab, page) {
+      pagination[tab].page = page;
+      if (tab === 'payments') loadSaldo();
+      if (tab === 'payroll') loadPayroll();
+      if (tab === 'spp') loadSpp();
+    }
+
+    function logout() {
+      localStorage.removeItem('token');
+      window.location.href = 'login.html';
+    }
+
+    function fmtRp(v) {
+      return 'Rp ' + (parseFloat(v) || 0).toLocaleString('id-ID');
+    }
+
+    function showToast(msg, type) {
+      const t = document.createElement('div');
+      t.className = 'fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm text-sm ' + (type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white');
+      t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), 3000);
+    }
+
+    async function loadSaldo() {
+      const tbody = document.getElementById('paymentsTable');
+      const pg = pagination.payments;
+      tbody.innerHTML = '<tr><td colspan="6" class="p-4 text-center">Memuat...</td></tr>';
+      try {
+        const res = await fetch('/api/treasurer/bendahara/saldo?tenant_id=' + currentTenantId + '&page=' + pg.page + '&limit=' + pg.limit, { headers: getAuthHeader() });
+        const json = await res.json();
+        if (json.success) {
+          pagination.payments.total = json.total || json.data.length;
+          tbody.innerHTML = json.data.map((d, i) => `
+            <tr class="border-b">
+              <td class="px-4 py-2">${i + 1}</td>
+              <td class="px-4 py-2">${d.nama_siswa}</td>
+              <td class="px-4 py-2">${d.nama_sekolah}</td>
+              <td class="px-4 py-2 text-right">${fmtRp(d.iuran_bulanan)}</td>
+              <td class="px-4 py-2 text-center">${d.saldo > 0 ? 'Lunas' : 'Tunggakan'}</td>
+              <td class="px-4 py-2 text-right">${d.saldo < 0 ? '-' : ''}${fmtRp(Math.abs(d.saldo))}</td>
+            </tr>`).join('');
+        }
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="6" class="p-4 text-red-500">Error: ' + e.message + '</td></tr>';
+      }
+      renderPagination('paymentsPagination', 'payments');
+    }
+
+    async function loadPayroll() {
+      const tbody = document.getElementById('payrollTable');
+      const pg = pagination.payroll;
+      const bulan = document.getElementById('payrollBulan').value;
+      const tahun = document.getElementById('payrollTahun').value;
+      const tenantId = document.getElementById('payrollTenantSelect').value || currentTenantId;
+      if (!bulan || !tahun) { showToast('Pilih bulan dan tahun', 'error'); return; }
+      tbody.innerHTML = '<tr><td colspan="13" class="text-center py-4">Memuat...</td></tr>';
+      try {
+        const token = localStorage.getItem('token');
+        const res = await fetch('/api/treasurer/bendahara/payroll?tenant_id=' + tenantId + '&bulan=' + bulan + '&tahun=' + tahun + '&page=' + pg.page + '&limit=' + pg.limit, { headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
+        const json = await res.json();
+        if (!json.success) { showToast('Gagal muat data', 'error'); return; }
+        pagination.payroll.total = json.total || json.data.length;
+        const data = json.data;
+        if (!data.length) { tbody.innerHTML = '<tr><td colspan="13" class="text-center py-4">Tidak ada data guru</td></tr>'; return; }
+        tbody.innerHTML = data.map((d, i) => `<tr data-id="${d.id}" class="hover:bg-blue-50 cursor-pointer"><td class="px-2 py-1 text-center">${(pg.page - 1) * pg.limit + i + 1}</td><td class="px-2 py-1" style="min-width:180px">${d.nama}</td><td class="px-2 py-1 text-right editable" data-id="${d.id}" data-field="gaji_pokok">${fmtRp(d.gaji_pokok)}</td><td class="px-2 py-1 text-right editable" data-id="${d.id}" data-field="tunj_kinerja">${fmtRp(d.tunj_kinerja)}</td><td class="px-2 py-1 text-right editable" data-id="${d.id}" data-field="tunj_umum">${fmtRp(d.tunj_umum)}</td><td class="px-2 py-1 text-right editable" data-id="${d.id}" data-field="tunj_istri">${fmtRp(d.tunj_istri)}</td><td class="px-2 py-1 text-right editable" data-id="${d.id}" data-field="tunj_anak">${fmtRp(d.tunj_anak)}</td><td class="px-2 py-1 text-right editable" data-id="${d.id}" data-field="tunj_kepala_sekolah">${fmtRp(d.tunj_kepala_sekolah)}</td><td class="px-2 py-1 text-right editable" data-id="${d.id}" data-field="tunj_wali_kelas">${fmtRp(d.tunj_wali_kelas)}</td><td class="px-2 py-1 text-right editable" data-id="${d.id}" data-field="honor_bendahara">${fmtRp(d.honor_bendahara)}</td><td class="px-2 py-1 text-right">${fmtRp(d.potongan)}</td><td class="px-2 py-1 text-right font-semibold">${fmtRp(d.total_gaji)}</td></tr>`).join('');
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="13" class="text-center py-4 text-red-500">Error: ' + e.message + '</td></tr>';
+      }
+      renderPagination('payrollPagination', 'payroll');
+      document.querySelectorAll('.editable').forEach(td => {
+        td.addEventListener('dblclick', function () { editCell(this); });
+      });
+    }
+
+    async function loadSpp() {
+      const tbody = document.getElementById('sppTable');
+      const pg = pagination.spp;
+      tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center">Memuat...</td></tr>';
+      try {
+        const res = await fetch('/api/treasurer/bendahara/saldo?tenant_id=' + currentTenantId + '&page=' + pg.page + '&limit=' + pg.limit, { headers: getAuthHeader() });
+        const json = await res.json();
+        if (json.success) {
+          pagination.spp.total = json.total || 0;
+          if (json.data?.length) {
+            tbody.innerHTML = json.data.map((d, i) => {
+              let kelas = '-';
+              if (d.tingkatan && d.nama_kelas) {
+                kelas = `${d.tingkatan} ${d.nama_kelas}`;
+              } else if (d.kelas) {
+                kelas = d.kelas;
+              } else if (d.tingkatan) {
+                kelas = d.tingkatan;
+              } else if (d.nama_kelas) {
+                kelas = d.nama_kelas;
+              }
+              return `
+                <tr class="border-b" data-id="${d.id}">
+                  <td class="px-3 py-2">${d.nama_siswa}</td>
+                  <td class="px-3 py-2">${d.nisn || d.nis || '-'}</td>
+                  <td class="px-3 py-2">${kelas}</td>
+                  <td class="px-3 py-2 text-right editable-iuran" data-field="iuran_bulanan">${fmtRp(d.iuran_bulanan)}</td>
+                  <td class="px-3 py-2 text-center">
+                    <button onclick="editIuranRow(${d.id}, '${d.nama_siswa || ''}')" class="text-emerald-600 hover:text-emerald-800"><i class="fas fa-edit"></i></button>
+                  </td>
+                </tr>`;
+            }).join('');
+            document.querySelectorAll('.editable-iuran').forEach(td => {
+              td.addEventListener('dblclick', function () { editIuranCell(this); });
+            });
+          } else {
+            tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center">Tidak ada data siswa</td></tr>';
+          }
+          renderPagination('sppPagination', 'spp');
+        }
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-red-500">Error: ' + e.message + '</td></tr>';
+      }
+    }
+
+    async function updateSalaryField(id, field, value) {
+      try {
+        const res = await fetch('/api/treasurer/bendahara/teacher/' + id, {
+          method: 'PUT',
+          headers: { ...getAuthHeader(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ field: field, value: value })
+        });
+        const result = await res.json();
+        if (result.success) showToast('Tersimpan', 'success');
+        else showToast(result.message || 'Gagal', 'error');
+      } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    function editCell(td) {
+      const val = td.textContent.replace(/[^0-9]/g, '');
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.value = val;
+      input.className = 'w-full text-right border-b';
+      input.style.cssText = 'background:transparent;outline:none;';
+      input.onblur = () => saveCell(input);
+      input.onkeypress = (e) => { if (e.key === 'Enter') saveCell(input); };
+      td.innerHTML = '';
+      td.appendChild(input);
+      input.focus();
+    }
+
+    function editRow(tr) {
+      const cells = tr.querySelectorAll('td[data-field]');
+      cells.forEach(td => {
+        const val = td.textContent.replace(/[^0-9]/g, '');
+        td.setAttribute('data-original', td.textContent);
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.value = val;
+        input.className = 'w-full text-right border-b';
+        input.style.cssText = 'background:transparent;outline:none;';
+        input.onblur = () => saveCell(input);
+        input.onkeypress = (e) => { if (e.key === 'Enter') saveCell(input); };
+        td.innerHTML = '';
+        td.appendChild(input);
+        input.focus();
+      });
+    }
+
+    async function saveCell(input) {
+      const td = input.parentElement;
+      const tr = td.parentElement;
+      const id = td.dataset.id;
+      const field = td.dataset.field;
+      const value = input.value.replace(/[^0-9]/g, '');
+      td.innerHTML = fmtRp(value) || 'Rp 0';
+      await updateSalaryField(id, field, value);
+    }
+
+    async function editIuranCell(td) {
+      const val = td.textContent.replace(/[^0-9]/g, '');
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.value = val;
+      input.className = 'w-full text-right border-b';
+      input.style.cssText = 'background:transparent;outline:none;';
+      input.onblur = () => saveIuranCell(input);
+      input.onkeypress = (e) => { if (e.key === 'Enter') saveIuranCell(input); };
+      td.innerHTML = '';
+      td.appendChild(input);
+      input.focus();
+    }
+
+    async function saveIuranCell(input) {
+      const td = input.parentElement;
+      const tr = td.parentElement;
+      const studentId = tr.dataset.id;
+      const value = input.value.replace(/[^0-9]/g, '');
+      td.innerHTML = fmtRp(value) || 'Rp 0';
+      try {
+        const res = await fetch('/api/treasurer/bendahara/spp/' + studentId + '?tenant_id=' + currentTenantId, {
+          method: 'PUT',
+          headers: { ...getAuthHeader(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ iuran_bulanan: value })
+        });
+        const result = await res.json();
+        if (result.success) showToast('Iuran diupdate', 'success');
+        else showToast(result.message || 'Gagal update', 'error');
+        loadSpp();
+      } catch (e) { showToast(e.message, 'error'); }
+    }
+
+    function editIuranRow(studentId, namaSiswa) {
+      const td = document.querySelector('tr[data-id="' + studentId + '"] .editable-iuran');
+      if (td) {
+        editIuranCell(td);
+      }
+    }
+  </script>
+</body>
+
+</html>

@@ -113,57 +113,6 @@
 
       <!-- Dashboard Tab -->
       <div id="dashboardTab" class="tab-content">
-        <!-- Financial Summary Cards -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div class="financial-card bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Pendapatan SPP</p>
-                <p class="text-3xl font-bold text-emerald-600 mt-2" id="totalIncome">Rp 0</p>
-              </div>
-              <div class="w-12 h-12 bg-emerald-100 rounded-lg flex items-center justify-center">
-                <i class="fas fa-arrow-down text-emerald-600"></i>
-              </div>
-            </div>
-          </div>
-
-          <div class="financial-card bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Gaji Guru</p>
-                <p class="text-3xl font-bold text-red-600 mt-2" id="totalExpense">Rp 0</p>
-              </div>
-              <div class="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
-                <i class="fas fa-arrow-up text-red-600"></i>
-              </div>
-            </div>
-          </div>
-
-          <div class="financial-card bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Saldo Kas</p>
-                <p class="text-3xl font-bold text-blue-600 mt-2" id="currentBalance">Rp 0</p>
-              </div>
-              <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                <i class="fas fa-wallet text-blue-600"></i>
-              </div>
-            </div>
-          </div>
-
-          <div class="financial-card bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Belum Bayar SPP</p>
-                <p class="text-3xl font-bold text-orange-600 mt-2" id="unpaidCount">0 Siswa</p>
-              </div>
-              <div class="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-                <i class="fas fa-exclamation-triangle text-orange-600"></i>
-              </div>
-            </div>
-          </div>
-        </div>
-
         <!-- School Filter -->
         <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-6">
           <div class="flex items-center space-x-3">
@@ -187,65 +136,45 @@
           </div>
         </div>
 
-        <!-- Overall Summary -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div class="financial-card bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Pendapatan SPP</p>
-                <p class="text-3xl font-bold text-emerald-600 mt-2" id="totalIncome2">Rp 0</p>
-              </div>
-              <div class="w-12 h-12 bg-emerald-100 rounded-lg flex items-center justify-center">
-                <i class="fas fa-arrow-down text-emerald-600"></i>
-              </div>
+        <!-- Recent Activity -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
+          <h3 class="text-lg font-semibold text-gray-900 mb-4">Ringkasan Lengkap</h3>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <h4 class="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Pendapatan SPP</h4>
+              <p class="text-3xl font-bold text-emerald-600 mt-2" id="totalIncome">Rp 0</p>
+            </div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <h4 class="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Gaji Guru</h4>
+              <p class="text-3xl font-bold text-red-600 mt-2" id="totalExpense">Rp 0</p>
+            </div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <h4 class="text-sm font-medium text-gray-500 uppercase tracking-wide">Saldo Kas</h4>
+              <p class="text-3xl font-bold text-blue-600 mt-2" id="currentBalance">Rp 0</p>
             </div>
           </div>
-
-          <div class="financial-card bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Gaji Guru</p>
-                <p class="text-3xl font-bold text-red-600 mt-2" id="totalExpense2">Rp 0</p>
-              </div>
-              <div class="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
-                <i class="fas fa-arrow-up text-red-600"></i>
-              </div>
-            </div>
-          </div>
-
-          <div class="financial-card bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Saldo Kas</p>
-                <p class="text-3xl font-bold text-blue-600 mt-2" id="currentBalance2">Rp 0</p>
-              </div>
-              <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                <i class="fas fa-wallet text-blue-600"></i>
-              </div>
-            </div>
-          </div>
-
-          <div class="financial-card bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Belum Bayar SPP</p>
-                <p class="text-3xl font-bold text-orange-600 mt-2" id="unpaidCount2">0 Siswa</p>
-              </div>
-              <div class="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-                <i class="fas fa-exclamation-triangle text-orange-600"></i>
-              </div>
+          
+          <!-- Daftar Pembayaran Siswa -->
+          <div class="mt-6">
+            <h4 class="font-semibold mb-3">Pembayaran Siswa</h4>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th class="px-3 py-2 text-left">#</th>
+                    <th class="px-3 py-2 text-left">Nama Siswa</th>
+                    <th class="px-3 py-2 text-left">Sekolah</th>
+                    <th class="px-3 py-2 text-right">Iuran</th>
+                    <th class="px-3 py-2 text-center">Status</th>
+                    <th class="px-3 py-2 text-right">Saldo</th>
+                  </tr>
+                </thead>
+                <tbody id="paymentsSummaryTable"><tr><td colspan="6" class="p-4 text-center">Memuat...</td></tr></tbody>
+              </table>
             </div>
           </div>
         </div>
-
-        <!-- Recent Activity -->
-        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <h3 class="text-lg font-semibold text-gray-900 mb-4">Aktivitas Terbaru</h3>
-<div id="recentActivity" class="space-y-3 max-h-64 overflow-y-auto">
-             <p class="text-center text-gray-500 py-8">Memuat aktivitas...</p>
-           </div>
-         </div>
-       </div>
+      </div>
 
        <!-- Payroll Tab -->
        <div id="payrollTab" class="tab-content hidden">
@@ -290,11 +219,12 @@
              </tr></thead><tbody id="payrollTable" class="divide-y divide-gray-100"><tr><td colspan="15" class="px-4 py-8 text-center text-gray-500">
                    <i class="fas fa-spinner fa-spin text-xl mb-2"></i>
                    <p>Pilih periode lalu klik Hitung</p>
-               </td></tr></tbody></table></div>
-         </div>
-       </div>
+</td></tr></tbody></table></div>
+          <div id="payrollPagination" class="flex justify-center gap-1 mt-4"></div>
+          </div>
+        </div>
 
-<!-- Pembayaran Siswa Tab -->
+      <!-- Pembayaran Siswa Tab -->
        <div id="paymentsTab" class="tab-content hidden">
          <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-4">
 <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
@@ -656,11 +586,10 @@ function formatCurrency(value) {
 
          const tenantCards = document.getElementById('tenantCards');
          if (incomeData.success && incomeData.data?.length) {
-           incomeData.data.forEach(item => {
-             totalIncome += parseFloat(item.total_pemasukan) || 0;
-           });
-           document.getElementById('totalIncome').textContent = formatCurrency(totalIncome);
-           document.getElementById('totalIncome2').textContent = formatCurrency(totalIncome);
+incomeData.data.forEach(item => {
+              totalIncome += parseFloat(item.total_pemasukan) || 0;
+            });
+            document.getElementById('totalIncome').textContent = formatCurrency(totalIncome);
 
            tenantCards.innerHTML = incomeData.data.map(d => `
              <div class="bg-white rounded-xl shadow-sm border border-emerald-200 p-5 hover:shadow-md transition-shadow">
@@ -679,44 +608,45 @@ function formatCurrency(value) {
            tenantCards.innerHTML = '<div class="col-span-full text-center py-8 text-gray-500">Tidak ada data sekolah</div>';
          }
 
-         if (expenseData.success) {
-           expenseData.data.forEach(item => {
-             totalExpense += parseFloat(item.total_gaji) || 0;
-           });
-           document.getElementById('totalExpense').textContent = formatCurrency(totalExpense);
-           document.getElementById('totalExpense2').textContent = formatCurrency(totalExpense);
-         }
+if (expenseData.success) {
+            expenseData.data.forEach(item => {
+              totalExpense += parseFloat(item.total_gaji) || 0;
+            });
+            document.getElementById('totalExpense').textContent = formatCurrency(totalExpense);
+          }
 
-         if (defaulterData.success) {
-           document.getElementById('unpaidCount').innerHTML = `${defaulterData.data.length} <span class="text-sm font-normal">Siswa</span>`;
-           document.getElementById('unpaidCount2').innerHTML = `${defaulterData.data.length} <span class="text-sm font-normal">Siswa</span>`;
-         }
+if (defaulterData.success) {
+          }
 
-         const balance = totalIncome - totalExpense;
-         document.getElementById('currentBalance').textContent = formatCurrency(balance);
-         document.getElementById('currentBalance2').textContent = formatCurrency(balance);
+          const balance = totalIncome - totalExpense;
+          document.getElementById('currentBalance').textContent = formatCurrency(balance);
 
-         // Recent activity
-         const recentActivity = document.getElementById('recentActivity');
-         if (incomeData.success && incomeData.data?.length) {
-           const activities = incomeData.data.slice(0, 5).map(d => `
-             <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-               <div class="flex items-center space-x-3">
-                 <div class="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center">
-                   <i class="fas fa-school text-emerald-600 text-sm"></i>
-                 </div>
-                 <div>
-                   <p class="text-sm font-medium text-gray-900">${d.nama_sekolah || 'Sekolah'}</p>
-                   <p class="text-xs text-gray-500">Pendapatan SPP</p>
-                 </div>
-               </div>
-               <span class="text-sm font-medium text-emerald-600">${formatCurrency(d.total_pemasukan || 0)}</span>
-             </div>
-           `).join('');
-           recentActivity.innerHTML = activities || '<p class="text-center text-gray-500 py-8">Tidak ada aktivitas</p>';
-         } else {
-           recentActivity.innerHTML = '<p class="text-center text-gray-500 py-8">Tidak ada aktivitas</p>';
-         }
+          const paymentsTable = document.getElementById('paymentsSummaryTable');
+          if (incomeData.success && incomeData.data?.length) {
+            const payments = incomeData.data.slice(0, 10).map((d, idx) => {
+              const status = d.total_bayar === d.total_iuran ? 'Lunas' : (d.total_bayar > d.total_iuran ? 'Kelebihan' : 'Tunggakan');
+              const saldo = (d.total_iuran || 0) - (d.total_bayar || 0);
+              return `
+                <tr class="hover:bg-gray-50">
+                  <td class="px-3 py-2">${idx + 1}</td>
+                  <td class="px-3 py-2 font-medium text-gray-900">${d.nama_sekolah || 'Sekolah'}</td>
+                  <td class="px-3 py-2 text-gray-600">${d.total_siswa || 0} siswa</td>
+                  <td class="px-3 py-2 text-right font-medium text-emerald-600">Rp ${d.total_iuran || 0}</td>
+                  <td class="px-3 py-2 text-center">
+                    <span class="px-2 py-1 text-xs rounded-full ${status === 'Lunas' ? 'bg-green-100 text-green-700' : status === 'Kelebihan' ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'}">
+                      ${status}
+                    </span>
+                  </td>
+                  <td class="px-3 py-2 text-right font-medium ${saldo > 0 ? 'text-red-600' : saldo < 0 ? 'text-green-600' : 'text-blue-600'}">
+                    Rp ${Math.abs(saldo) || 0}
+                  </td>
+                </tr>
+              `;
+            }).join('');
+            paymentsTable.innerHTML = payments || '<tr><td colspan="6" class="p-4 text-center">Tidak ada data</td></tr>';
+          } else {
+            paymentsTable.innerHTML = '<tr><td colspan="6" class="p-4 text-center">Tidak ada data</td></tr>';
+          }
        } catch (error) {
          console.error('Dashboard load error:', error);
        }
@@ -816,24 +746,47 @@ async function loadTenantFilters() {
 
         // Render pagination controls
         const totalPages = Math.ceil((data.summary?.total_siswa || 0) / limit);
-        renderPagination(page, totalPages, tenantId, statusFilter);
+        renderPagination(page, totalPages, tenantId, statusFilter, data.summary?.total_siswa || 0);
       } catch (e) {
         tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-red-500">Error: ' + e.message + '</td></tr>';
       }
     }
 
-    function renderPagination(currentPage, totalPages, tenantId, statusFilter) {
+    function renderPagination(currentPage, totalPages, tenantId, statusFilter, totalData) {
       const pagDiv = document.getElementById('paymentsPagination');
       if (totalPages <= 1) {
         pagDiv.innerHTML = '';
         return;
       }
-      let html = '<div class="flex justify-center items-center mt-4 space-x-2">';
-      for (let i = Math.max(1, currentPage - 2); i <= Math.min(totalPages, currentPage + 2); i++) {
-        html += `<button onclick="loadSaldo(${i})" class="px-3 py-1 rounded ${i === currentPage ? 'bg-emerald-600 text-white' : 'bg-gray-200 hover:bg-gray-300'}">${i}</button>`;
+      let html = '<div class="flex items-center justify-center gap-1">';
+      html += `<button onclick="loadSaldo(1)" class="pagination-btn px-3 py-1.5 rounded-lg ${currentPage === 1 ? 'opacity-30 cursor-not-allowed bg-gray-100' : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700'}" ${currentPage === 1 ? 'disabled' : ''} title="Halaman Pertama"><i class="fas fa-angle-double-left text-xs"></i></button>`;
+      html += `<button onclick="loadSaldo(${Math.max(1, currentPage - 1)})" class="pagination-btn px-3 py-1.5 rounded-lg ${currentPage === 1 ? 'opacity-30 cursor-not-allowed bg-gray-100' : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700'}" ${currentPage === 1 ? 'disabled' : ''} title="Sebelumnya"><i class="fas fa-angle-left text-sm"></i></button>`;
+
+      let startPage = Math.max(1, currentPage - 2);
+      let endPage = Math.min(totalPages, currentPage + 2);
+      if (startPage > 1) {
+        html += `<button onclick="loadSaldo(1)" class="pagination-btn px-3 py-1.5 rounded-lg bg-white border border-gray-200 hover:bg-emerald-50 text-gray-700">1</button>`;
+        if (startPage > 2) html += '<span class="px-2 text-gray-400">...</span>';
       }
-html += '</div>';
-       pagDiv.innerHTML = html;
+      for (let i = startPage; i <= endPage; i++) {
+        html += `<button onclick="loadSaldo(${i})" class="pagination-btn px-3 py-1.5 rounded-lg ${i === currentPage ? 'bg-emerald-600 text-white shadow-sm' : 'bg-white border border-gray-200 hover:bg-emerald-50 text-gray-700 font-medium'}">${i}</button>`;
+      }
+      if (endPage < totalPages) {
+        if (endPage < totalPages - 1) html += '<span class="px-2 text-gray-400">...</span>';
+        html += `<button onclick="loadSaldo(${totalPages})" class="pagination-btn px-3 py-1.5 rounded-lg bg-white border border-gray-200 hover:bg-emerald-50 text-gray-700">${totalPages}</button>`;
+      }
+
+      html += `<button onclick="loadSaldo(${Math.min(totalPages, currentPage + 1)})" class="pagination-btn px-3 py-1.5 rounded-lg ${currentPage === totalPages ? 'opacity-30 cursor-not-allowed bg-gray-100' : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700'}" ${currentPage === totalPages ? 'disabled' : ''} title="Selanjutnya"><i class="fas fa-angle-right text-sm"></i></button>`;
+      html += `<button onclick="loadSaldo(${totalPages})" class="pagination-btn px-3 py-1.5 rounded-lg ${currentPage === totalPages ? 'opacity-30 cursor-not-allowed bg-gray-100' : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700'}" ${currentPage === totalPages ? 'disabled' : ''} title="Halaman Terakhir"><i class="fas fa-angle-double-right text-xs"></i></button>`;
+
+      html += `</div><div class="text-xs text-gray-500 mt-1 text-center">Halaman ${currentPage} dari ${totalPages} (Total ${totalData} data)</div>`;
+      html += `<button onclick="showAllPayments()" class="ml-2 text-xs text-emerald-600 underline hover:text-emerald-800">Tampilkan Semua</button>`;
+      pagDiv.innerHTML = html;
+    }
+
+    function showAllPayments() {
+      pagination.payments.limit = 10000;
+      loadSaldo(1);
     }
 
     async function searchStudents() {

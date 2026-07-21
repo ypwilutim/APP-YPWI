@@ -509,7 +509,7 @@ router.put('/admin/rules/:id', authenticateOperator, async (req, res) => {
 
     const result = await db.query(
       'UPDATE attendance_rules SET tipe_unit = ?, tipe = ?, jam_mulai = ?, jam_selesai = ?, keterangan = ?, status_log = ?, hari = ? WHERE id = ?',
-      [tipe_unit || null, tipe, jam_selesai, jam_mulai, keterangan || null, status_log, hari || null, id]
+      [tipe_unit || null, tipe, jam_mulai, jam_selesai, keterangan || null, status_log, hari || null, id]
     );
 
     if (result.affectedRows === 0) {
@@ -1357,13 +1357,13 @@ router.get('/admin/students', authenticateOperator, async (req, res) => {
     const total = totalResult.total;
 
     let query = `
-SELECT s.id, s.nama_siswa, s.nisn, s.nis, s.jenis_kelamin, s.iuran_bulanan,
-       s.class_id, s.tenant_id, c.nama_kelas, tn.nama_sekolah, p.nama_orang_tua, p.no_wa as no_wa_ortu
-       FROM students s
-       LEFT JOIN classes c ON s.class_id = c.id
-       LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id
-       LEFT JOIN parents p ON s.parent_id = p.id
-       WHERE 1=1
+ SELECT s.id, s.nama_siswa, s.nisn, s.nis, s.jenis_kelamin, s.iuran_bulanan,
+        s.class_id, s.tenant_id, c.nama_kelas, c.tingkatan, tn.nama_sekolah, p.nama_orang_tua, p.no_wa as no_wa_ortu
+        FROM students s
+        LEFT JOIN classes c ON s.class_id = c.id
+        LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id
+        LEFT JOIN parents p ON s.parent_id = p.id
+        WHERE 1=1
      `;
     let params = [];
 
@@ -1428,7 +1428,7 @@ router.get('/admin/students/incomplete', authenticateOperator, async (req, res) 
 
     const query = `
       SELECT s.id, s.nama_siswa, s.nisn, s.nis, s.jenis_kelamin, s.iuran_bulanan,
-             c.nama_kelas, tn.nama_sekolah,
+             c.nama_kelas, c.tingkatan, tn.nama_sekolah,
              p.id as parent_id, p.nama_orang_tua, p.no_wa as no_wa_ortu
       FROM students s
       LEFT JOIN classes c ON s.class_id = c.id
@@ -1767,7 +1767,7 @@ router.get('/admin/students/all', authenticateOperator, async (req, res) => {
 
     let query = `
       SELECT s.id, s.nama_siswa, s.nisn, s.nis, s.jenis_kelamin, s.iuran_bulanan,
-             s.class_id, s.tenant_id, c.nama_kelas, tn.nama_sekolah, p.no_wa as no_wa_ortu
+             s.class_id, s.tenant_id, c.nama_kelas, c.tingkatan, tn.nama_sekolah, p.no_wa as no_wa_ortu
       FROM students s
       LEFT JOIN classes c ON s.class_id = c.id
       LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id
@@ -1900,7 +1900,7 @@ router.get('/admin/students/:id', authenticateOperator, async (req, res) => {
   try {
     const { id } = req.params;
     const [student] = await db.query(
-      'SELECT s.*, c.nama_kelas, tn.nama_sekolah, p.id as parent_id_ref, p.nama_orang_tua, p.no_wa as no_wa_ortu FROM students s LEFT JOIN classes c ON s.class_id = c.id LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id LEFT JOIN parents p ON s.parent_id = p.id WHERE s.id = ?',
+      'SELECT s.*, c.nama_kelas, c.tingkatan, tn.nama_sekolah, p.id as parent_id_ref, p.nama_orang_tua, p.no_wa as no_wa_ortu FROM students s LEFT JOIN classes c ON s.class_id = c.id LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id LEFT JOIN parents p ON s.parent_id = p.id WHERE s.id = ?',
       [id]
     );
 
@@ -1959,6 +1959,167 @@ router.post('/admin/students', authenticateOperator, async (req, res) => {
   } catch (error) {
     console.error('Create student error:', error);
     res.status(500).json({ success: false, message: 'Error creating student' });
+  }
+});
+
+// PUT /api/admin/students/bulk-promote - Bulk promote students to next class
+router.put('/admin/students/bulk-promote', authenticateOperator, async (req, res) => {
+  try {
+    let tenantId = req.query.tenant_id;
+    let { from_class_id, to_class_id, action, mappings } = req.body;
+
+    // Operator: force tenant_id from assignment if not provided
+    if (req.user.role !== 'admin' && !tenantId) {
+      const adminAssignments = (req.user.assignments || []).filter(a => {
+        const roles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin'];
+        return roles.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''));
+      });
+      if (adminAssignments.length === 1) {
+        tenantId = adminAssignments[0].tenant_id;
+      } else if (adminAssignments.length > 1) {
+        tenantId = adminAssignments[0].tenant_id;
+      }
+    }
+
+    // Verify tenant access
+    if (tenantId && !verifyTenantAccess(req, tenantId)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+
+    // Support both single mapping and array of mappings
+    let mappingList = [];
+    if (mappings && Array.isArray(mappings) && mappings.length > 0) {
+      mappingList = mappings;
+    } else if (from_class_id && to_class_id) {
+      mappingList = [{ from_class_id, to_class_id }];
+    } else {
+      return res.status(400).json({ success: false, message: 'from_class_id dan to_class_id wajib diisi, atau mappings harus berupa array' });
+    }
+
+    const results = [];
+    const graduates = mappingList.filter(m => m.action === 'graduate' || !m.to_class_id);
+    const moves = mappingList.filter(m => m.action !== 'graduate' && m.to_class_id);
+
+    // Helper: dapatkan atau buat kelas Alumni
+    async function getOrCreateAlumniClass(tenantId) {
+      const year = new Date().getFullYear();
+      let [alumniClass] = await db.query(
+        'SELECT id FROM classes WHERE tenant_id = ? AND nama_kelas = ? AND tingkatan = ?',
+        [tenantId, 'Alumni', String(year)]
+      );
+      if (!alumniClass) {
+        const result = await db.query(
+          'INSERT INTO classes (tenant_id, nama_kelas, tingkatan) VALUES (?, ?, ?)',
+          [tenantId, 'Alumni', String(year)]
+        );
+        return result.insertId;
+      }
+      return alumniClass.id;
+    }
+
+    for (const mapping of graduates) {
+      const { from_class_id: fromId } = mapping;
+
+      if (!fromId) {
+        results.push({ success: false, message: 'from_class_id wajib diisi' });
+        continue;
+      }
+
+      const [fromClass] = await db.query('SELECT * FROM classes WHERE id = ? AND tenant_id = ?', [fromId, tenantId]);
+      if (!fromClass) {
+        results.push({ success: false, message: `Kelas asal (ID: ${fromId}) tidak ditemukan` });
+        continue;
+      }
+
+      try {
+        const alumniClassId = await getOrCreateAlumniClass(tenantId);
+        await db.query(
+          'UPDATE students SET class_id = ?, status_lulus = 1, tanggal_lulus = NOW() WHERE class_id = ?',
+          [alumniClassId, fromId]
+        );
+      } catch (colError) {
+        const alumniClassId = await getOrCreateAlumniClass(tenantId);
+        await db.query(
+          'UPDATE students SET class_id = ?, status = ? WHERE class_id = ?',
+          [alumniClassId, 'alumni', fromId]
+        );
+      }
+      results.push({ success: true, message: `${fromClass.nama_kelas} berhasil diluluskan` });
+    }
+
+    const graduateIds = graduates.map(g => Number(g.from_class_id));
+    const moveFromIds = moves.map(m => Number(m.from_class_id));
+
+    // Urutkan move agar kelas yang menjadi tujuan suatu move diproses lebih dulu.
+    // Contoh: 5D->6D, 4D->5D  =>  5D->6D harus didulukan supaya 5D kosong dulu
+    // sebelum 4D dipindah ke 5D.
+    const orderedMoves = [];
+    const pending = [...moves];
+    const safeLimit = pending.length * pending.length + 10;
+    let guard = 0;
+    while (pending.length && guard++ < safeLimit) {
+      // cari move yang to_class_id-nya TIDAK ada di from_class_id move yang masih pending
+      const pendingFromIds = new Set(pending.map(m => Number(m.from_class_id)));
+      const idx = pending.findIndex(m => !pendingFromIds.has(Number(m.to_class_id)));
+      if (idx === -1) {
+        // sisa adalah siklus murni (semua saling jadi tujuan) -> tangani di validasi sirkular
+        orderedMoves.push(...pending);
+        break;
+      }
+      orderedMoves.push(pending[idx]);
+      pending.splice(idx, 1);
+    }
+
+    for (const mapping of orderedMoves) {
+      const { from_class_id: fromId, to_class_id: toId, action: mapAction } = mapping;
+
+      if (!fromId) {
+        results.push({ success: false, message: 'from_class_id wajib diisi' });
+        continue;
+      }
+
+      const [fromClass] = await db.query('SELECT * FROM classes WHERE id = ? AND tenant_id = ?', [fromId, tenantId]);
+      if (!fromClass) {
+        results.push({ success: false, message: `Kelas asal (ID: ${fromId}) tidak ditemukan` });
+        continue;
+      }
+
+      const [toClass] = await db.query('SELECT * FROM classes WHERE id = ? AND tenant_id = ?', [toId, tenantId]);
+      if (!toClass) {
+        results.push({ success: false, message: `Kelas tujuan (ID: ${toId}) tidak ditemukan` });
+        continue;
+      }
+
+      // Cek real-time: kelas tujuan harus benar-benar kosong SAAT ini
+      // (sudah mencakup efek graduate maupun move sebelumnya di loop yang sama).
+      const [targetCountRow] = await db.query('SELECT COUNT(*) as count FROM students WHERE class_id = ?', [toId]);
+      if (targetCountRow.count > 0) {
+        results.push({ success: false, message: `Kelas tujuan ${toClass.nama_kelas} masih memiliki siswa. Pindahkan ke kelas yang kosong.` });
+        continue;
+      }
+
+      const result = await db.query(
+        'UPDATE students SET class_id = ? WHERE class_id = ?',
+        [toId, fromId]
+      );
+      const count = result.affectedRows;
+      results.push({ success: true, message: `${count} siswa dipindahkan ${fromClass.nama_kelas} → ${toClass.nama_kelas}` });
+    }
+
+    const successCount = results.filter(r => r.success).length;
+    const failCount = results.filter(r => !r.success).length;
+    const messages = results.map(r => r.message).join('; ');
+
+    if (failCount === 0) {
+      res.json({ success: true, message: messages });
+    } else if (successCount > 0) {
+      res.json({ success: true, message: `Sebagian berhasil: ${messages}` });
+    } else {
+      res.status(400).json({ success: false, message: messages });
+    }
+  } catch (error) {
+    console.error('Bulk promote error:', error);
+    res.status(500).json({ success: false, message: 'Error promoting students' });
   }
 });
 
@@ -2099,105 +2260,6 @@ router.delete('/admin/classes/:id', authenticateOperator, async (req, res) => {
   } catch (error) {
     console.error('Delete class error:', error);
     res.status(500).json({ success: false, message: 'Error deleting class' });
-  }
-});
-
-// PUT /api/admin/students/bulk-promote - Bulk promote students to next class
-router.put('/admin/students/bulk-promote', authenticateOperator, async (req, res) => {
-  try {
-    let tenantId = req.query.tenant_id;
-    let { from_class_id, to_class_id, action, mappings } = req.body;
-
-    // Operator: force tenant_id from assignment if not provided
-    if (req.user.role !== 'admin' && !tenantId) {
-      const adminAssignments = (req.user.assignments || []).filter(a => {
-        const roles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin'];
-        return roles.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''));
-      });
-      if (adminAssignments.length === 1) {
-        tenantId = adminAssignments[0].tenant_id;
-      } else if (adminAssignments.length > 1) {
-        tenantId = adminAssignments[0].tenant_id;
-      }
-    }
-
-    // Verify tenant access
-    if (tenantId && !verifyTenantAccess(req, tenantId)) {
-      return res.status(403).json({ success: false, message: 'Akses ditolak' });
-    }
-
-    // Support both single mapping and array of mappings
-    let mappingList = [];
-    if (mappings && Array.isArray(mappings) && mappings.length > 0) {
-      mappingList = mappings;
-    } else if (from_class_id && to_class_id) {
-      mappingList = [{ from_class_id, to_class_id }];
-    } else {
-      return res.status(400).json({ success: false, message: 'from_class_id dan to_class_id wajib diisi, atau mappings harus berupa array' });
-    }
-
-    const results = [];
-    for (const mapping of mappingList) {
-      const { from_class_id: fromId, to_class_id: toId, action: mapAction } = mapping;
-
-      if (!fromId) {
-        results.push({ success: false, message: 'from_class_id wajib diisi' });
-        continue;
-      }
-
-      // Verify source class belongs to the tenant
-      const [fromClass] = await db.query('SELECT * FROM classes WHERE id = ? AND tenant_id = ?', [fromId, tenantId]);
-      if (!fromClass) {
-        results.push({ success: false, message: `Kelas asal (ID: ${fromId}) tidak ditemukan` });
-        continue;
-      }
-
-      if (mapAction === 'graduate' || !toId) {
-        // Graduate students (remove from active enrollment)
-        try {
-          await db.query(
-            'UPDATE students SET class_id = NULL, status_lulus = 1, tanggal_lulus = NOW() WHERE class_id = ?',
-            [fromId]
-          );
-        } catch (colError) {
-          // Fallback: just remove class assignment
-          await db.query(
-            'UPDATE students SET class_id = NULL WHERE class_id = ?',
-            [fromId]
-          );
-        }
-        results.push({ success: true, message: `${fromClass.nama_kelas} berhasil diluluskan` });
-      } else {
-        // Verify target class belongs to the tenant
-        const [toClass] = await db.query('SELECT * FROM classes WHERE id = ? AND tenant_id = ?', [toId, tenantId]);
-        if (!toClass) {
-          results.push({ success: false, message: `Kelas tujuan (ID: ${toId}) tidak ditemukan` });
-          continue;
-        }
-        // Move students to target class
-        const result = await db.query(
-          'UPDATE students SET class_id = ? WHERE class_id = ?',
-          [toId, fromId]
-        );
-        const count = result.affectedRows;
-        results.push({ success: true, message: `${count} siswa dipindahkan ${fromClass.nama_kelas} → ${toClass.nama_kelas}` });
-      }
-    }
-
-    const successCount = results.filter(r => r.success).length;
-    const failCount = results.filter(r => !r.success).length;
-    const messages = results.map(r => r.message).join('; ');
-
-    if (failCount === 0) {
-      res.json({ success: true, message: messages });
-    } else if (successCount > 0) {
-      res.json({ success: true, message: `Sebagian berhasil: ${messages}` });
-    } else {
-      res.status(400).json({ success: false, message: messages });
-    }
-  } catch (error) {
-    console.error('Bulk promote error:', error);
-    res.status(500).json({ success: false, message: 'Error promoting students' });
   }
 });
 
@@ -2713,14 +2775,30 @@ router.put('/admin/leave-requests/:id/status', authenticateOperator, async (req,
   try {
     const { id } = req.params;
     const { status, catatan } = req.body;
-    
+
     if (!['approved', 'rejected'].includes(status)) {
       return res.status(400).json({ success: false, message: 'Status tidak valid' });
     }
-    
+
+    // Ambil nama penyetuju (approver)
+    let approverName = req.user.nama || req.user.username || 'Admin';
+    if (req.user.guru_id) {
+      try {
+        const [teacher] = await db.query('SELECT nama FROM teachers WHERE id = ?', [req.user.guru_id]);
+        if (teacher && teacher.nama) approverName = teacher.nama;
+      } catch (_) { /* fallback ke username */ }
+    }
+
+    const aksi = status === 'approved' ? 'Disetujui' : 'Ditolak';
+    // Catatan otomatis + gabung catatan manual bila diisi
+    let finalCatatan = `${aksi} oleh ${approverName}`;
+    if (catatan && String(catatan).trim() !== '') {
+      finalCatatan += ` - ${String(catatan).trim()}`;
+    }
+
     const result = await db.query(
       'UPDATE leave_requests SET status = ?, catatan = ?, updated_at = NOW() WHERE id = ?',
-      [status, catatan || null, id]
+      [status, finalCatatan, id]
     );
     
     if (result.affectedRows === 0) {

@@ -14,6 +14,16 @@ const setEl = (id, val) => {
     }
 };
 
+function checkAuth401403(response) {
+    if (response.status === 401 || response.status === 403) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.replace('login.html');
+        return true;
+    }
+    return false;
+}
+
 let currentTeacherId = null;
 let currentRuleId = null;
 let currentPage = 1;
@@ -2152,11 +2162,30 @@ function initAllUI() {
                         const option = document.createElement('option');
                         option.value = tenant.tenant_id;
                         option.textContent = tenant.nama_sekolah;
+                        option.dataset.schoolName = tenant.nama_sekolah;
                         select.appendChild(option);
+                    });
+                    select.addEventListener('change', function() {
+                        const selected = this.options[this.selectedIndex];
+                        const schoolNameInput = document.getElementById('deviceSchoolName');
+                        const tokenInput = document.getElementById('deviceRegistrationToken');
+                        if (schoolNameInput) schoolNameInput.value = selected ? selected.dataset.schoolName || '' : '';
+                        if (tokenInput && this.value) {
+                            tokenInput.value = 'YPWI-' + (this.value || 'REG').toUpperCase() + '-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+                        }
                     });
                 }
             })
             .catch(error => console.error('Error loading tenants for device modal:', error));
+
+            // Regenerate token button
+            document.getElementById('btnRegenerateToken')?.addEventListener('click', function() {
+                const tenantSelect = document.getElementById('deviceTenantId');
+                const tokenInput = document.getElementById('deviceRegistrationToken');
+                if (tenantSelect && tokenSelect.value && tokenInput) {
+                    tokenInput.value = 'YPWI-' + tenantSelect.value.toUpperCase() + '-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+                }
+            });
     });
 
 
@@ -3030,8 +3059,46 @@ window.saveStudentEdit = function () { alert('Fitur edit siswa belum tersedia');
 
 if (typeof window.loadAttendanceLogs !== 'function') {
   window.loadAttendanceLogs = async function (page = 1) {
-    const tbody = document.getElementById('attendanceTable');
-    if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-12 text-center text-gray-500">Belum ada log absensi</td></tr>';
+    try {
+      const response = await fetch('/api/admin/attendance-logs?page=' + page + '&limit=50', {
+        headers: { 'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}` }
+      });
+
+      if (checkAuth401403(response)) return;
+
+      const res = await response.json();
+
+      if (res.success) {
+        const tbody = document.getElementById('attendanceTable');
+        const items = res.data || [];
+        if (!tbody) return;
+
+        if (items.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">Tidak ada log absensi hari ini</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = items.map(log => `
+          <tr class="hover:bg-gray-50">
+            <td class="px-6 py-4 text-sm text-gray-900 font-medium">${log.nama_guru || log.teacher_id || '-'}</td>
+            <td class="px-6 py-4 text-sm text-gray-500">${log.nama_sekolah || log.tenant_id || '-'}</td>
+            <td class="px-6 py-4 text-sm text-gray-500">
+              ${log.waktu ? new Date(log.waktu).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'} WITA
+            </td>
+            <td class="px-6 py-4 text-sm text-gray-500 capitalize">${log.jenis || '-'}</td>
+            <td class="px-6 py-4 text-sm">
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
+                ${log.status === 'tepat_waktu' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+                ${log.status ? log.status.replace('_', ' ') : '-'}
+              </span>
+            </td>
+            <td class="px-6 py-4 text-sm text-gray-500 capitalize">${log.metode || '-'}</td>
+          </tr>
+        `).join('');
+      }
+    } catch (error) {
+      console.error('Gagal memuat log absensi:', error);
+    }
   };
 }
 
@@ -3326,7 +3393,7 @@ window.hideTenantLocationModal = function () {
 };
 window.hideAddDeviceModal = function () {
     const modal = document.getElementById('addDeviceModal');
-    if (modal) modal.classList.add('hidden');
+    if (modal) { modal.classList.remove('show'); modal.classList.add('hidden'); }
 };
 window.hideAddTenantModal = function () {
     const modal = document.getElementById('addTenantModal');

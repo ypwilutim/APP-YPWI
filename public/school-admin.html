@@ -592,15 +592,15 @@
 
           <!-- Promote All Class Button -->
           <button onclick="showPromoteClassModal()"
-              class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">
-              <i class="fas fa-level-up-alt mr-2"></i>Naik Kelas Massal
-            </button>
+            class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">
+            <i class="fas fa-level-up-alt mr-2"></i>Naik Kelas Massal
+          </button>
 
           <div class="overflow-x-auto">
             <table class="w-full modern-table">
               <thead class="border-b border-gray-200">
                 <tr>
-                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Nama Kelas</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Kelas</th>
                   <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Jumlah Siswa</th>
                   <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Aksi</th>
                 </tr>
@@ -951,50 +951,55 @@
               </table>
             </div>
 
-<form id="promoteForm">
-                <div class="flex justify-between items-center mb-3">
-                  <button type="button" onclick="createNewClassForPromote()"
-                    class="px-3 py-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm">
-                    <i class="fas fa-plus mr-1"></i>Buat Kelas Baru
-                  </button>
-                </div>
-                <div class="flex justify-end space-x-3">
-                  <button type="button" onclick="hidePromoteClassModal()"
-                    class="px-4 py-2 text-gray-600 hover:text-gray-800 text-sm">Batal</button>
-                  <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm"
-                    id="promoteSubmitBtn" disabled>
-                    <i class="fas fa-rocket mr-2"></i>Proses Naik Kelas
-                  </button>
-                </div>
-</form>
-             </div>
-           </div>
-         </div>
+            <form id="promoteForm">
+              <div class="flex justify-between items-center mb-3">
+                <button type="button" onclick="createNewClassForPromote()"
+                  class="px-3 py-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 text-sm">
+                  <i class="fas fa-plus mr-1"></i>Buat Kelas Baru
+                </button>
+              </div>
+              <div class="flex justify-end space-x-3">
+                <button type="button" onclick="hidePromoteClassModal()"
+                  class="px-4 py-2 text-gray-600 hover:text-gray-800 text-sm">Batal</button>
+                <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm"
+                  id="promoteSubmitBtn" disabled>
+                  <i class="fas fa-rocket mr-2"></i>Proses Naik Kelas
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
 
-         <!-- Import Options Modal -->
-         <div id="importOptionsModal" class="modal fixed inset-0 bg-black bg-opacity-50 z-50 justify-center items-center hidden">
-           <div class="main-card w-full max-w-md mx-4 bg-white">
-             <div class="p-6">
-               <div class="flex items-center justify-between mb-4">
-                 <h3 class="text-lg font-semibold">Import Data Siswa</h3>
-                 <button onclick="hideImportOptionsModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
-               </div>
-               <div class="space-y-3">
-                 <button onclick="openIncompleteImport()" class="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center">
-                   <i class="fas fa-upload mr-2"></i>Import Perbaikan Data
-                 </button>
-                 <button onclick="openNewStudentImport()" class="w-full px-4 py-3 bg-amber-600 text-white rounded-lg hover:bg-amber-700 flex items-center justify-center">
-                   <i class="fas fa-user-plus mr-2"></i>Import Siswa Baru
-                 </button>
-                 <button onclick="downloadStudentImportTemplate()" class="w-full px-4 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center justify-center">
-                   <i class="fas fa-download mr-2"></i>Download Template Import
-                 </button>
-               </div>
-             </div>
-           </div>
-         </div>
+      <!-- Import Options Modal -->
+      <div id="importOptionsModal"
+        class="modal fixed inset-0 bg-black bg-opacity-50 z-50 justify-center items-center hidden">
+        <div class="main-card w-full max-w-md mx-4 bg-white">
+          <div class="p-6">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-lg font-semibold">Import Data Siswa</h3>
+              <button onclick="hideImportOptionsModal()" class="text-gray-400 hover:text-gray-600"><i
+                  class="fas fa-times text-xl"></i></button>
+            </div>
+            <div class="space-y-3">
+              <button onclick="openIncompleteImport()"
+                class="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center">
+                <i class="fas fa-upload mr-2"></i>Import Perbaikan Data
+              </button>
+              <button onclick="openNewStudentImport()"
+                class="w-full px-4 py-3 bg-amber-600 text-white rounded-lg hover:bg-amber-700 flex items-center justify-center">
+                <i class="fas fa-user-plus mr-2"></i>Import Siswa Baru
+              </button>
+              <button onclick="downloadStudentImportTemplate()"
+                class="w-full px-4 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center justify-center">
+                <i class="fas fa-download mr-2"></i>Download Template Import
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
 
-         <!-- Location Modal (sama seperti admin-dashboard.html) -->
+      <!-- Location Modal (sama seperti admin-dashboard.html) -->
       <div id="locationModal" class="modal fixed inset-0 bg-black bg-opacity-50 z-50 justify-center items-center">
         <div class="main-card max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto bg-white">
           <div class="p-6">
@@ -1143,8 +1148,8 @@
           window.location.href = 'dashboard.html';
         }
 
-const tenantId = window.tenantId;
-         const schoolName = urlParams.get('school') || userAssignments.find(a => a.tenant_id === window.tenantId)?.nama_sekolah || window.tenantId;
+        const tenantId = window.tenantId;
+        const schoolName = urlParams.get('school') || userAssignments.find(a => a.tenant_id === window.tenantId)?.nama_sekolah || window.tenantId;
         if (!tenantId) { alert('Parameter tenant tidak ditemukan.'); window.location.href = 'dashboard.html'; }
 
         document.getElementById('schoolNameHeader').textContent = schoolName || tenantId;
@@ -1169,6 +1174,14 @@ const tenantId = window.tenantId;
         function apiUrl(path) {
           const sep = path.includes('?') ? '&' : '?';
           return '/api' + path + sep + 'tenant_id=' + encodeURIComponent(tenantId);
+        }
+
+        function formatKelas(tingkatan, nama_kelas) {
+          const t = (tingkatan != null && tingkatan !== '') ? String(tingkatan) : '';
+          const n = (nama_kelas != null && nama_kelas !== '') ? String(nama_kelas) : '';
+          if (!t && !n) return '-';
+          if (!n) return t;
+          return n.length <= 1 ? `${t}${n}` : `${t} ${n}`;
         }
 
         let authToken = token;
@@ -1253,23 +1266,25 @@ const tenantId = window.tenantId;
           } catch (e) { console.error('[DASHBOARD]', e); }
         }
 
-async function loadAttendanceChart() {
-           try {
-             const r = await fetch(apiUrl('/admin/attendance-logs?tenant_id=' + tenantId), { headers: { 'Authorization': `Bearer ${authToken}` } });
-             if (!r.ok) return;
+        async function loadAttendanceChart() {
+          try {
+            const r = await fetch(apiUrl('/admin/attendance-logs?tenant_id=' + tenantId), { headers: { 'Authorization': `Bearer ${authToken}` } });
+            if (!r.ok) return;
             const d = await r.json();
             if (!d.success) return;
             const days = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
             const now = new Date();
-            const dow = now.getDay();
             const labels = [];
-            for (let i = 6; i >= 0; i--) { const dd = new Date(now); dd.setDate(dd.getDate() - i); labels.push(days[(dow - i + 7) % 7] + ', ' + dd.getDate()); }
+            for (let i = 6; i >= 0; i--) { const dd = new Date(now); dd.setDate(dd.getDate() - i); const month = String(dd.getMonth() + 1).padStart(2, '0'); labels.push(days[(dd.getDay() + 6) % 7] + ', ' + dd.getDate() + '/' + month); }
             const todayStr = now.toISOString().split('T')[0];
             const counts = {};
             labels.forEach(l => counts[l] = { masuk: 0, pulang: 0 });
             if (d.data) d.data.forEach(log => {
-              const ll = days[new Date(log.waktu_scan).getDay()] + ', ' + new Date(log.waktu_scan).getDate();
-              if (counts[ll] && (new Date(log.waktu_scan).toISOString().split('T')[0] === todayStr || labels.includes(ll))) {
+              const logDate = new Date(log.waktu_scan);
+              const logDay = days[(logDate.getDay() + 6) % 7];
+              const logMonth = String(logDate.getMonth() + 1).padStart(2, '0');
+              const ll = logDay + ', ' + logDate.getDate() + '/' + logMonth;
+              if (counts[ll] && (logDate.toISOString().split('T')[0] === todayStr || labels.includes(ll))) {
                 if (log.jenis === 'masuk') counts[ll].masuk++; else if (log.jenis === 'pulang') counts[ll].pulang++;
               }
             });
@@ -1395,7 +1410,7 @@ async function loadAttendanceChart() {
                 ? '<tr><td colspan="3" class="px-4 py-12 text-center text-gray-500">Belum ada data kelas</td></tr>'
                 : classes.map(c => `
                 <tr class="hover:bg-gray-50">
-                  <td class="px-4 py-3 text-sm text-gray-900 font-medium">${c.nama_kelas || '-'}</td>
+                  <td class="px-4 py-3 text-sm text-gray-900 font-medium">${formatKelas(c.tingkatan, c.nama_kelas)}</td>
                   <td class="px-4 py-3 text-sm text-gray-500" id="class-count-${c.id}">Memuat...</td>
                   <td class="px-4 py-3 text-sm space-x-1">
                     <button onclick="editClass(${c.id})" class="inline-flex items-center p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md" title="Edit"><i class="fas fa-edit text-xs"></i></button>
@@ -1686,6 +1701,7 @@ async function loadAttendanceChart() {
           tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-12 text-center text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>Memuat kelas...</td></tr>';
           document.getElementById('promoteSubmitBtn').disabled = true;
           window.promoteMappings = {};
+          window.promoteGraduateSet = new Set();
 
           try {
             const [classesRes, studentsRes] = await Promise.all([
@@ -1702,36 +1718,37 @@ async function loadAttendanceChart() {
               const studentsData = await studentsRes.json();
               const allStudents = studentsData.success ? (studentsData.data || []) : [];
               allStudents.forEach(s => {
-                if (s.class_id) {
-                  studentCounts[s.class_id] = (studentCounts[s.class_id] || 0) + 1;
+                const classKey = String(s.class_id || '');
+                if (classKey) {
+                  studentCounts[classKey] = (studentCounts[classKey] || 0) + 1;
                 }
               });
             }
 
             window.allPromotionClasses = classes;
+            window.promotionStudentCounts = studentCounts;
 
-            const toOptions = classes.map(c => `<option value="${c.id}">${c.nama_kelas}</option>`).join('');
             const currentYear = new Date().getFullYear();
 
             tbody.innerHTML = classes.length === 0
               ? '<tr><td colspan="4" class="px-4 py-12 text-center text-gray-500">Belum ada kelas</td></tr>'
               : classes.map(c => {
-                const count = studentCounts[c.id] || 0;
+                const count = studentCounts[String(c.id)] || 0;
                 return `
-                <tr data-class-id="${c.id}" data-class-name="${c.nama_kelas}">
-                  <td class="px-4 py-3 text-sm text-gray-900 font-medium">${c.nama_kelas}</td>
-                  <td class="px-4 py-3 text-sm text-gray-500">${count} siswa</td>
-                  <td class="px-4 py-3">
-                    <select class="promote-to-select w-full px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500" data-from-id="${c.id}">
-                      <option value="">Pilih tujuan</option>
-                      ${toOptions}
-                      <option value="graduate_${currentYear}">Luluskan (Angkatan ${currentYear})</option>
-                    </select>
-                  </td>
-                  <td class="px-4 py-3 text-sm text-gray-400" id="status-${c.id}">-</td>
-                </tr>
-              `;
+                  <tr data-class-id="${c.id}" data-class-name="${c.nama_kelas}">
+                    <td class="px-4 py-3 text-sm text-gray-900 font-medium">${c.nama_kelas}</td>
+                    <td class="px-4 py-3 text-sm text-gray-500">${count} siswa</td>
+                    <td class="px-4 py-3">
+                      <select class="promote-to-select w-full px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500" data-from-id="${c.id}">
+                        <option value="">Pilih tujuan</option>
+                      </select>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-400" id="status-${c.id}">-</td>
+                  </tr>
+                `;
               }).join('');
+
+            updatePromoteOptions();
 
             document.querySelectorAll('.promote-to-select').forEach(select => {
               select.addEventListener('change', function () {
@@ -1745,15 +1762,19 @@ async function loadAttendanceChart() {
                   }
                   if (toValue.startsWith('graduate_')) {
                     window.promoteMappings[fromId] = { action: 'graduate' };
+                    window.promoteGraduateSet.add(fromId);
                     document.getElementById('status-' + fromId).innerHTML = '<span class="text-green-600"><i class="fas fa-check"></i> Luluskan</span>';
                   } else {
                     window.promoteMappings[fromId] = { to_class_id: toValue, action: 'move' };
+                    window.promoteGraduateSet.delete(fromId);
                     document.getElementById('status-' + fromId).innerHTML = '<span class="text-green-600"><i class="fas fa-check"></i> Dipilih</span>';
                   }
                 } else {
                   delete window.promoteMappings[fromId];
+                  window.promoteGraduateSet.delete(fromId);
                   document.getElementById('status-' + fromId).textContent = '-';
                 }
+                updatePromoteOptions();
                 updatePromoteSubmitState();
               });
             });
@@ -1766,17 +1787,71 @@ async function loadAttendanceChart() {
           document.getElementById('promoteClassModal').classList.add('show');
         };
 
-        function updatePromoteSubmitState() {
-          const hasMappings = Object.keys(window.promoteMappings).length > 0;
-          document.getElementById('promoteSubmitBtn').disabled = !hasMappings;
+        function updatePromoteOptions() {
+          const classes = window.allPromotionClasses || [];
+          const currentYear = new Date().getFullYear();
+          const mappings = window.promoteMappings || {};
+          const graduateSet = window.promoteGraduateSet || new Set();
+
+          document.querySelectorAll('.promote-to-select').forEach(select => {
+            const fromId = select.dataset.fromId;
+            const currentValue = select.value;
+            const currentMapping = mappings[fromId] || null;
+
+            const options = ['<option value="">Pilih tujuan</option>'];
+            classes.forEach(c => {
+              const cid = String(c.id);
+              if (cid === fromId) return;
+
+              // 1. Kelas yang sudah menjadi tujuan milik dropdown ini -> TAMPIL (locked)
+              const isLockedTarget = currentMapping && String(currentMapping.to_class_id) === cid;
+              if (isLockedTarget) {
+                options.push(`<option value="${c.id}">${c.nama_kelas}</option>`);
+                return;
+              }
+
+              // 2. Kelas yang sudah jadi tujuan kelas lain -> HILANG dari dropdown ini
+              //    (kecuali locked target di dropdown pemilih).
+              const targetedByOthers = Object.entries(mappings).some(([mappingFromId, m]) => {
+                return mappingFromId !== fromId && m.action === 'move' && String(m.to_class_id) === cid;
+              });
+              if (targetedByOthers) return;
+
+              // 3. Kelas yang belum dipilih siapa pun -> tampilkan jika:
+              //    - awalnya kosong, ATAU
+              //    - memilih Luluskan, ATAU
+              //    - sudah dipilih aksi (Pindah) oleh kelas ini sendiri
+              const isEmpty = !(window.promotionStudentCounts[cid] || 0);
+              const hasMove = !!mappings[cid];
+              if (isEmpty || graduateSet.has(cid) || hasMove) {
+                options.push(`<option value="${c.id}">${c.nama_kelas}</option>`);
+              }
+            });
+            options.push(`<option value="graduate_${currentYear}">Luluskan (Angkatan ${currentYear})</option>`);
+
+            select.innerHTML = options.join('');
+
+            if (currentValue && !select.querySelector(`option[value="${currentValue}"]`)) {
+              select.value = '';
+            } else if (currentValue) {
+              select.value = currentValue;
+            }
+          });
         }
 
-function hidePromoteClassModal() {
-           document.getElementById('promoteClassModal').classList.remove('show');
-           window.promoteMappings = {};
-         }
+        function updatePromoteSubmitState() {
+          const totalClasses = (window.allPromotionClasses || []).length;
+          const selectedCount = Object.keys(window.promoteMappings || {}).length;
+          document.getElementById('promoteSubmitBtn').disabled = totalClasses === 0 || selectedCount === 0;
+        }
 
-         async function createNewClassForPromote() {
+        function hidePromoteClassModal() {
+          document.getElementById('promoteClassModal').classList.remove('show');
+          window.promoteMappings = {};
+          window.promoteGraduateSet = new Set();
+        }
+
+        async function createNewClassForPromote() {
           const { value: namaKelas } = await Swal.fire({
             title: 'Buat Kelas Baru',
             input: 'text',
@@ -1902,7 +1977,7 @@ function hidePromoteClassModal() {
               <td class="px-4 py-3 text-sm text-gray-900 font-medium">${s.nama_siswa || '-'} ${!s.nama_kelas || s.class_id === null ? '<span class="text-xs text-yellow-600 font-semibold">(Belum ada kelas)</span>' : ''}</td>
               <td class="px-4 py-3 text-sm text-gray-500">${s.nisn || '-'}</td>
               <td class="px-4 py-3 text-sm text-gray-500">${s.nis || '-'}</td>
-              <td class="px-4 py-3 text-sm text-gray-500">${s.nama_kelas || '-'}</td>
+               <td class="px-4 py-3 text-sm text-gray-500">${formatKelas(s.tingkatan, s.nama_kelas)}</td>
               <td class="px-4 py-3 text-sm text-gray-500">${s.nama_orang_tua || '-'}<br><small>${s.no_wa_ortu || ''}</small></td>
               <td class="px-4 py-3 text-sm text-gray-500">Rp ${(s.iuran_bulanan || 0).toLocaleString('id-ID')}</td>
               <td class="px-4 py-3 text-sm space-x-1">
@@ -1995,7 +2070,7 @@ function hidePromoteClassModal() {
             <div class="flex items-start justify-between">
               <div>
                 <h4 class="font-medium text-gray-900">${s.nama_siswa || '-'}</h4>
-                <p class="text-xs text-gray-500 mt-0.5">${s.nama_kelas || '-'} • NISN: ${s.nisn || '-'}</p>
+                 <p class="text-xs text-gray-500 mt-0.5">${formatKelas(s.tingkatan, s.nama_kelas)} • NISN: ${s.nisn || '-'}</p>
               </div>
               <button onclick="switchTab('students'); closeIncompleteStudentsModal();" class="text-blue-600 hover:text-blue-800 text-sm font-medium">Lengkapi <i class="fas fa-arrow-right ml-1"></i></button>
             </div>
@@ -2020,57 +2095,57 @@ function hidePromoteClassModal() {
         };
 
         // Auto-show only if there are incomplete students
-window.autoShowIncompleteStudentsModal = async function () {
-           const students = await fetchIncompleteStudents();
-           if (students && students.length > 0) {
-             renderIncompleteStudents(students);
-             const modal = document.getElementById('incompleteStudentsModal');
-             if (modal) modal.classList.add('show');
-           }
-         };
+        window.autoShowIncompleteStudentsModal = async function () {
+          const students = await fetchIncompleteStudents();
+          if (students && students.length > 0) {
+            renderIncompleteStudents(students);
+            const modal = document.getElementById('incompleteStudentsModal');
+            if (modal) modal.classList.add('show');
+          }
+        };
 
-         // Download template import siswa baru
-window.downloadStudentImportTemplate = async function () {
-           try {
-             const url = apiUrl('/admin/students/import-template?tenant_id=' + tenantId);
-             const r = await fetch(url, { headers: { 'Authorization': `Bearer ${authToken}` } });
-             if (!r.ok) { Swal.fire('Gagal', 'Tidak dapat mengunduh template', 'error'); return; }
-             const blob = await r.blob();
-             const downloadUrl = window.URL.createObjectURL(blob);
-             const a = document.createElement('a');
-             a.href = downloadUrl;
-             a.download = 'template_import_siswa_baru.xlsx';
-             document.body.appendChild(a);
-             a.click();
-             a.remove();
-             window.URL.revokeObjectURL(downloadUrl);
-           } catch (e) {
-             console.error('[TEMPLATE]', e);
-             Swal.fire('Error', 'Terjadi kesalahan saat download template', 'error');
-           }
-         };
+        // Download template import siswa baru
+        window.downloadStudentImportTemplate = async function () {
+          try {
+            const url = apiUrl('/admin/students/import-template?tenant_id=' + tenantId);
+            const r = await fetch(url, { headers: { 'Authorization': `Bearer ${authToken}` } });
+            if (!r.ok) { Swal.fire('Gagal', 'Tidak dapat mengunduh template', 'error'); return; }
+            const blob = await r.blob();
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = downloadUrl;
+            a.download = 'template_import_siswa_baru.xlsx';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            window.URL.revokeObjectURL(downloadUrl);
+          } catch (e) {
+            console.error('[TEMPLATE]', e);
+            Swal.fire('Error', 'Terjadi kesalahan saat download template', 'error');
+          }
+        };
 
-         // Import Options Modal
-         window.showImportModal = function () {
-           document.getElementById('importOptionsModal').classList.remove('hidden');
-           document.getElementById('importOptionsModal').classList.add('show');
-         };
+        // Import Options Modal
+        window.showImportModal = function () {
+          document.getElementById('importOptionsModal').classList.remove('hidden');
+          document.getElementById('importOptionsModal').classList.add('show');
+        };
 
-         window.hideImportOptionsModal = function () {
-           document.getElementById('importOptionsModal').classList.remove('show');
-         };
+        window.hideImportOptionsModal = function () {
+          document.getElementById('importOptionsModal').classList.remove('show');
+        };
 
-         window.openIncompleteImport = function () {
-           hideImportOptionsModal();
-           document.getElementById('studentImportInput').click();
-         };
+        window.openIncompleteImport = function () {
+          hideImportOptionsModal();
+          document.getElementById('studentImportInput').click();
+        };
 
-         window.openNewStudentImport = function () {
-           hideImportOptionsModal();
-           document.getElementById('studentNewImportInput').click();
-         };
+        window.openNewStudentImport = function () {
+          hideImportOptionsModal();
+          document.getElementById('studentNewImportInput').click();
+        };
 
-         // Export incomplete students to Excel (authenticated download)
+        // Export incomplete students to Excel (authenticated download)
         window.exportIncompleteStudents = async function () {
           try {
             const url = apiUrl('/admin/students/incomplete/export');
@@ -2114,104 +2189,104 @@ window.downloadStudentImportTemplate = async function () {
           }
         };
 
-// Import edited Excel to update students with progress percentage
-         window.importIncompleteStudents = function (input) {
-           const file = input.files && input.files[0];
-           if (!file) return;
-           const formData = new FormData();
-           formData.append('file', file);
-           formData.append('tenant_id', tenantId);
+        // Import edited Excel to update students with progress percentage
+        window.importIncompleteStudents = function (input) {
+          const file = input.files && input.files[0];
+          if (!file) return;
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('tenant_id', tenantId);
 
-           const swalProgress = Swal.fire({
-             title: 'Mengupload...',
-             html: '<div id="importProgress">Memulai upload...<br><progress class="w-full h-2" value="0" max="100"></progress><div id="progressPercent" class="text-sm text-gray-600 mt-1">0%</div></div>',
-             allowOutsideClick: false,
-             showConfirmButton: false
-           });
+          const swalProgress = Swal.fire({
+            title: 'Mengupload...',
+            html: '<div id="importProgress">Memulai upload...<br><progress class="w-full h-2" value="0" max="100"></progress><div id="progressPercent" class="text-sm text-gray-600 mt-1">0%</div></div>',
+            allowOutsideClick: false,
+            showConfirmButton: false
+          });
 
-           const xhr = new XMLHttpRequest();
-           xhr.upload.addEventListener('progress', function (e) {
-             if (e.lengthComputable) {
-               const percent = Math.round((e.loaded / e.total) * 100);
-               const progressBar = document.querySelector('#importProgress progress');
-               const progressText = document.getElementById('progressPercent');
-               if (progressBar) progressBar.value = percent;
-               if (progressText) progressText.textContent = percent + '%';
-             }
-           });
+          const xhr = new XMLHttpRequest();
+          xhr.upload.addEventListener('progress', function (e) {
+            if (e.lengthComputable) {
+              const percent = Math.round((e.loaded / e.total) * 100);
+              const progressBar = document.querySelector('#importProgress progress');
+              const progressText = document.getElementById('progressPercent');
+              if (progressBar) progressBar.value = percent;
+              if (progressText) progressText.textContent = percent + '%';
+            }
+          });
 
-           xhr.onreadystatechange = async function () {
-             if (xhr.readyState === 4) {
-               const d = xhr.responseText ? JSON.parse(xhr.responseText) : {};
-               if (xhr.status === 200 && d.success) {
-                 let msg = `${d.updated} siswa berhasil diperbarui.`;
-                 if (d.errors && d.errors.length) msg += `\n${d.errors.length} baris gagal:\n` + d.errors.slice(0, 10).join('\n');
-                 await Swal.fire('Selesai', msg, d.errors && d.errors.length ? 'warning' : 'success');
-                 loadStudents(currentStudentPage);
-                 const modal = document.getElementById('incompleteStudentsModal');
-                 if (modal && modal.classList.contains('show')) {
-                   const students = await fetchIncompleteStudents();
-                   renderIncompleteStudents(students);
-                 }
-               } else {
-                 Swal.fire('Gagal', d.message || 'Import gagal', 'error');
-               }
-               input.value = '';
-             }
-           };
-
-           xhr.open('POST', apiUrl('/admin/students/incomplete/import'));
-           xhr.setRequestHeader('Authorization', 'Bearer ' + authToken);
-           xhr.send(formData);
-         };
-
-         // Import new students from Excel with progress percentage
-         window.importNewStudents = function (input) {
-           const file = input.files && input.files[0];
-           if (!file) return;
-           const formData = new FormData();
-           formData.append('file', file);
-           formData.append('tenant_id', tenantId);
-
-           const swalProgress = Swal.fire({
-             title: 'Mengupload...',
-             html: '<div id="importProgress">Memulai upload...<br><progress class="w-full h-2" value="0" max="100"></progress><div id="progressPercent" class="text-sm text-gray-600 mt-1">0%</div></div>',
-             allowOutsideClick: false,
-             showConfirmButton: false
-           });
-
-           const xhr = new XMLHttpRequest();
-           xhr.upload.addEventListener('progress', function (e) {
-             if (e.lengthComputable) {
-               const percent = Math.round((e.loaded / e.total) * 100);
-               const progressBar = document.querySelector('#importProgress progress');
-               const progressText = document.getElementById('progressPercent');
-               if (progressBar) progressBar.value = percent;
-               if (progressText) progressText.textContent = percent + '%';
-             }
-           });
-
-           xhr.onreadystatechange = async function () {
-             if (xhr.readyState === 4) {
-               const d = xhr.responseText ? JSON.parse(xhr.responseText) : {};
-               if (xhr.status === 200 && d.success) {
-                 let msg = `${d.created} siswa baru berhasil ditambahkan.`;
-                 if (d.errors && d.errors.length) msg += `\n${d.errors.length} baris gagal:\n` + d.errors.slice(0, 10).join('\n');
-                 await Swal.fire('Selesai', msg, d.errors && d.errors.length ? 'warning' : 'success');
-                 loadStudents(currentStudentPage);
-               } else {
-                 Swal.fire('Gagal', d.message || 'Import gagal', 'error');
-               }
-               input.value = '';
-             }
-           };
-
-           xhr.open('POST', apiUrl('/admin/students/import'));
-           xhr.setRequestHeader('Authorization', 'Bearer ' + authToken);
-xhr.send(formData);
+          xhr.onreadystatechange = async function () {
+            if (xhr.readyState === 4) {
+              const d = xhr.responseText ? JSON.parse(xhr.responseText) : {};
+              if (xhr.status === 200 && d.success) {
+                let msg = `${d.updated} siswa berhasil diperbarui.`;
+                if (d.errors && d.errors.length) msg += `\n${d.errors.length} baris gagal:\n` + d.errors.slice(0, 10).join('\n');
+                await Swal.fire('Selesai', msg, d.errors && d.errors.length ? 'warning' : 'success');
+                loadStudents(currentStudentPage);
+                const modal = document.getElementById('incompleteStudentsModal');
+                if (modal && modal.classList.contains('show')) {
+                  const students = await fetchIncompleteStudents();
+                  renderIncompleteStudents(students);
+                }
+              } else {
+                Swal.fire('Gagal', d.message || 'Import gagal', 'error');
+              }
+              input.value = '';
+            }
           };
 
-         // Edit student - opens modal with all fields (delegates to window.editStudent from admin-dashboard.js)
+          xhr.open('POST', apiUrl('/admin/students/incomplete/import'));
+          xhr.setRequestHeader('Authorization', 'Bearer ' + authToken);
+          xhr.send(formData);
+        };
+
+        // Import new students from Excel with progress percentage
+        window.importNewStudents = function (input) {
+          const file = input.files && input.files[0];
+          if (!file) return;
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('tenant_id', tenantId);
+
+          const swalProgress = Swal.fire({
+            title: 'Mengupload...',
+            html: '<div id="importProgress">Memulai upload...<br><progress class="w-full h-2" value="0" max="100"></progress><div id="progressPercent" class="text-sm text-gray-600 mt-1">0%</div></div>',
+            allowOutsideClick: false,
+            showConfirmButton: false
+          });
+
+          const xhr = new XMLHttpRequest();
+          xhr.upload.addEventListener('progress', function (e) {
+            if (e.lengthComputable) {
+              const percent = Math.round((e.loaded / e.total) * 100);
+              const progressBar = document.querySelector('#importProgress progress');
+              const progressText = document.getElementById('progressPercent');
+              if (progressBar) progressBar.value = percent;
+              if (progressText) progressText.textContent = percent + '%';
+            }
+          });
+
+          xhr.onreadystatechange = async function () {
+            if (xhr.readyState === 4) {
+              const d = xhr.responseText ? JSON.parse(xhr.responseText) : {};
+              if (xhr.status === 200 && d.success) {
+                let msg = `${d.created} siswa baru berhasil ditambahkan.`;
+                if (d.errors && d.errors.length) msg += `\n${d.errors.length} baris gagal:\n` + d.errors.slice(0, 10).join('\n');
+                await Swal.fire('Selesai', msg, d.errors && d.errors.length ? 'warning' : 'success');
+                loadStudents(currentStudentPage);
+              } else {
+                Swal.fire('Gagal', d.message || 'Import gagal', 'error');
+              }
+              input.value = '';
+            }
+          };
+
+          xhr.open('POST', apiUrl('/admin/students/import'));
+          xhr.setRequestHeader('Authorization', 'Bearer ' + authToken);
+          xhr.send(formData);
+        };
+
+        // Edit student - opens modal with all fields (delegates to window.editStudent from admin-dashboard.js)
         async function editStudent(id) {
           if (typeof window.editStudent === 'function') {
             window.editStudent(id);
@@ -2629,27 +2704,27 @@ xhr.send(formData);
         });
 
         // ===== ATTENDANCE =====
-async function loadAttendanceLogs() {
-            try {
-              const df = document.getElementById('attendanceDateFilter');
-              if (df && !df.value) {
-                const today = new Date().toISOString().slice(0, 10);
-                df.value = today;
-              }
-              const dateVal = df?.value || '';
-              const sf = document.getElementById('attendanceStatusFilter')?.value || '';
-              let url = apiUrl('/admin/attendance-logs');
-              if (dateVal) url += '&date=' + encodeURIComponent(dateVal);
-              if (sf) url += '&status=' + encodeURIComponent(sf);
-              const r = await fetch(url, { headers: { 'Authorization': `Bearer ${authToken}` } });
-              if (checkAuth401403(r)) return;
-              const d = await r.json();
-              const tb = document.getElementById('attendanceTable');
-              if (d.success && d.data.length > 0) {
-                tb.innerHTML = d.data.map(a => `<tr class="hover:bg-gray-50"><td class="px-4 py-3 text-sm text-gray-900">${a.nama || '-'}</td><td class="px-4 py-3 text-sm text-gray-500">${a.jenis === 'masuk' ? 'Masuk' : 'Pulang'}</td><td class="px-4 py-3 text-sm text-gray-500">${new Date(a.waktu_scan).toLocaleString('id-ID')}</td><td class="px-4 py-3 text-sm"><span class="px-2 py-1 rounded-full text-xs font-semibold ${a.status === 'tepat_waktu' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">${a.status === 'tepat_waktu' ? 'Tepat Waktu' : 'Terlambat'}</span></td><td class="px-4 py-3 text-sm text-gray-500">${a.metode || '-'}</td></tr>`).join('');
-              } else tb.innerHTML = '<tr><td colspan="5" class="px-4 py-12 text-center text-gray-500">Belum ada data kehadiran untuk tanggal ini</td></tr>';
-            } catch (e) { console.error('[ATTENDANCE LOGS]', e); }
-          }
+        async function loadAttendanceLogs() {
+          try {
+            const df = document.getElementById('attendanceDateFilter');
+            if (df && !df.value) {
+              const today = new Date().toISOString().slice(0, 10);
+              df.value = today;
+            }
+            const dateVal = df?.value || '';
+            const sf = document.getElementById('attendanceStatusFilter')?.value || '';
+            let url = apiUrl('/admin/attendance-logs');
+            if (dateVal) url += '&date=' + encodeURIComponent(dateVal);
+            if (sf) url += '&status=' + encodeURIComponent(sf);
+            const r = await fetch(url, { headers: { 'Authorization': `Bearer ${authToken}` } });
+            if (checkAuth401403(r)) return;
+            const d = await r.json();
+            const tb = document.getElementById('attendanceTable');
+            if (d.success && d.data.length > 0) {
+              tb.innerHTML = d.data.map(a => `<tr class="hover:bg-gray-50"><td class="px-4 py-3 text-sm text-gray-900">${a.nama || '-'}</td><td class="px-4 py-3 text-sm text-gray-500">${a.jenis === 'masuk' ? 'Masuk' : 'Pulang'}</td><td class="px-4 py-3 text-sm text-gray-500">${new Date(a.waktu_scan).toLocaleString('id-ID')}</td><td class="px-4 py-3 text-sm"><span class="px-2 py-1 rounded-full text-xs font-semibold ${a.status === 'tepat_waktu' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">${a.status === 'tepat_waktu' ? 'Tepat Waktu' : 'Terlambat'}</span></td><td class="px-4 py-3 text-sm text-gray-500">${a.metode || '-'}</td></tr>`).join('');
+            } else tb.innerHTML = '<tr><td colspan="5" class="px-4 py-12 text-center text-gray-500">Belum ada data kehadiran untuk tanggal ini</td></tr>';
+          } catch (e) { console.error('[ATTENDANCE LOGS]', e); }
+        }
 
         document.getElementById('attendanceDateFilter')?.addEventListener('change', loadAttendanceLogs);
         document.getElementById('attendanceStatusFilter')?.addEventListener('change', loadAttendanceLogs);
@@ -3022,17 +3097,17 @@ async function loadAttendanceLogs() {
 
         // ===== SCANNER DEVICE MODAL =====
         function showAddScannerDeviceModal() {
+          const modal = document.getElementById('scannerDeviceModal');
           const tokenInput = document.getElementById('scannerDeviceToken');
+          if (modal) { modal.classList.remove('hidden'); modal.classList.add('show'); }
 
           // Generate random token (6 digit)
           if (tokenInput) tokenInput.value = window.generateScannerToken();
-
-          document.getElementById('scannerDeviceModal').classList.add('show');
         }
 
         function hideScannerDeviceModal() {
           const modal = document.getElementById('scannerDeviceModal');
-          if (modal) modal.classList.remove('show');
+          if (modal) { modal.classList.remove('show'); modal.classList.add('hidden'); }
         }
 
         async function submitScannerDeviceForm() {

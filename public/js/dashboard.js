@@ -2550,3 +2550,136 @@ function closeAllUnitsSummaryModal() {
     const modal = document.getElementById('allUnitsSummaryModal');
     if (modal) modal.style.display = 'none';
 }
+
+// ============================================================
+// EMAIL CONFIRMATION MODAL (SIMPLE, NO OTP)
+// ============================================================
+
+function isEmailVerified() {
+    return localStorage.getItem('email_verified') === 'true';
+}
+
+function setEmailVerified() {
+    localStorage.setItem('email_verified', 'true');
+    localStorage.setItem('email_verified_at', new Date().toISOString());
+}
+
+function showEmailVerificationModal() {
+    const modal = document.getElementById('emailVerificationModal');
+    if (modal) {
+        modal.style.display = 'flex';
+        loadTeacherEmailForConfirmation();
+    }
+}
+
+function closeEmailVerificationModal() {
+    const modal = document.getElementById('emailVerificationModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+async function loadTeacherEmailForConfirmation() {
+    try {
+        const response = await fetch('/api/teacher/info', {
+            headers: { 'Authorization': 'Bearer ' + (window.token || localStorage.getItem('token')) }
+        });
+        const data = await response.json();
+        if (data.success && data.teacher) {
+            const emailInput = document.getElementById('verifyEmailInput');
+            if (emailInput && data.teacher.email) {
+                emailInput.value = data.teacher.email;
+            }
+        }
+    } catch (error) {
+        console.error('Error loading teacher email:', error);
+    }
+}
+
+async function confirmEmail() {
+    const emailInput = document.getElementById('verifyEmailInput');
+    const confirmBtn = document.getElementById('confirmEmailBtn');
+    const email = emailInput ? emailInput.value.trim() : '';
+
+    if (!email) {
+        Swal.fire({ title: 'Gagal', text: 'Email wajib diisi', icon: 'error', confirmButtonColor: '#dc2626' });
+        return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        Swal.fire({ title: 'Gagal', text: 'Format email tidak valid', icon: 'error', confirmButtonColor: '#dc2626' });
+        return;
+    }
+
+    if (confirmBtn) {
+        confirmBtn.disabled = true;
+        confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin" style="margin-right: 0.4rem;"></i> Menyimpan...';
+    }
+
+    try {
+        const response = await fetch('/api/auth/update-email', {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + (window.token || localStorage.getItem('token'))
+            },
+            body: JSON.stringify({ email })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            setEmailVerified();
+            Swal.fire({ title: 'Berhasil', text: 'Email berhasil diperbarui dan diverifikasi', icon: 'success', confirmButtonColor: '#15803d' });
+            closeEmailVerificationModal();
+        } else {
+            Swal.fire({ title: 'Gagal', text: result.message, icon: 'error', confirmButtonColor: '#dc2626' });
+            if (confirmBtn) {
+                confirmBtn.disabled = false;
+                confirmBtn.innerHTML = '<i class="fas fa-check" style="margin-right: 0.4rem;"></i> Ya, Email Sudah Benar';
+            }
+        }
+    } catch (error) {
+        console.error('Confirm email error:', error);
+        Swal.fire({ title: 'Error', text: 'Terjadi kesalahan jaringan', icon: 'error', confirmButtonColor: '#dc2626' });
+        if (confirmBtn) {
+            confirmBtn.disabled = false;
+            confirmBtn.innerHTML = '<i class="fas fa-check" style="margin-right: 0.4rem;"></i> Ya, Email Sudah Benar';
+        }
+    }
+}
+
+// Prevent closing email confirmation modal by clicking overlay
+document.addEventListener('click', function (e) {
+    const emailVerifModal = document.getElementById('emailVerificationModal');
+    if (emailVerifModal && emailVerifModal.style.display === 'flex') {
+        if (e.target === emailVerifModal) {
+            e.stopPropagation();
+            e.preventDefault();
+        }
+    }
+}, true);
+
+// Check email confirmation status on page load
+async function checkEmailVerification() {
+    if (isEmailVerified()) return;
+
+    try {
+        const response = await fetch('/api/teacher/info', {
+            headers: { 'Authorization': 'Bearer ' + (window.token || localStorage.getItem('token')) }
+        });
+        const data = await response.json();
+        if (data.success && data.teacher && data.teacher.email) {
+            showEmailVerificationModal();
+        }
+    } catch (error) {
+        console.error('Error checking email verification:', error);
+    }
+}
+
+// Initialize email verification check when dashboard loads
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', checkEmailVerification);
+} else {
+    checkEmailVerification();
+}

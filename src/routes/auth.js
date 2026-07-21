@@ -159,8 +159,9 @@ router.post('/auth/login', async (req, res) => {
       redirectPage = 'admin-dashboard.html';
     } else if (user.role === 'guru') {
       redirectPage = 'dashboard.html';
-    } else if (isBendahara) {
-      redirectPage = 'treasurer-dashboard.html';
+    } else if (user.role === 'bendahara') {
+      // YPWILUTIM gets full dashboard, other schools get limited dashboard
+      redirectPage = user.tenant_id === 'YPWILUTIM' ? 'bendahara-dashboard.html' : 'bendahara-sekolah.html';
     }
 
     return res.json({
@@ -387,6 +388,36 @@ router.post('/forgot-password/reset', async (req, res) => {
 
   } catch (error) {
     console.error('[RESET PASSWORD ERROR]', error.message);
+    res.status(500).json({ success: false, message: 'Terjadi kesalahan sistem' });
+  }
+});
+
+router.put('/auth/update-email', authenticateToken, async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ success: false, message: 'Email wajib diisi' });
+    }
+
+    if (!validator.isEmail(email)) {
+      return res.status(400).json({ success: false, message: 'Format email tidak valid' });
+    }
+
+    const teacherResult = await db.query('UPDATE teachers SET email = ?, updated_at = NOW() WHERE id = ?', [email, req.user.guru_id]);
+
+    if (teacherResult.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: 'Guru tidak ditemukan' });
+    }
+
+    const userResult = await db.query('UPDATE users SET username = ?, updated_at = NOW() WHERE id = ?', [email, req.user.id]);
+
+    res.json({
+      success: true,
+      message: 'Email berhasil diperbarui'
+    });
+  } catch (error) {
+    console.error('[UPDATE EMAIL ERROR]', error.message);
     res.status(500).json({ success: false, message: 'Terjadi kesalahan sistem' });
   }
 });

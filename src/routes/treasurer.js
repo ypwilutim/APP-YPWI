@@ -1555,7 +1555,7 @@ router.get('/treasurer/bendahara/saldo', authenticateBendahara, async (req, res)
 
     const query = `
       SELECT s.id, s.nama_siswa, s.nisn, s.tenant_id, tn.nama_sekolah,
-        s.iuran_bulanan, COALESCE(ss.saldo, 0) as saldo
+        s.iuran_bulanan, COALESCE(ss.saldo, 0) as saldo, s.kelas, s.tingkatan, s.nama_kelas
       FROM students s
       JOIN tenants tn ON s.tenant_id = tn.tenant_id
       LEFT JOIN saldo_siswa ss ON ss.student_id = s.id
@@ -1580,6 +1580,7 @@ router.get('/treasurer/bendahara/saldo', authenticateBendahara, async (req, res)
 
     res.json({
       success: true,
+      total: summary.total_siswa,
       data: data.map(d => ({
         ...d,
         saldo: parseFloat(d.saldo) || 0,
@@ -1950,6 +1951,99 @@ router.get('/treasurer/bsi/transactions', authenticateToken, authenticateOperato
     res.json({ success: true, data: transactions });
   } catch (e) {
     res.status(500).json({ success: false, message: 'Gagal ambil transaksi BSI' });
+  }
+});
+
+// GET payroll data untuk bendahara sekolah
+router.get('/treasurer/bendahara/payroll', authenticateBendahara, async (req, res) => {
+  try {
+    const tenantId = req.query.tenant_id || '';
+    const bulan = parseInt(req.query.bulan) || (new Date().getMonth() + 1);
+    const tahun = parseInt(req.query.tahun) || new Date().getFullYear();
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const offset = (page - 1) * limit;
+
+    let query = `
+      SELECT t.id, t.nama, t.nik, t.gaji_pokok, t.tunj_kinerja, t.tunj_umum, t.tunj_istri, t.tunj_anak, t.tunj_kepala_sekolah, t.tunj_wali_kelas, t.honor_bendahara
+      FROM teachers t
+      JOIN teacher_assignments ta ON t.id = ta.teacher_id
+      WHERE t.status_aktif = 1
+    `;
+    let params = [];
+
+    if (tenantId) {
+      query += ' AND ta.tenant_id = ?';
+      params.push(tenantId);
+    }
+
+    query += ' ORDER BY t.nama ASC LIMIT ? OFFSET ?';
+    params.push(limit, offset);
+
+    const teachers = await db.query(query, params);
+
+    // Get total count for pagination
+    let countQuery = `
+      SELECT COUNT(*) as total
+      FROM teachers t
+      JOIN teacher_assignments ta ON t.id = ta.teacher_id
+      WHERE t.status_aktif = 1
+    `;
+    let countParams = [];
+    if (tenantId) {
+      countQuery += ' AND ta.tenant_id = ?';
+      countParams.push(tenantId);
+    }
+    const countResult = await db.query(countQuery, countParams);
+    const total = countResult[0]?.total || 0;
+
+    const result = teachers.map(t => ({ 
+      id: t.id, 
+      nama: t.nama, 
+      nik: t.nik || '',
+      gaji_pokok: t.gaji_pokok || 0, 
+      tunj_kinerja: t.tunj_kinerja || 0, 
+      tunj_umum: t.tunj_umum || 0, 
+      tunj_istri: t.tunj_istri || 0, 
+      tunj_anak: t.tunj_anak || 0, 
+      tunj_kepala_sekolah: t.tunj_kepala_sekolah || 0, 
+      tunj_wali_kelas: t.tunj_wali_kelas || 0, 
+      honor_bendahara: t.honor_bendahara || 0, 
+      potongan: 0, 
+      total_gaji: t.gaji_pokok || 0 
+    }));
+    res.json({ success: true, data: result, total: total });
+  } catch (e) {
+    console.error('Payroll error:', e);
+    res.status(500).json({ success: false, message: 'Error payroll: ' + e.message });
+  }
+});
+
+// PUT update salary field teacher
+router.put('/treasurer/bendahara/teacher/:id', authenticateBendahara, async (req, res) => {
+  try {
+    const teacherId = req.params.id;
+    const field = req.body.field;
+    const value = req.body.value;
+    await db.query('UPDATE teachers SET ' + field + ' = ? WHERE id = ?', [value, teacherId]);
+    res.json({ success: true, message: 'Tersimpan' });
+  } catch (e) {
+    res.status(500).json({ success: false, message: 'Gagal simpan' });
+  }
+});
+
+router.put('/treasurer/bendahara/spp/:id', authenticateBendahara, async (req, res) => {
+  try {
+    const studentId = req.params.id;
+    const { iuran_bulanan } = req.body;
+    const tenantId = req.query.tenant_id || req.body.tenant_id;
+    if (!tenantId) {
+      return res.status(400).json({ success: false, message: 'tenant_id required' });
+    }
+    await db.query('UPDATE students SET iuran_bulanan = ? WHERE id = ? AND tenant_id = ?', [iuran_bulanan, studentId, tenantId]);
+    res.json({ success: true, message: 'Iuran diupdate' });
+  } catch (e) {
+    res.status(500).json({ success: false, message: 'Gagal update SPP' });
   }
 });
 
