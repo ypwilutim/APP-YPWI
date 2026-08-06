@@ -5,7 +5,7 @@
  * - Push notifications
  */
 
-const CACHE_VERSION = 'ypwi-v1';
+const CACHE_VERSION = 'ypwi-v2';
 const STATIC_ASSETS = [
   '/',
   '/login.html',

@@ -2,6 +2,7 @@
   "name": "YPWI Lutim",
   "short_name": "YPWI",
   "description": "Sistem Digital YPWI Lutim",
+  "version": "2026.08.07",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
