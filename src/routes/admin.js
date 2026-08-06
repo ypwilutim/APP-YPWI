@@ -3259,7 +3259,7 @@ router.get('/public/teachers/:teacherId', async (req, res) => {
   try {
     const teacherId = req.params.teacherId;
     
-    let selectQuery = 'SELECT t.id, t.nama, t.nik, t.nip, t.email, t.tempat_lahir, t.tanggal_lahir, t.jenis_kelamin, t.alamat, t.no_wa, t.status_kepegawaian, t.status_aktif, t.tmt, t.pendidikan_terakhir, t.BANK as bank, t.nomor_rekening, t.link_foto, GROUP_CONCAT(CONCAT(ta.tenant_id, ":", ta.jabatan_di_unit)) as assignments FROM teachers t LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id';
+    let selectQuery = 'SELECT t.id, t.nama, t.nik, t.nip, t.email, t.tempat_lahir, t.tanggal_lahir, t.jenis_kelamin, t.alamat, t.no_wa, t.status_kepegawaian, t.status_aktif, t.tmt, t.pendidikan_terakhir, t.BANK as bank, t.nomor_rekening, t.link_foto, GROUP_CONCAT(CONCAT(ta.tenant_id, ":", ta.jabatan_di_unit)) as assignments';
     const selectParams = [teacherId];
     
     try {
@@ -3267,7 +3267,7 @@ router.get('/public/teachers/:teacherId', async (req, res) => {
       selectQuery += ', t.status_perkawinan, t.jumlah_anak';
     } catch (err) { }
     
-    selectQuery += ' WHERE t.id = ?';
+    selectQuery += ' FROM teachers t LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id WHERE t.id = ?';
     
     const [teacher] = await db.query(selectQuery, selectParams);
 
