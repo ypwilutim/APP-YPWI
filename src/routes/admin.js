@@ -3728,6 +3728,121 @@ router.get('/admin/attendance-monthly', authenticateOperator, async (req, res) =
     res.json({ success: true, data: result, daysInMonth });
   } catch (error) {
     console.error('Monthly attendance error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching monthly attendance' });
+  }
+});
+
+// GET /api/admin/monthly-report/html - Monthly attendance HTML report
+router.get('/admin/monthly-report/html', authenticateOperator, async (req, res) => {
+  try {
+    let tenantId = req.query.tenant_id;
+    const bulan = parseInt(req.query.bulan || new Date().getMonth() + 1);
+    const tahun = parseInt(req.query.tahun || new Date().getFullYear());
+    if (!tenantId && req.user.role !== 'admin') {
+      const assignments = (req.user.assignments || []).filter(a =>
+        ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin'].includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''))
+      );
+      if (assignments.length >= 1) tenantId = assignments[0].tenant_id;
+    }
+    if (!tenantId) return res.status(400).json({ success: false, message: 'tenant_id diperlukan' });
+
+    const tenant = await db.query('SELECT nama_sekolah FROM tenants WHERE tenant_id = ?', [tenantId]);
+    const tenantName = tenant.length > 0 ? tenant[0].nama_sekolah : tenantId;
+
+    const teachers = await db.query(
+      'SELECT t.id, t.nama FROM teachers t WHERE t.id IN (SELECT teacher_id FROM teacher_assignments WHERE tenant_id = ?) ORDER BY t.nama ASC',
+      [tenantId]
+    );
+
+    const logs = await db.query(
+      'SELECT al.teacher_id, DAY(al.waktu_scan) as hari, al.status, al.dinas_luar, al.keterangan, al.waktu_scan FROM attendance_logs al WHERE MONTH(al.waktu_scan) = ? AND YEAR(al.waktu_scan) = ? AND al.teacher_id IN (SELECT teacher_id FROM teacher_assignments WHERE tenant_id = ?)',
+      [bulan, tahun, tenantId]
+    );
+
+    const daysInMonth = new Date(tahun, bulan, 0).getDate();
+    const monthNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+
+    const weekendDays = [];
+    for (let d = 1; d <= daysInMonth; d++) {
+      const date = new Date(tahun, bulan - 1, d);
+      if (date.getDay() === 0 || date.getDay() === 6) weekendDays.push(d);
+    }
+
+    const result = teachers.map(t => {
+      const row = { id: t.id, nama: t.nama };
+      for (let d = 1; d <= daysInMonth; d++) row['tgl_' + d] = '';
+      let hadir = 0, terlambat = 0, izin = 0, cuti = 0, dinas_luar = 0, sakit = 0;
+      logs.filter(l => l.teacher_id === t.id).forEach(l => {
+        const day = parseInt(l.hari);
+        if (day >= 1 && day <= daysInMonth) {
+          const date = new Date(tahun, bulan - 1, day);
+          const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+          if (l.status === 'tepat_waktu') { row['tgl_' + day] = '<span class="text-green-600 font-bold">H</span>'; hadir++; }
+          else if (l.status === 'terlambat') { row['tgl_' + day] = '<span class="text-yellow-600 font-bold">T</span>'; terlambat++; }
+          else if (l.dinas_luar) { row['tgl_' + day] = '<span class="text-blue-600 font-bold">DL</span>'; dinas_luar++; }
+          else if (l.keterangan && l.keterangan.toLowerCase().includes('izin')) { row['tgl_' + day] = '<span class="text-purple-600 font-bold">I</span>'; izin++; }
+          else if (l.keterangan && l.keterangan.toLowerCase().includes('cuti')) { row['tgl_' + day] = '<span class="text-gray-600 font-bold">C</span>'; cuti++; }
+          else if (l.keterangan && l.keterangan.toLowerCase().includes('sakit')) { row['tgl_' + day] = '<span class="text-red-600 font-bold">S</span>'; sakit++; }
+          if (isWeekend && !row['tgl_' + day]) {
+            row['tgl_' + day] = '<span class="text-gray-400">-</span>';
+          }
+        }
+      });
+      row.hadir = hadir; row.terlambat = terlambat; row.izin = izin; row.cuti = cuti; row.dinas_luar = dinas_luar; row.sakit = sakit;
+      row.weekendDays = weekendDays;
+      const totalActiveDays = daysInMonth - weekendDays.length;
+      row.tanpa_keterangan = totalActiveDays - (hadir + terlambat + izin + cuti + dinas_luar + sakit);
+      return row;
+    });
+
+    let html = `
+      <div class="p-4">
+        <h3 class="text-lg font-semibold text-gray-900 mb-1">Rekap Absensi ${tenantName}</h3>
+        <p class="text-sm text-gray-600 mb-4">${monthNames[bulan - 1]} ${tahun}</p>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm border border-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="border border-gray-200 px-2 py-2 text-left text-xs font-semibold text-gray-600">No</th>
+                <th class="border border-gray-200 px-2 py-2 text-left text-xs font-semibold text-gray-600">Nama Guru</th>
+                ${Array.from({length: daysInMonth}, (_, i) => i + 1).map(d => `<th class="border border-gray-200 px-1 py-2 text-center text-xs font-semibold text-gray-600 ${weekendDays.includes(d) ? 'bg-gray-100 text-gray-400' : ''}">${d}</th>`).join('')}
+                <th class="border border-gray-200 px-2 py-2 text-center text-xs font-semibold text-gray-600">H</th>
+                <th class="border border-gray-200 px-2 py-2 text-center text-xs font-semibold text-gray-600">T</th>
+                <th class="border border-gray-200 px-2 py-2 text-center text-xs font-semibold text-gray-600">DL</th>
+                <th class="border border-gray-200 px-2 py-2 text-center text-xs font-semibold text-gray-600">I</th>
+                <th class="border border-gray-200 px-2 py-2 text-center text-xs font-semibold text-gray-600">C</th>
+                <th class="border border-gray-200 px-2 py-2 text-center text-xs font-semibold text-gray-600">S</th>
+                <th class="border border-gray-200 px-2 py-2 text-center text-xs font-semibold text-gray-600">TK</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${result.map((r, idx) => `
+                <tr class="hover:bg-gray-50">
+                  <td class="border border-gray-200 px-2 py-2 text-center text-gray-900">${idx + 1}</td>
+                  <td class="border border-gray-200 px-2 py-2 text-gray-900 font-medium">${r.nama}</td>
+                  ${Array.from({length: daysInMonth}, (_, i) => i + 1).map(d => `<td class="border border-gray-200 px-1 py-2 text-center">${r['tgl_' + d] || ''}</td>`).join('')}
+                  <td class="border border-gray-200 px-2 py-2 text-center text-green-600 font-semibold">${r.hadir}</td>
+                  <td class="border border-gray-200 px-2 py-2 text-center text-yellow-600 font-semibold">${r.terlambat}</td>
+                  <td class="border border-gray-200 px-2 py-2 text-center text-blue-600 font-semibold">${r.dinas_luar}</td>
+                  <td class="border border-gray-200 px-2 py-2 text-center text-purple-600 font-semibold">${r.izin}</td>
+                  <td class="border border-gray-200 px-2 py-2 text-center text-gray-600 font-semibold">${r.cuti}</td>
+                  <td class="border border-gray-200 px-2 py-2 text-center text-red-600 font-semibold">${r.sakit}</td>
+                  <td class="border border-gray-200 px-2 py-2 text-center text-red-800 font-semibold">${r.tanpa_keterangan}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+        <div class="mt-4 flex flex-wrap gap-3 text-xs text-gray-600">
+          <span><b>H</b>=Hadir <b>T</b>=Terlambat <b>DL</b>=Dinas Luar <b>I</b>=Izin <b>C</b>=Cuti <b>S</b>=Sakit <b>TK</b>=Tanpa Keterangan</span>
+        </div>
+      </div>
+    `;
+
+    res.send(html);
+  } catch (error) {
+    console.error('Monthly report HTML error:', error);
+    res.status(500).send('<div class="p-4 text-red-500">Error memuat rekap</div>');
   }
 });
 

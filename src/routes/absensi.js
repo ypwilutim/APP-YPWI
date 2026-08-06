@@ -365,10 +365,25 @@ router.get('/admin/attendance-logs', authenticateOperator, async (req, res) => {
     if (!tenantId) {
       return res.status(400).json({ success: false, message: 'tenant_id required' });
     }
-    const query = `SELECT al.id, al.teacher_id, al.waktu_scan, al.jenis, al.status, al.metode, t.nama, t.nip, ten.nama_sekolah, ar.keterangan AS nama_aturan, al.tenant_id as scan_tenant_id, al.dinas_luar FROM attendance_logs al JOIN teachers t ON al.teacher_id = t.id JOIN tenants ten ON al.tenant_id = ten.tenant_id LEFT JOIN attendance_rules ar ON al.rule_id = ar.id WHERE al.tenant_id = ? ORDER BY al.waktu_scan DESC LIMIT 100`;
 
-    const logs = await db.query(query, [tenantId]);
-    console.log('[ATTENDANCE DEBUG]', { tenantId, count: logs.length, sample: logs.slice(0, 3).map(l => ({teacher_id: l.teacher_id, scan_tenant_id: l.scan_tenant_id, nama_guru: l.nama})) });
+    let whereClauses = ['al.tenant_id = ?'];
+    const params = [tenantId];
+
+    if (dateFilter) {
+      whereClauses.push('DATE(al.waktu_scan) = ?');
+      params.push(dateFilter);
+    }
+
+    if (statusFilter) {
+      whereClauses.push('al.status = ?');
+      params.push(statusFilter);
+    }
+
+    const whereSql = 'WHERE ' + whereClauses.join(' AND ');
+    const query = `SELECT al.id, al.teacher_id, al.waktu_scan, al.jenis, al.status, al.metode, t.nama, t.nip, ten.nama_sekolah, ar.keterangan AS nama_aturan, al.tenant_id as scan_tenant_id, al.dinas_luar FROM attendance_logs al JOIN teachers t ON al.teacher_id = t.id JOIN tenants ten ON al.tenant_id = ten.tenant_id LEFT JOIN attendance_rules ar ON al.rule_id = ar.id ${whereSql} ORDER BY al.waktu_scan DESC LIMIT 100`;
+
+    const logs = await db.query(query, params);
+    console.log('[ATTENDANCE DEBUG]', { tenantId, dateFilter, statusFilter, count: logs.length, sample: logs.slice(0, 3).map(l => ({teacher_id: l.teacher_id, scan_tenant_id: l.scan_tenant_id, nama_guru: l.nama})) });
 
     res.json({ success: true, data: logs });
   } catch (error) {

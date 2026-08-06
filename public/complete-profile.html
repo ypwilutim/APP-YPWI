@@ -8,6 +8,26 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
   <link href="styles.css" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :required {
+      border-color: #fca5a5 !important;
+      background-color: #fff5f5 !important;
+    }
+    :required:focus {
+      border-color: #ef4444 !important;
+      box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1) !important;
+    }
+    @media (max-width: 640px) {
+      .pasangan-row {
+        grid-template-columns: 1fr !important;
+      }
+      .pasangan-row .cari-nik-btn,
+      .pasangan-row .hapus-pasangan-btn {
+        width: 100%;
+        justify-content: center;
+      }
+    }
+  </style>
 </head>
 
 <body class="min-h-screen py-8 profile-page">
@@ -493,6 +513,17 @@ setValue('nomor_rekening', teacher.nomor_rekening);
 
       document.getElementById('pasangan_fields').classList.toggle('hidden', !showPasangan);
       document.getElementById('jumlah_anak_field').classList.toggle('hidden', !showAnak);
+
+      // Mark pasangan NIK as required when visible
+      document.querySelectorAll('.pasangan-nik').forEach(input => {
+        input.required = showPasangan;
+      });
+
+      // Mark jumlah_anak as required when visible
+      const jumlahAnakInput = document.getElementById('jumlah_anak');
+      if (jumlahAnakInput) {
+        jumlahAnakInput.required = showAnak;
+      }
     }
 
     function addPasanganField(nik = '', nama = '', tipe = '') {
@@ -503,11 +534,11 @@ setValue('nomor_rekening', teacher.nomor_rekening);
       const label = tipe ? (tipe === 'suami' ? 'NIK Suami' : tipe === 'istri' ? 'NIK Istri' : 'NIK Mantan') : (isMenikah ? (jk === 'P' ? 'NIK Suami' : 'NIK Istri') : 'NIK Mantan');
 
       const div = document.createElement('div');
-      div.className = 'flex items-center gap-2';
+      div.className = 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_auto_auto] gap-2 items-center pasangan-row';
       div.dataset.tipe = tipe || (isMenikah ? (jk === 'P' ? 'suami' : 'istri') : 'mantan');
       div.innerHTML = `
-        <input type="text" placeholder="${label}" class="pasangan-nik flex-1 px-4 py-3 rounded-xl border-2 border-gray-200 bg-white outline-none font-medium" value="${nik}">
-        <input type="text" placeholder="Nama" class="pasangan-nama flex-1 px-4 py-3 rounded-xl border-2 border-gray-200 bg-white outline-none font-medium" value="${nama}" readonly>
+        <input type="text" placeholder="${label}" class="pasangan-nik px-4 py-3 rounded-xl border-2 border-gray-200 bg-white outline-none font-medium" value="${nik}">
+        <input type="text" placeholder="Nama" class="pasangan-nama px-4 py-3 rounded-xl border-2 border-gray-200 bg-white outline-none font-medium" value="${nama}" readonly>
         <button type="button" class="cari-nik-btn px-4 py-3 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700">Cari</button>
         <button type="button" class="hapus-pasangan-btn px-4 py-3 bg-red-600 text-white rounded-xl text-sm font-bold hover:bg-red-700"><i class="bi bi-trash"></i></button>
       `;

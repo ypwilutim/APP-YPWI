@@ -450,17 +450,20 @@
             <table class="w-full modern-table">
               <thead class="border-b border-gray-200">
                 <tr>
-                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Nama</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                    <input type="checkbox" id="selectAllTeachers" onchange="toggleSelectAllTeachers()" class="w-4 h-4 text-blue-600">
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Nama Guru</th>
                   <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">NIK</th>
                   <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">NIP</th>
-                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Status
-                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Status Kepegawaian</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Sekolah</th>
                   <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Aksi</th>
                 </tr>
               </thead>
               <tbody id="teachersTable" class="divide-y divide-gray-100">
                 <tr>
-                  <td colspan="5" class="px-4 py-12 text-center text-gray-500"><i
+                  <td colspan="7" class="px-4 py-12 text-center text-gray-500"><i
                       class="fas fa-spinner fa-spin text-xl mb-2"></i>
                     <p>Memuat data...</p>
                   </td>
@@ -629,25 +632,6 @@
                 class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300">Rekap
                 Bulanan</button>
             </div>
-            <div class="flex items-center space-x-2">
-              <select id="schoolRecapMonthSelect"
-                class="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500">
-                <option value="1">Januari</option>
-                <option value="2">Februari</option>
-                <option value="3">Maret</option>
-                <option value="4">April</option>
-                <option value="5">Mei</option>
-                <option value="6">Juni</option>
-                <option value="7">Juli</option>
-                <option value="8">Agustus</option>
-                <option value="9">September</option>
-                <option value="10">Oktober</option>
-                <option value="11">November</option>
-                <option value="12">Desember</option>
-              </select>
-              <select id="schoolRecapYearSelect"
-                class="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"></select>
-            </div>
           </div>
 
           <!-- Log Harian View -->
@@ -671,6 +655,7 @@
               <table class="w-full modern-table">
                 <thead class="border-b border-gray-200">
                   <tr>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Tanggal</th>
                     <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Nama Guru</th>
                     <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Jenis</th>
                     <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Waktu</th>
@@ -693,7 +678,26 @@
           <!-- Monthly Recap View -->
           <div id="schoolMonthlyRecapSection" class="hidden">
             <div class="flex justify-between items-center mb-4">
-              <h3 class="text-lg font-semibold text-gray-900">Rekap Absensi Bulanan</h3>
+              <div class="flex items-center space-x-2">
+                <h3 class="text-lg font-semibold text-gray-900">Rekap Absensi Bulanan</h3>
+                <select id="schoolRecapMonthSelect"
+                  class="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500">
+                  <option value="1">Januari</option>
+                  <option value="2">Februari</option>
+                  <option value="3">Maret</option>
+                  <option value="4">April</option>
+                  <option value="5">Mei</option>
+                  <option value="6">Juni</option>
+                  <option value="7">Juli</option>
+                  <option value="8">Agustus</option>
+                  <option value="9">September</option>
+                  <option value="10">Oktober</option>
+                  <option value="11">November</option>
+                  <option value="12">Desember</option>
+                </select>
+                <select id="schoolRecapYearSelect"
+                  class="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"></select>
+              </div>
               <button onclick="exportMonthlyPdfFromRecap()"
                 class="btn-primary text-white px-4 py-1.5 rounded-lg text-sm flex items-center">
                 <i class="fas fa-file-pdf mr-2"></i>Export PDF
@@ -1310,14 +1314,17 @@
             const r = await fetch(apiUrl(`/admin/teachers?page=${page}&limit=${pageLimit}`), { headers: { 'Authorization': `Bearer ${authToken}` } });
             if (checkAuth401403(r)) return;
             const d = await r.json();
-            if (d.success) {
-              const items = d.data || [];
-              currentPage = d.pagination ? d.pagination.page : page;
-              totalPages = d.pagination ? d.pagination.totalPages : 1;
-              const tb = document.getElementById('teachersTable');
-              tb.innerHTML = items.length === 0 ? '<tr><td colspan="5" class="px-4 py-12 text-center text-gray-500">Belum ada data guru</td></tr>' : items.map(t => `<tr class="hover:bg-gray-50"><td class="px-4 py-3 text-sm text-gray-900 font-medium">${t.nama || '-'}</td><td class="px-4 py-3 text-sm text-gray-500">${t.nik || '-'}</td><td class="px-4 py-3 text-sm text-gray-500">${t.nip || '-'}</td><td class="px-4 py-3 text-sm"><span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${t.status_aktif ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">${t.status_aktif ? 'Aktif' : 'Nonaktif'}</span></td><td class="px-4 py-3 text-sm space-x-1"><button onclick="editTeacher(${t.id})" class="inline-flex items-center p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md" title="Edit"><i class="fas fa-edit text-xs"></i></button><button onclick="deleteTeacher(${t.id})" class="inline-flex items-center p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md" title="Hapus"><i class="fas fa-trash text-xs"></i></button></td></tr>`).join('');
-              updatePaginationControls(d.pagination);
-            }
+if (d.success) {
+               const items = d.data || [];
+               currentPage = d.pagination ? d.pagination.page : page;
+               totalPages = d.pagination ? d.pagination.totalPages : 1;
+               const tb = document.getElementById('teachersTable');
+               tb.innerHTML = items.length === 0 ? '<tr><td colspan="7" class="px-4 py-12 text-center text-gray-500">Belum ada data guru</td></tr>' : items.map(t => {
+                 const sekolah = (t.assignments && t.assignments[0]) ? t.assignments[0].nama_sekolah : '-';
+                 return `<tr class="hover:bg-gray-50"><td class="px-4 py-3 text-sm text-gray-900 font-medium"><input type="checkbox" class="teacher-checkbox" value="${t.id}"></td><td class="px-4 py-3 text-sm text-gray-900 font-medium">${t.nama || '-'}</td><td class="px-4 py-3 text-sm text-gray-500">${t.nik || '-'}</td><td class="px-4 py-3 text-sm text-gray-500">${t.nip || '-'}</td><td class="px-4 py-3 text-sm text-gray-500">${t.status_kepegawaian || '-'}</td><td class="px-4 py-3 text-sm text-gray-500">${sekolah}</td><td class="px-4 py-3 text-sm space-x-1"><button onclick="editTeacher(${t.id})" class="inline-flex items-center p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md" title="Edit"><i class="fas fa-edit text-xs"></i></button><button onclick="deleteTeacher(${t.id})" class="inline-flex items-center p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md" title="Hapus"><i class="fas fa-trash text-xs"></i></button></td></tr>`;
+               }).join('');
+               updatePaginationControls(d.pagination);
+             }
           } catch (e) { console.error('[TEACHERS]', e); }
         }
 
@@ -2334,6 +2341,12 @@
           updateMutasiBtnState();
         };
 
+        window.toggleSelectAllTeachers = function () {
+          const selectAll = document.getElementById('selectAllTeachers');
+          const checkboxes = document.querySelectorAll('.teacher-checkbox');
+          checkboxes.forEach(cb => cb.checked = selectAll.checked);
+        };
+
         window.updateMutasiBtnState = function () {
           const checked = document.querySelectorAll('.student-checkbox:checked');
           const btn = document.getElementById('mutasiBtn');
@@ -2703,7 +2716,7 @@
           } catch (err) { console.error('[TEACHER FORM]', err); showToast('Terjadi kesalahan', 'error'); }
         });
 
-        // ===== ATTENDANCE =====
+// ===== ATTENDANCE =====
         async function loadAttendanceLogs() {
           try {
             const df = document.getElementById('attendanceDateFilter');
@@ -2716,15 +2729,17 @@
             let url = apiUrl('/admin/attendance-logs');
             if (dateVal) url += '&date=' + encodeURIComponent(dateVal);
             if (sf) url += '&status=' + encodeURIComponent(sf);
+            console.log('[ATTENDANCE] Fetching:', url);
             const r = await fetch(url, { headers: { 'Authorization': `Bearer ${authToken}` } });
             if (checkAuth401403(r)) return;
             const d = await r.json();
+            console.log('[ATTENDANCE] Response:', d);
             const tb = document.getElementById('attendanceTable');
-if (d.success && d.data.length > 0) {
-               tb.innerHTML = d.data.map(a => `<tr class="hover:bg-gray-50"><td class="px-4 py-3 text-sm text-gray-900">${a.nama_guru || '-'}</td><td class="px-4 py-3 text-sm text-gray-500">${a.jenis === 'masuk' ? 'Masuk' : 'Pulang'}</td><td class="px-4 py-3 text-sm text-gray-500">${a.waktu_scan ? new Date(a.waktu_scan).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'} WITA</td><td class="px-4 py-3 text-sm"><span class="px-2 py-1 rounded-full text-xs font-semibold ${a.status === 'tepat_waktu' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">${a.status === 'tepat_waktu' ? 'Tepat Waktu' : 'Terlambat'}</span></td><td class="px-4 py-3 text-sm text-gray-500 capitalize">${a.metode || '-'}</td></tr>`).join('');
-            } else tb.innerHTML = '<tr><td colspan="5" class="px-4 py-12 text-center text-gray-500">Belum ada data kehadiran untuk tanggal ini</td></tr>';
-          } catch (e) { console.error('[ATTENDANCE LOGS]', e); }
-        }
+            if (d.success && d.data.length > 0) {
+               tb.innerHTML = d.data.map(a => `<tr class="hover:bg-gray-50"><td class="px-4 py-3 text-sm text-gray-500">${a.waktu_scan ? new Date(a.waktu_scan).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-'}</td><td class="px-4 py-3 text-sm text-gray-900">${a.nama || '-'}</td><td class="px-4 py-3 text-sm text-gray-500">${a.jenis === 'masuk' ? 'Masuk' : 'Pulang'}</td><td class="px-4 py-3 text-sm text-gray-500">${a.waktu_scan ? new Date(a.waktu_scan).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'} WITA</td><td class="px-4 py-3 text-sm"><span class="px-2 py-1 rounded-full text-xs font-semibold ${a.status === 'tepat_waktu' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">${a.status === 'tepat_waktu' ? 'Tepat Waktu' : 'Terlambat'}</span></td><td class="px-4 py-3 text-sm text-gray-500 capitalize">${a.metode || '-'}</td></tr>`).join('');
+             } else tb.innerHTML = '<tr><td colspan="6" class="px-4 py-12 text-center text-gray-500">Belum ada data kehadiran untuk tanggal ini</td></tr>';
+           } catch (e) { console.error('[ATTENDANCE LOGS]', e); }
+         }
 
         document.getElementById('attendanceDateFilter')?.addEventListener('change', loadAttendanceLogs);
         document.getElementById('attendanceStatusFilter')?.addEventListener('change', loadAttendanceLogs);
@@ -3593,7 +3608,7 @@ if (d.success && d.data.length > 0) {
           container.innerHTML = '<div class="text-center py-8"><i class="fas fa-spinner fa-spin text-xl"></i><p class="mt-2">Memuat rekap...</p></div>';
 
           try {
-            const response = await fetch(`/api/admin/monthly-report/html?tenant_id=${encodeURIComponent(tenantId)}&month=${month}&year=${year}`, {
+            const response = await fetch(`/api/admin/monthly-report/html?tenant_id=${encodeURIComponent(tenantId)}&bulan=${month}&tahun=${year}`, {
               headers: { 'Authorization': `Bearer ${authToken}` }
             });
 
