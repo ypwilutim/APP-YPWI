@@ -370,7 +370,8 @@ CREATE TABLE `parents` (
   `id` int(11) NOT NULL,
   `nama_orang_tua` varchar(255) DEFAULT NULL,
   `no_wa` varchar(30) DEFAULT NULL,
-  `email` varchar(255) DEFAULT NULL
+  `email` varchar(255) DEFAULT NULL,
+  `nik` varchar(20) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
@@ -714,6 +715,22 @@ CREATE TABLE `teachers` (
   `honor_bendahara` decimal(12,2) NOT NULL DEFAULT 0.00,
   `potongan` decimal(12,2) NOT NULL DEFAULT 0.00,
   `tunj_kehadiran` decimal(12,2) NOT NULL DEFAULT 0.00
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `teacher_family`
+--
+
+CREATE TABLE `teacher_family` (
+  `id` int(11) NOT NULL,
+  `teacher_id` int(11) NOT NULL,
+  `nik` varchar(20) DEFAULT NULL,
+  `nama` varchar(255) DEFAULT NULL,
+  `tipe` enum('suami','istri','mantan') DEFAULT NULL,
+  `related_teacher_id` int(11) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 --

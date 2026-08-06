@@ -341,11 +341,13 @@ async function loadApprovalIzin() {
     const filter = document.getElementById('approvalIzinFilter')?.value || 'pending';
     const assignments = window.userAssignments || [];
     const tenantFilter = getApprovalTenantFilter(assignments);
+    const principalOnly = isKetuaYPWILUTIM(assignments);
 
     if (subtitleEl) {
         const scope = !tenantFilter ? 'Semua unit sekolah'
             : 'Unit: ' + assignments.filter(a => tenantFilter.includes(a.tenant_id)).map(a => a.nama_sekolah || a.tenant_id).join(', ');
-        subtitleEl.textContent = tenantFilter ? `Data perizinan ${scope}` : 'Data perizinan seluruh unit';
+        const base = tenantFilter ? `Data perizinan ${scope}` : 'Data perizinan seluruh unit';
+        subtitleEl.textContent = principalOnly ? `${base} (hanya izin kepala sekolah)` : base;
     }
 
     listEl.innerHTML = '<div style="padding:2rem 0;text-align:center;color:#94a3b8;font-size:0.9rem;"><i class="fas fa-spinner spinner" style="font-size:1.25rem;margin-bottom:0.5rem;display:inline-block;"></i><p style="margin:0;">Memuat data perizinan...</p></div>';
@@ -354,6 +356,7 @@ async function loadApprovalIzin() {
         const params = new URLSearchParams();
         params.set('status', filter);
         if (tenantFilter) tenantFilter.forEach(t => params.append('tenant_id', t));
+        if (principalOnly) params.set('principal_only', '1');
 
         const response = await fetch(`/api/admin/leave-requests?${params.toString()}`, {
             headers: { 'Authorization': 'Bearer ' + (window.token || localStorage.getItem('token')) }
@@ -500,33 +503,33 @@ function canApproveIzin(assignments) {
     if (window.userRole === 'admin') return true;
     if (list.length === 0) return false;
 
-    const isYpwilutimAdmin = list.some(a =>
-        a.tenant_id === 'YPWILUTIM' &&
-        ['admin'].includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''))
-    );
-    if (isYpwilutimAdmin) return true;
-
     const ketuaRoles = ['kepalasekolah', 'pimpinan', 'ketua', 'kepalapondok'];
-    const isKetuaNonYpwilutim = list.some(a => {
+    const isKetuaYpwilutim = list.some(a => {
+        const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
+        return a.tenant_id === 'YPWILUTIM' && ketuaRoles.includes(jabatan);
+    });
+    if (isKetuaYpwilutim) return true;
+
+    const isKetuaOther = list.some(a => {
         const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
         return a.tenant_id !== 'YPWILUTIM' && ketuaRoles.includes(jabatan);
     });
-    if (isKetuaNonYpwilutim) return true;
+    if (isKetuaOther) return true;
 
     return false;
 }
 
 function getApprovalTenantFilter(assignments) {
     const list = assignments || [];
-    if (window.userRole === 'admin') return null;
-
-    const isYpwilutimAdmin = list.some(a =>
-        a.tenant_id === 'YPWILUTIM' &&
-        ['admin'].includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''))
-    );
-    if (isYpwilutimAdmin) return null;
+    if (window.userRole === 'admin') return ['YPWILUTIM'];
 
     const ketuaRoles = ['kepalasekolah', 'pimpinan', 'ketua', 'kepalapondok'];
+    const isKetuaYpwilutim = list.some(a => {
+        const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
+        return a.tenant_id === 'YPWILUTIM' && ketuaRoles.includes(jabatan);
+    });
+    if (isKetuaYpwilutim) return null;
+
     const allowed = list
         .filter(a => {
             const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
@@ -534,6 +537,15 @@ function getApprovalTenantFilter(assignments) {
         })
         .map(a => a.tenant_id);
     return allowed.length > 0 ? allowed : [];
+}
+
+function isKetuaYPWILUTIM(assignments) {
+    const list = assignments || [];
+    const ketuaRoles = ['kepalasekolah', 'pimpinan', 'ketua', 'kepalapondok'];
+    return list.some(a => {
+        const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
+        return a.tenant_id === 'YPWILUTIM' && ketuaRoles.includes(jabatan);
+    });
 }
 
 async function initPaktaIntegritas() {

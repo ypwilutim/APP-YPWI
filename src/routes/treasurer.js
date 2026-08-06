@@ -1535,6 +1535,30 @@ router.get('/treasurer/bendahara/profile', authenticateBendahara, async (req, re
   }
 });
 
+// GET /api/treasurer/bendahara/search-students - Cari siswa langsung dari tabel students (tanpa billing)
+router.get('/treasurer/bendahara/search-students', authenticateBendahara, async (req, res) => {
+  try {
+    const search = req.query.q || '';
+    if (!search || search.length < 2) {
+      return res.json({ success: false, message: 'Kata kunci minimal 2 karakter' });
+    }
+    
+    const [students] = await db.query(`
+      SELECT s.id, s.nama_siswa, s.nisn, s.tenant_id, s.iuran_bulanan, tn.nama_sekolah, s.va_number
+      FROM students s
+      JOIN tenants tn ON s.tenant_id = tn.tenant_id
+      WHERE (s.nama_siswa LIKE ? OR s.nisn LIKE ?) AND (s.status = 'active' OR s.status = 'aktif' OR s.status IS NULL)
+      ORDER BY s.nama_siswa ASC
+      LIMIT 50
+    `, ['%' + search + '%', '%' + search + '%']);
+    
+    res.json({ success: true, data: students });
+  } catch (e) {
+    console.error('Search students error:', e);
+    res.status(500).json({ success: false, message: 'Gagal mencari siswa' });
+  }
+});
+
 // GET /api/treasurer/bendahara/saldo - Saldo berjalan siswa (tunggakan / kelebihan) — baca dari billing_payment + incoming_payments
 router.get('/treasurer/bendahara/saldo', authenticateBendahara, async (req, res) => {
   try {
@@ -1546,16 +1570,29 @@ router.get('/treasurer/bendahara/saldo', authenticateBendahara, async (req, res)
 
     const tenantId = req.query.tenant_id || '';
     const statusFilter = req.query.status || ''; // 'tunggakan' | 'kelebihan' | '' (semua)
+    const search = req.query.search || ''; // Cari nama_siswa atau nisn
     const limit = parseInt(req.query.limit) || 500;
     const page = parseInt(req.query.page) || 1;
 
+    // Handle 'all' for tenant filter - show all schools
+    let effectiveTenantId = tenantId;
+    if (tenantId === 'all' || !tenantId) {
+      effectiveTenantId = null;
+    }
+
     let where = 'WHERE 1=1';
     const params = [];
-    if (tenantId) { where += ' AND s.tenant_id = ?'; params.push(tenantId); }
+    if (effectiveTenantId) { where += ' AND s.tenant_id = ?'; params.push(effectiveTenantId); }
 
     if (statusFilter === 'tunggakan') { where += ' AND COALESCE(ss.saldo, 0) < 0'; }
     else if (statusFilter === 'kelebihan') { where += ' AND COALESCE(ss.saldo, 0) > 0'; }
     else if (statusFilter === 'lunas') { where += ' AND COALESCE(ss.saldo, 0) = 0'; }
+
+    // Tambahkan filter pencarian
+    if (search) {
+      where += ' AND (s.nama_siswa LIKE ? OR s.nisn LIKE ?)';
+      params.push('%' + search + '%', '%' + search + '%');
+    }
 
     const query = `
       SELECT s.id, s.nama_siswa, s.nisn, s.tenant_id, tn.nama_sekolah,
@@ -1570,7 +1607,12 @@ router.get('/treasurer/bendahara/saldo', authenticateBendahara, async (req, res)
     `;
     const data = await db.query(query, [...params, limit, (page - 1) * limit]);
 
-    // Ringkasan global (dari saldo_siswa)
+    // Ringkasan global (dari saldo_siswa) - dengan filter yang sama
+    const summaryWhere = search ? ' AND (s.nama_siswa LIKE ? OR s.nisn LIKE ?)' : '';
+    const summaryParams = effectiveTenantId ? [effectiveTenantId] : [];
+    if (search) summaryParams.push('%' + search + '%', '%' + search + '%');
+    
+    const tenantWhere = effectiveTenantId ? 'WHERE s.tenant_id = ?' : '';
     const [summary] = await db.query(`
       SELECT
         COUNT(*) as total_siswa,
@@ -1580,8 +1622,8 @@ router.get('/treasurer/bendahara/saldo', authenticateBendahara, async (req, res)
         COUNT(CASE WHEN COALESCE(ss.saldo,0) > 0 THEN 1 END) as jumlah_kelebihan
       FROM students s
       LEFT JOIN saldo_siswa ss ON ss.student_id = s.id
-      ${tenantId ? 'WHERE s.tenant_id = ?' : ''}
-    `, tenantId ? [tenantId] : []);
+      ${tenantWhere}${search ? summaryWhere : ''}
+    `, [...summaryParams]);
 
     res.json({
       success: true,

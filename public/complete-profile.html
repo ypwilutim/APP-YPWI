@@ -96,6 +96,36 @@
                 </div>
               </div>
 
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <label for="status_perkawinan" class="block text-sm font-semibold text-gray-700 mb-2">Status Perkawinan</label>
+                  <select id="status_perkawinan" name="status_perkawinan"
+                    class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 bg-white outline-none font-medium">
+                    <option value="">Pilih</option>
+                    <option value="Lajang">Lajang</option>
+                    <option value="Menikah">Menikah</option>
+                    <option value="Cerai Hidup">Cerai Hidup</option>
+                    <option value="Cerai Mati">Cerai Mati</option>
+                  </select>
+                </div>
+                <div id="jumlah_anak_field" class="hidden">
+                  <label for="jumlah_anak" class="block text-sm font-semibold text-gray-700 mb-2">Jumlah Anak yang Hidup</label>
+                  <input type="number" id="jumlah_anak" name="jumlah_anak" min="0" value="0"
+                    class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 bg-white outline-none font-medium">
+                </div>
+              </div>
+
+              <div id="pasangan_fields" class="hidden space-y-4">
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Data Pasangan / Mantan</label>
+                  <div id="pasangan_list" class="space-y-3"></div>
+                  <button type="button" id="add_pasangan_btn"
+                    class="mt-2 px-4 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-sm font-semibold hover:bg-blue-100 transition">
+                    <i class="bi bi-plus-circle mr-1"></i> Tambah
+                  </button>
+                </div>
+              </div>
+
               <div>
                 <label for="alamat" class="block text-sm font-semibold text-gray-700 mb-2">Alamat Lengkap <span
                     class="text-red-500">*</span></label>
@@ -437,6 +467,15 @@ setValue('nomor_rekening', teacher.nomor_rekening);
         console.log('Bank select value set to:', bankSelect.value);
       }
 
+      setValue('status_perkawinan', teacher.status_perkawinan);
+      setValue('jumlah_anak', teacher.jumlah_anak || 0);
+      initPerkawinanToggle();
+
+      if (teacher.data_keluarga && Array.isArray(teacher.data_keluarga)) {
+        document.getElementById('pasangan_list').innerHTML = '';
+        teacher.data_keluarga.forEach(item => addPasanganField(item.nik, item.nama, item.tipe));
+      }
+
       if (teacher.link_foto) {
         document.getElementById('photo-preview').src = teacher.link_foto;
         document.getElementById('photo-preview').classList.remove('hidden');
@@ -444,6 +483,60 @@ setValue('nomor_rekening', teacher.nomor_rekening);
         document.getElementById('existing-photo-info').classList.remove('hidden');
         document.getElementById('link_foto').value = teacher.link_foto;
       }
+    }
+
+    function initPerkawinanToggle() {
+      const status = document.getElementById('status_perkawinan').value;
+      const showPasangan = ['Menikah', 'Cerai Hidup'].includes(status);
+      const showAnak = ['Menikah', 'Cerai Hidup', 'Cerai Mati'].includes(status);
+
+      document.getElementById('pasangan_fields').classList.toggle('hidden', !showPasangan);
+      document.getElementById('jumlah_anak_field').classList.toggle('hidden', !showAnak);
+    }
+
+    function addPasanganField(nik = '', nama = '', tipe = '') {
+      const list = document.getElementById('pasangan_list');
+      const jk = document.getElementById('jenis_kelamin').value;
+      const status = document.getElementById('status_perkawinan').value;
+      const isMenikah = status === 'Menikah';
+      const label = tipe ? (tipe === 'suami' ? 'NIK Suami' : tipe === 'istri' ? 'NIK Istri' : 'NIK Mantan') : (isMenikah ? (jk === 'P' ? 'NIK Suami' : 'NIK Istri') : 'NIK Mantan');
+
+      const div = document.createElement('div');
+      div.className = 'flex items-center gap-2';
+      div.dataset.tipe = tipe || (isMenikah ? (jk === 'P' ? 'suami' : 'istri') : 'mantan');
+      div.innerHTML = `
+        <input type="text" placeholder="${label}" class="pasangan-nik flex-1 px-4 py-3 rounded-xl border-2 border-gray-200 bg-white outline-none font-medium" value="${nik}">
+        <input type="text" placeholder="Nama" class="pasangan-nama flex-1 px-4 py-3 rounded-xl border-2 border-gray-200 bg-white outline-none font-medium" value="${nama}" readonly>
+        <button type="button" class="cari-nik-btn px-4 py-3 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700">Cari</button>
+        <button type="button" class="hapus-pasangan-btn px-4 py-3 bg-red-600 text-white rounded-xl text-sm font-bold hover:bg-red-700"><i class="bi bi-trash"></i></button>
+      `;
+      list.appendChild(div);
+
+      const nikInput = div.querySelector('.pasangan-nik');
+      const namaInput = div.querySelector('.pasangan-nama');
+      const cariBtn = div.querySelector('.cari-nik-btn');
+      const hapusBtn = div.querySelector('.hapus-pasangan-btn');
+
+      cariBtn.addEventListener('click', async () => {
+        const nikVal = nikInput.value.trim();
+        if (!nikVal) return alert('Masukkan NIK');
+        try {
+          const res = await fetch('/api/public/lookup-nik?nik=' + encodeURIComponent(nikVal));
+          const data = await res.json();
+          if (data.success && data.nama) {
+            namaInput.value = data.nama;
+          } else {
+            namaInput.value = '';
+            alert('NIK tidak ditemukan');
+          }
+        } catch (e) {
+          console.error('Lookup NIK error:', e);
+        }
+      });
+
+      hapusBtn.addEventListener('click', () => {
+        div.remove();
+      });
     }
 
     function initPendidikanToggle() {
@@ -491,6 +584,9 @@ setValue('nomor_rekening', teacher.nomor_rekening);
         }
       });
       initPendidikanToggle();
+
+      document.getElementById('status_perkawinan')?.addEventListener('change', initPerkawinanToggle);
+      document.getElementById('add_pasangan_btn')?.addEventListener('click', () => addPasanganField());
     });
 
     function saveAssignment() {
@@ -556,11 +652,29 @@ setValue('nomor_rekening', teacher.nomor_rekening);
       submitBtn.disabled = true;
       submitBtn.innerHTML = '<div class="inline-block animate-spin rounded-full h-5 w-5 border-4 border-white border-t-transparent mr-2"></div>Menyimpan...';
 
-      try {
-        const formData = new FormData(e.target);
-        formData.append('assignments_json', JSON.stringify(localAssignments));
+try {
+         const formData = new FormData(e.target);
+         formData.append('assignments_json', JSON.stringify(localAssignments));
 
-        // Auto-detect employment status based on assignments
+// Collect pasangan data
+          const pasanganList = [];
+          const statusPerkawinan = document.getElementById('status_perkawinan').value;
+          const jk = document.getElementById('jenis_kelamin').value;
+          let defaultTipe = null;
+          if (statusPerkawinan === 'Menikah') {
+            defaultTipe = jk === 'P' ? 'suami' : 'istri';
+          } else if (statusPerkawinan === 'Cerai Hidup') {
+            defaultTipe = 'mantan';
+          }
+          document.querySelectorAll('#pasangan_list > div').forEach(div => {
+            const nik = div.querySelector('.pasangan-nik')?.value.trim() || '';
+            const nama = div.querySelector('.pasangan-nama')?.value.trim() || '';
+            const tipe = div.dataset.tipe || defaultTipe;
+            if (nik) pasanganList.push({ nik, nama, tipe });
+          });
+          formData.append('data_keluarga', JSON.stringify(pasanganList));
+
+         // Auto-detect employment status based on assignments
         const assignments = localAssignments.map(a => a.jabatan_di_unit);
         const hasGuruRole = assignments.some(j => ['Guru Mapel', 'Walikelas', 'Guru'].includes(j));
         const hasPegawaiRole = assignments.some(j => ['Admin', 'TU', 'Operator', 'Pimpinan', 'Kepala Sekolah', 'Bendahara'].includes(j));

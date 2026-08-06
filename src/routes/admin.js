@@ -2724,44 +2724,98 @@ router.post('/admin/mutasi/students/:id/adopt', authenticateOperator, async (req
 // ============================================================
 
 // GET /api/admin/leave-requests - List all leave requests with filtering
+// Filter:
+// 1. users.role = admin -> semua tenant, semua jabatan
+// 2. assignment YPWILUTIM + jabatan ketua/kepala/pimpinan -> semua tenant, HANYA izin pengaju dengan jabatan ketua/kepala/pimpinan
+// 3. assignment jabatan ketua/kepala/pimpinan (bukan YPWILUTIM) -> hanya tenant assignmentnya (tanpa filter jabatan pengaju)
 router.get('/admin/leave-requests', authenticateOperator, async (req, res) => {
   try {
-    let tenantId = req.query.tenant_id;
     let statusFilter = req.query.status;
-    
-    // Operator: restrict to their tenant
-    if (req.user.role !== 'admin' && !tenantId) {
-      const adminAssignments = (req.user.assignments || []).filter(a => {
-        const roles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin', 'kepala_sekolah'];
-        return roles.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''));
+    let principalOnly = req.query.principal_only === '1' || req.query.principal_only === 'true';
+
+    // Tentukan tenant yang diizinkan berdasarkan role/jabatan (enforce server-side)
+    // 1. users.role = admin -> HANYA tenant YPWILUTIM
+    // 2. assignment YPWILUTIM + jabatan ketua/kepala/pimpinan -> semua tenant, HANYA izin pengaju dengan jabatan ketua/kepala/pimpinan
+    // 3. assignment jabatan ketua/kepala/pimpinan (bukan YPWILUTIM) -> hanya tenant assignmentnya (tanpa filter jabatan pengaju)
+    let allowedTenants = []; // default: tidak ada akses
+    let filterPrincipalOnly = false;
+    if (req.user.role === 'admin') {
+      allowedTenants = ['YPWILUTIM'];
+    } else {
+      const assignments = req.user.assignments || [];
+      const ketuaRoles = ['kepalasekolah', 'pimpinan', 'ketua', 'kepalapondok'];
+      const isKetuaYpwilutim = assignments.some(a => {
+        const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
+        return a.tenant_id === 'YPWILUTIM' && ketuaRoles.includes(jabatan);
       });
-      if (adminAssignments.length === 1) {
-        tenantId = adminAssignments[0].tenant_id;
+      if (isKetuaYpwilutim) {
+        filterPrincipalOnly = true;
+        allowedTenants = null; // semua tenant
+      } else {
+        const allowed = assignments
+          .filter(a => {
+            const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
+            return a.tenant_id !== 'YPWILUTIM' && ketuaRoles.includes(jabatan);
+          })
+          .map(a => a.tenant_id);
+        allowedTenants = allowed.length > 0 ? allowed : [];
       }
     }
-    
+
+    // override dari client jika dikirim (untuk konsistensi)
+    if (req.query.principal_only === '1' || req.query.principal_only === 'true') {
+      filterPrincipalOnly = true;
+    }
+
+    let requestedTenants = req.query.tenant_id;
+    if (requestedTenants && !Array.isArray(requestedTenants)) {
+      requestedTenants = [requestedTenants];
+    }
+    requestedTenants = requestedTenants || [];
+
+    let tenantFilter = null;
+    if (allowedTenants === null) {
+      tenantFilter = requestedTenants.length > 0 ? requestedTenants : null;
+    } else {
+      tenantFilter = allowedTenants.filter(t => requestedTenants.length === 0 || requestedTenants.includes(t));
+    }
+
     let query = `
-      SELECT lr.*, t.nama as teacher_name, ta.tenant_id, tn.nama_sekolah
+      SELECT lr.*, t.nama as teacher_name,
+             lr.tenant_id,
+             (SELECT GROUP_CONCAT(tn.nama_sekolah ORDER BY tn.nama_sekolah SEPARATOR ', ')
+              FROM tenants tn
+              WHERE FIND_IN_SET(tn.tenant_id, lr.tenant_id) > 0) as nama_sekolah
       FROM leave_requests lr
       JOIN teachers t ON lr.teacher_id = t.id
-      JOIN teacher_assignments ta ON t.id = ta.teacher_id
-      JOIN tenants tn ON ta.tenant_id = tn.tenant_id
       WHERE 1=1
     `;
     let params = [];
-    
-    if (tenantId) {
-      query += ' AND ta.tenant_id = ?';
-      params.push(tenantId);
+
+    if (tenantFilter && tenantFilter.length > 0) {
+      const cond = tenantFilter.map(() => 'FIND_IN_SET(?, lr.tenant_id) > 0').join(' OR ');
+      query += ` AND (${cond})`;
+      params.push(...tenantFilter);
+    } else if (allowedTenants !== null && allowedTenants.length === 0) {
+      query += ' AND 1=0';
     }
-    
+
+    if (filterPrincipalOnly) {
+      query += ` AND EXISTS (
+        SELECT 1 FROM teacher_assignments ta
+        WHERE ta.teacher_id = t.id
+          AND (ta.jabatan_di_unit REGEXP ?)
+      )`;
+      params.push('kepala|pimpinan|ketua');
+    }
+
     if (statusFilter && statusFilter !== 'all') {
       query += ' AND lr.status = ?';
       params.push(statusFilter);
     }
-    
+
     query += ' ORDER BY lr.created_at DESC LIMIT 200';
-    
+
     const requests = await db.query(query, params);
     res.json({ success: true, data: requests });
   } catch (error) {
@@ -3009,24 +3063,24 @@ router.post('/admin/restore', authenticateToken, async (req, res) => {
 router.put('/public/teachers/:teacherId', teacherUpload.single('foto'), async (req, res) => {
   try {
     const teacherId = req.params.teacherId;
-    const { nama, nik, nip, email, tempat_lahir, tanggal_lahir, jenis_kelamin, alamat, no_wa, status_kepegawaian, status_aktif, tmt, pendidikan_terakhir, jurusan, nama_sekolah_pendidikan, tahun_angkatan, assignments_json, bank, nomor_rekening } = req.body;
+    const { nama, nik, nip, email, tempat_lahir, tanggal_lahir, jenis_kelamin, alamat, no_wa, status_kepegawaian, status_aktif, tmt, pendidikan_terakhir, jurusan, nama_sekolah_pendidikan, tahun_angkatan, assignments_json, bank, nomor_rekening, status_perkawinan, jumlah_anak, data_keluarga } = req.body;
     const foto = req.file ? `/uploads/${req.file.filename}` : null;
 
     // Get existing values if not provided (fields may be disabled in form)
-    // Use graceful fallback for bank/nomor_rekening columns in case they don't exist yet
     let selectQuery = 'SELECT nama, nik, nip, email, tempat_lahir, tanggal_lahir, jenis_kelamin, alamat, no_wa, status_kepegawaian, status_aktif, tmt, pendidikan_terakhir';
     const selectParams = [];
     try {
       await db.query('SELECT bank, nomor_rekening FROM teachers LIMIT 1');
       selectQuery += ', bank, nomor_rekening';
-    } catch (err) {
-      // Columns don't exist, use fallback values
-    }
+    } catch (err) { }
+    try {
+      await db.query('SELECT status_perkawinan, jumlah_anak, data_keluarga FROM teachers LIMIT 1');
+      selectQuery += ', status_perkawinan, jumlah_anak, data_keluarga';
+    } catch (err) { }
     selectQuery += ' FROM teachers WHERE id = ?';
     selectParams.push(teacherId);
     const [existingTeacher] = await db.query(selectQuery, selectParams);
 
-    // Use existing values as fallback
     const finalNama = nama || existingTeacher?.nama || null;
     const finalNik = nik || existingTeacher?.nik || null;
     const finalNip = nip || existingTeacher?.nip || null;
@@ -3041,8 +3095,10 @@ router.put('/public/teachers/:teacherId', teacherUpload.single('foto'), async (r
     const finalTmt = tmt || existingTeacher?.tmt || null;
     const finalBank = bank || existingTeacher?.bank || null;
     const finalNomorRekening = nomor_rekening || existingTeacher?.nomor_rekening || null;
+    const finalStatusPerkawinan = status_perkawinan || existingTeacher?.status_perkawinan || null;
+    const finalJumlahAnak = jumlah_anak || existingTeacher?.jumlah_anak || 0;
+    const finalDataKeluarga = data_keluarga || existingTeacher?.data_keluarga || null;
 
-    // Format pendidikan_terakhir string - handle all undefined
     let pendidikanFormatted = pendidikan_terakhir || null;
     if (pendidikan_terakhir && ['SMK', 'S1', 'S2', 'S3'].includes(pendidikan_terakhir)) {
       const parts = [pendidikan_terakhir];
@@ -3054,39 +3110,31 @@ router.put('/public/teachers/:teacherId', teacherUpload.single('foto'), async (r
       pendidikanFormatted = `${pendidikan_terakhir}/${tahun_angkatan}` || null;
     }
 
-    // Ensure all params are not undefined
     const safeParams = {
-      nama: finalNama,
-      nik: finalNik,
-      nip: finalNip,
-      email: finalEmail,
-      tempat_lahir: finalTempatLahir,
-      tanggal_lahir: finalTanggalLahir,
-      jenis_kelamin: finalJenisKelamin,
-      alamat: finalAlamat,
-      no_wa: finalNoWa,
-      status_kepegawaian: finalStatusKepegawaian,
-      status_aktif: finalStatusAktif,
-      tmt: finalTmt,
-      pendidikan_terakhir: pendidikanFormatted,
-      bank: finalBank,
-      nomor_rekening: finalNomorRekening
+      nama: finalNama, nik: finalNik, nip: finalNip, email: finalEmail,
+      tempat_lahir: finalTempatLahir, tanggal_lahir: finalTanggalLahir,
+      jenis_kelamin: finalJenisKelamin, alamat: finalAlamat, no_wa: finalNoWa,
+      status_kepegawaian: finalStatusKepegawaian, status_aktif: finalStatusAktif,
+      tmt: finalTmt, pendidikan_terakhir: pendidikanFormatted,
+      bank: finalBank, nomor_rekening: finalNomorRekening,
+      status_perkawinan: finalStatusPerkawinan, jumlah_anak: finalJumlahAnak,
+      data_keluarga: finalDataKeluarga
     };
 
-    // Update teacher data - build query dynamically based on available columns
     let updateQuery = 'UPDATE teachers SET nama=?, nik=?, nip=?, email=?, tempat_lahir=?, tanggal_lahir=?, jenis_kelamin=?, alamat=?, no_wa=?, status_kepegawaian=?, status_aktif=?, tmt=?, pendidikan_terakhir=?';
     let updateParams = [safeParams.nama, safeParams.nik, safeParams.nip, safeParams.email, safeParams.tempat_lahir, safeParams.tanggal_lahir, safeParams.jenis_kelamin, safeParams.alamat, safeParams.no_wa, safeParams.status_kepegawaian, safeParams.status_aktif, safeParams.tmt, safeParams.pendidikan_terakhir];
 
-    // Add bank and nomor_rekening if columns exist
-    let bankExists = false;
     try {
       await db.query('SELECT bank FROM teachers LIMIT 1');
-      bankExists = true;
       updateQuery += ', bank=?, nomor_rekening=?';
       updateParams.push(safeParams.bank, safeParams.nomor_rekening);
-    } catch (err) {
-      // Columns don't exist, skip
-    }
+    } catch (err) { }
+
+    try {
+      await db.query('SELECT status_perkawinan, jumlah_anak, data_keluarga FROM teachers LIMIT 1');
+      updateQuery += ', status_perkawinan=?, jumlah_anak=?, data_keluarga=?';
+      updateParams.push(safeParams.status_perkawinan, safeParams.jumlah_anak, safeParams.data_keluarga);
+    } catch (err) { }
 
     if (foto) {
       updateQuery += ', link_foto=?';
@@ -3096,6 +3144,31 @@ router.put('/public/teachers/:teacherId', teacherUpload.single('foto'), async (r
     updateParams.push(teacherId);
 
     await db.query(updateQuery, updateParams);
+
+    // Save family data to teacher_family table
+    await db.query('DELETE FROM teacher_family WHERE teacher_id = ?', [teacherId]);
+    if (data_keluarga) {
+      try {
+        const keluarga = typeof data_keluarga === 'string' ? JSON.parse(data_keluarga) : data_keluarga;
+        if (Array.isArray(keluarga)) {
+          for (const item of keluarga) {
+            let relatedTeacherId = null;
+            if (item.nik) {
+              const related = await db.query('SELECT id FROM teachers WHERE nik = ? AND id != ? LIMIT 1', [item.nik, teacherId]);
+              if (related.length > 0) {
+                relatedTeacherId = related[0].id;
+              }
+            }
+            await db.query(
+              'INSERT INTO teacher_family (teacher_id, nik, nama, tipe, related_teacher_id) VALUES (?, ?, ?, ?, ?)',
+              [teacherId, item.nik || null, item.nama || null, item.tipe || null, relatedTeacherId]
+            );
+          }
+        }
+      } catch (parseErr) {
+        console.error('Family data parse error:', parseErr);
+      }
+    }
 
     // Clear existing assignments
     await db.query('DELETE FROM teacher_assignments WHERE teacher_id = ?', [teacherId]);
@@ -3184,10 +3257,19 @@ router.put('/public/teachers/:teacherId', teacherUpload.single('foto'), async (r
 
 router.get('/public/teachers/:teacherId', async (req, res) => {
   try {
-    const [teacher] = await db.query(
-      'SELECT t.id, t.nama, t.nik, t.nip, t.email, t.tempat_lahir, t.tanggal_lahir, t.jenis_kelamin, t.alamat, t.no_wa, t.status_kepegawaian, t.status_aktif, t.tmt, t.pendidikan_terakhir, t.BANK as bank, t.nomor_rekening, t.link_foto, GROUP_CONCAT(CONCAT(ta.tenant_id, ":", ta.jabatan_di_unit)) as assignments FROM teachers t LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id WHERE t.id = ?',
-      [req.params.teacherId]
-    );
+    const teacherId = req.params.teacherId;
+    
+    let selectQuery = 'SELECT t.id, t.nama, t.nik, t.nip, t.email, t.tempat_lahir, t.tanggal_lahir, t.jenis_kelamin, t.alamat, t.no_wa, t.status_kepegawaian, t.status_aktif, t.tmt, t.pendidikan_terakhir, t.BANK as bank, t.nomor_rekening, t.link_foto, GROUP_CONCAT(CONCAT(ta.tenant_id, ":", ta.jabatan_di_unit)) as assignments FROM teachers t LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id';
+    const selectParams = [teacherId];
+    
+    try {
+      await db.query('SELECT status_perkawinan, jumlah_anak FROM teachers LIMIT 1');
+      selectQuery += ', t.status_perkawinan, t.jumlah_anak';
+    } catch (err) { }
+    
+    selectQuery += ' WHERE t.id = ?';
+    
+    const [teacher] = await db.query(selectQuery, selectParams);
 
     if (!teacher || teacher.length === 0) {
       return res.status(404).json({ success: false, message: 'Guru tidak ditemukan' });
@@ -3201,6 +3283,14 @@ router.get('/public/teachers/:teacherId', async (req, res) => {
         return { tenant_id, jabatan_di_unit: jabatan };
       }) : []
     };
+
+    // Fetch family data
+    try {
+      const family = await db.query('SELECT nik, nama, tipe FROM teacher_family WHERE teacher_id = ?', [teacherId]);
+      formattedTeacher.data_keluarga = family;
+    } catch (err) {
+      formattedTeacher.data_keluarga = [];
+    }
 
     res.json({ success: true, data: formattedTeacher });
   } catch (error) {
@@ -3856,6 +3946,31 @@ router.get('/admin/attendance-logs', authenticateOperator, async (req, res) => {
   } catch (error) {
     console.error('Attendance logs error:', error);
     res.status(500).json({ success: false, message: 'Error fetching attendance logs' });
+  }
+});
+
+// GET /api/public/lookup-nik - Lookup NIK in teachers or parents table
+router.get('/public/lookup-nik', async (req, res) => {
+  try {
+    const nik = req.query.nik;
+    if (!nik) {
+      return res.status(400).json({ success: false, message: 'NIK harus diisi' });
+    }
+
+    let result = await db.query('SELECT nama FROM teachers WHERE nik = ? LIMIT 1', [nik]);
+    if (result.length > 0) {
+      return res.json({ success: true, nama: result[0].nama });
+    }
+
+    result = await db.query('SELECT nama_orang_tua as nama FROM parents WHERE nik = ? LIMIT 1', [nik]);
+    if (result.length > 0) {
+      return res.json({ success: true, nama: result[0].nama });
+    }
+
+    res.json({ success: false, message: 'NIK tidak ditemukan' });
+  } catch (error) {
+    console.error('Lookup NIK error:', error);
+    res.status(500).json({ success: false, message: 'Error looking up NIK' });
   }
 });
 

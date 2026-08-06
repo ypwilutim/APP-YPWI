@@ -50,14 +50,14 @@ function stripDigits(v) {
 }
 
 function extractVA(beneficiaryRaw) {
-  const match = (beneficiaryRaw || '').match(/^(\d{10,16})/);
+  const match = (beneficiaryRaw || '').match(/(\d{10,16})/);
   if (match) {
     const va = match[1];
     // BSI VA biasanya diawali 832231 (atau 172 untuk sandbox)
-    // Terima hanya jika diawali 10-16 digit dengan prefix yang valid
-    if (/^(832231|172)\d+$/.test(va)) return va;
+    // Terima semua VA dengan format 10-16 digit
+    if (/^\d{10,16}$/.test(va)) return va;
   }
-  return null; // Return null untuk tidak menyimpan record non-VA
+  return null;
 }
 
 async function ensureBillingTables() {
@@ -158,11 +158,51 @@ async function insertIncoming(rec) {
     if (existing) return { id: existing.id, matchedStudentId: existing.matched_student_id, periode, duplicate: true };
   }
 
+  // Normalize status - BSI reports often use "Success", "SUCCESS", or other variations
+  let rawStatus = (rec['Status'] || '').trim();
+  const statusMap = {
+    'Success': 'Success',
+    'SUCCESS': 'Success',
+    'success': 'Success',
+    'Sukses': 'Success',
+    'sukses': 'Success',
+    'Settlement': 'Success',
+    'SETTLEMENT': 'Success',
+    'Paid': 'Success',
+    'PAID': 'Success',
+    'Referral': 'Success',
+    'REFERRAL': 'Success'
+  };
+  const status = statusMap[rawStatus] || rawStatus;
+
   // Match siswa by VA (hanya 10-16 digit awal)
   let matchedStudentId = null;
   if (beneficiaryDigits) {
-    const [st] = await db.query('SELECT id FROM students WHERE REPLACE(va_number, " ", "") = ? OR va_number = ? LIMIT 1', [beneficiaryDigits, beneficiaryDigits]);
+    // Try multiple matching patterns - VA in database may have different formats
+    // Pattern 1: Exact match (with/without spaces)
+    let [st] = await db.query('SELECT id FROM students WHERE REPLACE(va_number, " ", "") = ? OR va_number = ? LIMIT 1', [beneficiaryDigits, beneficiaryDigits]);
+    
+    // Pattern 2: Last 10-12 digits (VA prefix variations)
+    if (!st && beneficiaryDigits.length > 10) {
+      for (let len = 12; len >= 10; len--) {
+        const suffix = beneficiaryDigits.slice(-len);
+        [st] = await db.query('SELECT id FROM students WHERE REPLACE(va_number, " ", "") LIKE ? LIMIT 1', ['%' + suffix]);
+        if (st) break;
+      }
+    }
+    
+    // Pattern 3: Remove BSI prefix (832231) if present
+    if (!st) {
+      const withoutPrefix = beneficiaryDigits.replace(/^832231/, '');
+      if (withoutPrefix.length >= 10) {
+        [st] = await db.query('SELECT id FROM students WHERE REPLACE(va_number, " ", "") = ? OR va_number = ? LIMIT 1', [withoutPrefix, withoutPrefix]);
+      }
+    }
+    
     matchedStudentId = st ? st.id : null;
+    if (!matchedStudentId) {
+      console.log(`[VA_MATCH] Tidak ditemukan siswa untuk VA ${beneficiaryDigits}`);
+    }
   }
 
   const columns = [
@@ -189,7 +229,7 @@ async function insertIncoming(rec) {
     amount,
     rec['Channel'] || '',
     rec['Transfer Type'] || '',
-    rec['Status'] || '',
+    status,
     matchedStudentId,
     periode
   ];
@@ -215,13 +255,25 @@ async function generateBilling(tenantId, fallbackStart) {
 
   let created = 0, skipped = 0;
   for (const s of students) {
-    const start = (s.tanggal_masuk && /^\d{4}-\d{2}$/.test(s.tanggal_masuk)) ? s.tanggal_masuk : (fallbackStart || end);
+    // Check for existing bills to determine the real start
+    const [existingBills] = await db.query('SELECT MIN(bulan) as min_bulan FROM billing_payment WHERE student_id = ? LIMIT 1', [s.id]);
+    const minBulan = existingBills?.min_bulan;
+    
+    // Start from earliest existing bill, tanggal_masuk, or fallbackStart
+    let start = minBulan;
+    if (!start && s.tanggal_masuk && /^\d{4}-\d{2}$/.test(s.tanggal_masuk)) {
+      start = s.tanggal_masuk;
+    }
+    if (!start) {
+      start = fallbackStart || end;
+    }
+    
     const months = monthList(start, end);
     const spp = parseFloat(s.iuran_bulanan) || 0;
     for (const m of months) {
       const [existing] = await db.query('SELECT id, bulan FROM billing_payment WHERE student_id = ? AND bulan = ?', [s.id, m]);
       if (existing) {
-        // Kunci snapshot spp_bulanan untuk bulan yang sudah lewat
+        // Lock snapshot spp_bulanan for months already past
         if (m < end) { skipped++; continue; }
         await db.query('UPDATE billing_payment SET spp_bulanan = ?, transaksi = 0, keterangan_spp = ?, status = "belum" WHERE id = ?', [spp, spp, existing.id]);
         created++;
@@ -244,7 +296,7 @@ async function recalcStudent(studentId) {
 
   const bills = await db.query('SELECT * FROM billing_payment WHERE student_id = ? ORDER BY bulan ASC', [studentId]);
   const inc = await db.query(
-    "SELECT periode, SUM(total_amount) as total FROM incoming_payments WHERE matched_student_id = ? AND status = 'Success' GROUP BY periode",
+    "SELECT periode, SUM(total_amount) as total FROM incoming_payments WHERE matched_student_id = ? AND status IN ('Success', 'SUCCESS', 'success', 'Sukses', 'Settlement', 'Paid', 'PAID', 'Referral') GROUP BY periode",
     [studentId]
   );
   const incMap = {};

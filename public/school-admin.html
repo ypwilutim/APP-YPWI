@@ -2720,8 +2720,8 @@
             if (checkAuth401403(r)) return;
             const d = await r.json();
             const tb = document.getElementById('attendanceTable');
-            if (d.success && d.data.length > 0) {
-              tb.innerHTML = d.data.map(a => `<tr class="hover:bg-gray-50"><td class="px-4 py-3 text-sm text-gray-900">${a.nama || '-'}</td><td class="px-4 py-3 text-sm text-gray-500">${a.jenis === 'masuk' ? 'Masuk' : 'Pulang'}</td><td class="px-4 py-3 text-sm text-gray-500">${new Date(a.waktu_scan).toLocaleString('id-ID')}</td><td class="px-4 py-3 text-sm"><span class="px-2 py-1 rounded-full text-xs font-semibold ${a.status === 'tepat_waktu' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">${a.status === 'tepat_waktu' ? 'Tepat Waktu' : 'Terlambat'}</span></td><td class="px-4 py-3 text-sm text-gray-500">${a.metode || '-'}</td></tr>`).join('');
+if (d.success && d.data.length > 0) {
+               tb.innerHTML = d.data.map(a => `<tr class="hover:bg-gray-50"><td class="px-4 py-3 text-sm text-gray-900">${a.nama_guru || '-'}</td><td class="px-4 py-3 text-sm text-gray-500">${a.jenis === 'masuk' ? 'Masuk' : 'Pulang'}</td><td class="px-4 py-3 text-sm text-gray-500">${a.waktu_scan ? new Date(a.waktu_scan).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-'} WITA</td><td class="px-4 py-3 text-sm"><span class="px-2 py-1 rounded-full text-xs font-semibold ${a.status === 'tepat_waktu' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">${a.status === 'tepat_waktu' ? 'Tepat Waktu' : 'Terlambat'}</span></td><td class="px-4 py-3 text-sm text-gray-500 capitalize">${a.metode || '-'}</td></tr>`).join('');
             } else tb.innerHTML = '<tr><td colspan="5" class="px-4 py-12 text-center text-gray-500">Belum ada data kehadiran untuk tanggal ini</td></tr>';
           } catch (e) { console.error('[ATTENDANCE LOGS]', e); }
         }
