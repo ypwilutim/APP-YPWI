@@ -318,22 +318,20 @@ router.post('/scanner/attendance', async (req, res) => {
     const assignedTenantIds = assignments.map(a => a.tenant_id);
     const is_dinas_luar = !assignedTenantIds.includes(tenant_id);
 
-    const scanTime = new Date(timestamp);
-    if (isNaN(scanTime.getTime())) {
+    // Timestamp yang diterima adalah format "YYYY-MM-DD HH:MM:SS" (WITA lokal)
+    // Ekstrak langsung untuk logika bisnis
+    const timeMatch = timestamp.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})$/);
+    if (!timeMatch) {
       return res.status(400).json({ success: false, message: 'Format timestamp tidak valid' });
     }
     
-    // Konversi ke timezone WITA untuk logika bisnis
-    const userTimezone = 'Asia/Makassar';
-    const currentDay = scanTime.toLocaleDateString('id-ID', { 
-      weekday: 'long', 
-      timeZone: userTimezone 
-    }).toLowerCase();
+    const [, year, month, day, hours, minutes, seconds] = timeMatch;
+    const scanTimeWITA = `${hours}:${minutes}:${seconds}`;
+    const scanDateStr = `${year}-${month}-${day}`;
+    const localDateTime = scanDateStr + ' ' + scanTimeWITA;
     
-    const scanTimeWITA = scanTime.toLocaleTimeString('id-ID', { 
-      hour12: false, 
-      timeZone: userTimezone 
-    }).slice(0, 8);
+    // Hitung hari minggu (Indonesian locale)
+    const currentDay = new Date(`${year}-${month}-${day}`).toLocaleDateString('id-ID', { weekday: 'long' }).toLowerCase();
 
     // ====================================================================
     // 🔥 [SOLUSI FINAL TIMEZONE]: Serahkan Pembandingan Tanggal ke MySQL
@@ -341,14 +339,11 @@ router.post('/scanner/attendance', async (req, res) => {
     // Kita kirim string timestamp apa adanya ke MySQL, lalu minta MySQL
     // mengonversi parameter input dan kolom database ke tanggal yang sama.
 
-    // Ekstrak tanggal untuk pengecekan duplikat
-    const scanDateStr = timestamp.substring(0, 10);
-
     // ====================================================================
     // 🛡️ [PERBAIKAN FINAL STABIL]: Gunakan String Mentah untuk Duplikasi
     // ====================================================================
     // Karena tablet mengirimkan teks waktu lokal ("2026-05-21 07:46:00"), 
-    // kita ambil 10 karakter pertamanya saja ("2026-05-21") untuk mencocokkan tanggal.
+    // kita gunakan tanggal yang sudah dielaborasikan sebelumnya.
     // ===========================================================
     // 🛡️ [PERBAIKAN] Handle kolom waktu_absen yang mungkin belum ada di DB lama
     // ===========================================================
@@ -359,23 +354,14 @@ router.post('/scanner/attendance', async (req, res) => {
         [teacher_id, type, scanDateStr]
       );
     } catch (err) {
-      // Fallback jika kolom waktu_absen belum ada - gunakan waktu_scan dengan konversi
+      // Fallback jika kolom waktu_absen belum ada - gunakan waktu_scan
       duplicate = await db.query(
-        "SELECT id FROM attendance_logs WHERE teacher_id = ? AND jenis = ? AND DATE(waktu_scan) = DATE(CONVERT_TZ(?, '+00:00', '+08:00'))",
+        "SELECT id FROM attendance_logs WHERE teacher_id = ? AND jenis = ? AND DATE(waktu_scan) = ?",
         [teacher_id, type, scanDateStr]
       );
     }
 
     let status = 'terlambat';
-
-    // Konversi timestamp ISO ke format lokal datetime untuk waktu_scan (format: YYYY-MM-DD HH:MM:SS)
-    const year = scanTime.getFullYear();
-    const month = String(scanTime.getMonth() + 1).padStart(2, '0');
-    const day = String(scanTime.getDate()).padStart(2, '0');
-    const hours = String(scanTime.getHours()).padStart(2, '0');
-    const minutes = String(scanTime.getMinutes()).padStart(2, '0');
-    const seconds = String(scanTime.getSeconds()).padStart(2, '0');
-    const localDateTime = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 
     try {
       const [tenantData] = await db.query('SELECT use_central_rules, tipe_unit FROM tenants WHERE tenant_id = ?', [tenant_id]);

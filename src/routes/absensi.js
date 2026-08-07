@@ -346,6 +346,10 @@ router.get('/admin/attendance-logs', authenticateOperator, async (req, res) => {
   try {
     const dateFilter = req.query.date;
     const statusFilter = req.query.status;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = (page - 1) * limit;
+
     // Prioritas: query param > user.tenant_id (dari JWT) > assignments[0]
     let tenantId = Array.isArray(req.query.tenant_id) ? req.query.tenant_id[0] : req.query.tenant_id;
     tenantId = tenantId || req.user.tenant_id || (req.user && req.user.assignments && req.user.assignments.length === 1 ? req.user.assignments[0].tenant_id : null);
@@ -353,7 +357,7 @@ router.get('/admin/attendance-logs', authenticateOperator, async (req, res) => {
     // Operator: force tenant_id from assignment if not provided
     if (req.user.role !== 'admin' && !tenantId) {
       const adminAssignments = (req.user.assignments || []).filter(a => {
-        const roles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin'];
+        const roles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin', 'bendahara'];
         return roles.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''));
       });
       if (adminAssignments.length === 1) {
@@ -361,13 +365,19 @@ router.get('/admin/attendance-logs', authenticateOperator, async (req, res) => {
       }
     }
 
-    // Filter: hanya tampilkan absen untuk guru yang terdaftar di tenant ini + scan di tenant ini
-    if (!tenantId) {
+    // Admin bisa melihat semua data tanpa filter tenant_id
+    const isAdmin = req.user.role === 'admin';
+    if (!tenantId && !isAdmin) {
       return res.status(400).json({ success: false, message: 'tenant_id required' });
     }
 
-    let whereClauses = ['al.tenant_id = ?'];
-    const params = [tenantId];
+    let whereClauses = [];
+    const params = [];
+
+    if (tenantId) {
+      whereClauses.push('al.tenant_id = ?');
+      params.push(tenantId);
+    }
 
     if (dateFilter) {
       whereClauses.push('DATE(al.waktu_scan) = ?');
@@ -379,13 +389,29 @@ router.get('/admin/attendance-logs', authenticateOperator, async (req, res) => {
       params.push(statusFilter);
     }
 
-    const whereSql = 'WHERE ' + whereClauses.join(' AND ');
-    const query = `SELECT al.id, al.teacher_id, al.waktu_scan, al.jenis, al.status, al.metode, t.nama, t.nip, ten.nama_sekolah, ar.keterangan AS nama_aturan, al.tenant_id as scan_tenant_id, al.dinas_luar FROM attendance_logs al JOIN teachers t ON al.teacher_id = t.id JOIN tenants ten ON al.tenant_id = ten.tenant_id LEFT JOIN attendance_rules ar ON al.rule_id = ar.id ${whereSql} ORDER BY al.waktu_scan DESC LIMIT 100`;
+    const whereSql = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
+    const query = `SELECT al.id, al.teacher_id, al.waktu_scan, al.jenis, al.status, al.metode, t.nama AS nama, t.nip, ten.nama_sekolah, al.tenant_id as scan_tenant_id, al.dinas_luar FROM attendance_logs al JOIN teachers t ON al.teacher_id = t.id JOIN tenants ten ON al.tenant_id = ten.tenant_id ${whereSql} ORDER BY al.waktu_scan DESC LIMIT ? OFFSET ?`;
+    params.push(limit, offset);
+
+    const totalRes = await db.query(`SELECT COUNT(*) as total FROM attendance_logs al ${whereSql}`, params.slice(0, -2));
 
     const logs = await db.query(query, params);
-    console.log('[ATTENDANCE DEBUG]', { tenantId, dateFilter, statusFilter, count: logs.length, sample: logs.slice(0, 3).map(l => ({teacher_id: l.teacher_id, scan_tenant_id: l.scan_tenant_id, nama_guru: l.nama})) });
+    const processedLogs = logs.map(l => ({
+      ...l,
+      jenis: l.jenis ? (l.jenis.charAt(0).toUpperCase() + l.jenis.slice(1).toLowerCase()) : (l.status === 'tepat_waktu' ? 'Masuk' : 'Pulang')
+    }));
+    console.log('[ATTENDANCE DEBUG]', { tenantId, dateFilter, statusFilter, count: processedLogs.length, sample: processedLogs.slice(0, 3).map(l => ({teacher_id: l.teacher_id, scan_tenant_id: l.scan_tenant_id, nama: l.nama})) });
 
-    res.json({ success: true, data: logs });
+    res.json({ 
+      success: true, 
+      data: processedLogs,
+      pagination: {
+        page,
+        limit,
+        total: totalRes[0].total,
+        totalPages: Math.ceil(totalRes[0].total / limit)
+      }
+    });
   } catch (error) {
     console.error('Admin attendance logs error:', error);
     res.status(500).json({ success: false, message: 'Error fetching attendance logs' });

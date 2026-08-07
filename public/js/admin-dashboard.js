@@ -734,30 +734,33 @@ async function fetchAttendanceLogs() {
         const res = await response.json();
 
         if (res.success) {
-            const items = Array.isArray(res.data) ? res.data : (res.data ? [res.data] : []);
-            const tbody = document.getElementById('attendanceTable');
-            tbody.innerHTML = items.map(a => `
-            <tr class="hover:bg-gray-50">
+          const items = Array.isArray(res.data) ? res.data : (res.data ? [res.data] : []);
+          const tbody = document.getElementById('attendanceTable');
+          tbody.innerHTML = items.map(a => {
+            const jenisDisplay = a.jenis || (a.status === 'tepat_waktu' ? 'Masuk' : 'Pulang');
+            return `<tr class="hover:bg-gray-50">
               <td class="px-6 py-4 text-sm text-gray-900">${a.nama || '-'}</td>
               <td class="px-6 py-4 text-sm text-gray-500">${a.nip || '-'}</td>
-              <td class="px-6 py-4 text-sm text-gray-500">${a.jenis}</td>
+              <td class="px-6 py-4 text-sm text-gray-500">${jenisDisplay}</td>
               <td class="px-6 py-4 text-sm text-gray-500">${new Date(a.waktu_scan).toLocaleString('id-ID')}</td>
               <td class="px-6 py-4 text-sm">
                 <span class="px-2 py-1 rounded-full text-xs ${a.status === 'tepat_waktu' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
                   ${a.status === 'tepat_waktu' ? 'Tepat Waktu' : 'Terlambat'}
                 </span>
               </td>
-              <td class="px-6 py-4 text-sm text-gray-500">${a.metode}</td>
-            </tr>
-          `).join('');
+              <td class="px-6 py-4 text-sm text-gray-500">${a.metode || '-'}</td>
+            </tr>`;
+          }).join('');
         }
-    } catch (error) {
+      } catch (error) {
         console.error('Attendance logs fetch error:', error);
+      }
     }
-}
 
-async function fetchTenantLocations() {
-    try {
+    window.loadAttendanceLogs = fetchAttendanceLogs;
+
+    async function fetchTenantLocations() {
+      try {
         const response = await fetch('/api/admin/tenants', {
             headers: { 'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}` }
         });
@@ -2143,6 +2146,9 @@ function initAllUI() {
     // Refresh devices button
     document.getElementById('refresh-devices')?.addEventListener('click', loadScannerDevices);
 
+    // Add device form submit
+    document.getElementById('addDeviceForm')?.addEventListener('submit', handleSubmitDevice);
+
     // Auto evaluation button
     document.getElementById('runAutoEvaluation')?.addEventListener('click', runAutoEvaluation);
 
@@ -3354,6 +3360,48 @@ window.selectTeacher = function (id) { };
 window.editDevice = function (id) { };
 window.changeDeviceStatus = function (id, status) { };
 window.deleteDevice = function (id) { };
+window.handleSubmitDevice = async function (event) {
+    event.preventDefault();
+
+    const tenantId = document.getElementById('deviceTenantId')?.value;
+    const schoolName = document.getElementById('deviceSchoolName')?.value;
+    const registrationToken = document.getElementById('deviceRegistrationToken')?.value;
+    const deviceStatus = document.getElementById('deviceStatus')?.value;
+    const deviceName = document.getElementById('deviceName')?.value || 'Scanner QR';
+
+    if (!tenantId) {
+        alert('Pilih sekolah/tenant terlebih dahulu');
+        return;
+    }
+
+    const authHeader = () => ({ 'Authorization': 'Bearer ' + (window.authToken || localStorage.getItem('token') || ''), 'Content-Type': 'application/json' });
+
+    try {
+        const response = await fetch('/api/admin/scanner-devices', {
+            method: 'POST',
+            headers: authHeader(),
+            body: JSON.stringify({
+                tenant_id: tenantId,
+                registration_token: registrationToken,
+                device_name: deviceName,
+                status: deviceStatus
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            alert('Otorisasi scanner berhasil dirilis');
+            hideAddDeviceModal();
+            if (typeof loadScannerDevices === 'function') loadScannerDevices();
+        } else {
+            alert('Gagal: ' + (result.message || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Submit device error:', error);
+        alert('Terjadi kesalahan sistem');
+    }
+};
 window.showAddLocationModal = function () { };
-window.toggleLocationStatus = function (id) { };
+window.toggleLocationStatus = function (id, status) { };
 window.deleteTenantLocation = function (id) { };

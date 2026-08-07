@@ -4011,59 +4011,6 @@ router.put('/admin/emails/:id/read', authenticateOperator, async (req, res) => {
   }
 });
 
-// GET /api/admin/attendance-logs - Recent attendance logs
-router.get('/admin/attendance-logs', authenticateOperator, async (req, res) => {
-  try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 50;
-    const offset = (page - 1) * limit;
-    const tenant_id = req.query.tenant_id || req.user.tenant_id;
-
-    let query = `
-      SELECT a.id, a.teacher_id, a.waktu_scan, a.status, a.metode, a.tenant_id,
-             t.nama as nama_guru, t.nip,
-             te.nama_sekolah
-      FROM attendance_logs a
-      JOIN teachers t ON a.teacher_id = t.id
-      JOIN tenants te ON a.tenant_id = te.tenant_id
-    `;
-    let params = [];
-    let whereClauses = [];
-
-    if (tenant_id) {
-      whereClauses.push('a.tenant_id = ?');
-      params.push(tenant_id);
-    }
-
-    if (whereClauses.length) {
-      query += ' WHERE ' + whereClauses.join(' AND ');
-    }
-
-    query += ' ORDER BY a.waktu_scan DESC LIMIT ? OFFSET ?';
-    params.push(limit, offset);
-
-    const logs = await db.query(query, params);
-    const totalRes = await db.query('SELECT COUNT(*) as total FROM attendance_logs' + (tenant_id ? ' WHERE tenant_id = ?' : ''), tenant_id ? [tenant_id] : []);
-
-    res.json({
-      success: true,
-      data: logs.map(l => ({
-        ...l,
-        jenis: l.status === 'tepat_waktu' ? 'Masuk' : 'Pulang'
-      })),
-      pagination: {
-        page,
-        limit,
-        total: totalRes[0].total,
-        totalPages: Math.ceil(totalRes[0].total / limit)
-      }
-    });
-  } catch (error) {
-    console.error('Attendance logs error:', error);
-    res.status(500).json({ success: false, message: 'Error fetching attendance logs' });
-  }
-});
-
 // GET /api/public/lookup-nik - Lookup NIK in teachers or parents table
 router.get('/public/lookup-nik', async (req, res) => {
   try {
