@@ -343,7 +343,12 @@
           <h3 class="text-lg font-semibold text-gray-900">
             <i class="fas fa-users text-red-600 mr-2"></i>Daftar Guru
           </h3>
-          <span id="totalCount" class="text-sm text-gray-600">0 guru</span>
+          <div class="flex items-center space-x-3">
+            <span id="totalCount" class="text-sm text-gray-600">0 guru</span>
+            <button onclick="exportTeachersExcel()" class="px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700">
+              <i class="fas fa-file-excel mr-1"></i>Export Excel
+            </button>
+          </div>
         </div>
         <div class="overflow-x-auto">
           <table class="w-full">
@@ -353,6 +358,8 @@
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">NIK/NIP</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pendidikan</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status Perkawinan</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">TMT</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Masa Kerja</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kelengkapan</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sekolah</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Aksi</th>
@@ -395,6 +402,17 @@
     }
 
     async function loadDetail() {
+      // Admin/operator langsung akses tanpa verifikasi KTP
+      if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'operator')) {
+        document.getElementById('verificationModal').classList.add('hidden');
+        document.getElementById('waitingModal').classList.add('hidden');
+        document.getElementById('specialLoginModal').classList.add('hidden');
+        document.getElementById('createAccountModal').classList.add('hidden');
+        document.getElementById('contentState').classList.remove('hidden');
+        applyFilters();
+        return;
+      }
+
       if (!verificationToken) {
         showVerificationModal();
         return;
@@ -692,6 +710,28 @@
       }
     }
 
+    function parsePendidikan(raw) {
+      if (!raw) return { jenjang: '', sekolah: '', jurusan: '', tahun: '', label: '-' };
+      const parts = String(raw).split('/');
+      const jenjang = parts[0] || '';
+      const sekolah = parts[1] || '';
+      const jurusan = parts[2] || '';
+      const tahun = parts[3] || '';
+      const label = jenjang ? (tahun ? `${jenjang} (${tahun})` : jenjang) : '-';
+      return { jenjang, sekolah, jurusan, tahun, label };
+    }
+
+    function hitungMasaKerja(tmt) {
+      if (!tmt) return '-';
+      const start = new Date(tmt);
+      if (isNaN(start.getTime())) return '-';
+      const now = new Date();
+      let years = now.getFullYear() - start.getFullYear();
+      let months = now.getMonth() - start.getMonth();
+      if (months < 0 || (months === 0 && now.getDate() < start.getDate())) years--;
+      return years + ' thn';
+    }
+
     function renderTeachers(teachers, pagination) {
       const tbody = document.getElementById('teachersTableBody');
       if (!tbody) return;
@@ -716,8 +756,10 @@
               <div>NIK: ${teacher.nik || '-'}</div>
               <div>NIP: ${teacher.nip || '-'}</div>
             </td>
-            <td class="px-6 py-4 text-sm text-gray-600">${teacher.pendidikan_terakhir || '-'}</td>
+            <td class="px-6 py-4 text-sm text-gray-600">${parsePendidikan(teacher.pendidikan_terakhir).label}</td>
             <td class="px-6 py-4 text-sm text-gray-600">${teacher.status_perkawinan || '-'}</td>
+            <td class="px-6 py-4 text-sm text-gray-600">${teacher.tmt || '-'}</td>
+            <td class="px-6 py-4 text-sm text-gray-600">${hitungMasaKerja(teacher.tmt)}</td>
             <td class="px-6 py-4">
               <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${completionColor}">
                 ${teacher.completion_percentage}%
@@ -791,6 +833,30 @@
       applyFilters();
     }
 
+    async function exportTeachersExcel() {
+      try {
+        Swal.fire({ title: 'Memproses...', text: 'Sedang mengexport data guru', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        const response = await api('/api/admin/teacher-profile-detail/export');
+        if (!response) { Swal.close(); alert('Gagal export. Pastikan Anda login sebagai admin.'); return; }
+        if (!response.ok) { Swal.close(); alert('Gagal export data guru'); return; }
+
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `data_guru_${new Date().toISOString().slice(0, 10)}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+        Swal.close();
+      } catch (error) {
+        console.error('Export error:', error);
+        Swal.close();
+        alert('Terjadi kesalahan saat export');
+      }
+    }
+
     async function viewTeacherDetail(teacherId) {
       try {
         const response = await api(`/api/admin/teachers/${teacherId}`);
@@ -800,42 +866,89 @@
 
         if (result.success) {
           const teacher = result.data;
-          let detailHtml = `
-            <div class="space-y-4">
-              <div class="grid grid-cols-2 gap-4">
-                <div><strong>Nama:</strong> ${teacher.nama || '-'}</div>
-                <div><strong>NIK:</strong> ${teacher.nik || '-'}</div>
-                <div><strong>NIP:</strong> ${teacher.nip || '-'}</div>
-                <div><strong>Email:</strong> ${teacher.email || '-'}</div>
-                <div><strong>TTL:</strong> ${teacher.tempat_lahir || '-'}, ${teacher.tanggal_lahir || '-'}</div>
-                <div><strong>Jenis Kelamin:</strong> ${teacher.jenis_kelamin === 'L' ? 'Laki-laki' : teacher.jenis_kelamin === 'P' ? 'Perempuan' : '-'}</div>
-                <div><strong>Alamat:</strong> ${teacher.alamat || '-'}</div>
-                <div><strong>No WA:</strong> ${teacher.no_wa || '-'}</div>
-                <div><strong>Status Kepegawaian:</strong> ${teacher.status_kepegawaian || '-'}</div>
-                <div><strong>TMT:</strong> ${teacher.tmt || '-'}</div>
-                <div><strong>Pendidikan Terakhir:</strong> ${teacher.pendidikan_terakhir || '-'}</div>
-                <div><strong>Status Perkawinan:</strong> ${teacher.status_perkawinan || '-'}</div>
-                ${teacher.jumlah_anak !== null && teacher.jumlah_anak !== undefined ? `<div><strong>Jumlah Anak:</strong> ${teacher.jumlah_anak}</div>` : ''}
-              </div>
-          `;
+          const pend = parsePendidikan(teacher.pendidikan_terakhir);
+          const jk = teacher.jenis_kelamin === 'L' ? 'Laki-laki' : teacher.jenis_kelamin === 'P' ? 'Perempuan' : '-';
+          const fmtUang = (v) => (v !== null && v !== undefined && v !== '') ? 'Rp ' + Number(v).toLocaleString('id-ID') : '-';
+          const row = (label, val) => `<div><strong>${label}:</strong> ${val || '-'}</div>`;
 
-          if (teacher.assignments && teacher.assignments.length > 0) {
-            detailHtml += `
-              <div class="mt-4">
-                <strong>Assignments:</strong>
-                <ul class="list-disc list-inside mt-2">
-                  ${teacher.assignments.map(a => `<li>${a.nama_sekolah || a.tenant_id} - ${a.jabatan_di_unit}</li>`).join('')}
-                </ul>
-              </div>
-            `;
-          }
+          let detailHtml = `<div class="text-left space-y-4">`;
+
+          detailHtml += `<div>
+            <h4 class="font-bold text-gray-800 border-b pb-1 mb-2">Data Pribadi</h4>
+            <div class="grid grid-cols-2 gap-2 text-sm">
+              ${row('Nama', teacher.nama)}
+              ${row('NIK', teacher.nik)}
+              ${row('NIP', teacher.nip)}
+              ${row('Email', teacher.email)}
+              ${row('Tempat Lahir', teacher.tempat_lahir)}
+              ${row('Tanggal Lahir', teacher.tanggal_lahir)}
+              ${row('Jenis Kelamin', jk)}
+              ${row('Alamat', teacher.alamat)}
+              ${row('No WA', teacher.no_wa)}
+              ${row('Scan ID', teacher.scan_id)}
+              ${row('Foto', teacher.link_foto ? '<a href="'+teacher.link_foto+'" target="_blank" class="text-blue-600">Lihat</a>' : '-')}
+            </div>
+          </div>`;
+
+          detailHtml += `<div>
+            <h4 class="font-bold text-gray-800 border-b pb-1 mb-2">Pendidikan Terakhir</h4>
+            <div class="grid grid-cols-2 gap-2 text-sm">
+              ${row('Jenjang', pend.jenjang)}
+              ${row('Sekolah/Universitas', pend.sekolah)}
+              ${row('Jurusan', pend.jurusan)}
+              ${row('Tahun Lulus', pend.tahun)}
+            </div>
+          </div>`;
+
+          detailHtml += `<div>
+            <h4 class="font-bold text-gray-800 border-b pb-1 mb-2">Kepegawaian & Keluarga</h4>
+            <div class="grid grid-cols-2 gap-2 text-sm">
+              ${row('Status Kepegawaian', teacher.status_kepegawaian)}
+              ${row('TMT', teacher.tmt)}
+              ${row('Masa Kerja', hitungMasaKerja(teacher.tmt))}
+              ${row('Status Perkawinan', teacher.status_perkawinan)}
+              ${row('Jumlah Anak', (teacher.jumlah_anak !== null && teacher.jumlah_anak !== undefined) ? teacher.jumlah_anak : '-')}
+            </div>
+          </div>`;
+
+          detailHtml += `<div>
+            <h4 class="font-bold text-gray-800 border-b pb-1 mb-2">Rekening Bank</h4>
+            <div class="grid grid-cols-2 gap-2 text-sm">
+              ${row('Bank', teacher.BANK)}
+              ${row('Nomor Rekening', teacher.nomor_rekening)}
+            </div>
+          </div>`;
+
+          detailHtml += `<div>
+            <h4 class="font-bold text-gray-800 border-b pb-1 mb-2">Penempatan & Jabatan</h4>
+            <div class="grid grid-cols-2 gap-2 text-sm">
+              ${row('Sekolah', teacher.sekolah_list)}
+            </div>
+            ${teacher.assignments && teacher.assignments.length > 0 ? `<ul class="list-disc list-inside mt-2 text-sm">${teacher.assignments.map(a => `<li>${a.nama_sekolah || a.tenant_id} - ${a.jabatan_di_unit || '-'}</li>`).join('')}</ul>` : ''}
+          </div>`;
+
+          detailHtml += `<div>
+            <h4 class="font-bold text-gray-800 border-b pb-1 mb-2">Gaji & Tunjangan</h4>
+            <div class="grid grid-cols-2 gap-2 text-sm">
+              ${row('Gaji Pokok', fmtUang(teacher.gaji_pokok))}
+              ${row('Tunj. Kinerja', fmtUang(teacher.tunj_kinerja))}
+              ${row('Tunj. Umum', fmtUang(teacher.tunj_umum))}
+              ${row('Tunj. Istri', fmtUang(teacher.tunj_istri))}
+              ${row('Tunj. Anak', fmtUang(teacher.tunj_anak))}
+              ${row('Tunj. Kepala Sekolah', fmtUang(teacher.tunj_kepala_sekolah))}
+              ${row('Tunj. Wali Kelas', fmtUang(teacher.tunj_wali_kelas))}
+              ${row('Honor Bendahara', fmtUang(teacher.honor_bendahara))}
+              ${row('Tunj. Kehadiran', fmtUang(teacher.tunj_kehadiran))}
+              ${row('Potongan', fmtUang(teacher.potongan))}
+            </div>
+          </div>`;
 
           detailHtml += '</div>';
 
           Swal.fire({
             title: `Detail Guru - ${teacher.nama}`,
             html: detailHtml,
-            width: '600px',
+            width: '800px',
             confirmButtonText: 'Tutup'
           });
         }

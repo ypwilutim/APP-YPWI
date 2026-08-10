@@ -2981,3 +2981,59 @@ if (document.readyState === 'loading') {
 } else {
     checkEmailVerification();
 }
+
+// ============================================================
+// PROBLEM ATTENDANCE QR
+// ============================================================
+function showProblemQR() {
+    const modal = document.getElementById('problemQRModal');
+    const container = document.getElementById('problemQRImage');
+    if (!modal || !container) return;
+
+    container.innerHTML = '<div style="text-align:center;padding:2rem;"><i class="fas fa-spinner fa-spin" style="font-size:1.5rem;color:#2563eb;"></i><p style="margin-top:0.5rem;color:#64748b;font-size:0.875rem;">Membuat QR...</p></div>';
+    modal.style.display = 'flex';
+
+    (async () => {
+        try {
+            const token = window.token || localStorage.getItem('token');
+            const res = await fetch('/api/teacher/info', {
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            const data = await res.json();
+            if (!data.success || !data.teacher) {
+                container.innerHTML = '<p style="color:#dc2626;text-align:center;">Gagal memuat data guru</p>';
+                return;
+            }
+
+            const teacher = data.teacher;
+            const scanId = teacher.scan_id || teacher.id;
+            const payload = {
+                scan_id: String(scanId),
+                nama: teacher.nama || '',
+                email: teacher.email || '',
+                no_wa: teacher.no_wa || '',
+                ts: Date.now()
+            };
+
+            const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+            const qrRes = await fetch('/api/qrcode/' + encodeURIComponent(encoded) + '?size=200', {
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            const qrData = await qrRes.json();
+
+            if (qrData.success && qrData.qr_url) {
+                container.innerHTML = '<img src="' + qrData.qr_url + '" style="max-width:200px;height:auto;border-radius:0.5rem;" alt="QR Absen Masalah">';
+            } else {
+                container.innerHTML = '<p style="color:#dc2626;text-align:center;">Gagal generate QR</p>';
+            }
+        } catch (e) {
+            console.error('Problem QR error:', e);
+            container.innerHTML = '<p style="color:#dc2626;text-align:center;">Terjadi kesalahan</p>';
+        }
+    })();
+}
+
+function closeProblemQRModal() {
+    const modal = document.getElementById('problemQRModal');
+    if (modal) modal.style.display = 'none';
+}

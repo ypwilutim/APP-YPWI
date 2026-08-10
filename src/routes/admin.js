@@ -887,7 +887,12 @@ router.post('/admin/teachers', authenticateOperator, async (req, res) => {
 router.get('/admin/teachers/:id', authenticateOperator, async (req, res) => {
   try {
     const [teacher] = await db.query(
-      'SELECT t.id, t.nama FROM teachers t WHERE t.id = ? AND t.status_aktif = 1',
+      `SELECT t.*, GROUP_CONCAT(DISTINCT tn.nama_sekolah) as sekolah_list
+       FROM teachers t
+       LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id
+       LEFT JOIN tenants tn ON ta.tenant_id = tn.tenant_id
+       WHERE t.id = ? AND t.status_aktif = 1
+       GROUP BY t.id`,
       [req.params.id]
     );
     if (!teacher) {
@@ -957,6 +962,202 @@ router.delete('/admin/teachers/:id', authenticateOperator, async (req, res) => {
   } catch (error) {
     console.error('Delete teacher error:', error);
     res.status(500).json({ success: false, message: 'Error deleting teacher' });
+  }
+});
+
+// ============================================================
+// MANUAL ATTENDANCE - Admin entry for teachers who cannot scan/absen
+// ============================================================
+router.post('/admin/attendance/manual', authenticateOperator, async (req, res) => {
+  try {
+    const { teacher_id, tenant_id, tanggal, jenis, jam } = req.body;
+
+    if (!teacher_id || !tenant_id || !tanggal || !jenis || !jam) {
+      return res.status(400).json({ success: false, message: 'Semua field wajib diisi: guru, sekolah, tanggal, jenis, jam' });
+    }
+
+    if (!['masuk', 'pulang'].includes(jenis)) {
+      return res.status(400).json({ success: false, message: 'Jenis absen tidak valid' });
+    }
+
+    const [teacher] = await db.query('SELECT nama, email, no_wa FROM teachers WHERE id = ? AND status_aktif = 1', [teacher_id]);
+    if (!teacher) {
+      return res.status(404).json({ success: false, message: 'Guru tidak ditemukan atau nonaktif' });
+    }
+
+    const [tenant] = await db.query('SELECT nama_sekolah FROM tenants WHERE tenant_id = ?', [tenant_id]);
+    if (!tenant) {
+      return res.status(404).json({ success: false, message: 'Sekolah/tenant tidak ditemukan' });
+    }
+
+    const scanDate = new Date(`${tanggal}T${jam}:00`);
+    if (isNaN(scanDate.getTime())) {
+      return res.status(400).json({ success: false, message: 'Format tanggal/jam tidak valid' });
+    }
+
+    const userTimezone = 'Asia/Makassar';
+    const dayName = scanDate.toLocaleDateString('id-ID', { weekday: 'long', timeZone: userTimezone });
+    const timeOnly = String(scanDate.getHours()).padStart(2, '0') + ':' + String(scanDate.getMinutes()).padStart(2, '0');
+
+    const tipeRule = jenis === 'masuk' ? 'Datang' : 'Pulang';
+
+    const rules = await db.query(
+      `SELECT status_log, hari, jam_mulai, jam_selesai FROM attendance_rules WHERE tenant_id = ? AND tipe = ? AND ? BETWEEN jam_mulai AND jam_selesai`,
+      [tenant_id, tipeRule, timeOnly]
+    );
+
+    let status = 'terlambat';
+    const matchingRules = rules.filter(rule => {
+      if (!rule.hari || rule.hari.trim() === '') return true;
+      const ruleDays = rule.hari.toLowerCase().split(',').map(d => d.trim());
+      return ruleDays.includes(dayName);
+    });
+
+    if (matchingRules.length > 0) {
+      status = matchingRules[0].status_log;
+    }
+
+    const waktuScan = scanDate.toISOString().slice(0, 16).replace('T', ' ');
+
+    await db.query(
+      `INSERT INTO attendance_logs (teacher_id, tenant_id, waktu_scan, jenis, metode, status, keterangan, dinas_luar)
+       VALUES (?, ?, ?, ?, 'manual', ?, ?, 0)`,
+      [teacher_id, tenant_id, waktuScan, jenis, status, 'Absen manual oleh admin']
+    );
+
+    const subject = `Absensi Manual ${jenis.toUpperCase()} - ${tenant.nama_sekolah || tenant_id}`;
+    const htmlMessage = `<!DOCTYPE html>
+<html lang="id">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Absensi Manual</title></head>
+<body style="margin:0;padding:0;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background-color:#f5f5f5;">
+  <div style="max-width:600px;margin:20px auto;background:white;border-radius:12px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.1);">
+    <div style="background:linear-gradient(135deg,#2563eb,#1d4ed8);padding:30px;text-align:center;">
+      <h1 style="margin:0;color:white;font-size:24px;">YPWI Lutim</h1>
+      <p style="margin:5px 0 0 0;color:rgba(255,255,255,0.9);font-size:14px;">Notifikasi Absensi Manual</p>
+    </div>
+    <div style="padding:30px;">
+      <h2 style="margin:0 0 20px 0;color:#333;font-size:20px;">📝 Absensi Manual Berhasil</h2>
+      <p style="margin:0 0 15px 0;color:#555;font-size:16px;line-height:1.6;">
+        Assalamu'alaikum <strong>${teacher.nama}</strong>,
+      </p>
+      <p style="margin:0 0 20px 0;color:#555;font-size:16px;line-height:1.6;">
+        Anda telah diabsen secara manual oleh admin untuk absensi <strong>${jenis.toUpperCase()}</strong> pada tanggal <strong>${scanDate.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: userTimezone })}</strong>.
+      </p>
+      <table style="width:100%;border-collapse:collapse;margin:20px 0;">
+        <tr><td style="padding:8px 0;border-bottom:1px solid #eee;color:#666;">Sekolah</td><td style="padding:8px 0;border-bottom:1px solid #eee;font-weight:600;">${tenant.nama_sekolah || tenant_id}</td></tr>
+        <tr><td style="padding:8px 0;border-bottom:1px solid #eee;color:#666;">Jenis</td><td style="padding:8px 0;border-bottom:1px solid #eee;font-weight:600;">${jenis.toUpperCase()}</td></tr>
+        <tr><td style="padding:8px 0;border-bottom:1px solid #eee;color:#666;">Waktu</td><td style="padding:8px 0;border-bottom:1px solid #eee;font-weight:600;">${timeOnly} WITA</td></tr>
+        <tr><td style="padding:8px 0;border-bottom:1px solid #eee;color:#666;">Status</td><td style="padding:8px 0;border-bottom:1px solid #eee;font-weight:600;color:${status === 'tepat_waktu' ? '#16a34a' : '#d97706'};">${status === 'tepat_waktu' ? 'Tepat Waktu' : 'Terlambat'}</td></tr>
+        <tr><td style="padding:8px 0;color:#666;">Metode</td><td style="padding:8px 0;font-weight:600;">Manual (Admin)</td></tr>
+      </table>
+      <p style="margin:20px 0 0 0;color:#888;font-size:14px;">Email ini dikirim otomatis oleh sistem.</p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+    if (typeof global.sendEmail === 'function') {
+      await global.sendEmail(teacher.email, subject, htmlMessage, '', [], 'manual_attendance');
+    }
+
+    res.json({ success: true, message: 'Absensi manual berhasil disimpan', data: { teacher_id, tenant_id, tanggal, jenis, jam, status, waktu_scan: waktuScan } });
+  } catch (error) {
+    console.error('Manual attendance error:', error);
+    res.status(500).json({ success: false, message: 'Gagal menyimpan absensi manual' });
+  }
+});
+
+// GET /api/admin/attendance/rules - Preview attendance rule status for manual attendance
+router.get('/admin/attendance/rules', authenticateOperator, async (req, res) => {
+  try {
+    const { tenant_id, tipe, time, day } = req.query;
+
+    if (!tenant_id || !tipe || !time || !day) {
+      return res.status(400).json({ success: false, message: 'Parameter tidak lengkap' });
+    }
+
+    const [tenant] = await db.query('SELECT tenant_id FROM tenants WHERE tenant_id = ?', [tenant_id]);
+    if (!tenant) {
+      return res.status(404).json({ success: false, message: 'Tenant tidak ditemukan' });
+    }
+
+    const rules = await db.query(
+      `SELECT status_log, hari, jam_mulai, jam_selesai FROM attendance_rules WHERE tenant_id = ? AND tipe = ? AND ? BETWEEN jam_mulai AND jam_selesai`,
+      [tenant_id, tipe, time]
+    );
+
+    const matchingRules = rules.filter(rule => {
+      if (!rule.hari || rule.hari.trim() === '') return true;
+      const ruleDays = rule.hari.toLowerCase().split(',').map(d => d.trim());
+      return ruleDays.includes(day.toLowerCase());
+    });
+
+    res.json({ success: true, data: matchingRules });
+  } catch (error) {
+    console.error('Attendance rules preview error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching attendance rules' });
+  }
+});
+
+// POST /api/admin/attendance/qr-decode - Decode problem attendance QR and return teacher info
+router.post('/admin/attendance/qr-decode', authenticateOperator, async (req, res) => {
+  try {
+    const { qr_string } = req.body;
+
+    if (!qr_string || typeof qr_string !== 'string') {
+      return res.status(400).json({ success: false, message: 'QR string tidak valid' });
+    }
+
+    let payload;
+    try {
+      const decoded = Buffer.from(qr_string, 'base64').toString('utf-8');
+      payload = JSON.parse(decoded);
+    } catch (e) {
+      return res.status(400).json({ success: false, message: 'Format QR tidak dikenali' });
+    }
+
+    const { scan_id, nama, email, no_wa, ts } = payload;
+
+    if (!scan_id && !email) {
+      return res.status(400).json({ success: false, message: 'QR tidak berisi data guru yang valid' });
+    }
+
+    let teacher = null;
+    if (scan_id) {
+      const results = await db.query('SELECT id, nama, email, no_wa, scan_id FROM teachers WHERE scan_id = ? AND status_aktif = 1', [scan_id]);
+      teacher = results[0] || null;
+    }
+    if (!teacher && email) {
+      const results = await db.query('SELECT id, nama, email, no_wa, scan_id FROM teachers WHERE email = ? AND status_aktif = 1', [email]);
+      teacher = results[0] || null;
+    }
+
+    if (!teacher) {
+      return res.status(404).json({ success: false, message: 'Guru tidak ditemukan atau nonaktif' });
+    }
+
+    const assignments = await db.query(
+      'SELECT tenant_id, jabatan_di_unit FROM teacher_assignments WHERE teacher_id = ? LIMIT 1',
+      [teacher.id]
+    );
+    const firstTenant = assignments[0] || null;
+
+    res.json({
+      success: true,
+      message: 'QR berhasil dibaca',
+      data: {
+        teacher_id: teacher.id,
+        nama: teacher.nama,
+        email: teacher.email,
+        no_wa: teacher.no_wa,
+        scan_id: teacher.scan_id,
+        tenant_id: firstTenant ? firstTenant.tenant_id : null,
+        original_payload: payload
+      }
+    });
+  } catch (error) {
+    console.error('QR decode error:', error);
+    res.status(500).json({ success: false, message: 'Gagal membaca QR' });
   }
 });
 
@@ -1091,7 +1292,7 @@ async function getTeacherProfileSummary() {
     const filledFields = requiredFields.filter(f => teacher[f] && teacher[f].toString().trim() !== '').length;
     if (filledFields === requiredFields.length) completeProfileCount++;
 
-    const pendidikan = teacher.pendidikan_terakhir || 'Tidak Diketahui';
+    const pendidikan = (teacher.pendidikan_terakhir ? String(teacher.pendidikan_terakhir).split('/')[0] : '') || 'Tidak Diketahui';
     educationStats[pendidikan] = (educationStats[pendidikan] || 0) + 1;
 
     const statusPerkawinan = teacher.status_perkawinan || 'Tidak Diketahui';
@@ -1128,7 +1329,7 @@ router.get('/admin/teacher-profile-detail', authenticateOperator, async (req, re
     let query = `SELECT t.id, t.nama, t.nik, t.nip, t.email, t.tempat_lahir, t.tanggal_lahir, t.jenis_kelamin, t.alamat, t.no_wa, t.status_kepegawaian, t.tmt, t.pendidikan_terakhir, t.status_perkawinan, t.jumlah_anak, t.link_foto, GROUP_CONCAT(DISTINCT tn.nama_sekolah) as sekolah_list FROM teachers t LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id LEFT JOIN tenants tn ON ta.tenant_id = tn.tenant_id WHERE t.status_aktif = 1`;
     const params = [];
 
-    if (pendidikan) { query += ' AND t.pendidikan_terakhir = ?'; params.push(pendidikan); }
+    if (pendidikan) { query += ' AND t.pendidikan_terakhir LIKE ?'; params.push(pendidikan + '/%'); }
     if (status_perkawinan) { query += ' AND t.status_perkawinan = ?'; params.push(status_perkawinan); }
     if (search) { query += ' AND (t.nama LIKE ? OR t.nik LIKE ? OR t.nip LIKE ?)'; params.push(`%${search}%`, `%${search}%`, `%${search}%`); }
 
@@ -1144,7 +1345,7 @@ router.get('/admin/teacher-profile-detail', authenticateOperator, async (req, re
 
     let countQuery = 'SELECT COUNT(*) as total FROM teachers t WHERE t.status_aktif = 1';
     const countParams = [];
-    if (pendidikan) { countQuery += ' AND t.pendidikan_terakhir = ?'; countParams.push(pendidikan); }
+    if (pendidikan) { countQuery += ' AND t.pendidikan_terakhir LIKE ?'; countParams.push(pendidikan + '/%'); }
     if (status_perkawinan) { countQuery += ' AND t.status_perkawinan = ?'; countParams.push(status_perkawinan); }
     if (search) { countQuery += ' AND (t.nama LIKE ? OR t.nik LIKE ? OR t.nip LIKE ?)'; countParams.push(`%${search}%`, `%${search}%`, `%${search}%`); }
     const totalResult = await db.query(countQuery, countParams);
@@ -1153,6 +1354,90 @@ router.get('/admin/teacher-profile-detail', authenticateOperator, async (req, re
   } catch (error) {
     console.error('Teacher profile detail error:', error);
     res.status(500).json({ success: false, message: 'Error fetching teacher profile detail', error: error.message });
+  }
+});
+
+// GET /api/admin/teacher-profile-detail/export - Export ALL teacher data as Excel
+router.get('/admin/teacher-profile-detail/export', authenticateOperator, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Akses ditolak. Hanya admin yang dapat export data guru.' });
+    }
+
+    const teachers = await db.query(`
+      SELECT t.*, GROUP_CONCAT(DISTINCT tn.nama_sekolah) as sekolah_list
+      FROM teachers t
+      LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id
+      LEFT JOIN tenants tn ON ta.tenant_id = tn.tenant_id
+      WHERE t.status_aktif = 1
+      GROUP BY t.id ORDER BY t.nama ASC
+    `);
+
+    const assignments = await db.query(`
+      SELECT teacher_id, tenant_id, jabatan_di_unit FROM teacher_assignments
+    `);
+    const assignMap = {};
+    assignments.forEach(a => {
+      if (!assignMap[a.teacher_id]) assignMap[a.teacher_id] = [];
+      assignMap[a.teacher_id].push(`${a.tenant_id} - ${a.jabatan_di_unit || '-'}`);
+    });
+
+    const fmtUang = (v) => (v === null || v === undefined || v === '') ? '' : Number(v);
+    const jk = (v) => v === 'L' ? 'Laki-laki' : v === 'P' ? 'Perempuan' : '';
+
+    const data = teachers.map(t => {
+      const pend = (t.pendidikan_terakhir ? String(t.pendidikan_terakhir).split('/') : []);
+      return {
+        'ID': t.id,
+        'Nama': t.nama || '',
+        'NIK': t.nik || '',
+        'NIP': t.nip || '',
+        'Email': t.email || '',
+        'Tempat Lahir': t.tempat_lahir || '',
+        'Tanggal Lahir': t.tanggal_lahir || '',
+        'Jenis Kelamin': jk(t.jenis_kelamin),
+        'Alamat': t.alamat || '',
+        'No WA': t.no_wa || '',
+        'Scan ID': t.scan_id || '',
+        'Foto': t.link_foto || '',
+        'Pendidikan (Jenjang)': pend[0] || '',
+        'Pendidikan (Sekolah/Univ)': pend[1] || '',
+        'Pendidikan (Jurusan)': pend[2] || '',
+        'Pendidikan (Tahun Lulus)': pend[3] || '',
+        'Status Kepegawaian': t.status_kepegawaian || '',
+        'TMT': t.tmt || '',
+        'Masa Kerja (Tahun)': t.tmt ? (() => { const s = new Date(t.tmt); const now = new Date(); let y = now.getFullYear() - s.getFullYear(); if (now.getMonth() < s.getMonth() || (now.getMonth() === s.getMonth() && now.getDate() < s.getDate())) y--; return y; })() : '',
+        'Status Perkawinan': t.status_perkawinan || '',
+        'Jumlah Anak': t.jumlah_anak ?? '',
+        'Bank': t.BANK || '',
+        'Nomor Rekening': t.nomor_rekening || '',
+        'Sekolah': t.sekolah_list || '',
+        'Penempatan & Jabatan': (assignMap[t.id] || []).join('; '),
+        'Gaji Pokok': fmtUang(t.gaji_pokok),
+        'Tunj. Kinerja': fmtUang(t.tunj_kinerja),
+        'Tunj. Umum': fmtUang(t.tunj_umum),
+        'Tunj. Istri': fmtUang(t.tunj_istri),
+        'Tunj. Anak': fmtUang(t.tunj_anak),
+        'Tunj. Kepala Sekolah': fmtUang(t.tunj_kepala_sekolah),
+        'Tunj. Wali Kelas': fmtUang(t.tunj_wali_kelas),
+        'Honor Bendahara': fmtUang(t.honor_bendahara),
+        'Tunj. Kehadiran': fmtUang(t.tunj_kehadiran),
+        'Potongan': fmtUang(t.potongan)
+      };
+    });
+
+    const ws = XLSX.utils.json_to_sheet(data.length ? data : [{ 'ID': '', 'Nama': '' }]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Data Guru');
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    const fileName = `data_guru_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.send(buf);
+  } catch (error) {
+    console.error('Teacher profile export error:', error);
+    res.status(500).json({ success: false, message: 'Error export data guru' });
   }
 });
 
@@ -3513,7 +3798,7 @@ router.put('/admin/leave-requests/:id/status', authenticateOperator, async (req,
 router.get('/teacher/info', authenticateToken, async (req, res) => {
   try {
     const [teacher] = await db.query(
-      'SELECT t.id, t.nama, t.nik, t.nip, t.email, t.tempat_lahir, t.tanggal_lahir, t.jenis_kelamin, t.alamat, t.no_wa, t.status_kepegawaian, t.status_aktif, t.tmt, t.pendidikan_terakhir, t.bank, t.nomor_rekening, t.link_foto FROM teachers t WHERE t.id = ?',
+      'SELECT t.id, t.nama, t.nik, t.nip, t.email, t.no_wa, t.scan_id, t.tempat_lahir, t.tanggal_lahir, t.jenis_kelamin, t.alamat, t.status_kepegawaian, t.status_aktif, t.tmt, t.pendidikan_terakhir, t.bank, t.nomor_rekening, t.link_foto FROM teachers t WHERE t.id = ?',
       [req.user.guru_id]
     );
 

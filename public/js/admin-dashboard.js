@@ -759,6 +759,213 @@ async function fetchAttendanceLogs() {
 
     window.loadAttendanceLogs = fetchAttendanceLogs;
 
+    // ============================================================
+    // MANUAL ATTENDANCE
+    // ============================================================
+    async function openManualAttendanceModal() {
+        const modal = document.getElementById('manualAttendanceModal');
+        const teacherSelect = document.getElementById('manualTeacherId');
+        const tenantSelect = document.getElementById('manualTenantId');
+        const statusPreview = document.getElementById('manualStatusPreview');
+        const statusText = document.getElementById('manualStatusText');
+
+        if (!modal || !teacherSelect || !tenantSelect) return;
+
+        teacherSelect.innerHTML = '<option value="">-- Pilih Guru --</option>';
+        tenantSelect.innerHTML = '<option value="">-- Pilih Sekolah --</option>';
+        const qrInput = document.getElementById('qrInput');
+        if (qrInput) qrInput.value = '';
+
+        try {
+            const tenantRes = await fetch('/api/admin/tenants', {
+                headers: { 'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}` }
+            });
+            const tenantJson = await tenantRes.json();
+            if (tenantJson.success && Array.isArray(tenantJson.data)) {
+                tenantJson.data.forEach(t => {
+                    const opt = document.createElement('option');
+                    opt.value = t.tenant_id;
+                    opt.textContent = t.nama_sekolah || t.tenant_id;
+                    tenantSelect.appendChild(opt);
+                });
+            }
+        } catch (e) {
+            console.error('Failed to load tenants for manual attendance:', e);
+        }
+
+        try {
+            const teacherRes = await fetch('/api/admin/teachers?limit=200&search=', {
+                headers: { 'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}` }
+            });
+            const teacherJson = await teacherRes.json();
+            if (teacherJson.success && Array.isArray(teacherJson.data)) {
+                teacherJson.data.forEach(t => {
+                    const opt = document.createElement('option');
+                    opt.value = t.id;
+                    opt.textContent = t.nama || `Guru #${t.id}`;
+                    teacherSelect.appendChild(opt);
+                });
+            }
+        } catch (e) {
+            console.error('Failed to load teachers for manual attendance:', e);
+        }
+
+        document.getElementById('manualAttendanceForm').reset();
+        if (statusPreview) statusPreview.style.display = 'none';
+        modal.style.display = 'flex';
+    }
+
+    function closeManualAttendanceModal() {
+        const modal = document.getElementById('manualAttendanceModal');
+        if (modal) modal.style.display = 'none';
+    }
+
+    async function previewManualAttendanceStatus() {
+        const tenantId = document.getElementById('manualTenantId').value;
+        const jenis = document.getElementById('manualJenis').value;
+        const jam = document.getElementById('manualJam').value;
+        const tanggal = document.getElementById('manualTanggal').value;
+        const statusPreview = document.getElementById('manualStatusPreview');
+        const statusText = document.getElementById('manualStatusText');
+
+        if (!tenantId || !jenis || !jam || !tanggal || !statusPreview || !statusText) return;
+
+        try {
+            const scanDate = new Date(`${tanggal}T${jam}:00`);
+            const userTimezone = 'Asia/Makassar';
+            const dayName = scanDate.toLocaleDateString('id-ID', { weekday: 'long', timeZone: userTimezone });
+            const timeOnly = String(scanDate.getHours()).padStart(2, '0') + ':' + String(scanDate.getMinutes()).padStart(2, '0');
+            const tipeRule = jenis === 'masuk' ? 'Datang' : 'Pulang';
+
+            const res = await fetch(`/api/admin/attendance/rules?tenant_id=${encodeURIComponent(tenantId)}&tipe=${encodeURIComponent(tipeRule)}&time=${encodeURIComponent(timeOnly)}&day=${encodeURIComponent(dayName)}`, {
+                headers: { 'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}` }
+            });
+            const json = await res.json();
+            if (json.success && json.data && json.data.length > 0) {
+                const rule = json.data[0];
+                statusText.textContent = rule.status_log === 'tepat_waktu' ? 'Tepat Waktu' : 'Terlambat';
+                statusText.style.color = rule.status_log === 'tepat_waktu' ? '#16a34a' : '#d97706';
+                statusPreview.style.display = 'block';
+                statusPreview.style.background = rule.status_log === 'tepat_waktu' ? '#f0fdf4' : '#fffbeb';
+                statusPreview.style.borderColor = rule.status_log === 'tepat_waktu' ? '#bbf7d0' : '#fde68a';
+            } else {
+                statusText.textContent = 'Terlambat (default)';
+                statusText.style.color = '#d97706';
+                statusPreview.style.display = 'block';
+                statusPreview.style.background = '#fffbeb';
+                statusPreview.style.borderColor = '#fde68a';
+            }
+        } catch (e) {
+            console.error('Preview status error:', e);
+        }
+    }
+
+    async function submitManualAttendance(event) {
+        event.preventDefault();
+        const teacherId = document.getElementById('manualTeacherId').value;
+        const tenantId = document.getElementById('manualTenantId').value;
+        const tanggal = document.getElementById('manualTanggal').value;
+        const jam = document.getElementById('manualJam').value;
+        const jenis = document.getElementById('manualJenis').value;
+        const submitBtn = document.getElementById('manualAttendanceSubmit');
+
+        if (!teacherId || !tenantId || !tanggal || !jam || !jenis) {
+            Swal.fire('Error', 'Semua field wajib diisi', 'error');
+            return;
+        }
+
+        const originalText = submitBtn.innerHTML;
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner spinner" style="margin-right:0.5rem;"></i>Menyimpan...';
+
+        try {
+            const response = await fetch('/api/admin/attendance/manual', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}`
+                },
+                body: JSON.stringify({ teacher_id: parseInt(teacherId), tenant_id, tanggal, jenis, jam })
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                Swal.fire({ title: 'Berhasil', text: result.message, icon: 'success', confirmButtonColor: '#066e3a' });
+                closeManualAttendanceModal();
+                if (typeof window.loadAttendanceLogs === 'function') {
+                    window.loadAttendanceLogs();
+                }
+            } else {
+                Swal.fire({ title: 'Gagal', text: result.message, icon: 'error', confirmButtonColor: '#dc2626' });
+            }
+        } catch (error) {
+            console.error('Manual attendance submit error:', error);
+            Swal.fire({ title: 'Error', text: 'Terjadi kesalahan jaringan', icon: 'error', confirmButtonColor: '#dc2626' });
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalText;
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const manualFields = ['manualTenantId', 'manualJenis', 'manualJam', 'manualTanggal'];
+        manualFields.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('change', previewManualAttendanceStatus);
+        });
+    });
+
+    async function decodeQR() {
+        const qrInput = document.getElementById('qrInput');
+        const teacherSelect = document.getElementById('manualTeacherId');
+        const tenantSelect = document.getElementById('manualTenantId');
+        const qrString = qrInput ? qrInput.value.trim() : '';
+
+        if (!qrString) {
+            Swal.fire({ title: 'Kosong', text: 'Tempel teks QR terlebih dahulu', icon: 'warning', confirmButtonColor: '#d97706' });
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/admin/attendance/qr-decode', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}`
+                },
+                body: JSON.stringify({ qr_string: qrString })
+            });
+
+            const result = await response.json();
+            if (result.success && result.data) {
+                if (teacherSelect) {
+                    teacherSelect.value = result.data.teacher_id;
+                }
+                if (tenantSelect && result.data.tenant_id) {
+                    tenantSelect.value = result.data.tenant_id;
+                }
+                const payload = result.data.original_payload;
+                if (payload && payload.ts) {
+                    const ts = new Date(payload.ts);
+                    const userTimezone = 'Asia/Makassar';
+                    const tanggal = ts.toLocaleDateString('en-CA', { timeZone: userTimezone });
+                    const jam = String(ts.getHours()).padStart(2, '0') + ':' + String(ts.getMinutes()).padStart(2, '0');
+                    const tanggalEl = document.getElementById('manualTanggal');
+                    const jamEl = document.getElementById('manualJam');
+                    if (tanggalEl) tanggalEl.value = tanggal;
+                    if (jamEl) jamEl.value = jam;
+                }
+                Swal.fire({ title: 'Berhasil', text: `Data guru terdeteksi: ${result.data.nama}`, icon: 'success', confirmButtonColor: '#066e3a' });
+                previewManualAttendanceStatus();
+            } else {
+                Swal.fire({ title: 'Gagal', text: result.message || 'QR tidak dikenali', icon: 'error', confirmButtonColor: '#dc2626' });
+            }
+        } catch (error) {
+            console.error('QR decode error:', error);
+            Swal.fire({ title: 'Error', text: 'Terjadi kesalahan jaringan', icon: 'error', confirmButtonColor: '#dc2626' });
+        }
+    }
+
     async function fetchTenantLocations() {
       try {
         const response = await fetch('/api/admin/tenants', {

@@ -466,6 +466,8 @@ function populateForm(teacher) {
         if (parts[1]) document.getElementById('jurusan').value = parts[1];
         if (parts[2]) document.getElementById('nama_sekolah_pendidikan').value = parts[2];
         if (parts[3]) document.getElementById('tahun_angkatan').value = parts[3];
+        // Tampilkan field terkait (tahun lulus, jurusan, nama sekolah) sesuai jenjang
+        if (parts[0]) updatePendidikanFields(parts[0]);
       }
 
 setValue('nomor_rekening', teacher.nomor_rekening);
@@ -571,17 +573,20 @@ setValue('nomor_rekening', teacher.nomor_rekening);
       });
     }
 
+    function updatePendidikanFields(value) {
+      document.getElementById('tahun-field').classList.toggle('hidden', !['SD', 'SMP', 'SMA', 'SMK', 'S1', 'S2', 'S3'].includes(value));
+      document.getElementById('jurusan-field').classList.toggle('hidden', !['SMK', 'S1', 'S2', 'S3'].includes(value));
+      document.getElementById('nama_sekolah-field').classList.toggle('hidden', !['SMK', 'S1', 'S2', 'S3'].includes(value));
+      // Enable/disable required on visible fields
+      document.getElementById('tahun_angkatan').required = ['SD', 'SMP', 'SMA', 'SMK', 'S1', 'S2', 'S3'].includes(value);
+      document.getElementById('jurusan').required = ['SMK', 'S1', 'S2', 'S3'].includes(value);
+      document.getElementById('nama_sekolah_pendidikan').required = ['SMK', 'S1', 'S2', 'S3'].includes(value);
+    }
+
     function initPendidikanToggle() {
       const pendidikanSelect = document.getElementById('pendidikan_terakhir');
       pendidikanSelect?.addEventListener('change', function () {
-        const value = this.value;
-        document.getElementById('tahun-field').classList.toggle('hidden', !['SD', 'SMP', 'SMA', 'SMK', 'S1', 'S2', 'S3'].includes(value));
-        document.getElementById('jurusan-field').classList.toggle('hidden', !['SMK', 'S1', 'S2', 'S3'].includes(value));
-        document.getElementById('nama_sekolah-field').classList.toggle('hidden', !['SMK', 'S1', 'S2', 'S3'].includes(value));
-        // Enable/disable required on visible fields
-        document.getElementById('tahun_angkatan').required = ['SD', 'SMP', 'SMA', 'SMK', 'S1', 'S2', 'S3'].includes(value);
-        document.getElementById('jurusan').required = ['SMK', 'S1', 'S2', 'S3'].includes(value);
-        document.getElementById('nama_sekolah_pendidikan').required = ['SMK', 'S1', 'S2', 'S3'].includes(value);
+        updatePendidikanFields(this.value);
       });
     }
 
