@@ -161,14 +161,14 @@
       const btn = document.getElementById('testPayBtn');
       btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Membuat invoice...';
       try {
-        const res = await fetch('/api/treasurer/public/students?tenant_id=PPIB');
-        const students = await res.json();
-        const studentId = students.success && students.data.length ? students.data[0].id : '2311';
-        
+        // Data dummy (tidak ambil dari database)
+        const studentId = 999999;
+        const amount = 100000;
+
         const res2 = await fetch('/api/xendit/public/create-invoice', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tenant_id: 'PPIB', student_id: parseInt(studentId) })
+          body: JSON.stringify({ tenant_id: 'PPIB', student_id: parseInt(studentId), amount: amount })
         });
         const data = await res2.json();
         if (data.success) {

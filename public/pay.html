@@ -65,6 +65,7 @@
     const urlParams = new URLSearchParams(window.location.search);
     const tenantId = urlParams.get('tenant');
     const studentId = urlParams.get('student');
+    let currentStudent = null;
 
     if (tenantId && studentId) {
       loadPaymentData(tenantId, studentId);
@@ -80,6 +81,7 @@
         if (json.success) {
           const studentData = json.data.find(s => s.id == student);
           if (studentData) {
+            currentStudent = studentData;
             document.getElementById('studentName').textContent = studentData.nama_siswa;
             document.getElementById('schoolName').textContent = studentData.nama_sekolah || tenant;
             document.getElementById('amount').textContent = 'Rp ' + (studentData.iuran_bulanan || 500000).toLocaleString('id-ID');
@@ -111,20 +113,22 @@
     });
 
     async function createDokuInvoice() {
+      const amount = parseFloat(currentStudent?.iuran_bulanan) > 0 ? parseFloat(currentStudent.iuran_bulanan) : 100000;
       const res = await fetch('/api/doku/create-invoice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tenant_id: tenantId, student_id: parseInt(studentId) })
+        body: JSON.stringify({ tenant_id: tenantId, student_id: parseInt(studentId), amount: amount })
       });
       const json = await res.json();
       if (json.success) window.open(json.invoice_url, '_blank');
     }
 
     async function createXenditInvoice() {
+      const amount = parseFloat(currentStudent?.iuran_bulanan) > 0 ? parseFloat(currentStudent.iuran_bulanan) : 100000;
       const res = await fetch('/api/xendit/public/create-invoice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tenant_id: tenantId, student_id: parseInt(studentId) })
+        body: JSON.stringify({ tenant_id: tenantId, student_id: parseInt(studentId), amount: amount })
       });
       const json = await res.json();
       if (json.success) window.open(json.invoice_url, '_blank');

@@ -34,10 +34,14 @@
     
     async function createInvoice() {
       try {
+        // Data dummy (tidak ambil dari database)
+        const studentId = 999999;
+        const amount = 100000;
+
         const res = await fetch('/api/xendit/public/create-invoice', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tenant_id: DEFAULT_TENANT, student_id: parseInt(DEFAULT_STUDENT) })
+          body: JSON.stringify({ tenant_id: DEFAULT_TENANT, student_id: studentId, amount: amount })
         });
         const json = await res.json();
         
