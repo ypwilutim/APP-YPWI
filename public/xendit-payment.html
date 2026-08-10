@@ -161,9 +161,14 @@
       const btn = document.getElementById('testPayBtn');
       btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Membuat invoice...';
       try {
-        // Data dummy (tidak ambil dari database)
-        const studentId = 999999;
-        const amount = 100000;
+        // Ambil siswa pertama (data master), amount di-dummy-kan bila 0
+        const res = await fetch('/api/treasurer/public/students?tenant_id=PPIB');
+        const students = await res.json();
+        const studentList = (students.success && students.data) || [];
+        if (!studentList.length) throw new Error('Tidak ada siswa untuk tenant PPIB');
+        const student = studentList[0];
+        const studentId = student.id;
+        const amount = parseFloat(student.iuran_bulanan) > 0 ? parseFloat(student.iuran_bulanan) : 100000;
 
         const res2 = await fetch('/api/xendit/public/create-invoice', {
           method: 'POST',

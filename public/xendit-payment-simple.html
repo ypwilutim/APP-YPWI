@@ -34,9 +34,18 @@
     
     async function createInvoice() {
       try {
-        // Data dummy (tidak ambil dari database)
-        const studentId = 999999;
-        const amount = 100000;
+        // Ambil siswa pertama (data master), amount di-dummy-kan bila 0
+        let studentId = parseInt(DEFAULT_STUDENT);
+        let amount = 100000;
+        try {
+          const sres = await fetch('/api/treasurer/public/students?tenant_id=' + DEFAULT_TENANT);
+          const sjson = await sres.json();
+          const list = (sjson.success && sjson.data) || [];
+          if (list.length) {
+            studentId = list[0].id;
+            if (parseFloat(list[0].iuran_bulanan) > 0) amount = parseFloat(list[0].iuran_bulanan);
+          }
+        } catch (e) { /* fallback ke default */ }
 
         const res = await fetch('/api/xendit/public/create-invoice', {
           method: 'POST',
