@@ -11,6 +11,7 @@ const db = require('../../db');
 const { authenticateToken, authenticateOperator, verifyTenantAccess } = require('../middleware/auth');
 const { logToFile } = require('../middlewares/logger');
 const { fetchMetaTemplates } = require('../utils/whatsappTemplate');
+const { extractKTPFromImage } = require('../utils/geminiOcr');
 
 const router = express.Router();
 const XLSX = require('xlsx');
@@ -26,6 +27,27 @@ const teacherStorage = multer.diskStorage({
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     cb(null, 'teacher-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const accessRequestStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'public/uploads/access-requests/');
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'access-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const accessRequestUpload = multer({
+  storage: accessRequestStorage,
+  limits: { fileSize: 5 * 1024 * 1024, files: 2 },
+  fileFilter: (req, file, cb) => {
+    if (!file.mimetype.startsWith('image/')) {
+      return cb(new Error('Hanya file gambar yang diperbolehkan'));
+    }
+    cb(null, true);
   }
 });
 
@@ -1015,9 +1037,630 @@ router.put('/admin/teachers/:id/assignment', authenticateOperator, async (req, r
 
 // });
 
-// ============================================================
+// ==========================================
+// TEACHER PROFILE SUMMARY ROUTES
+// ==========================================
+
+router.get('/admin/teacher-profile-summary', authenticateOperator, async (req, res) => {
+  try {
+    const result = await getTeacherProfileSummary();
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error('Teacher profile summary error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching teacher profile summary', error: error.message });
+  }
+});
+
+// GET /api/public/teacher-profile-summary - Public summary (no auth required)
+router.get('/public/teacher-profile-summary', async (req, res) => {
+  try {
+    const result = await getTeacherProfileSummary();
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error('Public teacher profile summary error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching teacher profile summary' });
+  }
+});
+
+async function getTeacherProfileSummary() {
+  const teachers = await db.query(`
+    SELECT t.id, t.nama, t.pendidikan_terakhir, t.status_perkawinan, t.jumlah_anak
+    FROM teachers t
+    WHERE t.status_aktif = 1
+  `);
+
+  const requiredFields = ['nama', 'nik', 'nip', 'email', 'tempat_lahir', 'tanggal_lahir', 'jenis_kelamin', 'alamat', 'no_wa', 'status_kepegawaian', 'tmt', 'pendidikan_terakhir', 'status_perkawinan'];
+  const teacherDetails = await db.query(`
+    SELECT t.id, t.nama, t.nik, t.nip, t.email, t.tempat_lahir, t.tanggal_lahir,
+      t.jenis_kelamin, t.alamat, t.no_wa, t.status_kepegawaian, t.tmt,
+      t.pendidikan_terakhir, t.status_perkawinan, t.jumlah_anak,
+      GROUP_CONCAT(DISTINCT tn.nama_sekolah) as sekolah_list
+    FROM teachers t
+    LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id
+    LEFT JOIN tenants tn ON ta.tenant_id = tn.tenant_id
+    WHERE t.status_aktif = 1
+    GROUP BY t.id ORDER BY t.nama ASC
+  `);
+
+  let totalTeachers = teacherDetails.length;
+  let completeProfileCount = 0;
+  const educationStats = {};
+  const maritalStatusStats = { 'Lajang': 0, 'Menikah': 0, 'Cerai Hidup': 0, 'Cerai Mati': 0, 'Tidak Diketahui': 0 };
+
+  teacherDetails.forEach(teacher => {
+    const filledFields = requiredFields.filter(f => teacher[f] && teacher[f].toString().trim() !== '').length;
+    if (filledFields === requiredFields.length) completeProfileCount++;
+
+    const pendidikan = teacher.pendidikan_terakhir || 'Tidak Diketahui';
+    educationStats[pendidikan] = (educationStats[pendidikan] || 0) + 1;
+
+    const statusPerkawinan = teacher.status_perkawinan || 'Tidak Diketahui';
+    if (maritalStatusStats.hasOwnProperty(statusPerkawinan)) maritalStatusStats[statusPerkawinan]++;
+    else maritalStatusStats['Tidak Diketahui']++;
+  });
+
+  return {
+    data: {
+      total_teachers: totalTeachers,
+      complete_profile: completeProfileCount,
+      incomplete_profile: totalTeachers - completeProfileCount,
+      education_distribution: educationStats,
+      marital_status_distribution: maritalStatusStats,
+      average_completion: totalTeachers > 0 ? Math.round((completeProfileCount / totalTeachers) * 100) : 0
+    },
+    teachers: teacherDetails.map(t => ({
+      id: t.id, nama: t.nama, pendidikan_terakhir: t.pendidikan_terakhir || null,
+      status_perkawinan: t.status_perkawinan || null,
+      completion_percentage: Math.round(requiredFields.filter(f => t[f] && t[f].toString().trim() !== '').length / requiredFields.length * 100)
+    }))
+  };
+}
+
+router.get('/admin/teacher-profile-detail', authenticateOperator, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Akses ditolak. Hanya admin yang dapat melihat detail kelengkapan profil guru.' });
+    }
+
+    const { pendidikan, status_perkawinan, search, page = 1, limit = 50 } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    let query = `SELECT t.id, t.nama, t.nik, t.nip, t.email, t.tempat_lahir, t.tanggal_lahir, t.jenis_kelamin, t.alamat, t.no_wa, t.status_kepegawaian, t.tmt, t.pendidikan_terakhir, t.status_perkawinan, t.jumlah_anak, t.link_foto, GROUP_CONCAT(DISTINCT tn.nama_sekolah) as sekolah_list FROM teachers t LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id LEFT JOIN tenants tn ON ta.tenant_id = tn.tenant_id WHERE t.status_aktif = 1`;
+    const params = [];
+
+    if (pendidikan) { query += ' AND t.pendidikan_terakhir = ?'; params.push(pendidikan); }
+    if (status_perkawinan) { query += ' AND t.status_perkawinan = ?'; params.push(status_perkawinan); }
+    if (search) { query += ' AND (t.nama LIKE ? OR t.nik LIKE ? OR t.nip LIKE ?)'; params.push(`%${search}%`, `%${search}%`, `%${search}%`); }
+
+    query += ' GROUP BY t.id ORDER BY t.nama ASC LIMIT ? OFFSET ?';
+    params.push(parseInt(limit), offset);
+
+    const teachers = await db.query(query, params);
+    const requiredFields = ['nama', 'nik', 'nip', 'email', 'tempat_lahir', 'tanggal_lahir', 'jenis_kelamin', 'alamat', 'no_wa', 'status_kepegawaian', 'tmt', 'pendidikan_terakhir', 'status_perkawinan'];
+    const detailedTeachers = teachers.map(teacher => {
+      const filledFields = requiredFields.filter(f => teacher[f] && teacher[f].toString().trim() !== '').length;
+      return { ...teacher, completion_percentage: Math.round((filledFields / requiredFields.length) * 100), missing_fields: requiredFields.filter(f => !teacher[f] || teacher[f].toString().trim() === '') };
+    });
+
+    let countQuery = 'SELECT COUNT(*) as total FROM teachers t WHERE t.status_aktif = 1';
+    const countParams = [];
+    if (pendidikan) { countQuery += ' AND t.pendidikan_terakhir = ?'; countParams.push(pendidikan); }
+    if (status_perkawinan) { countQuery += ' AND t.status_perkawinan = ?'; countParams.push(status_perkawinan); }
+    if (search) { countQuery += ' AND (t.nama LIKE ? OR t.nik LIKE ? OR t.nip LIKE ?)'; countParams.push(`%${search}%`, `%${search}%`, `%${search}%`); }
+    const totalResult = await db.query(countQuery, countParams);
+
+    res.json({ success: true, data: detailedTeachers, pagination: { page: parseInt(page), limit: parseInt(limit), total: totalResult[0]?.total || 0, totalPages: Math.ceil((totalResult[0]?.total || 0) / parseInt(limit)) } });
+  } catch (error) {
+    console.error('Teacher profile detail error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching teacher profile detail', error: error.message });
+  }
+});
+
+// ==========================================
+// PROFILE ACCESS REQUEST ROUTES
+// ==========================================
+
+// GET /api/public/profile-access/check - Check if user has access to detail view
+router.get('/public/profile-access/check', async (req, res) => {
+  try {
+    const { token } = req.query;
+    if (!token) {
+      return res.json({ success: true, has_access: false });
+    }
+
+    const request = await db.query(
+      'SELECT id, status FROM profile_access_requests WHERE verification_token = ? AND status = ? ORDER BY created_at DESC LIMIT 1',
+      [token, 'approved']
+    );
+
+    res.json({ 
+      success: true, 
+      has_access: request.length > 0,
+      request_id: request[0]?.id || null
+    });
+  } catch (error) {
+    console.error('Check profile access error:', error);
+    res.json({ success: true, has_access: false });
+  }
+});
+
+// POST /api/public/profile-access/request - Submit access request with file upload (public)
+router.post('/public/profile-access/request', accessRequestUpload.fields([
+  { name: 'selfie', maxCount: 1 },
+  { name: 'ktp', maxCount: 1 }
+]), async (req, res) => {
+  try {
+    const { session_id, requester_name, requester_email, reason, ktp_nik, ktp_nama, ktp_alamat, ktp_tempat_lahir, ktp_tanggal_lahir, ktp_jenis_kelamin } = req.body;
+
+    if (!session_id || !requester_name) {
+      return res.status(400).json({ success: false, message: 'Data permintaan tidak lengkap' });
+    }
+
+    // Check if there's already a pending or approved request
+    const existing = await db.query(
+      'SELECT id, status FROM profile_access_requests WHERE session_id = ? ORDER BY created_at DESC LIMIT 1',
+      [session_id]
+    );
+
+    if (existing.length > 0) {
+      const lastRequest = existing[0];
+      if (lastRequest.status === 'approved') {
+        return res.json({ success: true, message: 'Anda sudah memiliki akses', approved: true });
+      } else if (lastRequest.status === 'pending') {
+        return res.json({ success: true, message: 'Permintaan Anda sedang menunggu persetujuan admin.', pending: true });
+      }
+    }
+
+    // Handle file uploads
+    const selfieFile = req.files?.selfie?.[0];
+    const ktpFile = req.files?.ktp?.[0];
+
+    const selfieUrl = selfieFile ? `/uploads/access-requests/${selfieFile.filename}` : null;
+    const ktpUrl = ktpFile ? `/uploads/access-requests/${ktpFile.filename}` : null;
+
+    // Verify NIK if provided
+    let matchedTeacherId = null;
+    if (ktp_nik) {
+      const teacherMatch = await db.query(
+        'SELECT id FROM teachers WHERE nik = ? AND status_aktif = 1 LIMIT 1',
+        [ktp_nik]
+      );
+      if (teacherMatch.length > 0) {
+        matchedTeacherId = teacherMatch[0].id;
+      }
+    }
+
+    // Create new request
+    const result = await db.query(
+      `INSERT INTO profile_access_requests 
+       (session_id, requester_name, requester_email, reason, status, selfie_url, ktp_url, 
+        ktp_nik, ktp_nama, ktp_alamat, ktp_tempat_lahir, ktp_tanggal_lahir, ktp_jenis_kelamin,
+        verification_status, matched_teacher_id, created_at) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+      [
+        session_id, requester_name, requester_email || null, reason || null, 'pending',
+        selfieUrl, ktpUrl, ktp_nik || null, ktp_nama || null, ktp_alamat || null,
+        ktp_tempat_lahir || null, ktp_tanggal_lahir || null, ktp_jenis_kelamin || null,
+        ktp_nik ? (matchedTeacherId ? 'verified' : 'failed') : 'pending',
+        matchedTeacherId
+      ]
+    );
+
+    console.log(`[PROFILE ACCESS REQUEST] New request from ${requester_name} (${session_id}) - KTP NIK: ${ktp_nik || 'not provided'} - Matched: ${matchedTeacherId ? 'YES' : 'NO'}`);
+
+    res.json({ 
+      success: true, 
+      message: matchedTeacherId 
+        ? 'Permintaan akses berhasil dikirim. NIK terverifikasi, menunggu persetujuan admin.'
+        : 'Permintaan akses berhasil dikirim. Menunggu persetujuan admin.',
+      matched: !!matchedTeacherId
+    });
+  } catch (error) {
+    console.error('Profile access request error:', error);
+    res.status(500).json({ success: false, message: 'Gagal mengirim permintaan akses' });
+  }
+});
+
+// GET /api/admin/profile-access/requests - List all access requests (admin only)
+router.get('/admin/profile-access/requests', authenticateOperator, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+
+    const { status } = req.query;
+    let query = `SELECT * FROM profile_access_requests`;
+    const params = [];
+
+    if (status) {
+      query += ' WHERE status = ?';
+      params.push(status);
+    }
+
+    query += ' ORDER BY created_at DESC';
+
+    const requests = await db.query(query, params);
+
+    res.json({ success: true, data: requests });
+  } catch (error) {
+    console.error('List profile access requests error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching requests' });
+  }
+});
+
+// POST /api/admin/profile-access/:id/approve - Approve access request (admin only)
+router.post('/admin/profile-access/:id/approve', authenticateOperator, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+
+    const { id } = req.params;
+    const { notes } = req.body;
+
+    const result = await db.query(
+      'UPDATE profile_access_requests SET status = ?, approved_by = ?, approved_at = NOW(), notes = ? WHERE id = ?',
+      ['approved', req.user.id, notes || null, id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: 'Permintaan tidak ditemukan' });
+    }
+
+    console.log(`[PROFILE ACCESS REQUEST] Request ${id} approved by admin ${req.user.id}`);
+
+    res.json({ success: true, message: 'Permintaan akses disetujui' });
+  } catch (error) {
+    console.error('Approve profile access error:', error);
+    res.status(500).json({ success: false, message: 'Error approving request' });
+  }
+});
+
+// POST /api/admin/profile-access/:id/deny - Deny access request (admin only)
+router.post('/admin/profile-access/:id/deny', authenticateOperator, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+
+    const { id } = req.params;
+    const { notes } = req.body;
+
+    const result = await db.query(
+      'UPDATE profile_access_requests SET status = ?, approved_by = ?, approved_at = NOW(), notes = ? WHERE id = ?',
+      ['denied', req.user.id, notes || null, id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: 'Permintaan tidak ditemukan' });
+    }
+
+    console.log(`[PROFILE ACCESS REQUEST] Request ${id} denied by admin ${req.user.id}`);
+
+    res.json({ success: true, message: 'Permintaan akses ditolak' });
+  } catch (error) {
+    console.error('Deny profile access error:', error);
+    res.status(500).json({ success: false, message: 'Error denying request' });
+  }
+});
+
+// POST /api/public/profile-access/ocr-ktp - Extract KTP fields via Gemini Vision API
+router.post('/public/profile-access/ocr-ktp', accessRequestUpload.single('ktp'), async (req, res) => {
+  try {
+    const ktpFile = req.file;
+    if (!ktpFile) {
+      return res.status(400).json({ success: false, message: 'File KTP harus diupload' });
+    }
+
+    const parsed = await extractKTPFromImage(ktpFile.path);
+
+    const ktpData = {
+      nik: parsed.nik || '',
+      nama: parsed.nama || '',
+      alamat: parsed.alamat || '',
+      tempat_lahir: parsed.tempat_lahir || '',
+      tanggal_lahir: parsed.tanggal_lahir || '',
+      jenis_kelamin: parsed.jenis_kelamin || '',
+      gol_darah: parsed.gol_darah || '',
+      agama: parsed.agama || '',
+      status_perkawinan: parsed.status_perkawinan || '',
+      pekerjaan: parsed.pekerjaan || '',
+      kewarganegaraan: parsed.kewarganegaraan || '',
+      berlaku_hingga: parsed.berlaku_hingga || '',
+      rt_rw: parsed.rt_rw || '',
+      kel_desa: parsed.kel_desa || '',
+      kecamatan: parsed.kecamatan || ''
+    };
+
+    const isKtp = parsed.is_ktp === true && /^\d{16}$/.test((ktpData.nik || '').toString());
+
+    res.json({
+      success: true,
+      ktp_data: ktpData,
+      is_ktp: isKtp
+    });
+  } catch (error) {
+    console.error('Gemini OCR error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Gagal memproses OCR KTP' });
+  }
+});
+
+// POST /api/public/profile-access/verify - Submit verification with KTP and selfie
+router.post('/public/profile-access/verify', accessRequestUpload.fields([
+  { name: 'selfie', maxCount: 1 },
+  { name: 'ktp', maxCount: 1 }
+]), async (req, res) => {
+  try {
+    const { 
+      ktp_nik, ktp_nama, ktp_alamat, ktp_tempat_lahir, ktp_tanggal_lahir, ktp_jenis_kelamin,
+      ktp_golongan_darah, ktp_agama, ktp_status_perkawinan, ktp_pekerjaan, ktp_kewarganegaraan,
+      ktp_berlaku_hingga, ktp_rt_rw, ktp_kel_desa, ktp_kecamatan,
+      email, nomor_wa 
+    } = req.body;
+
+    if (!ktp_nik || !ktp_nama || !email || !nomor_wa) {
+      return res.status(400).json({ success: false, message: 'Data verifikasi tidak lengkap' });
+    }
+
+    // Generate verification token
+    const verificationToken = 'vrf_' + Date.now() + '_' + Math.random().toString(36).substring(2, 15);
+
+    // Handle file uploads
+    const selfieFile = req.files?.selfie?.[0];
+    const ktpFile = req.files?.ktp?.[0];
+
+    const selfieUrl = selfieFile ? `/uploads/access-requests/${selfieFile.filename}` : null;
+    const ktpUrl = ktpFile ? `/uploads/access-requests/${ktpFile.filename}` : null;
+
+    // Verify NIK if provided
+    let matchedTeacherId = null;
+    let matchedUserId = null;
+    if (ktp_nik) {
+      const teacherMatch = await db.query(
+        'SELECT id FROM teachers WHERE nik = ? AND status_aktif = 1 LIMIT 1',
+        [ktp_nik]
+      );
+      if (teacherMatch.length > 0) {
+        matchedTeacherId = teacherMatch[0].id;
+        
+        // Check if teacher has user account
+        const userMatch = await db.query(
+          'SELECT id FROM users WHERE guru_id = ? LIMIT 1',
+          [matchedTeacherId]
+        );
+        if (userMatch.length > 0) {
+          matchedUserId = userMatch[0].id;
+        }
+      }
+    }
+
+    // Create access request
+    const result = await db.query(
+      `INSERT INTO profile_access_requests 
+       (session_id, requester_name, requester_email, reason, status, selfie_url, ktp_url, 
+        ktp_nik, ktp_nama, ktp_alamat, ktp_tempat_lahir, ktp_tanggal_lahir, ktp_jenis_kelamin,
+        ktp_golongan_darah, ktp_agama, ktp_status_perkawinan, ktp_pekerjaan, ktp_kewarganegaraan,
+        ktp_berlaku_hingga, ktp_rt_rw, ktp_kel_desa, ktp_kecamatan,
+        verification_status, matched_teacher_id, matched_user_id, verification_token, created_at) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+      [
+        verificationToken, ktp_nama, email, 'Verifikasi identitas untuk akses detail profil guru', 'pending',
+        selfieUrl, ktpUrl, ktp_nik, ktp_nama, ktp_alamat,
+        ktp_tempat_lahir || null, ktp_tanggal_lahir || null, ktp_jenis_kelamin || null,
+        ktp_golongan_darah || null, ktp_agama || null, ktp_status_perkawinan || null,
+        ktp_pekerjaan || null, ktp_kewarganegaraan || null, ktp_berlaku_hingga || null,
+        ktp_rt_rw || null, ktp_kel_desa || null, ktp_kecamatan || null,
+        ktp_nik ? (matchedTeacherId ? 'verified' : 'failed') : 'pending',
+        matchedTeacherId, matchedUserId, verificationToken
+      ]
+    );
+
+    console.log(`[PROFILE VERIFICATION] New verification from ${ktp_nama} (${ktp_nik}) - Matched Teacher: ${matchedTeacherId || 'NO'} - Matched User: ${matchedUserId || 'NO'}`);
+
+    // If NIK matches teacher, auto-approve
+    if (matchedTeacherId) {
+      await db.query(
+        'UPDATE profile_access_requests SET status = ?, approved_at = NOW() WHERE id = ?',
+        ['approved', result.insertId]
+      );
+      
+      // Generate JWT token for user
+      const token = jwt.sign(
+        { id: matchedUserId, username: ktp_nik, role: 'guru', guru_id: matchedTeacherId, is_profile_complete: 1 },
+        process.env.JWT_SECRET || 'ypwi_lutim_secret_key',
+        { expiresIn: '7d' }
+      );
+
+      return res.json({ 
+        success: true, 
+        status: 'approved',
+        message: 'NIK terverifikasi. Akses diberikan.',
+        verification_token: verificationToken,
+        token: token,
+        user: {
+          id: matchedUserId,
+          username: ktp_nik,
+          role: 'guru',
+          guru_id: matchedTeacherId
+        }
+      });
+    }
+
+    res.json({ 
+      success: true, 
+      status: 'pending',
+      message: 'Permintaan verifikasi berhasil dikirim. Menunggu persetujuan admin.',
+      verification_token: verificationToken
+    });
+  } catch (error) {
+    console.error('Profile verification error:', error);
+    res.status(500).json({ success: false, message: 'Gagal memproses verifikasi' });
+  }
+});
+
+// POST /api/public/profile-access/login - Special login for verified users
+router.post('/public/profile-access/login', async (req, res) => {
+  try {
+    const { identifier, password, token } = req.body;
+
+    if (!identifier || !password) {
+      return res.status(400).json({ success: false, message: 'Email/NIK dan password wajib diisi' });
+    }
+
+    // Find user by email or NIK
+    let user = await db.query(
+      'SELECT u.*, t.nama as guru_nama FROM users u LEFT JOIN teachers t ON u.guru_id = t.id WHERE u.email = ? OR u.username = ? LIMIT 1',
+      [identifier, identifier]
+    );
+
+    if (user.length === 0) {
+      return res.status(401).json({ success: false, message: 'Akun tidak ditemukan' });
+    }
+
+    const userData = user[0];
+
+    // Verify password
+    const bcrypt = require('bcryptjs');
+    const validPassword = await bcrypt.compare(password, userData.password);
+    if (!validPassword) {
+      return res.status(401).json({ success: false, message: 'Password salah' });
+    }
+
+    // Generate JWT token
+    const jwt = require('jsonwebtoken');
+    const jwtToken = jwt.sign(
+      { id: userData.id, username: userData.username, role: userData.role, guru_id: userData.guru_id },
+      process.env.JWT_SECRET || 'ypwi_lutim_secret_key',
+      { expiresIn: '7d' }
+    );
+
+    res.json({
+      success: true,
+      token: jwtToken,
+      user: {
+        id: userData.id,
+        username: userData.username,
+        email: userData.email,
+        role: userData.role,
+        guru_id: userData.guru_id,
+        nama: userData.guru_nama
+      }
+    });
+  } catch (error) {
+    console.error('Special login error:', error);
+    res.status(500).json({ success: false, message: 'Gagal login' });
+  }
+});
+
+// POST /api/public/profile-access/create-account - Create new account for verified user
+router.post('/public/profile-access/create-account', async (req, res) => {
+  try {
+    const { token, password } = req.body;
+
+    if (!token || !password) {
+      return res.status(400).json({ success: false, message: 'Token dan password wajib diisi' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ success: false, message: 'Password minimal 6 karakter' });
+    }
+
+    // Find verification request
+    const request = await db.query(
+      'SELECT * FROM profile_access_requests WHERE verification_token = ? AND status = ? LIMIT 1',
+      [token, 'approved']
+    );
+
+    if (request.length === 0) {
+      return res.status(404).json({ success: false, message: 'Token verifikasi tidak valid atau expired' });
+    }
+
+    const reqData = request[0];
+
+    // Check if user already exists
+    const existingUser = await db.query(
+      'SELECT id FROM users WHERE email = ? OR username = ?',
+      [reqData.requester_email, reqData.ktp_nik]
+    );
+
+    if (existingUser.length > 0) {
+      return res.status(400).json({ success: false, message: 'Akun dengan email/NIK tersebut sudah ada' });
+    }
+
+    // If matched with teacher, create user for teacher
+    if (reqData.matched_teacher_id) {
+      const bcrypt = require('bcryptjs');
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      const result = await db.query(
+        'INSERT INTO users (username, email, password, role, guru_id, is_profile_complete, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())',
+        [reqData.ktp_nik, reqData.requester_email, hashedPassword, 'guru', reqData.matched_teacher_id, 1]
+      );
+
+      const jwt = require('jsonwebtoken');
+      const jwtToken = jwt.sign(
+        { id: result.insertId, username: reqData.ktp_nik, role: 'guru', guru_id: reqData.matched_teacher_id },
+        process.env.JWT_SECRET || 'ypwi_lutim_secret_key',
+        { expiresIn: '7d' }
+      );
+
+      // Update request with new user ID
+      await db.query('UPDATE profile_access_requests SET matched_user_id = ? WHERE id = ?', [result.insertId, reqData.id]);
+
+      return res.json({
+        success: true,
+        token: jwtToken,
+        user: {
+          id: result.insertId,
+          username: reqData.ktp_nik,
+          email: reqData.requester_email,
+          role: 'guru',
+          guru_id: reqData.matched_teacher_id,
+          nama: reqData.ktp_nama
+        }
+      });
+    }
+
+    // If no matched teacher, create generic user with is_profile_complete = 0
+    const bcrypt = require('bcryptjs');
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const result = await db.query(
+      'INSERT INTO users (username, email, password, role, is_profile_complete, created_at) VALUES (?, ?, ?, ?, ?, NOW())',
+      [reqData.ktp_nik, reqData.requester_email, hashedPassword, 'public', 0]
+    );
+
+    const jwt = require('jsonwebtoken');
+    const jwtToken = jwt.sign(
+      { id: result.insertId, username: reqData.ktp_nik, role: 'public', is_profile_complete: 0 },
+      process.env.JWT_SECRET || 'ypwi_lutim_secret_key',
+      { expiresIn: '7d' }
+    );
+
+    // Update request with new user ID
+    await db.query('UPDATE profile_access_requests SET matched_user_id = ? WHERE id = ?', [result.insertId, reqData.id]);
+
+    res.json({
+      success: true,
+      token: jwtToken,
+      user: {
+        id: result.insertId,
+        username: reqData.ktp_nik,
+        email: reqData.requester_email,
+        role: 'public',
+        is_profile_complete: 0,
+        nama: reqData.ktp_nama
+      }
+    });
+  } catch (error) {
+    console.error('Create account error:', error);
+    res.status(500).json({ success: false, message: 'Gagal membuat akun' });
+  }
+});
+
+// ==========================================
 // DASHBOARD ROUTES
-// ============================================================
+// ============================================
 
 // GET /api/dashboard - User dashboard
 router.get('/dashboarda', authenticateToken, async (req, res) => {

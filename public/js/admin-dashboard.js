@@ -2154,6 +2154,11 @@ function initAllUI() {
 
     fetchDashboardData();
 
+    // Load access requests for admin
+    if (window.authToken || localStorage.getItem('token')) {
+      loadAccessRequests();
+    }
+
     // Initialize PDF report and recap view
     initPdfReport();
     initRecapView();
@@ -3405,3 +3410,167 @@ window.handleSubmitDevice = async function (event) {
 window.showAddLocationModal = function () { };
 window.toggleLocationStatus = function (id, status) { };
 window.deleteTenantLocation = function (id) { };
+
+// Access request management
+window.loadAccessRequests = async function () {
+  try {
+    const response = await fetch('/api/admin/profile-access/requests?status=pending', {
+      headers: { 'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}` }
+    });
+
+    if (response.status === 401 || response.status === 403) {
+      return;
+    }
+
+    const result = await response.json();
+    
+    if (result.success) {
+      renderAccessRequests(result.data);
+    }
+  } catch (error) {
+    console.error('Error loading access requests:', error);
+  }
+};
+
+window.renderAccessRequests = function (requests) {
+  const container = document.getElementById('accessRequestsList');
+  const countBadge = document.getElementById('accessRequestCount');
+  
+  if (!container) return;
+
+  if (requests.length === 0) {
+    container.innerHTML = '<p class="text-gray-500 text-center py-4">Tidak ada permintaan akses pending</p>';
+    if (countBadge) countBadge.classList.add('hidden');
+    return;
+  }
+
+  if (countBadge) {
+    countBadge.textContent = `${requests.length} pending`;
+    countBadge.classList.remove('hidden');
+  }
+
+  container.innerHTML = requests.map(req => {
+    const verificationBadge = req.verification_status === 'verified' 
+      ? '<span class="px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">NIK Terverifikasi</span>'
+      : req.verification_status === 'failed'
+        ? '<span class="px-2 py-1 bg-red-100 text-red-800 text-xs font-medium rounded-full">NIK Tidak Ditemukan</span>'
+        : '<span class="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs font-medium rounded-full">Belum Verifikasi</span>';
+
+    return `
+    <div class="p-4 bg-gray-50 rounded-lg border border-gray-200">
+      <div class="flex items-start justify-between">
+        <div class="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <!-- Photo Uploads -->
+          <div class="space-y-3">
+            <div>
+              <p class="text-sm font-medium text-gray-700 mb-1">Selfie:</p>
+              ${req.selfie_url 
+                ? `<img src="${req.selfie_url}" alt="Selfie" class="w-32 h-32 object-cover rounded-lg border border-gray-300" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22128%22 height=%22128%22><rect width=%22128%22 height=%22128%22 fill=%22%23f3f4f6%22/><text x=%2264%22 y=%2264%22 text-anchor=%22middle%22 fill=%22%239ca3af%22>No Image</text></svg>'">`
+                : '<p class="text-sm text-gray-500">Tidak ada foto selfie</p>'
+              }
+            </div>
+            <div>
+              <p class="text-sm font-medium text-gray-700 mb-1">KTP:</p>
+              ${req.ktp_url 
+                ? `<img src="${req.ktp_url}" alt="KTP" class="w-32 h-32 object-cover rounded-lg border border-gray-300 cursor-pointer" onclick="window.open('${req.ktp_url}', '_blank')" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22128%22 height=%22128%22><rect width=%22128%22 height=%22128%22 fill=%22%23f3f4f6%22/><text x=%2264%22 y=%2264%22 text-anchor=%22middle%22 fill=%22%239ca3af%22>No Image</text></svg>'">`
+                : '<p class="text-sm text-gray-500">Tidak ada foto KTP</p>'
+              }
+            </div>
+          </div>
+
+          <!-- Requester Info -->
+          <div class="space-y-2">
+            <p class="font-medium text-gray-900">${req.ktp_nama || req.requester_name}</p>
+            <p class="text-sm text-gray-600">📧 ${req.requester_email || 'Tidak ada email'}</p>
+            <p class="text-sm text-gray-600">📱 ${req.nomor_wa || 'Tidak ada WA'}</p>
+            <p class="text-xs text-gray-400">${new Date(req.created_at).toLocaleString('id-ID')}</p>
+            <div class="mt-2">${verificationBadge}</div>
+            ${req.matched_teacher_id ? `<p class="text-xs text-green-600 mt-1">✓ Terkait dengan Guru ID: ${req.matched_teacher_id}</p>` : ''}
+          </div>
+
+          <!-- KTP Extracted Data -->
+          <div class="space-y-2">
+            <p class="text-sm font-medium text-gray-700">Data dari KTP:</p>
+            <div class="text-sm text-gray-600 space-y-1">
+              ${req.ktp_nik ? `<p><strong>NIK:</strong> ${req.ktp_nik}</p>` : ''}
+              ${req.ktp_nama ? `<p><strong>Nama:</strong> ${req.ktp_nama}</p>` : ''}
+              ${req.ktp_tempat_lahir || req.ktp_tanggal_lahir ? `<p><strong>TTL:</strong> ${req.ktp_tempat_lahir || ''}${req.ktp_tempat_lahir && req.ktp_tanggal_lahir ? ', ' : ''}${req.ktp_tanggal_lahir || ''}</p>` : ''}
+              ${req.ktp_jenis_kelamin ? `<p><strong>Jenis Kelamin:</strong> ${req.ktp_jenis_kelamin}</p>` : ''}
+              ${req.ktp_golongan_darah ? `<p><strong>Golongan Darah:</strong> ${req.ktp_golongan_darah}</p>` : ''}
+              ${req.ktp_alamat ? `<p><strong>Alamat:</strong> ${req.ktp_alamat}</p>` : ''}
+              ${req.ktp_rt_rw ? `<p><strong>RT/RW:</strong> ${req.ktp_rt_rw}</p>` : ''}
+              ${req.ktp_kel_desa ? `<p><strong>Kel/Desa:</strong> ${req.ktp_kel_desa}</p>` : ''}
+              ${req.ktp_kecamatan ? `<p><strong>Kecamatan:</strong> ${req.ktp_kecamatan}</p>` : ''}
+              ${req.ktp_agama ? `<p><strong>Agama:</strong> ${req.ktp_agama}</p>` : ''}
+              ${req.ktp_status_perkawinan ? `<p><strong>Status Perkawinan:</strong> ${req.ktp_status_perkawinan}</p>` : ''}
+              ${req.ktp_pekerjaan ? `<p><strong>Pekerjaan:</strong> ${req.ktp_pekerjaan}</p>` : ''}
+              ${req.ktp_kewarganegaraan ? `<p><strong>Kewarganegaraan:</strong> ${req.ktp_kewarganegaraan}</p>` : ''}
+              ${req.ktp_berlaku_hingga ? `<p><strong>Berlaku Hingga:</strong> ${req.ktp_berlaku_hingga}</p>` : ''}
+              ${!req.ktp_nik && !req.ktp_nama ? '<p class="text-gray-400 italic">Belum ada data KTP yang diekstrak</p>' : ''}
+            </div>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex flex-col space-y-2 ml-4 mt-4 lg:mt-0">
+          <button onclick="approveAccessRequest(${req.id})" class="px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700">
+            <i class="fas fa-check mr-1"></i>Setujui
+          </button>
+          <button onclick="denyAccessRequest(${req.id})" class="px-3 py-1.5 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700">
+            <i class="fas fa-times mr-1"></i>Tolak
+          </button>
+        </div>
+      </div>
+    </div>
+  `}).join('');
+};
+
+window.approveAccessRequest = async function (id) {
+  try {
+    const response = await fetch(`/api/admin/profile-access/${id}/approve`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ notes: 'Disetujui oleh admin' })
+    });
+
+    const result = await response.json();
+    
+    if (result.success) {
+      alert('Permintaan akses disetujui');
+      loadAccessRequests();
+    } else {
+      alert('Gagal: ' + (result.message || 'Unknown error'));
+    }
+  } catch (error) {
+    console.error('Error approving request:', error);
+    alert('Terjadi kesalahan sistem');
+  }
+};
+
+window.denyAccessRequest = async function (id) {
+  try {
+    const response = await fetch(`/api/admin/profile-access/${id}/deny`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ notes: 'Ditolak oleh admin' })
+    });
+
+    const result = await response.json();
+    
+    if (result.success) {
+      alert('Permintaan akses ditolak');
+      loadAccessRequests();
+    } else {
+      alert('Gagal: ' + (result.message || 'Unknown error'));
+    }
+  } catch (error) {
+    console.error('Error denying request:', error);
+    alert('Terjadi kesalahan sistem');
+  }
+};

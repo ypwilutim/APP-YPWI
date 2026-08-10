@@ -393,11 +393,16 @@ const xenditInvoice = response.data;
         payment_methods: xenditInvoice.available_payment_methods
       }
     });
-   } catch (error) {
-     console.error('Create public xendit invoice error:', error.response?.data || error.message);
-     res.status(500).json({ success: false, message: error.response?.data?.message || 'Error creating xendit invoice' });
-   }
- });
+    } catch (error) {
+    console.error('Create public xendit invoice error:', error.response?.data || error.message);
+    console.error('Status:', error.response?.status);
+    console.error('Stack:', error.stack);
+    res.status(500).json({
+      success: false,
+      message: error.response?.data?.message || error.message || 'Error creating xendit invoice'
+    });
+  }
+});
 
  // GET /api/xendit/public/invoices - List Xendit invoices (testing, public)
 router.get('/xendit/public/invoices', async (req, res) => {

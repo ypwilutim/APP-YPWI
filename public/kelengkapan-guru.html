@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#066e3a">
+  <title>Kelengkapan Profil Guru - YPWI Lutim</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <style>
+    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    .card-hover { transition: all 0.3s ease; }
+    .card-hover:hover { transform: translateY(-4px); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <!-- Header -->
+  <header class="bg-white shadow-sm border-b">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 bg-green-600 rounded-lg flex items-center justify-center">
+          <i class="fas fa-user-check text-white text-xl"></i>
+        </div>
+        <div>
+          <h1 class="text-xl font-bold text-gray-900">Kelengkapan Profil Guru</h1>
+          <p class="text-sm text-gray-500">Ringkasan data profil seluruh guru</p>
+        </div>
+      </div>
+      <div class="flex items-center space-x-3">
+        <button onclick="window.history.back()" class="px-4 py-2 text-sm text-gray-600 hover:text-gray-900">
+          <i class="fas fa-arrow-left mr-2"></i>Kembali
+        </button>
+        <button id="btnViewDetail" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">
+          <i class="fas fa-list mr-2"></i>Lihat Detail Guru
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <!-- Loading State -->
+    <div id="loadingState" class="text-center py-12">
+      <i class="fas fa-spinner fa-spin text-4xl text-green-600 mb-4"></i>
+      <p class="text-gray-600">Memuat data kelengkapan profil...</p>
+    </div>
+
+    <!-- Error State -->
+    <div id="errorState" class="hidden text-center py-12">
+      <i class="fas fa-exclamation-triangle text-4xl text-red-500 mb-4"></i>
+      <p class="text-gray-600 mb-4">Gagal memuat data</p>
+      <button onclick="loadSummary()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+        <i class="fas fa-redo mr-2"></i>Coba Lagi
+      </button>
+    </div>
+
+    <!-- Content -->
+    <div id="contentState" class="hidden space-y-8">
+      <!-- Summary Cards -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <!-- Total Guru -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 card-hover">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm font-medium text-gray-600">Total Guru</p>
+              <p id="totalTeachers" class="text-3xl font-bold text-gray-900 mt-1">0</p>
+            </div>
+            <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+              <i class="fas fa-users text-blue-600 text-xl"></i>
+            </div>
+          </div>
+        </div>
+
+        <!-- Profil Lengkap -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 card-hover">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm font-medium text-gray-600">Profil Lengkap</p>
+              <p id="completeProfile" class="text-3xl font-bold text-green-600 mt-1">0</p>
+              <p id="completePercent" class="text-xs text-gray-500 mt-1">0% dari total</p>
+            </div>
+            <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+              <i class="fas fa-check-circle text-green-600 text-xl"></i>
+            </div>
+          </div>
+        </div>
+
+        <!-- Profil Belum Lengkap -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 card-hover">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm font-medium text-gray-600">Belum Lengkap</p>
+              <p id="incompleteProfile" class="text-3xl font-bold text-orange-600 mt-1">0</p>
+              <p id="incompletePercent" class="text-xs text-gray-500 mt-1">0% dari total</p>
+            </div>
+            <div class="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+              <i class="fas fa-exclamation-circle text-orange-600 text-xl"></i>
+            </div>
+          </div>
+        </div>
+
+        <!-- Rata-rata Kelengkapan -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 card-hover">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm font-medium text-gray-600">Rata-rata Kelengkapan</p>
+              <p id="averageCompletion" class="text-3xl font-bold text-purple-600 mt-1">0%</p>
+            </div>
+            <div class="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+              <i class="fas fa-chart-pie text-purple-600 text-xl"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Education & Marital Status Grid -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <!-- Education Distribution -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <h3 class="text-lg font-semibold text-gray-900 mb-4">
+            <i class="fas fa-graduation-cap text-blue-600 mr-2"></i>Pendidikan Terakhir
+          </h3>
+          <div id="educationStats" class="space-y-3">
+            <!-- Filled by JS -->
+          </div>
+        </div>
+
+        <!-- Marital Status Distribution -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <h3 class="text-lg font-semibold text-gray-900 mb-4">
+            <i class="fas fa-heart text-red-600 mr-2"></i>Status Perkawinan
+          </h3>
+          <div id="maritalStats" class="space-y-3">
+            <!-- Filled by JS -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Stats Table -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-100">
+          <h3 class="text-lg font-semibold text-gray-900">
+            <i class="fas fa-chart-bar text-green-600 mr-2"></i>Ringkasan per Kategori
+          </h3>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kategori</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Jumlah</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Persentase</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Visual</th>
+              </tr>
+            </thead>
+            <tbody id="summaryTableBody" class="divide-y divide-gray-100">
+              <!-- Filled by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    function getUserRole() {
+      const userData = localStorage.getItem('user');
+      if (userData) {
+        try {
+          return JSON.parse(userData).role;
+        } catch (e) {
+          return null;
+        }
+      }
+      return null;
+    }
+
+    async function loadSummary() {
+      document.getElementById('loadingState').classList.remove('hidden');
+      document.getElementById('errorState').classList.add('hidden');
+      document.getElementById('contentState').classList.add('hidden');
+
+      try {
+        const response = await fetch('/api/public/teacher-profile-summary');
+        if (!response.ok) throw new Error('Failed to load summary');
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          renderSummary(result.data);
+          document.getElementById('loadingState').classList.add('hidden');
+          document.getElementById('contentState').classList.remove('hidden');
+          
+          // Show detail button only for admin
+          const userRole = getUserRole();
+          if (userRole === 'admin') {
+            document.getElementById('btnViewDetail').classList.remove('hidden');
+          }
+        } else {
+          throw new Error(result.message || 'Failed to load summary');
+        }
+      } catch (error) {
+        console.error('Error loading summary:', error);
+        document.getElementById('loadingState').classList.add('hidden');
+        document.getElementById('errorState').classList.remove('hidden');
+      }
+    }
+
+    function renderSummary(data) {
+      // Update summary cards
+      document.getElementById('totalTeachers').textContent = data.total_teachers;
+      document.getElementById('completeProfile').textContent = data.complete_profile;
+      document.getElementById('incompleteProfile').textContent = data.incomplete_profile;
+      document.getElementById('averageCompletion').textContent = data.average_completion + '%';
+
+      const completePercent = data.total_teachers > 0 ? Math.round((data.complete_profile / data.total_teachers) * 100) : 0;
+      const incompletePercent = data.total_teachers > 0 ? Math.round((data.incomplete_profile / data.total_teachers) * 100) : 0;
+      document.getElementById('completePercent').textContent = completePercent + '% dari total';
+      document.getElementById('incompletePercent').textContent = incompletePercent + '% dari total';
+
+      // Education stats
+      const educationContainer = document.getElementById('educationStats');
+      const educationOrder = ['SD', 'SMP', 'SMA', 'SMK', 'D1', 'D2', 'D3', 'S1', 'S2', 'S3', 'Lainnya', 'Tidak Diketahui'];
+      const educationData = educationOrder.filter(edu => data.education_distribution[edu] > 0).map(edu => ({
+        label: edu,
+        count: data.education_distribution[edu],
+        percent: data.total_teachers > 0 ? Math.round((data.education_distribution[edu] / data.total_teachers) * 100) : 0
+      }));
+
+      educationContainer.innerHTML = educationData.map(item => `
+        <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+          <div class="flex items-center space-x-3">
+            <div class="w-2 h-2 bg-blue-600 rounded-full"></div>
+            <span class="font-medium text-gray-900">${item.label}</span>
+          </div>
+          <div class="flex items-center space-x-4">
+            <span class="text-sm text-gray-600">${item.count} guru</span>
+            <span class="text-sm font-semibold text-gray-900">${item.percent}%</span>
+          </div>
+        </div>
+      `).join('');
+
+      // Marital status stats
+      const maritalContainer = document.getElementById('maritalStats');
+      const maritalData = [
+        { key: 'Lajang', label: 'Lajang', icon: 'fa-user', color: 'bg-gray-500' },
+        { key: 'Menikah', label: 'Menikah', icon: 'fa-heart', color: 'bg-green-500' },
+        { key: 'Cerai Hidup', label: 'Cerai Hidup', icon: 'fa-user-times', color: 'bg-orange-500' },
+        { key: 'Cerai Mati', label: 'Cerai Mati', icon: 'fa-user-slash', color: 'bg-red-500' },
+        { key: 'Tidak Diketahui', label: 'Tidak Diketahui', icon: 'fa-question', color: 'bg-gray-400' }
+      ].filter(item => data.marital_status_distribution[item.key] > 0).map(item => ({
+        ...item,
+        count: data.marital_status_distribution[item.key],
+        percent: data.total_teachers > 0 ? Math.round((data.marital_status_distribution[item.key] / data.total_teachers) * 100) : 0
+      }));
+
+      maritalContainer.innerHTML = maritalData.map(item => `
+        <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+          <div class="flex items-center space-x-3">
+            <div class="w-8 h-8 ${item.color} rounded-lg flex items-center justify-center">
+              <i class="fas ${item.icon} text-white text-sm"></i>
+            </div>
+            <span class="font-medium text-gray-900">${item.label}</span>
+          </div>
+          <div class="flex items-center space-x-4">
+            <span class="text-sm text-gray-600">${item.count} guru</span>
+            <span class="text-sm font-semibold text-gray-900">${item.percent}%</span>
+          </div>
+        </div>
+      `).join('');
+
+      // Summary table
+      const tableBody = document.getElementById('summaryTableBody');
+      const allCategories = [
+        { label: 'Total Guru', count: data.total_teachers, percent: 100, color: 'bg-blue-600' },
+        ...educationData.map(item => ({ label: `Pendidikan ${item.label}`, count: item.count, percent: item.percent, color: 'bg-indigo-600' })),
+        ...maritalData.map(item => ({ label: item.label, count: item.count, percent: item.percent, color: 'bg-pink-600' }))
+      ];
+
+      tableBody.innerHTML = allCategories.map(item => `
+        <tr class="hover:bg-gray-50">
+          <td class="px-6 py-4 text-sm font-medium text-gray-900">${item.label}</td>
+          <td class="px-6 py-4 text-sm text-gray-600">${item.count}</td>
+          <td class="px-6 py-4 text-sm text-gray-600">${item.percent}%</td>
+          <td class="px-6 py-4">
+            <div class="w-full bg-gray-200 rounded-full h-2">
+              <div class="${item.color} h-2 rounded-full" style="width: ${item.percent}%"></div>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    // Event listeners
+    document.getElementById('btnViewDetail')?.addEventListener('click', () => {
+      window.location.href = 'kelengkapan-guru-detail.html';
+    });
+
+    // Load on page load
+    document.addEventListener('DOMContentLoaded', loadSummary);
+  </script>
+</body>
+</html>

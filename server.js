@@ -893,6 +893,75 @@ async function startServer() {
     await db.initializeDatabase();
     console.log('Database initialized, starting server');
 
+    // Create upload directories if not exists
+    const fs = require('fs');
+    const path = require('path');
+    const uploadDirs = ['public/uploads', 'public/uploads/access-requests'];
+    uploadDirs.forEach(dir => {
+      const fullPath = path.join(process.cwd(), dir);
+      if (!fs.existsSync(fullPath)) {
+        fs.mkdirSync(fullPath, { recursive: true });
+        console.log(`Created directory: ${dir}`);
+      }
+    });
+
+    // Create profile access requests table if not exists
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS profile_access_requests (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        session_id VARCHAR(255) NOT NULL,
+        requester_name VARCHAR(255) NOT NULL,
+        requester_email VARCHAR(255),
+        reason TEXT,
+        status ENUM('pending', 'approved', 'denied') DEFAULT 'pending',
+        approved_by INT,
+        approved_at DATETIME,
+        notes TEXT,
+        selfie_url VARCHAR(500),
+        ktp_url VARCHAR(500),
+        ktp_nik VARCHAR(20),
+        ktp_nama VARCHAR(255),
+        ktp_alamat TEXT,
+        ktp_tempat_lahir VARCHAR(255),
+        ktp_tanggal_lahir DATE,
+        ktp_jenis_kelamin VARCHAR(10),
+        ktp_golongan_darah VARCHAR(5),
+        ktp_agama VARCHAR(50),
+        ktp_status_perkawinan VARCHAR(50),
+        ktp_pekerjaan VARCHAR(100),
+        ktp_kewarganegaraan VARCHAR(10),
+        ktp_berlaku_hingga VARCHAR(100),
+        ktp_rt_rw VARCHAR(10),
+        ktp_kel_desa VARCHAR(100),
+        ktp_kecamatan VARCHAR(100),
+        verification_status ENUM('pending', 'verified', 'failed') DEFAULT 'pending',
+        matched_teacher_id INT,
+        matched_user_id INT,
+        verification_token VARCHAR(255),
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX(session_id),
+        INDEX(status),
+        INDEX(ktp_nik),
+        INDEX(verification_status)
+      )
+    `);
+
+    // Add new columns if not exists (for existing tables)
+    try {
+      await db.query(`ALTER TABLE profile_access_requests ADD COLUMN IF NOT EXISTS ktp_golongan_darah VARCHAR(5) AFTER ktp_jenis_kelamin`);
+      await db.query(`ALTER TABLE profile_access_requests ADD COLUMN IF NOT EXISTS ktp_agama VARCHAR(50) AFTER ktp_golongan_darah`);
+      await db.query(`ALTER TABLE profile_access_requests ADD COLUMN IF NOT EXISTS ktp_status_perkawinan VARCHAR(50) AFTER ktp_agama`);
+      await db.query(`ALTER TABLE profile_access_requests ADD COLUMN IF NOT EXISTS ktp_pekerjaan VARCHAR(100) AFTER ktp_status_perkawinan`);
+      await db.query(`ALTER TABLE profile_access_requests ADD COLUMN IF NOT EXISTS ktp_kewarganegaraan VARCHAR(10) AFTER ktp_pekerjaan`);
+      await db.query(`ALTER TABLE profile_access_requests ADD COLUMN IF NOT EXISTS ktp_berlaku_hingga VARCHAR(100) AFTER ktp_kewarganegaraan`);
+      await db.query(`ALTER TABLE profile_access_requests ADD COLUMN IF NOT EXISTS ktp_rt_rw VARCHAR(10) AFTER ktp_berlaku_hingga`);
+      await db.query(`ALTER TABLE profile_access_requests ADD COLUMN IF NOT EXISTS ktp_kel_desa VARCHAR(100) AFTER ktp_rt_rw`);
+      await db.query(`ALTER TABLE profile_access_requests ADD COLUMN IF NOT EXISTS ktp_kecamatan VARCHAR(100) AFTER ktp_kel_desa`);
+      await db.query(`ALTER TABLE profile_access_requests ADD COLUMN IF NOT EXISTS verification_token VARCHAR(255) AFTER matched_user_id`);
+    } catch (e) {
+      console.log('Profile access requests table migration note:', e.message);
+    }
+
     // Admin teacher completion progress
     app.get('/api/admin/teacher-completion-progress', authenticateOperator, async (req, res) => {
       try {

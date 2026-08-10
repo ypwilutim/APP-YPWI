@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#dc2626">
+  <title>Detail Kelengkapan Profil Guru - YPWI Lutim</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <style>
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    .table-row-hover:hover {
+      background-color: #f9fafb;
+    }
+  </style>
+</head>
+
+<body class="bg-gray-50 min-h-screen">
+  <!-- Header -->
+  <header class="bg-white shadow-sm border-b">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 bg-red-600 rounded-lg flex items-center justify-center">
+          <i class="fas fa-user-shield text-white text-xl"></i>
+        </div>
+        <div>
+          <h1 class="text-xl font-bold text-gray-900">Detail Kelengkapan Profil Guru</h1>
+          <p class="text-sm text-gray-500">Verifikasi identitas untuk mengakses data</p>
+        </div>
+      </div>
+      <div class="flex items-center space-x-3">
+        <button onclick="window.location.href='kelengkapan-guru.html'"
+          class="px-4 py-2 text-sm text-gray-600 hover:text-gray-900">
+          <i class="fas fa-arrow-left mr-2"></i>Kembali
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <!-- Verification Modal -->
+    <div id="verificationModal" class="hidden">
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 max-w-3xl mx-auto">
+        <div class="text-center mb-6">
+          <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <i class="fas fa-id-card text-blue-600 text-2xl"></i>
+          </div>
+          <h2 class="text-2xl font-bold text-gray-900 mb-2">Verifikasi Identitas</h2>
+          <p class="text-gray-600">Upload foto selfie dan KTP untuk verifikasi identitas Anda</p>
+        </div>
+
+        <form id="verificationForm" class="space-y-6">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Foto Selfie *</label>
+              <input type="file" id="selfieInput" accept="image/*" required
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+              <p class="text-xs text-gray-500 mt-1">Format: JPG, PNG. Max 5MB</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Foto KTP *</label>
+              <input type="file" id="ktpInput" accept="image/*" required
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+              <p class="text-xs text-gray-500 mt-1">Format: JPG, PNG. Max 5MB</p>
+              <button type="button" id="btnOcrKtp"
+                class="mt-2 px-3 py-1.5 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                <i class="fas fa-magic mr-1"></i>Ekstrak Data dari KTP
+              </button>
+              <p id="ocrStatus" class="text-xs text-gray-500 mt-1"></p>
+            </div>
+          </div>
+
+          <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <p class="text-sm font-medium text-yellow-800 mb-2">Data dari KTP (Diisi Manual/OCR):</p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">NIK *</label>
+                <input type="text" id="ktpNik" required class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  placeholder="16 digit NIK">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Nama Sesuai KTP *</label>
+                <input type="text" id="ktpNama" required class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+              </div>
+              <div class="md:col-span-2">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Alamat *</label>
+                <textarea id="ktpAlamat" rows="2" required
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg"></textarea>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Tempat Lahir</label>
+                <input type="text" id="ktpTempatLahir" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Tanggal Lahir</label>
+                <input type="date" id="ktpTanggalLahir" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Jenis Kelamin</label>
+                <select id="ktpJenisKelamin" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                  <option value="">Pilih</option>
+                  <option value="Laki-laki">Laki-laki</option>
+                  <option value="Perempuan">Perempuan</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Golongan Darah</label>
+                <select id="ktpGolonganDarah" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                  <option value="">Pilih</option>
+                  <option value="A">A</option>
+                  <option value="B">B</option>
+                  <option value="AB">AB</option>
+                  <option value="O">O</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Agama</label>
+                <select id="ktpAgama" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                  <option value="">Pilih</option>
+                  <option value="ISLAM">ISLAM</option>
+                  <option value="KRISTEN">KRISTEN</option>
+                  <option value="KATOLIK">KATOLIK</option>
+                  <option value="HINDU">HINDU</option>
+                  <option value="BUDDHA">BUDDHA</option>
+                  <option value="KONGHUCU">KONGHUCU</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Status Perkawinan</label>
+                <select id="ktpStatusPerkawinan" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                  <option value="">Pilih</option>
+                  <option value="BELUM KAWIN">BELUM KAWIN</option>
+                  <option value="KAWIN">KAWIN</option>
+                  <option value="CERAI HIDUP">CERAI HIDUP</option>
+                  <option value="CERAI MATI">CERAI MATI</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Pekerjaan</label>
+                <input type="text" id="ktpPekerjaan" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Kewarganegaraan</label>
+                <select id="ktpKewarganegaraan" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                  <option value="">Pilih</option>
+                  <option value="WNI">WNI</option>
+                  <option value="WNA">WNA</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Berlaku Hingga</label>
+                <input type="text" id="ktpBerlakuHingga" class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  placeholder="SEUMUR HIDUP atau tanggal">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">RT/RW</label>
+                <input type="text" id="ktpRtRw" class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  placeholder="001/004">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Kelurahan/Desa</label>
+                <input type="text" id="ktpKelDesa" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Kecamatan</label>
+                <input type="text" id="ktpKecamatan" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Email *</label>
+              <input type="email" id="requesterEmail" required
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Nomor WA *</label>
+              <input type="tel" id="requesterWa" required class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                placeholder="08xxxxxxxxxx">
+            </div>
+          </div>
+
+          <div class="flex justify-end space-x-3 pt-4 border-t border-gray-200">
+            <button type="button" onclick="window.location.href='kelengkapan-guru.html'"
+              class="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200">
+              Batal
+            </button>
+            <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+              <i class="fas fa-paper-plane mr-2"></i>Kirim Verifikasi
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Waiting Modal -->
+    <div id="waitingModal" class="hidden">
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 max-w-md mx-auto text-center">
+        <div class="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <i class="fas fa-clock text-yellow-600 text-2xl"></i>
+        </div>
+        <h2 class="text-2xl font-bold text-gray-900 mb-2">Menunggu Persetujuan</h2>
+        <p class="text-gray-600 mb-6">Permintaan verifikasi Anda sedang menunggu persetujuan admin.</p>
+        <div class="bg-gray-50 rounded-lg p-4 mb-6">
+          <p class="text-sm text-gray-600">Status: <span class="font-semibold text-yellow-600">Pending</span></p>
+          <p class="text-sm text-gray-600 mt-1">Anda akan mendapatkan notifikasi setelah disetujui.</p>
+        </div>
+        <button onclick="checkAccessStatus()" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+          <i class="fas fa-refresh mr-2"></i>Cek Status
+        </button>
+      </div>
+    </div>
+
+    <!-- Special Login Modal -->
+    <div id="specialLoginModal" class="hidden">
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 max-w-md mx-auto">
+        <div class="text-center mb-6">
+          <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <i class="fas fa-check-circle text-green-600 text-2xl"></i>
+          </div>
+          <h2 class="text-2xl font-bold text-gray-900 mb-2">Verifikasi Disetujui</h2>
+          <p class="text-gray-600">Identitas Anda telah diverifikasi. Silakan login untuk mengakses detail.</p>
+        </div>
+
+        <form id="specialLoginForm" class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Email / NIK</label>
+            <input type="text" id="loginIdentifier" class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              placeholder="Email atau NIK">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Password</label>
+            <input type="password" id="loginPassword" class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              placeholder="Password">
+          </div>
+          <button type="submit" class="w-full px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+            <i class="fas fa-sign-in-alt mr-2"></i>Login
+          </button>
+        </form>
+
+        <div class="mt-4 text-center">
+          <p class="text-sm text-gray-600">Belum punya akun? </p>
+          <button onclick="showCreateAccount()" class="text-blue-600 hover:text-blue-800 text-sm font-medium">
+            Buat akun baru
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Create Account Modal -->
+    <div id="createAccountModal" class="hidden">
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 max-w-md mx-auto">
+        <div class="text-center mb-6">
+          <h2 class="text-2xl font-bold text-gray-900 mb-2">Buat Akun Baru</h2>
+          <p class="text-gray-600">Buat akun untuk mengakses detail profil guru</p>
+        </div>
+
+        <form id="createAccountForm" class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Nama Lengkap</label>
+            <input type="text" id="newAccountName" class="w-full px-3 py-2 border border-gray-300 rounded-lg" readonly>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
+            <input type="email" id="newAccountEmail" class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              readonly>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Nomor WA</label>
+            <input type="tel" id="newAccountWa" class="w-full px-3 py-2 border border-gray-300 rounded-lg" readonly>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Password Baru</label>
+            <input type="password" id="newAccountPassword" class="w-full px-3 py-2 border border-gray-300 rounded-lg"
+              placeholder="Minimal 6 karakter">
+          </div>
+          <button type="submit" class="w-full px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+            <i class="fas fa-user-plus mr-2"></i>Buat Akun
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Teacher Detail Content -->
+    <div id="contentState" class="hidden space-y-6">
+      <!-- Filters -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">
+          <i class="fas fa-filter text-red-600 mr-2"></i>Filter Data
+        </h3>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Pendidikan Terakhir</label>
+            <select id="filterPendidikan"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500">
+              <option value="">Semua</option>
+              <option value="SD">SD</option>
+              <option value="SMP">SMP</option>
+              <option value="SMA">SMA</option>
+              <option value="SMK">SMK</option>
+              <option value="D1">D1</option>
+              <option value="D2">D2</option>
+              <option value="D3">D3</option>
+              <option value="S1">S1</option>
+              <option value="S2">S2</option>
+              <option value="S3">S3</option>
+              <option value="Lainnya">Lainnya</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Status Perkawinan</label>
+            <select id="filterStatusPerkawinan"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500">
+              <option value="">Semua</option>
+              <option value="Lajang">Lajang</option>
+              <option value="Menikah">Menikah</option>
+              <option value="Cerai Hidup">Cerai Hidup</option>
+              <option value="Cerai Mati">Cerai Mati</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Cari Guru</label>
+            <input type="text" id="filterSearch" placeholder="Nama / NIK / NIP"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500">
+          </div>
+          <div class="flex items-end">
+            <button onclick="applyFilters()" class="w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">
+              <i class="fas fa-search mr-2"></i>Cari
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Teachers Table -->
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+          <h3 class="text-lg font-semibold text-gray-900">
+            <i class="fas fa-users text-red-600 mr-2"></i>Daftar Guru
+          </h3>
+          <span id="totalCount" class="text-sm text-gray-600">0 guru</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nama Guru</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">NIK/NIP</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pendidikan</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status Perkawinan</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kelengkapan</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sekolah</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="teachersTableBody" class="divide-y divide-gray-100">
+              <!-- Filled by JS -->
+            </tbody>
+          </table>
+        </div>
+        <!-- Pagination -->
+        <div id="pagination" class="px-6 py-4 border-t border-gray-100 flex justify-between items-center">
+          <!-- Filled by JS -->
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    let authToken = localStorage.getItem('token') || '';
+    let currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+    let currentPage = 1;
+    let currentFilters = {};
+    let verificationToken = localStorage.getItem('profile_verification_token');
+
+    async function api(url, options = {}) {
+      const headers = {
+        'Authorization': `Bearer ${authToken}`,
+        'Content-Type': 'application/json',
+        ...options.headers
+      };
+
+      const response = await fetch(url, { ...options, headers });
+
+      if (response.status === 401 || response.status === 403) {
+        return null;
+      }
+
+      return response;
+    }
+
+    async function loadDetail() {
+      if (!verificationToken) {
+        showVerificationModal();
+        return;
+      }
+
+      const accessCheck = await checkAccessStatus();
+      if (!accessCheck) {
+        showWaitingModal();
+        return;
+      }
+
+      document.getElementById('verificationModal').classList.add('hidden');
+      document.getElementById('waitingModal').classList.add('hidden');
+      document.getElementById('specialLoginModal').classList.add('hidden');
+      document.getElementById('createAccountModal').classList.add('hidden');
+      document.getElementById('contentState').classList.remove('hidden');
+
+      applyFilters();
+    }
+
+    function showVerificationModal() {
+      document.getElementById('verificationModal').classList.remove('hidden');
+      document.getElementById('waitingModal').classList.add('hidden');
+      document.getElementById('specialLoginModal').classList.add('hidden');
+      document.getElementById('createAccountModal').classList.add('hidden');
+      document.getElementById('contentState').classList.add('hidden');
+    }
+
+    function showWaitingModal() {
+      document.getElementById('verificationModal').classList.add('hidden');
+      document.getElementById('waitingModal').classList.remove('hidden');
+      document.getElementById('specialLoginModal').classList.add('hidden');
+      document.getElementById('createAccountModal').classList.add('hidden');
+      document.getElementById('contentState').classList.add('hidden');
+    }
+
+    function showSpecialLoginModal() {
+      document.getElementById('verificationModal').classList.add('hidden');
+      document.getElementById('waitingModal').classList.add('hidden');
+      document.getElementById('specialLoginModal').classList.remove('hidden');
+      document.getElementById('createAccountModal').classList.add('hidden');
+      document.getElementById('contentState').classList.add('hidden');
+    }
+
+    async function checkAccessStatus() {
+      if (!verificationToken) return false;
+
+      try {
+        const response = await fetch(`/api/public/profile-access/check?token=${verificationToken}`);
+        const result = await response.json();
+        return result.success && result.has_access;
+      } catch (error) {
+        console.error('Error checking access:', error);
+        return false;
+      }
+    }
+
+    function showOcrStatus(message, type) {
+      const ocrStatus = document.getElementById('ocrStatus');
+      if (!ocrStatus) return;
+      ocrStatus.textContent = message;
+      ocrStatus.className = type === 'success' ? 'text-xs text-green-600 mt-1' :
+        type === 'error' ? 'text-xs text-red-600 mt-1' : 'text-xs text-blue-600 mt-1';
+    }
+
+    // OCR KTP via Gemini Vision API (backend)
+    document.getElementById('btnOcrKtp')?.addEventListener('click', async () => {
+      const ktpFile = document.getElementById('ktpInput')?.files[0];
+      if (!ktpFile) {
+        alert('Pilih foto KTP terlebih dahulu');
+        return;
+      }
+
+      const btnOcr = document.getElementById('btnOcrKtp');
+      btnOcr.disabled = true;
+      showOcrStatus('Sedang memproses OCR via Gemini...', 'info');
+
+      try {
+        const formData = new FormData();
+        formData.append('ktp', ktpFile);
+
+        const response = await fetch('/api/public/profile-access/ocr-ktp', {
+          method: 'POST',
+          body: formData
+        });
+
+        const result = await response.json();
+
+        if (!result.success) {
+          throw new Error(result.message || 'Gagal memproses OCR');
+        }
+
+        const ktpData = result.ktp_data || {};
+
+        console.log('=== GEMINI OCR KTP RESULT ===');
+        console.log('Parsed KTP Data:', ktpData);
+        console.log('Is KTP valid:', result.is_ktp);
+        console.log('==============================');
+
+        const setVal = (id, val) => { if (val) document.getElementById(id).value = val; };
+
+        setVal('ktpNik', ktpData.nik);
+        setVal('ktpNama', ktpData.nama);
+        setVal('ktpAlamat', ktpData.alamat);
+        setVal('ktpTempatLahir', ktpData.tempat_lahir);
+        setVal('ktpTanggalLahir', ktpData.tanggal_lahir);
+        setVal('ktpJenisKelamin', ktpData.jenis_kelamin);
+        setVal('ktpGolonganDarah', ktpData.gol_darah);
+        setVal('ktpAgama', ktpData.agama);
+        setVal('ktpStatusPerkawinan', ktpData.status_perkawinan);
+        setVal('ktpPekerjaan', ktpData.pekerjaan);
+        setVal('ktpKewarganegaraan', ktpData.kewarganegaraan);
+        setVal('ktpBerlakuHingga', ktpData.berlaku_hingga);
+        setVal('ktpRtRw', ktpData.rt_rw);
+        setVal('ktpKelDesa', ktpData.kel_desa);
+        setVal('ktpKecamatan', ktpData.kecamatan);
+
+        if (!result.is_ktp) {
+          showOcrStatus('File yang diupload bukan KTP valid. Silakan koreksi manual.', 'error');
+          alert('Peringatan: File yang diupload tampaknya bukan KTP Indonesia yang valid. Silakan periksa data dan edit manual.');
+        } else {
+          showOcrStatus('OCR selesai via Gemini. Periksa kembali jika diperlukan.', 'success');
+        }
+      } catch (error) {
+        console.error('OCR Error:', error);
+        showOcrStatus('Gagal memproses OCR: ' + error.message, 'error');
+      } finally {
+        btnOcr.disabled = false;
+      }
+    });
+
+    // Verification form submission
+    document.getElementById('verificationForm')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const selfieFile = document.getElementById('selfieInput')?.files[0];
+      const ktpFile = document.getElementById('ktpInput')?.files[0];
+
+      if (!selfieFile || !ktpFile) {
+        alert('Foto selfie dan KTP harus diupload');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('selfie', selfieFile);
+      formData.append('ktp', ktpFile);
+      formData.append('ktp_nik', document.getElementById('ktpNik')?.value.trim());
+      formData.append('ktp_nama', document.getElementById('ktpNama')?.value.trim());
+      formData.append('ktp_alamat', document.getElementById('ktpAlamat')?.value.trim());
+      formData.append('ktp_tempat_lahir', document.getElementById('ktpTempatLahir')?.value.trim());
+      formData.append('ktp_tanggal_lahir', document.getElementById('ktpTanggalLahir')?.value.trim());
+      formData.append('ktp_jenis_kelamin', document.getElementById('ktpJenisKelamin')?.value.trim());
+      formData.append('ktp_golongan_darah', document.getElementById('ktpGolonganDarah')?.value.trim());
+      formData.append('ktp_agama', document.getElementById('ktpAgama')?.value.trim());
+      formData.append('ktp_status_perkawinan', document.getElementById('ktpStatusPerkawinan')?.value.trim());
+      formData.append('ktp_pekerjaan', document.getElementById('ktpPekerjaan')?.value.trim());
+      formData.append('ktp_kewarganegaraan', document.getElementById('ktpKewarganegaraan')?.value.trim());
+      formData.append('ktp_berlaku_hingga', document.getElementById('ktpBerlakuHingga')?.value.trim());
+      formData.append('ktp_rt_rw', document.getElementById('ktpRtRw')?.value.trim());
+      formData.append('ktp_kel_desa', document.getElementById('ktpKelDesa')?.value.trim());
+      formData.append('ktp_kecamatan', document.getElementById('ktpKecamatan')?.value.trim());
+      formData.append('email', document.getElementById('requesterEmail')?.value.trim());
+      formData.append('nomor_wa', document.getElementById('requesterWa')?.value.trim());
+
+      try {
+        const response = await fetch('/api/public/profile-access/verify', {
+          method: 'POST',
+          body: formData
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          verificationToken = result.verification_token;
+          localStorage.setItem('profile_verification_token', verificationToken);
+
+          if (result.status === 'approved') {
+            alert('Verifikasi disetujui! Anda sekarang bisa login.');
+            showSpecialLoginModal();
+            if (result.user_email) {
+              document.getElementById('loginIdentifier').value = result.user_email;
+            }
+          } else if (result.status === 'pending') {
+            alert('Permintaan verifikasi berhasil dikirim. Menunggu persetujuan admin.');
+            showWaitingModal();
+          }
+        } else {
+          alert('Gagal: ' + (result.message || 'Unknown error'));
+        }
+      } catch (error) {
+        console.error('Error submitting verification:', error);
+        alert('Terjadi kesalahan sistem');
+      }
+    });
+
+    // Special login form
+    document.getElementById('specialLoginForm')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const identifier = document.getElementById('loginIdentifier')?.value.trim();
+      const password = document.getElementById('loginPassword')?.value.trim();
+
+      if (!identifier || !password) {
+        alert('Email/NIK dan password harus diisi');
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/public/profile-access/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            identifier: identifier,
+            password: password,
+            token: verificationToken
+          })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          localStorage.setItem('token', result.token);
+          localStorage.setItem('user', JSON.stringify(result.user));
+          alert('Login berhasil!');
+          window.location.href = 'admin-dashboard.html';
+        } else {
+          alert('Login gagal: ' + (result.message || 'Unknown error'));
+        }
+      } catch (error) {
+        console.error('Error during special login:', error);
+        alert('Terjadi kesalahan sistem');
+      }
+    });
+
+    // Create account form
+    document.getElementById('createAccountForm')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const password = document.getElementById('newAccountPassword')?.value.trim();
+
+      if (!password || password.length < 6) {
+        alert('Password minimal 6 karakter');
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/public/profile-access/create-account', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token: verificationToken,
+            password: password
+          })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          localStorage.setItem('token', result.token);
+          localStorage.setItem('user', JSON.stringify(result.user));
+          alert('Akun berhasil dibuat!');
+          window.location.href = 'admin-dashboard.html';
+        } else {
+          alert('Gagal: ' + (result.message || 'Unknown error'));
+        }
+      } catch (error) {
+        console.error('Error creating account:', error);
+        alert('Terjadi kesalahan sistem');
+      }
+    });
+
+    function showCreateAccount() {
+      document.getElementById('createAccountModal').classList.remove('hidden');
+    }
+
+    async function applyFilters() {
+      const pendidikan = document.getElementById('filterPendidikan')?.value || '';
+      const statusPerkawinan = document.getElementById('filterStatusPerkawinan')?.value || '';
+      const search = document.getElementById('filterSearch')?.value || '';
+
+      let url = `/api/admin/teacher-profile-detail?page=${currentPage}&limit=20`;
+      if (pendidikan) url += `&pendidikan=${encodeURIComponent(pendidikan)}`;
+      if (statusPerkawinan) url += `&status_perkawinan=${encodeURIComponent(statusPerkawinan)}`;
+      if (search) url += `&search=${encodeURIComponent(search)}`;
+
+      const response = await api(url);
+      if (!response) return;
+
+      const result = await response.json();
+
+      if (result.success) {
+        renderTeachers(result.data, result.pagination);
+      } else {
+        alert('Gagal memuat data: ' + (result.message || 'Unknown error'));
+      }
+    }
+
+    function renderTeachers(teachers, pagination) {
+      const tbody = document.getElementById('teachersTableBody');
+      if (!tbody) return;
+
+      if (teachers.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-12 text-center text-gray-500">Tidak ada data guru</td></tr>';
+        document.getElementById('totalCount').textContent = '0 guru';
+        document.getElementById('pagination').innerHTML = '';
+        return;
+      }
+
+      document.getElementById('totalCount').textContent = `${pagination.total} guru`;
+
+      tbody.innerHTML = teachers.map(teacher => {
+        const completionColor = teacher.completion_percentage >= 80 ? 'bg-green-100 text-green-800' :
+          teacher.completion_percentage >= 50 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800';
+
+        return `
+          <tr class="table-row-hover">
+            <td class="px-6 py-4 text-sm font-medium text-gray-900">${teacher.nama || '-'}</td>
+            <td class="px-6 py-4 text-sm text-gray-600">
+              <div>NIK: ${teacher.nik || '-'}</div>
+              <div>NIP: ${teacher.nip || '-'}</div>
+            </td>
+            <td class="px-6 py-4 text-sm text-gray-600">${teacher.pendidikan_terakhir || '-'}</td>
+            <td class="px-6 py-4 text-sm text-gray-600">${teacher.status_perkawinan || '-'}</td>
+            <td class="px-6 py-4">
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${completionColor}">
+                ${teacher.completion_percentage}%
+              </span>
+            </td>
+            <td class="px-6 py-4 text-sm text-gray-600">${teacher.sekolah_list || '-'}</td>
+            <td class="px-6 py-4 text-sm">
+              <button onclick="viewTeacherDetail(${teacher.id})" class="text-blue-600 hover:text-blue-800 mr-2" title="Lihat Detail">
+                <i class="fas fa-eye"></i>
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      renderPagination(pagination);
+    }
+
+    function renderPagination(pagination) {
+      const paginationContainer = document.getElementById('pagination');
+      if (!paginationContainer) return;
+      const { page, totalPages, total } = pagination;
+
+      if (totalPages <= 1) {
+        paginationContainer.innerHTML = '';
+        return;
+      }
+
+      let html = `
+        <div class="text-sm text-gray-600">
+          Menampilkan halaman ${page} dari ${totalPages} (${total} data)
+        </div>
+        <div class="flex space-x-2">
+      `;
+
+      html += `
+        <button onclick="changePage(${Math.max(1, page - 1)})" 
+          class="px-3 py-1.5 rounded-lg ${page === 1 ? 'opacity-30 cursor-not-allowed bg-gray-100' : 'bg-white border border-gray-200 hover:bg-gray-50'}"
+          ${page === 1 ? 'disabled' : ''}>
+          <i class="fas fa-chevron-left text-xs"></i>
+        </button>
+      `;
+
+      for (let i = 1; i <= totalPages; i++) {
+        if (i === 1 || i === totalPages || (i >= page - 1 && i <= page + 1)) {
+          html += `
+            <button onclick="changePage(${i})" 
+              class="px-3 py-1.5 rounded-lg ${i === page ? 'bg-red-600 text-white' : 'bg-white border border-gray-200 hover:bg-gray-50'}">
+              ${i}
+            </button>
+          `;
+        } else if (i === page - 2 || i === page + 2) {
+          html += `<span class="px-2 py-1.5 text-gray-400">...</span>`;
+        }
+      }
+
+      html += `
+        <button onclick="changePage(${Math.min(totalPages, page + 1)})" 
+          class="px-3 py-1.5 rounded-lg ${page === totalPages ? 'opacity-30 cursor-not-allowed bg-gray-100' : 'bg-white border border-gray-200 hover:bg-gray-50'}"
+          ${page === totalPages ? 'disabled' : ''}>
+          <i class="fas fa-chevron-right text-xs"></i>
+        </button>
+      `;
+
+      html += '</div>';
+      paginationContainer.innerHTML = html;
+    }
+
+    function changePage(page) {
+      currentPage = page;
+      applyFilters();
+    }
+
+    async function viewTeacherDetail(teacherId) {
+      try {
+        const response = await api(`/api/admin/teachers/${teacherId}`);
+        if (!response) return;
+
+        const result = await response.json();
+
+        if (result.success) {
+          const teacher = result.data;
+          let detailHtml = `
+            <div class="space-y-4">
+              <div class="grid grid-cols-2 gap-4">
+                <div><strong>Nama:</strong> ${teacher.nama || '-'}</div>
+                <div><strong>NIK:</strong> ${teacher.nik || '-'}</div>
+                <div><strong>NIP:</strong> ${teacher.nip || '-'}</div>
+                <div><strong>Email:</strong> ${teacher.email || '-'}</div>
+                <div><strong>TTL:</strong> ${teacher.tempat_lahir || '-'}, ${teacher.tanggal_lahir || '-'}</div>
+                <div><strong>Jenis Kelamin:</strong> ${teacher.jenis_kelamin === 'L' ? 'Laki-laki' : teacher.jenis_kelamin === 'P' ? 'Perempuan' : '-'}</div>
+                <div><strong>Alamat:</strong> ${teacher.alamat || '-'}</div>
+                <div><strong>No WA:</strong> ${teacher.no_wa || '-'}</div>
+                <div><strong>Status Kepegawaian:</strong> ${teacher.status_kepegawaian || '-'}</div>
+                <div><strong>TMT:</strong> ${teacher.tmt || '-'}</div>
+                <div><strong>Pendidikan Terakhir:</strong> ${teacher.pendidikan_terakhir || '-'}</div>
+                <div><strong>Status Perkawinan:</strong> ${teacher.status_perkawinan || '-'}</div>
+                ${teacher.jumlah_anak !== null && teacher.jumlah_anak !== undefined ? `<div><strong>Jumlah Anak:</strong> ${teacher.jumlah_anak}</div>` : ''}
+              </div>
+          `;
+
+          if (teacher.assignments && teacher.assignments.length > 0) {
+            detailHtml += `
+              <div class="mt-4">
+                <strong>Assignments:</strong>
+                <ul class="list-disc list-inside mt-2">
+                  ${teacher.assignments.map(a => `<li>${a.nama_sekolah || a.tenant_id} - ${a.jabatan_di_unit}</li>`).join('')}
+                </ul>
+              </div>
+            `;
+          }
+
+          detailHtml += '</div>';
+
+          Swal.fire({
+            title: `Detail Guru - ${teacher.nama}`,
+            html: detailHtml,
+            width: '600px',
+            confirmButtonText: 'Tutup'
+          });
+        }
+      } catch (error) {
+        console.error('Error viewing teacher detail:', error);
+        Swal.fire('Error', 'Gagal memuat detail guru', 'error');
+      }
+    }
+
+    // Event listeners for filters
+    document.getElementById('filterPendidikan')?.addEventListener('change', () => { currentPage = 1; applyFilters(); });
+    document.getElementById('filterStatusPerkawinan')?.addEventListener('change', () => { currentPage = 1; applyFilters(); });
+    document.getElementById('filterSearch')?.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') { currentPage = 1; applyFilters(); }
+    });
+
+    // Load on page load
+    document.addEventListener('DOMContentLoaded', () => {
+      loadDetail();
+    });
+  </script>
+</body>
+
+</html>
