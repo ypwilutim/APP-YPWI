@@ -1323,12 +1323,13 @@ router.get('/admin/teacher-profile-detail', authenticateOperator, async (req, re
       return res.status(403).json({ success: false, message: 'Akses ditolak. Hanya admin yang dapat melihat detail kelengkapan profil guru.' });
     }
 
-    const { pendidikan, status_perkawinan, search, page = 1, limit = 50 } = req.query;
+    const { pendidikan, status_perkawinan, search, tenant_id, page = 1, limit = 50 } = req.query;
     const offset = (parseInt(page) - 1) * parseInt(limit);
 
     let query = `SELECT t.id, t.nama, t.nik, t.nip, t.email, t.tempat_lahir, t.tanggal_lahir, t.jenis_kelamin, t.alamat, t.no_wa, t.status_kepegawaian, t.tmt, t.pendidikan_terakhir, t.status_perkawinan, t.jumlah_anak, t.link_foto, GROUP_CONCAT(DISTINCT tn.nama_sekolah) as sekolah_list FROM teachers t LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id LEFT JOIN tenants tn ON ta.tenant_id = tn.tenant_id WHERE t.status_aktif = 1`;
     const params = [];
 
+    if (tenant_id) { query += ' AND EXISTS (SELECT 1 FROM teacher_assignments ta2 WHERE ta2.teacher_id = t.id AND ta2.tenant_id = ?)'; params.push(tenant_id); }
     if (pendidikan) { query += ' AND t.pendidikan_terakhir LIKE ?'; params.push(pendidikan + '/%'); }
     if (status_perkawinan) { query += ' AND t.status_perkawinan = ?'; params.push(status_perkawinan); }
     if (search) { query += ' AND (t.nama LIKE ? OR t.nik LIKE ? OR t.nip LIKE ?)'; params.push(`%${search}%`, `%${search}%`, `%${search}%`); }
@@ -1345,6 +1346,7 @@ router.get('/admin/teacher-profile-detail', authenticateOperator, async (req, re
 
     let countQuery = 'SELECT COUNT(*) as total FROM teachers t WHERE t.status_aktif = 1';
     const countParams = [];
+    if (tenant_id) { countQuery += ' AND EXISTS (SELECT 1 FROM teacher_assignments ta2 WHERE ta2.teacher_id = t.id AND ta2.tenant_id = ?)'; countParams.push(tenant_id); }
     if (pendidikan) { countQuery += ' AND t.pendidikan_terakhir LIKE ?'; countParams.push(pendidikan + '/%'); }
     if (status_perkawinan) { countQuery += ' AND t.status_perkawinan = ?'; countParams.push(status_perkawinan); }
     if (search) { countQuery += ' AND (t.nama LIKE ? OR t.nik LIKE ? OR t.nip LIKE ?)'; countParams.push(`%${search}%`, `%${search}%`, `%${search}%`); }
@@ -1357,21 +1359,30 @@ router.get('/admin/teacher-profile-detail', authenticateOperator, async (req, re
   }
 });
 
-// GET /api/admin/teacher-profile-detail/export - Export ALL teacher data as Excel
+// GET /api/admin/teacher-profile-detail/export - Export teacher data as Excel (respects filters)
 router.get('/admin/teacher-profile-detail/export', authenticateOperator, async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
       return res.status(403).json({ success: false, message: 'Akses ditolak. Hanya admin yang dapat export data guru.' });
     }
 
-    const teachers = await db.query(`
+    const { pendidikan, status_perkawinan, search, tenant_id } = req.query;
+
+    let query = `
       SELECT t.*, GROUP_CONCAT(DISTINCT tn.nama_sekolah) as sekolah_list
       FROM teachers t
       LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id
       LEFT JOIN tenants tn ON ta.tenant_id = tn.tenant_id
       WHERE t.status_aktif = 1
-      GROUP BY t.id ORDER BY t.nama ASC
-    `);
+    `;
+    const params = [];
+    if (tenant_id) { query += ' AND EXISTS (SELECT 1 FROM teacher_assignments ta2 WHERE ta2.teacher_id = t.id AND ta2.tenant_id = ?)'; params.push(tenant_id); }
+    if (pendidikan) { query += ' AND t.pendidikan_terakhir LIKE ?'; params.push(pendidikan + '/%'); }
+    if (status_perkawinan) { query += ' AND t.status_perkawinan = ?'; params.push(status_perkawinan); }
+    if (search) { query += ' AND (t.nama LIKE ? OR t.nik LIKE ? OR t.nip LIKE ?)'; params.push(`%${search}%`, `%${search}%`, `%${search}%`); }
+    query += ' GROUP BY t.id ORDER BY t.nama ASC';
+
+    const teachers = await db.query(query, params);
 
     const assignments = await db.query(`
       SELECT teacher_id, tenant_id, jabatan_di_unit FROM teacher_assignments
@@ -1384,6 +1395,22 @@ router.get('/admin/teacher-profile-detail/export', authenticateOperator, async (
 
     const fmtUang = (v) => (v === null || v === undefined || v === '') ? '' : Number(v);
     const jk = (v) => v === 'L' ? 'Laki-laki' : v === 'P' ? 'Perempuan' : '';
+    const hitungMasaKerja = (tmt) => {
+      if (!tmt) return '';
+      const s = new Date(tmt);
+      if (isNaN(s.getTime())) return '';
+      const now = new Date();
+      let years = now.getFullYear() - s.getFullYear();
+      let months = now.getMonth() - s.getMonth();
+      let days = now.getDate() - s.getDate();
+      if (days < 0) {
+        months--;
+        const prevMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+        days += prevMonth.getDate();
+      }
+      if (months < 0) { years--; months += 12; }
+      return `${years} thn ${months} bln ${days} hari`;
+    };
 
     const data = teachers.map(t => {
       const pend = (t.pendidikan_terakhir ? String(t.pendidikan_terakhir).split('/') : []);
@@ -1406,7 +1433,7 @@ router.get('/admin/teacher-profile-detail/export', authenticateOperator, async (
         'Pendidikan (Tahun Lulus)': pend[3] || '',
         'Status Kepegawaian': t.status_kepegawaian || '',
         'TMT': t.tmt || '',
-        'Masa Kerja (Tahun)': t.tmt ? (() => { const s = new Date(t.tmt); const now = new Date(); let y = now.getFullYear() - s.getFullYear(); if (now.getMonth() < s.getMonth() || (now.getMonth() === s.getMonth() && now.getDate() < s.getDate())) y--; return y; })() : '',
+        'Masa Kerja': hitungMasaKerja(t.tmt),
         'Status Perkawinan': t.status_perkawinan || '',
         'Jumlah Anak': t.jumlah_anak ?? '',
         'Bank': t.BANK || '',

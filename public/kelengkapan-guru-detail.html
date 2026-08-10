@@ -294,7 +294,7 @@
         <h3 class="text-lg font-semibold text-gray-900 mb-4">
           <i class="fas fa-filter text-red-600 mr-2"></i>Filter Data
         </h3>
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-2">Pendidikan Terakhir</label>
             <select id="filterPendidikan"
@@ -322,6 +322,13 @@
               <option value="Menikah">Menikah</option>
               <option value="Cerai Hidup">Cerai Hidup</option>
               <option value="Cerai Mati">Cerai Mati</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">Sekolah</label>
+            <select id="filterSekolah"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500">
+              <option value="">Semua</option>
             </select>
           </div>
           <div>
@@ -691,11 +698,13 @@
     async function applyFilters() {
       const pendidikan = document.getElementById('filterPendidikan')?.value || '';
       const statusPerkawinan = document.getElementById('filterStatusPerkawinan')?.value || '';
+      const tenantId = document.getElementById('filterSekolah')?.value || '';
       const search = document.getElementById('filterSearch')?.value || '';
 
       let url = `/api/admin/teacher-profile-detail?page=${currentPage}&limit=20`;
       if (pendidikan) url += `&pendidikan=${encodeURIComponent(pendidikan)}`;
       if (statusPerkawinan) url += `&status_perkawinan=${encodeURIComponent(statusPerkawinan)}`;
+      if (tenantId) url += `&tenant_id=${encodeURIComponent(tenantId)}`;
       if (search) url += `&search=${encodeURIComponent(search)}`;
 
       const response = await api(url);
@@ -728,8 +737,14 @@
       const now = new Date();
       let years = now.getFullYear() - start.getFullYear();
       let months = now.getMonth() - start.getMonth();
-      if (months < 0 || (months === 0 && now.getDate() < start.getDate())) years--;
-      return years + ' thn';
+      let days = now.getDate() - start.getDate();
+      if (days < 0) {
+        months--;
+        const prevMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+        days += prevMonth.getDate();
+      }
+      if (months < 0) { years--; months += 12; }
+      return `${years} thn ${months} bln ${days} hari`;
     }
 
     function renderTeachers(teachers, pagination) {
@@ -835,20 +850,33 @@
 
     async function exportTeachersExcel() {
       try {
+        const pendidikan = document.getElementById('filterPendidikan')?.value || '';
+        const statusPerkawinan = document.getElementById('filterStatusPerkawinan')?.value || '';
+        const tenantId = document.getElementById('filterSekolah')?.value || '';
+        const search = document.getElementById('filterSearch')?.value || '';
+
+        let url = '/api/admin/teacher-profile-detail/export';
+        const params = [];
+        if (pendidikan) params.push(`pendidikan=${encodeURIComponent(pendidikan)}`);
+        if (statusPerkawinan) params.push(`status_perkawinan=${encodeURIComponent(statusPerkawinan)}`);
+        if (tenantId) params.push(`tenant_id=${encodeURIComponent(tenantId)}`);
+        if (search) params.push(`search=${encodeURIComponent(search)}`);
+        if (params.length) url += '?' + params.join('&');
+
         Swal.fire({ title: 'Memproses...', text: 'Sedang mengexport data guru', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-        const response = await api('/api/admin/teacher-profile-detail/export');
+        const response = await api(url);
         if (!response) { Swal.close(); alert('Gagal export. Pastikan Anda login sebagai admin.'); return; }
         if (!response.ok) { Swal.close(); alert('Gagal export data guru'); return; }
 
         const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
+        const downloadUrl = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url;
+        a.href = downloadUrl;
         a.download = `data_guru_${new Date().toISOString().slice(0, 10)}.xlsx`;
         document.body.appendChild(a);
         a.click();
         a.remove();
-        window.URL.revokeObjectURL(url);
+        window.URL.revokeObjectURL(downloadUrl);
         Swal.close();
       } catch (error) {
         console.error('Export error:', error);
@@ -873,6 +901,11 @@
 
           let detailHtml = `<div class="text-left space-y-4">`;
 
+          const fotoHtml = teacher.link_foto
+            ? `<img src="${teacher.link_foto}" alt="Foto ${teacher.nama}" class="w-28 h-28 rounded-full object-cover border-4 border-gray-200 mx-auto" onerror="this.outerHTML='<div class=&quot;w-28 h-28 rounded-full bg-gray-200 flex items-center justify-center mx-auto text-gray-400&quot;><i class=&quot;fas fa-user fa-2x&quot;></i></div>'">`
+            : `<div class="w-28 h-28 rounded-full bg-gray-200 flex items-center justify-center mx-auto text-gray-400"><i class="fas fa-user fa-2x"></i></div>`;
+          detailHtml += `<div class="flex flex-col items-center">${fotoHtml}<p class="mt-2 font-semibold text-gray-800">${teacher.nama || '-'}</p></div>`;
+
           detailHtml += `<div>
             <h4 class="font-bold text-gray-800 border-b pb-1 mb-2">Data Pribadi</h4>
             <div class="grid grid-cols-2 gap-2 text-sm">
@@ -886,7 +919,6 @@
               ${row('Alamat', teacher.alamat)}
               ${row('No WA', teacher.no_wa)}
               ${row('Scan ID', teacher.scan_id)}
-              ${row('Foto', teacher.link_foto ? '<a href="'+teacher.link_foto+'" target="_blank" class="text-blue-600">Lihat</a>' : '-')}
             </div>
           </div>`;
 
@@ -961,13 +993,33 @@
     // Event listeners for filters
     document.getElementById('filterPendidikan')?.addEventListener('change', () => { currentPage = 1; applyFilters(); });
     document.getElementById('filterStatusPerkawinan')?.addEventListener('change', () => { currentPage = 1; applyFilters(); });
+    document.getElementById('filterSekolah')?.addEventListener('change', () => { currentPage = 1; applyFilters(); });
     document.getElementById('filterSearch')?.addEventListener('keypress', (e) => {
       if (e.key === 'Enter') { currentPage = 1; applyFilters(); }
     });
 
+    async function loadSekolahOptions() {
+      try {
+        const res = await api('/api/admin/tenants');
+        if (!res) return;
+        const result = await res.json();
+        if (result.success) {
+          const select = document.getElementById('filterSekolah');
+          if (!select) return;
+          (result.data || []).forEach(t => {
+            const opt = document.createElement('option');
+            opt.value = t.tenant_id;
+            opt.textContent = t.nama_sekolah || t.tenant_id;
+            select.appendChild(opt);
+          });
+        }
+      } catch (e) { console.error('Gagal memuat daftar sekolah:', e); }
+    }
+
     // Load on page load
     document.addEventListener('DOMContentLoaded', () => {
       loadDetail();
+      loadSekolahOptions();
     });
   </script>
 </body>
