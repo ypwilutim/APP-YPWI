@@ -69,7 +69,7 @@ const teacherUpload = multer({
 
 const berkasUpload = multer({
   storage: teacherStorage,
-  limits: { fileSize: 5 * 1024 * 1024, files: 3 },
+  limits: { fileSize: 5 * 1024 * 1024, files: 4 },
   fileFilter: (req, file, cb) => {
     const allowedMimes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
     const allowedExtensions = ['.jpg', '.jpeg', '.png', '.pdf'];

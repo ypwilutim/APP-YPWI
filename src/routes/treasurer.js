@@ -353,7 +353,13 @@ router.post('/treasurer/public/send-all-spp-reminders', async (req, res) => {
       }
     }
 
-    res.json({ success: true, message: `Terkirim: ${sent} | Gagal: ${failed}`, sent, failed });
+    res.json({ 
+      success: true, 
+      message: `Terkirim: ${sent} | Gagal: ${failed}`, 
+      sent, 
+      failed, 
+      data: defaulters.map(s => ({ id: s.id, nama_siswa: s.nama_siswa, nisn: s.nisn, no_wa: s.no_wa, nama_sekolah: s.nama_sekolah, total_arrears: s.total_arrears }))
+    });
   } catch (error) {
     console.error('Send all SPP reminders error:', error.message);
     res.status(500).json({ success: false, message: error.message });
@@ -1785,34 +1791,34 @@ router.post('/treasurer/bsi/create-single', authenticateBendahara, async (req, r
     }
 
     const [student] = await db.query(
-      'SELECT id, nama_siswa, tenant_id, iuran_bulanan FROM students WHERE id = ? AND tenant_id = ?',
+      'SELECT id, nama_siswa, tenant_id, iuran_bulanan, va_number FROM students WHERE id = ? AND tenant_id = ?',
       [student_id, tenant_id]
     );
     if (!student) {
       return res.status(404).json({ success: false, message: 'Siswa tidak ditemukan' });
     }
 
-    // Generate 10 digit acak untuk kolom VA di CUZ BSI (tanpa prefix).
-    const vaSuffix = String(Math.floor(1000000000 + Math.random() * 9000000000));
-    // Di database ditambah prefix dari env BSI_VA_PREFIX (default 832231).
-    // Strip karakter non-digit agar spasi di env tidak ikut tersimpan.
     const vaPrefix = (process.env.BSI_VA_PREFIX || '832231').replace(/[^0-9]/g, '');
-    const vaNumber = `${vaPrefix}${vaSuffix}`;
+    let vaNumber = student.va_number ? String(student.va_number).replace(/[^0-9]/g, '') : '';
 
-    // Simpan va_number (ber-prefix) ke tabel students
-    await db.query(
-      'UPDATE students SET va_number = ?, va_name = ? WHERE id = ?',
-      [vaNumber, student.nama_siswa, student_id]
-    );
+    if (!vaNumber || vaNumber.length < 10) {
+      const vaSuffix = String(Math.floor(1000000000 + Math.random() * 9000000000));
+      vaNumber = `${vaPrefix}${vaSuffix}`;
 
-    // Insert ke payment_transactions status pending
+      await db.query(
+        'UPDATE students SET va_number = ?, va_name = ? WHERE id = ?',
+        [vaNumber, student.nama_siswa, student_id]
+      );
+    }
+
     const finalAmount = amount !== undefined && amount !== null && !isNaN(parseFloat(amount))
       ? parseFloat(amount)
       : parseFloat(student.iuran_bulanan) || 0;
 
     await db.query(
       `INSERT INTO payment_transactions (tenant_id, student_id, gateway, external_id, amount, status, payment_method, description, metadata)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE amount = VALUES(amount), description = VALUES(description)`,
       [
         tenant_id,
         student_id,
@@ -1828,7 +1834,7 @@ router.post('/treasurer/bsi/create-single', authenticateBendahara, async (req, r
 
     res.json({
       success: true,
-      message: 'VA BSI berhasil dibuat',
+      message: student.va_number ? 'VA BSI sudah ada dan tetap digunakan' : 'VA BSI berhasil dibuat',
       data: { student_id, va_number: vaNumber, va_name: student.nama_siswa, amount: finalAmount }
     });
   } catch (error) {
