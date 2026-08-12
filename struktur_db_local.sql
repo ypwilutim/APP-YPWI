@@ -701,6 +701,7 @@ CREATE TABLE `teachers` (
   `nip` varchar(50) DEFAULT NULL,
   `scan_id` varchar(20) DEFAULT NULL,
   `link_foto` varchar(255) DEFAULT NULL,
+  `pending_password_hash` varchar(255) DEFAULT NULL,
   `status_aktif` tinyint(1) DEFAULT 1,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
@@ -1248,6 +1249,12 @@ ALTER TABLE `teachers`
   ADD KEY `idx_nik` (`nik`),
   ADD KEY `idx_scan_id` (`scan_id`),
   ADD KEY `idx_status_aktif` (`status_aktif`);
+
+ALTER TABLE `teachers`
+  ADD COLUMN `pending_password_hash` varchar(255) DEFAULT NULL AFTER `link_foto`,
+  ADD COLUMN `link_ktp` varchar(255) DEFAULT NULL AFTER `pending_password_hash`,
+  ADD COLUMN `link_kk` varchar(255) DEFAULT NULL AFTER `link_ktp`,
+  ADD COLUMN `link_ijazah` varchar(255) DEFAULT NULL AFTER `link_kk`;
 
 --
 -- Indeks untuk tabel `teacher_assignments`

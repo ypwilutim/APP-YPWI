@@ -67,6 +67,44 @@ const teacherUpload = multer({
   }
 });
 
+const berkasUpload = multer({
+  storage: teacherStorage,
+  limits: { fileSize: 5 * 1024 * 1024, files: 3 },
+  fileFilter: (req, file, cb) => {
+    const allowedMimes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
+    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.pdf'];
+    const fileExtension = path.extname(file.originalname).toLowerCase();
+    if (!allowedMimes.includes(file.mimetype) && !allowedExtensions.includes(fileExtension)) {
+      return cb(new Error('Format file harus JPG, PNG, atau PDF'));
+    }
+    cb(null, true);
+  }
+});
+
+const registrationStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'public/uploads/registrations/');
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'reg-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const registrationUpload = multer({
+  storage: registrationStorage,
+  limits: { fileSize: 5 * 1024 * 1024, files: 4 },
+  fileFilter: (req, file, cb) => {
+    const allowedMimes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
+    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.pdf'];
+    const fileExtension = path.extname(file.originalname).toLowerCase();
+    if (!allowedMimes.includes(file.mimetype) && !allowedExtensions.includes(fileExtension)) {
+      return cb(new Error('Format file harus JPG, PNG, atau PDF'));
+    }
+    cb(null, true);
+  }
+});
+
 const excelUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024, files: 1 },
@@ -786,7 +824,7 @@ router.get('/admin/teachers', authenticateOperator, async (req, res) => {
     }
 
     let query = `
-      SELECT t.id, t.nama, t.nik, t.nip, t.email, t.status_kepegawaian, t.status_aktif, t.no_wa, t.scan_id, t.link_foto,
+      SELECT t.id, t.nama, t.nik, t.nip, t.email, t.status_kepegawaian, t.status_aktif, t.no_wa, t.scan_id, t.link_foto, t.link_ktp, t.link_kk, t.link_ijazah,
              GROUP_CONCAT(DISTINCT CONCAT(ta.tenant_id, ':', ta.jabatan_di_unit, ':', tn.nama_sekolah)) as assignments
       FROM teachers t
       LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id
@@ -1019,6 +1057,14 @@ router.post('/admin/attendance/manual', authenticateOperator, async (req, res) =
 
     const waktuScan = scanDate.toISOString().slice(0, 16).replace('T', ' ');
 
+    const [existing] = await db.query(
+      'SELECT id FROM attendance_logs WHERE teacher_id = ? AND jenis = ? AND DATE(waktu_scan) = ?',
+      [teacher_id, jenis, tanggal]
+    );
+    if (existing.length > 0) {
+      return res.status(409).json({ success: false, message: `Guru sudah absen ${jenis.toUpperCase()} pada tanggal ${tanggal}` });
+    }
+
     await db.query(
       `INSERT INTO attendance_logs (teacher_id, tenant_id, waktu_scan, jenis, metode, status, keterangan, dinas_luar)
        VALUES (?, ?, ?, ?, 'manual', ?, ?, 0)`,
@@ -1189,11 +1235,15 @@ router.get('/admin/assignments', authenticateOperator, async (req, res) => {
   }
 });
 
-// PUT /api/admin/teachers/:id/assignment - Update teacher assignment (jabatan + class_id)
+// PUT /api/admin/teachers/:id/assignment - Update teacher assignment (tenant + jabatan + class_id)
 router.put('/admin/teachers/:id/assignment', authenticateOperator, async (req, res) => {
   try {
     const { id } = req.params;
-    const { jabatan_di_unit, class_id } = req.body;
+    const { tenant_id, jabatan_di_unit, class_id } = req.body;
+
+    if (!tenant_id) {
+      return res.status(400).json({ success: false, message: 'Sekolah/tenant wajib diisi' });
+    }
 
     // Verify teacher exists
     const [teacher] = await db.query('SELECT id FROM teachers WHERE id = ? AND status_aktif = 1', [id]);
@@ -1201,35 +1251,35 @@ router.put('/admin/teachers/:id/assignment', authenticateOperator, async (req, r
       return res.status(404).json({ success: false, message: 'Guru tidak ditemukan' });
     }
 
-    // If class_id provided, verify it belongs to the teacher's tenant
+    // Verify tenant exists
+    const [tenant] = await db.query('SELECT tenant_id FROM tenants WHERE tenant_id = ?', [tenant_id]);
+    if (!tenant) {
+      return res.status(400).json({ success: false, message: 'Sekolah/tenant tidak ditemukan' });
+    }
+
+    // If class_id provided, verify it belongs to the selected tenant
     if (class_id) {
-      const [assignment] = await db.query('SELECT tenant_id FROM teacher_assignments WHERE teacher_id = ?', [id]);
-      if (assignment) {
-        const [classCheck] = await db.query('SELECT id FROM classes WHERE id = ? AND tenant_id = ?', [class_id, assignment.tenant_id]);
-        if (!classCheck) {
-          return res.status(400).json({ success: false, message: 'Kelas tidak valid untuk tenant ini' });
-        }
+      const [classCheck] = await db.query('SELECT id FROM classes WHERE id = ? AND tenant_id = ?', [class_id, tenant_id]);
+      if (!classCheck) {
+        return res.status(400).json({ success: false, message: 'Kelas tidak valid untuk sekolah ini' });
       }
     }
 
-    // Update assignment
+    // Update or create assignment
     const existingAssignment = await db.query('SELECT id FROM teacher_assignments WHERE teacher_id = ?', [id]);
     if (existingAssignment.length > 0) {
       await db.query(
-        'UPDATE teacher_assignments SET jabatan_di_unit = ?, class_id = ? WHERE teacher_id = ?',
-        [jabatan_di_unit || 'Guru', class_id || null, id]
+        'UPDATE teacher_assignments SET tenant_id = ?, jabatan_di_unit = ?, class_id = ? WHERE teacher_id = ?',
+        [tenant_id, jabatan_di_unit || 'Guru', class_id || null, id]
       );
     } else {
-      const [teacherInfo] = await db.query('SELECT tenant_id FROM teachers t JOIN teacher_assignments ta ON t.id = ta.teacher_id WHERE t.id = ?', [id]);
-      if (teacherInfo) {
-        await db.query(
-          'INSERT INTO teacher_assignments (teacher_id, tenant_id, jabatan_di_unit, class_id) VALUES (?, ?, ?, ?)',
-          [id, teacherInfo.tenant_id, jabatan_di_unit || 'Guru', class_id || null]
-        );
-      }
+      await db.query(
+        'INSERT INTO teacher_assignments (teacher_id, tenant_id, jabatan_di_unit, class_id) VALUES (?, ?, ?, ?)',
+        [id, tenant_id, jabatan_di_unit || 'Guru', class_id || null]
+      );
     }
 
-    res.json({ success: true, message: 'Tugas guru berhasil diupdate' });
+    res.json({ success: true, message: 'Penempatan dan jabatan guru berhasil diupdate' });
   } catch (error) {
     console.error('Update assignment error:', error);
     res.status(500).json({ success: false, message: 'Error updating assignment' });
@@ -1326,7 +1376,7 @@ router.get('/admin/teacher-profile-detail', authenticateOperator, async (req, re
     const { pendidikan, status_perkawinan, search, tenant_id, page = 1, limit = 50 } = req.query;
     const offset = (parseInt(page) - 1) * parseInt(limit);
 
-    let query = `SELECT t.id, t.nama, t.nik, t.nip, t.email, t.tempat_lahir, t.tanggal_lahir, t.jenis_kelamin, t.alamat, t.no_wa, t.status_kepegawaian, t.tmt, t.pendidikan_terakhir, t.status_perkawinan, t.jumlah_anak, t.link_foto, GROUP_CONCAT(DISTINCT tn.nama_sekolah) as sekolah_list FROM teachers t LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id LEFT JOIN tenants tn ON ta.tenant_id = tn.tenant_id WHERE t.status_aktif = 1`;
+    let query = `SELECT t.id, t.nama, t.nik, t.nip, t.email, t.tempat_lahir, t.tanggal_lahir, t.jenis_kelamin, t.alamat, t.no_wa, t.status_kepegawaian, t.tmt, t.pendidikan_terakhir, t.status_perkawinan, t.jumlah_anak, t.link_foto, t.link_ktp, t.link_kk, t.link_ijazah, GROUP_CONCAT(DISTINCT tn.nama_sekolah) as sekolah_list FROM teachers t LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id LEFT JOIN tenants tn ON ta.tenant_id = tn.tenant_id WHERE t.status_aktif = 1`;
     const params = [];
 
     if (tenant_id) { query += ' AND EXISTS (SELECT 1 FROM teacher_assignments ta2 WHERE ta2.teacher_id = t.id AND ta2.tenant_id = ?)'; params.push(tenant_id); }
@@ -1358,6 +1408,233 @@ router.get('/admin/teacher-profile-detail', authenticateOperator, async (req, re
     res.status(500).json({ success: false, message: 'Error fetching teacher profile detail', error: error.message });
   }
 });
+
+// ==========================================
+// GURU REGISTRATION ROUTES (Public)
+// ==========================================
+
+// POST /api/public/register-guru - Public registration for new teachers (pending status)
+router.post('/public/register-guru', registrationUpload.fields([
+  { name: 'foto', maxCount: 1 },
+  { name: 'ktp', maxCount: 1 },
+  { name: 'kk', maxCount: 1 },
+  { name: 'ijazah', maxCount: 1 }
+]), async (req, res) => {
+  try {
+    const { nama, nik, nip, email, no_wa, tempat_lahir, tanggal_lahir, jenis_kelamin, status_perkawinan, alamat, pendidikan_terakhir, jurusan, nama_sekolah_pendidikan, tahun_angkatan, tenant_id, jabatan_di_unit, bank, nomor_rekening } = req.body;
+
+    if (!nama || !nik || !email || !no_wa || !tempat_lahir || !tanggal_lahir || !jenis_kelamin || !alamat || !pendidikan_terakhir || !jurusan || !nama_sekolah_pendidikan || !tahun_angkatan || !tenant_id || !jabatan_di_unit) {
+      return res.status(400).json({ success: false, message: 'Semua field wajib diisi' });
+    }
+
+    if (!req.files || !req.files.foto || !req.files.ktp || !req.files.kk || !req.files.ijazah) {
+      return res.status(400).json({ success: false, message: 'Semua berkas wajib diupload (Foto, KTP, KK, Ijazah)' });
+    }
+
+    const [existingNik] = await db.query('SELECT id FROM teachers WHERE nik = ? AND status_aktif = 0', [nik]);
+    if (existingNik.length > 0) {
+      return res.status(409).json({ success: false, message: 'Pendaftaran dengan NIK ini sedang menunggu persetujuan' });
+    }
+
+    const [tenant] = await db.query('SELECT tenant_id FROM tenants WHERE tenant_id = ?', [tenant_id]);
+    if (!tenant) {
+      return res.status(400).json({ success: false, message: 'Sekolah tidak ditemukan' });
+    }
+
+    const fotoPath = req.files.foto[0].path.replace(/\\/g, '/');
+    const ktpPath = req.files.ktp[0].path.replace(/\\/g, '/');
+    const kkPath = req.files.kk[0].path.replace(/\\/g, '/');
+    const ijazahPath = req.files.ijazah[0].path.replace(/\\/g, '/');
+
+    const result = await db.query(
+      'INSERT INTO teachers (nama, nik, nip, email, no_wa, tempat_lahir, tanggal_lahir, jenis_kelamin, alamat, status_kepegawaian, pendidikan_terakhir, jurusan, nama_sekolah_pendidikan, tahun_angkatan, bank, nomor_rekening, link_foto, status_aktif) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)',
+      [nama, nik, nip || null, email, no_wa, tempat_lahir, tanggal_lahir, jenis_kelamin, alamat, null, pendidikan_terakhir, jurusan, nama_sekolah_pendidikan, tahun_angkatan, bank || null, nomor_rekening || null, fotoPath]
+    );
+
+    const teacherId = result.insertId;
+
+    await db.query(
+      'INSERT INTO teacher_assignments (teacher_id, tenant_id, jabatan_di_unit) VALUES (?, ?, ?)',
+      [teacherId, tenant_id, jabatan_di_unit]
+    );
+
+    res.json({ success: true, message: 'Pendaftaran berhasil. Silakan atur password Anda.', teacher_id: teacherId });
+  } catch (error) {
+    console.error('Guru registration error:', error);
+    res.status(500).json({ success: false, message: 'Gagal mendaftar: ' + error.message });
+  }
+});
+
+// POST /api/public/set-password/:teacherId - Set password for pending registration
+router.post('/public/set-password/:teacherId', async (req, res) => {
+  try {
+    const { teacherId } = req.params;
+    const { password } = req.body;
+
+    if (!password || password.length < 6) {
+      return res.status(400).json({ success: false, message: 'Password minimal 6 karakter' });
+    }
+
+    const [teacher] = await db.query('SELECT id FROM teachers WHERE id = ? AND status_aktif = 0', [teacherId]);
+    if (!teacher) {
+      return res.status(404).json({ success: false, message: 'Pendaftaran tidak ditemukan atau sudah disetujui' });
+    }
+
+    const bcrypt = require('bcryptjs');
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    await db.query(
+      'UPDATE teachers SET pending_password_hash = ? WHERE id = ?',
+      [hashedPassword, teacherId]
+    );
+
+    res.json({ success: true, message: 'Password berhasil disimpan' });
+  } catch (error) {
+    console.error('Set password error:', error);
+    res.status(500).json({ success: false, message: 'Gagal menyimpan password' });
+  }
+});
+
+// GET /api/admin/pending-registrations - List pending teacher registrations
+router.get('/admin/pending-registrations', authenticateOperator, async (req, res) => {
+  try {
+    const teachers = await db.query(`
+      SELECT t.id, t.nama, t.nik, t.email, t.no_wa, t.tempat_lahir, t.tanggal_lahir,
+             t.jenis_kelamin, t.alamat, t.status_kepegawaian, t.pendidikan_terakhir,
+             t.jurusan, t.nama_sekolah_pendidikan, t.tahun_angkatan, t.link_foto,
+             ta.tenant_id, tn.nama_sekolah, ta.jabatan_di_unit, t.created_at
+      FROM teachers t
+      JOIN teacher_assignments ta ON t.id = ta.teacher_id
+      JOIN tenants tn ON ta.tenant_id = tn.tenant_id
+      WHERE t.status_aktif = 0
+      ORDER BY t.created_at DESC
+    `);
+    res.json({ success: true, data: teachers });
+  } catch (error) {
+    console.error('Pending registrations error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching pending registrations' });
+  }
+});
+
+// POST /api/admin/approve-registration/:id - Approve teacher registration
+router.post('/admin/approve-registration/:id', authenticateOperator, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status_kepegawaian, tmt, scan_id, tenant_id, jabatan_di_unit } = req.body;
+
+    const [teacher] = await db.query('SELECT id, nama, email, pending_password_hash FROM teachers WHERE id = ? AND status_aktif = 0', [id]);
+    if (!teacher) {
+      return res.status(404).json({ success: false, message: 'Pendaftaran tidak ditemukan' });
+    }
+
+    await db.query(
+      'UPDATE teachers SET status_aktif = 1, status_kepegawaian = ?, tmt = ?, scan_id = ?, pending_password_hash = NULL WHERE id = ?',
+      [status_kepegawaian || null, tmt || null, scan_id || null, id]
+    );
+
+    if (tenant_id && jabatan_di_unit) {
+      const [existingAssignment] = await db.query('SELECT id FROM teacher_assignments WHERE teacher_id = ?', [id]);
+      if (existingAssignment.length > 0) {
+        await db.query(
+          'UPDATE teacher_assignments SET tenant_id = ?, jabatan_di_unit = ? WHERE teacher_id = ?',
+          [tenant_id, jabatan_di_unit || 'Guru', id]
+        );
+      } else {
+        await db.query(
+          'INSERT INTO teacher_assignments (teacher_id, tenant_id, jabatan_di_unit) VALUES (?, ?, ?)',
+          [id, tenant_id, jabatan_di_unit || 'Guru']
+        );
+      }
+    }
+
+    const bcrypt = require('bcryptjs');
+    const jwt = require('jsonwebtoken');
+    const username = teacher.email || `guru-${id}`;
+    const hashedPassword = teacher.pending_password_hash || await bcrypt.hash(username + '123', 10);
+
+    const userResult = await db.query(
+      'INSERT INTO users (username, email, password, role, guru_id, is_profile_complete, created_at) VALUES (?, ?, ?, ?, ?, 0, NOW())',
+      [username, teacher.email, hashedPassword, 'guru', id]
+    );
+
+    if (typeof global.sendEmail === 'function') {
+      const subject = 'Akun Guru YPWI Lutim - Pendaftaran Disetujui';
+      const htmlMessage = `<!DOCTYPE html>
+<html lang="id">
+<head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background-color:#f5f5f5;">
+  <div style="max-width:600px;margin:20px auto;background:white;border-radius:12px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.1);">
+    <div style="background:linear-gradient(135deg,#10b981,#059669);padding:30px;text-align:center;">
+      <h1 style="margin:0;color:white;font-size:24px;">YPWI Lutim</h1>
+      <p style="margin:5px 0 0 0;color:rgba(255,255,255,0.9);font-size:14px;">Pendaftaran Disetujui</p>
+    </div>
+    <div style="padding:30px;">
+      <h2 style="margin:0 0 20px 0;color:#333;font-size:20px;">Selamat, ${teacher.nama}!</h2>
+      <p style="margin:0 0 15px 0;color:#555;font-size:16px;line-height:1.6;">Pendaftaran Anda sebagai guru telah disetujui.</p>
+      <p style="margin:0 0 10px 0;color:#555;font-size:16px;"><strong>Username:</strong> ${username}</p>
+      <p style="margin:0 0 20px 0;color:#555;font-size:16px;"><strong>Password:</strong> ${teacher.pending_password_hash ? '(Password yang Anda buat)' : username + '123'}</p>
+      <p style="margin:20px 0 0 0;color:#888;font-size:14px;">Silakan login dan lengkapi profil Anda.</p>
+    </div>
+  </div>
+</body>
+</html>`;
+      await global.sendEmail(teacher.email, subject, htmlMessage, '', [], 'registration_approved');
+    }
+
+    res.json({ success: true, message: 'Pendaftaran berhasil disetujui', user_id: userResult.insertId });
+  } catch (error) {
+    console.error('Approve registration error:', error);
+    res.status(500).json({ success: false, message: 'Gagal menyetujui pendaftaran' });
+  }
+});
+
+// POST /api/admin/reject-registration/:id - Reject teacher registration
+router.post('/admin/reject-registration/:id', authenticateOperator, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+
+    const [teacher] = await db.query('SELECT id, nama, email FROM teachers WHERE id = ? AND status_aktif = 0', [id]);
+    if (!teacher) {
+      return res.status(404).json({ success: false, message: 'Pendaftaran tidak ditemukan' });
+    }
+
+    await db.query('DELETE FROM teacher_assignments WHERE teacher_id = ?', [id]);
+    await db.query('DELETE FROM teachers WHERE id = ?', [id]);
+
+    if (typeof global.sendEmail === 'function') {
+      const subject = 'Pendaftaran Guru YPWI Lutim - Ditolak';
+      const htmlMessage = `<!DOCTYPE html>
+<html lang="id">
+<head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background-color:#f5f5f5;">
+  <div style="max-width:600px;margin:20px auto;background:white;border-radius:12px;overflow:hidden;box-shadow:0 4px 6px rgba(0,0,0,0.1);">
+    <div style="background:linear-gradient(135deg,#dc2626,#b91c1c);padding:30px;text-align:center;">
+      <h1 style="margin:0;color:white;font-size:24px;">YPWI Lutim</h1>
+      <p style="margin:5px 0 0 0;color:rgba(255,255,255,0.9);font-size:14px;">Pendaftaran Ditolak</p>
+    </div>
+    <div style="padding:30px;">
+      <h2 style="margin:0 0 20px 0;color:#333;font-size:20px;">Mohon Maaf, ${teacher.nama}</h2>
+      <p style="margin:0 0 15px 0;color:#555;font-size:16px;line-height:1.6;">Pendaftaran Anda sebagai guru belum dapat disetujui.</p>
+      ${reason ? `<p style="margin:0 0 20px 0;color:#555;font-size:16px;"><strong>Alasan:</strong> ${reason}</p>` : ''}
+      <p style="margin:20px 0 0 0;color:#888;font-size:14px;">Anda dapat mendaftar kembali dengan data yang lebih lengkap.</p>
+    </div>
+  </div>
+</body>
+</html>`;
+      await global.sendEmail(teacher.email, subject, htmlMessage, '', [], 'registration_rejected');
+    }
+
+    res.json({ success: true, message: 'Pendaftaran berhasil ditolak' });
+  } catch (error) {
+    console.error('Reject registration error:', error);
+    res.status(500).json({ success: false, message: 'Gagal menolak pendaftaran' });
+  }
+});
+
+// ==========================================
+// END OF GURU REGISTRATION ROUTES
+// ==========================================
 
 // GET /api/admin/teacher-profile-detail/export - Export teacher data as Excel (respects filters)
 router.get('/admin/teacher-profile-detail/export', authenticateOperator, async (req, res) => {
@@ -1418,7 +1695,7 @@ router.get('/admin/teacher-profile-detail/export', authenticateOperator, async (
         'ID': t.id,
         'Nama': t.nama || '',
         'NIK': t.nik || '',
-        'NIP': t.nip || '',
+        'NIY': t.nip || '',
         'Email': t.email || '',
         'Tempat Lahir': t.tempat_lahir || '',
         'Tanggal Lahir': t.tanggal_lahir || '',
@@ -3825,7 +4102,7 @@ router.put('/admin/leave-requests/:id/status', authenticateOperator, async (req,
 router.get('/teacher/info', authenticateToken, async (req, res) => {
   try {
     const [teacher] = await db.query(
-      'SELECT t.id, t.nama, t.nik, t.nip, t.email, t.no_wa, t.scan_id, t.tempat_lahir, t.tanggal_lahir, t.jenis_kelamin, t.alamat, t.status_kepegawaian, t.status_aktif, t.tmt, t.pendidikan_terakhir, t.bank, t.nomor_rekening, t.link_foto FROM teachers t WHERE t.id = ?',
+      'SELECT t.id, t.nama, t.nik, t.nip, t.email, t.no_wa, t.scan_id, t.tempat_lahir, t.tanggal_lahir, t.jenis_kelamin, t.alamat, t.status_kepegawaian, t.status_aktif, t.tmt, t.pendidikan_terakhir, t.bank, t.nomor_rekening, t.link_foto, t.link_ktp, t.link_kk, t.link_ijazah FROM teachers t WHERE t.id = ?',
       [req.user.guru_id]
     );
 
@@ -4015,11 +4292,19 @@ router.post('/admin/restore', authenticateToken, async (req, res) => {
 });
 
 // PUT /api/public/teachers/:teacherId - Update teacher profile (no auth required, for complete-profile.html)
-router.put('/public/teachers/:teacherId', teacherUpload.single('foto'), async (req, res) => {
+router.put('/public/teachers/:teacherId', berkasUpload.fields([
+  { name: 'foto', maxCount: 1 },
+  { name: 'ktp', maxCount: 1 },
+  { name: 'kk', maxCount: 1 },
+  { name: 'ijazah', maxCount: 1 }
+]), async (req, res) => {
   try {
     const teacherId = req.params.teacherId;
     const { nama, nik, nip, email, tempat_lahir, tanggal_lahir, jenis_kelamin, alamat, no_wa, status_kepegawaian, status_aktif, tmt, pendidikan_terakhir, jurusan, nama_sekolah_pendidikan, tahun_angkatan, assignments_json, bank, nomor_rekening, status_perkawinan, jumlah_anak, data_keluarga } = req.body;
-    const foto = req.file ? `/uploads/${req.file.filename}` : null;
+    const foto = req.files && req.files.foto && req.files.foto[0] ? `/uploads/${req.files.foto[0].filename}` : null;
+    const ktp = req.files && req.files.ktp && req.files.ktp[0] ? `/uploads/${req.files.ktp[0].filename}` : null;
+    const kk = req.files && req.files.kk && req.files.kk[0] ? `/uploads/${req.files.kk[0].filename}` : null;
+    const ijazah = req.files && req.files.ijazah && req.files.ijazah[0] ? `/uploads/${req.files.ijazah[0].filename}` : null;
 
     // Get existing values if not provided (fields may be disabled in form)
     let selectQuery = 'SELECT nama, nik, nip, email, tempat_lahir, tanggal_lahir, jenis_kelamin, alamat, no_wa, status_kepegawaian, status_aktif, tmt, pendidikan_terakhir';
@@ -4094,6 +4379,18 @@ router.put('/public/teachers/:teacherId', teacherUpload.single('foto'), async (r
     if (foto) {
       updateQuery += ', link_foto=?';
       updateParams.push(foto);
+    }
+    if (ktp) {
+      updateQuery += ', link_ktp=?';
+      updateParams.push(ktp);
+    }
+    if (kk) {
+      updateQuery += ', link_kk=?';
+      updateParams.push(kk);
+    }
+    if (ijazah) {
+      updateQuery += ', link_ijazah=?';
+      updateParams.push(ijazah);
     }
     updateQuery += ' WHERE id=?';
     updateParams.push(teacherId);
@@ -4214,7 +4511,7 @@ router.get('/public/teachers/:teacherId', async (req, res) => {
   try {
     const teacherId = req.params.teacherId;
     
-    let selectQuery = 'SELECT t.id, t.nama, t.nik, t.nip, t.email, t.tempat_lahir, t.tanggal_lahir, t.jenis_kelamin, t.alamat, t.no_wa, t.status_kepegawaian, t.status_aktif, t.tmt, t.pendidikan_terakhir, t.BANK as bank, t.nomor_rekening, t.link_foto, GROUP_CONCAT(CONCAT(ta.tenant_id, ":", ta.jabatan_di_unit)) as assignments';
+    let selectQuery = 'SELECT t.id, t.nama, t.nik, t.nip, t.email, t.tempat_lahir, t.tanggal_lahir, t.jenis_kelamin, t.alamat, t.no_wa, t.status_kepegawaian, t.status_aktif, t.tmt, t.pendidikan_terakhir, t.BANK as bank, t.nomor_rekening, t.link_foto, t.link_ktp, t.link_kk, t.link_ijazah, GROUP_CONCAT(CONCAT(ta.tenant_id, ":", ta.jabatan_di_unit)) as assignments';
     const selectParams = [teacherId];
     
     try {

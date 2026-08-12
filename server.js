@@ -15,6 +15,7 @@ const helmet = require('helmet');
 const axios = require('axios');
 const PDFKit = require('pdfkit');
 const nodemailer = require('nodemailer');
+const QRCode = require('qrcode');
 const db = require('./db');
 const { requestLogger } = require('./src/middlewares/logger');
 const validator = require('validator');
@@ -835,13 +836,22 @@ app.get('/api/idcard/templates/:id', authenticateToken, async (req, res) => {
 });
 
 // Generate QR code for ID card
-app.get('/api/qrcode/:text', (req, res) => {
-  const { text } = req.params;
-  const size = req.query.size || 100;
-  
-  // Use Google Charts API for QR code (free, no API key needed)
-  const qrUrl = `https://chart.googleapis.com/chart?chs=${size}x${size}&cht=qr&chl=${encodeURIComponent(text)}`;
-  res.json({ success: true, qr_url: qrUrl });
+app.get('/api/qrcode/:text', async (req, res) => {
+  try {
+    const text = decodeURIComponent(req.params.text);
+    const size = parseInt(req.query.size) || 200;
+
+    const qrDataUrl = await QRCode.toDataURL(text, {
+      width: size,
+      margin: 1,
+      errorCorrectionLevel: 'M'
+    });
+
+    res.json({ success: true, qr_url: qrDataUrl });
+  } catch (error) {
+    console.error('QR generation error:', error);
+    res.status(500).json({ success: false, message: 'Gagal generate QR' });
+  }
 });
 
 // Get teacher list by tenant with completion status

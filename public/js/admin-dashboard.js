@@ -768,6 +768,7 @@ async function fetchAttendanceLogs() {
         const tenantSelect = document.getElementById('manualTenantId');
         const statusPreview = document.getElementById('manualStatusPreview');
         const statusText = document.getElementById('manualStatusText');
+        const form = document.getElementById('manualAttendanceForm');
 
         if (!modal || !teacherSelect || !tenantSelect) return;
 
@@ -775,6 +776,10 @@ async function fetchAttendanceLogs() {
         tenantSelect.innerHTML = '<option value="">-- Pilih Sekolah --</option>';
         const qrInput = document.getElementById('qrInput');
         if (qrInput) qrInput.value = '';
+        if (statusPreview) { statusPreview.style.display = 'none'; statusText.textContent = ''; }
+        if (form) form.reset();
+        modal.style.display = 'flex';
+        setManualMode('qr');
 
         try {
             const tenantRes = await fetch('/api/admin/tenants', {
@@ -809,11 +814,18 @@ async function fetchAttendanceLogs() {
         } catch (e) {
             console.error('Failed to load teachers for manual attendance:', e);
         }
-
-        document.getElementById('manualAttendanceForm').reset();
-        if (statusPreview) statusPreview.style.display = 'none';
-        modal.style.display = 'flex';
     }
+
+    window.openManualAttendanceModal = openManualAttendanceModal;
+    window.closeManualAttendanceModal = closeManualAttendanceModal;
+    window.decodeQR = decodeQR;
+    window.decodeQRFromFile = decodeQRFromFile;
+    window.startQRScan = startQRScan;
+    window.stopQRScan = stopQRScan;
+    window.setManualMode = setManualMode;
+    window.submitManualAttendance = submitManualAttendance;
+    window.submitManualAttendanceDirect = submitManualAttendanceDirect;
+    window.previewManualAttendanceStatus = previewManualAttendanceStatus;
 
     function closeManualAttendanceModal() {
         const modal = document.getElementById('manualAttendanceModal');
@@ -915,14 +927,14 @@ async function fetchAttendanceLogs() {
         });
     });
 
-    async function decodeQR() {
-        const qrInput = document.getElementById('qrInput');
+    async function decodeQR(qrStringOverride) {
         const teacherSelect = document.getElementById('manualTeacherId');
         const tenantSelect = document.getElementById('manualTenantId');
-        const qrString = qrInput ? qrInput.value.trim() : '';
+        const qrInput = document.getElementById('qrInput');
+        const qrString = (qrStringOverride || '').trim() || (qrInput ? qrInput.value.trim() : '');
 
         if (!qrString) {
-            Swal.fire({ title: 'Kosong', text: 'Tempel teks QR terlebih dahulu', icon: 'warning', confirmButtonColor: '#d97706' });
+            Swal.fire({ title: 'Kosong', text: 'QR tidak terbaca', icon: 'warning', confirmButtonColor: '#d97706' });
             return;
         }
 
@@ -938,12 +950,6 @@ async function fetchAttendanceLogs() {
 
             const result = await response.json();
             if (result.success && result.data) {
-                if (teacherSelect) {
-                    teacherSelect.value = result.data.teacher_id;
-                }
-                if (tenantSelect && result.data.tenant_id) {
-                    tenantSelect.value = result.data.tenant_id;
-                }
                 const payload = result.data.original_payload;
                 if (payload && payload.ts) {
                     const ts = new Date(payload.ts);
@@ -955,8 +961,7 @@ async function fetchAttendanceLogs() {
                     if (tanggalEl) tanggalEl.value = tanggal;
                     if (jamEl) jamEl.value = jam;
                 }
-                Swal.fire({ title: 'Berhasil', text: `Data guru terdeteksi: ${result.data.nama}`, icon: 'success', confirmButtonColor: '#066e3a' });
-                previewManualAttendanceStatus();
+                await submitManualAttendanceDirect(result.data);
             } else {
                 Swal.fire({ title: 'Gagal', text: result.message || 'QR tidak dikenali', icon: 'error', confirmButtonColor: '#dc2626' });
             }
@@ -964,6 +969,164 @@ async function fetchAttendanceLogs() {
             console.error('QR decode error:', error);
             Swal.fire({ title: 'Error', text: 'Terjadi kesalahan jaringan', icon: 'error', confirmButtonColor: '#dc2626' });
         }
+    }
+
+    async function submitManualAttendanceDirect(qrData) {
+        const jenisSelect = document.getElementById('manualJenis');
+        const submitBtn = document.getElementById('manualAttendanceSubmit');
+        const jenis = jenisSelect ? jenisSelect.value : 'masuk';
+
+        if (!qrData || !qrData.teacher_id) {
+            Swal.fire({ title: 'Gagal', text: 'Data guru dari QR tidak valid', icon: 'error', confirmButtonColor: '#dc2626' });
+            return;
+        }
+
+        const originalText = submitBtn ? submitBtn.innerHTML : '';
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner spinner" style="margin-right:0.5rem;"></i>Menyimpan...';
+        }
+
+        try {
+            const tanggalEl = document.getElementById('manualTanggal');
+            const jamEl = document.getElementById('manualJam');
+            const tanggal = tanggalEl ? tanggalEl.value : '';
+            const jam = jamEl ? jamEl.value : '';
+
+            if (!tanggal || !jam) {
+                Swal.fire({ title: 'Kurang Data', text: 'Tanggal atau jam tidak tersedia dari QR', icon: 'warning', confirmButtonColor: '#d97706' });
+                return;
+            }
+
+            const response = await fetch('/api/admin/attendance/manual', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}`
+                },
+                body: JSON.stringify({
+                    teacher_id: qrData.teacher_id,
+                    tenant_id: qrData.tenant_id,
+                    tanggal,
+                    jam,
+                    jenis
+                })
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                Swal.fire({ title: 'Berhasil', text: `Absensi manual ${jenis.toUpperCase()} untuk ${qrData.nama} berhasil disimpan`, icon: 'success', confirmButtonColor: '#066e3a' });
+                closeManualAttendanceModal();
+                if (typeof window.loadAttendanceLogs === 'function') {
+                    window.loadAttendanceLogs();
+                }
+            } else {
+                Swal.fire({ title: 'Gagal', text: result.message || 'Gagal menyimpan absensi', icon: 'error', confirmButtonColor: '#dc2626' });
+            }
+        } catch (error) {
+            console.error('Direct attendance submit error:', error);
+            Swal.fire({ title: 'Error', text: 'Terjadi kesalahan jaringan', icon: 'error', confirmButtonColor: '#dc2626' });
+        } finally {
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalText;
+            }
+        }
+    }
+
+    function setManualMode(mode) {
+        const modeQR = document.getElementById('manualModeQR');
+        const modeForm = document.getElementById('manualModeForm');
+        const btnQR = document.getElementById('btnModeQR');
+        const btnForm = document.getElementById('btnModeForm');
+
+        if (mode === 'qr') {
+            if (modeQR) modeQR.style.display = 'block';
+            if (modeForm) modeForm.style.display = 'none';
+            if (btnQR) { btnQR.style.background = '#2563eb'; btnQR.style.color = 'white'; }
+            if (btnForm) { btnForm.style.background = '#e2e8f0'; btnForm.style.color = '#334155'; }
+        } else {
+            if (modeQR) modeQR.style.display = 'none';
+            if (modeForm) modeForm.style.display = 'block';
+            if (btnQR) { btnQR.style.background = '#e2e8f0'; btnQR.style.color = '#334155'; }
+            if (btnForm) { btnForm.style.background = '#2563eb'; btnForm.style.color = 'white'; }
+        }
+    }
+
+    async function decodeQRFromFile(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const img = new Image();
+            img.onload = function() {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const code = jsQR(imageData.data, imageData.width, imageData.height);
+                if (code && code.data) {
+                    Swal.fire({ title: 'QR Terbaca', text: 'QR code berhasil dibaca dari gambar', icon: 'success', confirmButtonColor: '#066e3a' });
+                    decodeQR(code.data);
+                } else {
+                    Swal.fire({ title: 'Gagal', text: 'QR code tidak ditemukan dalam gambar', icon: 'error', confirmButtonColor: '#dc2626' });
+                }
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+        event.target.value = '';
+    }
+
+    let qrScanInterval = null;
+    async function startQRScan() {
+        const modal = document.getElementById('qrScannerModal');
+        const video = document.getElementById('qrVideo');
+        const canvas = document.getElementById('qrCanvas');
+        if (!modal || !video || !canvas) return;
+
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+            video.srcObject = stream;
+            modal.style.display = 'flex';
+
+            const ctx = canvas.getContext('2d');
+            qrScanInterval = setInterval(() => {
+                if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const code = jsQR(imageData.data, imageData.width, imageData.height);
+                    if (code && code.data) {
+                        stopQRScan();
+                        Swal.fire({ title: 'QR Terbaca', text: 'QR code berhasil discan', icon: 'success', confirmButtonColor: '#066e3a' });
+                        decodeQR(code.data);
+                    }
+                }
+            }, 500);
+        } catch (error) {
+            console.error('QR scan error:', error);
+            Swal.fire({ title: 'Error', text: 'Gagal mengakses kamera. Pastikan kamera sudah diizinkan.', icon: 'error', confirmButtonColor: '#dc2626' });
+            stopQRScan();
+        }
+    }
+
+    function stopQRScan() {
+        if (qrScanInterval) {
+            clearInterval(qrScanInterval);
+            qrScanInterval = null;
+        }
+        const video = document.getElementById('qrVideo');
+        if (video && video.srcObject) {
+            video.srcObject.getTracks().forEach(track => track.stop());
+            video.srcObject = null;
+        }
+        const modal = document.getElementById('qrScannerModal');
+        if (modal) modal.style.display = 'none';
     }
 
     async function fetchTenantLocations() {
@@ -1224,6 +1387,7 @@ function showTab(tabName) {
     const titles = {
         dashboard: 'Dashboard',
         teachers: 'Manajemen Guru',
+        'pending-registrations': 'Pendaftaran Guru Baru',
         students: 'Manajemen Siswa',
         attendance: 'Log Kehadiran',
         payroll: 'Penggajian',
@@ -1238,6 +1402,7 @@ function showTab(tabName) {
 
     if (tabName === 'dashboard') fetchDashboardData();
     else if (tabName === 'teachers') { fetchTeachers(1); loadTeacherTenants(); }
+    else if (tabName === 'pending-registrations') loadPendingRegistrations();
     else if (tabName === 'students') { loadStudents(); loadStudentClasses(); }
     else if (tabName === 'attendance') fetchAttendanceLogs();
     else if (tabName === 'email') loadEmailLogs();
@@ -1497,6 +1662,218 @@ async function deleteTeacher(id) {
         } catch (error) {
             console.error('Delete teacher error:', error);
         }
+    }
+}
+
+async function loadPendingRegistrations() {
+    const tbody = document.getElementById('pendingRegistrationsTable');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-8 text-center text-gray-500">Memuat data...</td></tr>';
+
+    try {
+        const response = await fetch('/api/admin/pending-registrations', {
+            headers: { 'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}` }
+        });
+        const res = await response.json();
+        if (res.success && Array.isArray(res.data)) {
+            if (res.data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-8 text-center text-gray-500">Tidak ada pendaftaran baru</td></tr>';
+                return;
+            }
+            tbody.innerHTML = res.data.map(reg => `
+                <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-4 text-sm text-gray-900">${reg.nama || '-'}</td>
+                    <td class="px-4 py-4 text-sm text-gray-500">${reg.nik || '-'}</td>
+                    <td class="px-4 py-4 text-sm text-gray-500">${reg.email || '-'}</td>
+                    <td class="px-4 py-4 text-sm text-gray-500">${reg.no_wa || '-'}</td>
+                    <td class="px-4 py-4 text-sm text-gray-500">${reg.nama_sekolah || reg.tenant_id}</td>
+                    <td class="px-4 py-4 text-sm text-gray-500">${reg.jabatan_di_unit || '-'}</td>
+                    <td class="px-4 py-4 text-sm text-gray-500">${reg.created_at ? new Date(reg.created_at).toLocaleDateString('id-ID') : '-'}</td>
+                    <td class="px-4 py-4 text-sm space-x-2">
+                        <button onclick="openPendingAssignmentModal(${reg.id}, '${(reg.tenant_id || '').replace(/'/g, "\\'")}', '${(reg.jabatan_di_unit || 'Guru').replace(/'/g, "\\'")}')" class="text-blue-600 hover:text-blue-800" title="Ubah Penempatan">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button onclick="approveRegistration(${reg.id})" class="text-green-600 hover:text-green-800" title="Setujui">
+                            <i class="fas fa-check"></i>
+                        </button>
+                        <button onclick="rejectRegistration(${reg.id})" class="text-red-600 hover:text-red-800" title="Tolak">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        } else {
+            tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-8 text-center text-gray-500">Gagal memuat data</td></tr>';
+        }
+    } catch (error) {
+        console.error('Load pending registrations error:', error);
+    }
+}
+
+async function openPendingAssignmentModal(id, currentTenant, currentJabatan) {
+    const modal = document.getElementById('pendingAssignmentModal');
+    const tenantSelect = document.getElementById('pendingTenantId');
+    const positionSelect = document.getElementById('pendingJabatan');
+    const hiddenId = document.getElementById('pendingTeacherId');
+    
+    if (!modal || !tenantSelect || !positionSelect || !hiddenId) return;
+    
+    hiddenId.value = id;
+    tenantSelect.innerHTML = '<option value="">Memuat...</option>';
+    positionSelect.value = currentJabatan || 'Guru';
+    
+    try {
+        const r = await fetch('/api/admin/tenants', {
+            headers: { 'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}` }
+        });
+        const d = await r.json();
+        if (d.success) {
+            tenantSelect.innerHTML = '<option value="">Pilih Sekolah</option>';
+            (d.data || []).forEach(t => {
+                const opt = document.createElement('option');
+                opt.value = t.tenant_id;
+                opt.textContent = t.nama_sekolah || t.tenant_id;
+                tenantSelect.appendChild(opt);
+            });
+            tenantSelect.value = currentTenant || '';
+        }
+    } catch (e) {
+        console.error('[LOAD TENANTS FOR PENDING ASSIGNMENT]', e);
+        tenantSelect.innerHTML = '<option value="">Error</option>';
+    }
+    
+    modal.style.display = 'flex';
+}
+
+async function closePendingAssignmentModal() {
+    const modal = document.getElementById('pendingAssignmentModal');
+    if (modal) modal.style.display = 'none';
+}
+
+async function savePendingAssignment() {
+    const hiddenId = document.getElementById('pendingTeacherId');
+    const tenantSelect = document.getElementById('pendingTenantId');
+    const positionSelect = document.getElementById('pendingJabatan');
+    
+    if (!hiddenId || !tenantSelect || !positionSelect) return;
+    
+    const id = hiddenId.value;
+    const tenantId = tenantSelect.value;
+    const jabatan = positionSelect.value;
+    
+    if (!tenantId) {
+        Swal.fire({ title: 'Kosong', text: 'Pilih sekolah terlebih dahulu', icon: 'warning', confirmButtonColor: '#d97706' });
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/admin/teachers/${id}/assignment`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}`
+            },
+            body: JSON.stringify({ tenant_id: tenantId, jabatan_di_unit: jabatan })
+        });
+        const res = await response.json();
+        if (res.success) {
+            Swal.fire({ title: 'Berhasil', text: 'Penempatan dan jabatan berhasil diupdate', icon: 'success', confirmButtonColor: '#066e3a' });
+            closePendingAssignmentModal();
+            loadPendingRegistrations();
+        } else {
+            Swal.fire({ title: 'Gagal', text: res.message || 'Gagal update penempatan', icon: 'error', confirmButtonColor: '#dc2626' });
+        }
+    } catch (error) {
+        Swal.fire({ title: 'Error', text: 'Terjadi kesalahan jaringan', icon: 'error', confirmButtonColor: '#dc2626' });
+    }
+}
+
+async function approveRegistration(id) {
+    const tmt = prompt('Masukkan TMT (YYYY-MM-DD):', new Date().toISOString().split('T')[0]);
+    if (tmt === null) return;
+    const scanId = prompt('Masukkan Scan ID (kartu angka):', '');
+    if (scanId === null) return;
+
+    try {
+        const response = await fetch(`/api/admin/approve-registration/${id}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}`
+            },
+            body: JSON.stringify({ status_kepegawaian, tmt, scan_id: scanId })
+        });
+        const res = await response.json();
+        if (res.success) {
+            Swal.fire({ title: 'Berhasil', text: res.message, icon: 'success', confirmButtonColor: '#066e3a' });
+            loadPendingRegistrations();
+        } else {
+            Swal.fire({ title: 'Gagal', text: res.message, icon: 'error', confirmButtonColor: '#dc2626' });
+        }
+    } catch (error) {
+        Swal.fire({ title: 'Error', text: 'Terjadi kesalahan jaringan', icon: 'error', confirmButtonColor: '#dc2626' });
+    }
+}
+
+async function editPendingAssignment(id) {
+    const tenantSelect = document.getElementById('pendingTenantId');
+    const positionSelect = document.getElementById('pendingJabatan');
+    const modal = document.getElementById('pendingAssignmentModal');
+    
+    if (!tenantSelect || !positionSelect || !modal) return;
+    
+    const tenantId = tenantSelect.value;
+    const jabatan = positionSelect.value;
+    
+    if (!tenantId) {
+        Swal.fire({ title: 'Kosong', text: 'Pilih sekolah terlebih dahulu', icon: 'warning', confirmButtonColor: '#d97706' });
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/admin/teachers/${id}/assignment`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}`
+            },
+            body: JSON.stringify({ tenant_id: tenantId, jabatan_di_unit: jabatan })
+        });
+        const res = await response.json();
+        if (res.success) {
+            Swal.fire({ title: 'Berhasil', text: 'Penempatan dan jabatan berhasil diupdate', icon: 'success', confirmButtonColor: '#066e3a' });
+            if (modal) modal.style.display = 'none';
+            loadPendingRegistrations();
+        } else {
+            Swal.fire({ title: 'Gagal', text: res.message || 'Gagal update penempatan', icon: 'error', confirmButtonColor: '#dc2626' });
+        }
+    } catch (error) {
+        Swal.fire({ title: 'Error', text: 'Terjadi kesalahan jaringan', icon: 'error', confirmButtonColor: '#dc2626' });
+    }
+}
+
+async function rejectRegistration(id) {
+    const reason = prompt('Alasan penolakan (opsional):', '');
+    if (reason === null) return;
+
+    try {
+        const response = await fetch(`/api/admin/reject-registration/${id}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}`
+            },
+            body: JSON.stringify({ reason })
+        });
+        const res = await response.json();
+        if (res.success) {
+            Swal.fire({ title: 'Berhasil', text: res.message, icon: 'success', confirmButtonColor: '#066e3a' });
+            loadPendingRegistrations();
+        } else {
+            Swal.fire({ title: 'Gagal', text: res.message, icon: 'error', confirmButtonColor: '#dc2626' });
+        }
+    } catch (error) {
+        Swal.fire({ title: 'Error', text: 'Terjadi kesalahan jaringan', icon: 'error', confirmButtonColor: '#dc2626' });
     }
 }
 

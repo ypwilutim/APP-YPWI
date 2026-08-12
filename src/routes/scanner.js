@@ -354,11 +354,14 @@ router.post('/scanner/attendance', async (req, res) => {
         [teacher_id, type, scanDateStr]
       );
     } catch (err) {
-      // Fallback jika kolom waktu_absen belum ada - gunakan waktu_scan
       duplicate = await db.query(
         "SELECT id FROM attendance_logs WHERE teacher_id = ? AND jenis = ? AND DATE(waktu_scan) = ?",
         [teacher_id, type, scanDateStr]
       );
+    }
+
+    if (duplicate.length > 0) {
+      return res.status(409).json({ success: false, message: `Guru sudah absen ${type.toUpperCase()} hari ini` });
     }
 
     let status = 'terlambat';

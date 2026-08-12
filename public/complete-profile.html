@@ -27,6 +27,50 @@
         justify-content: center;
       }
     }
+    .step-indicator {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 16px;
+      border: 2px solid #e5e7eb;
+      background: white;
+      color: #9ca3af;
+      transition: all 0.3s;
+    }
+    .step-indicator.active {
+      background: #066e3a;
+      color: white;
+      border-color: #066e3a;
+    }
+    .step-indicator.completed {
+      background: #10b981;
+      color: white;
+      border-color: #10b981;
+    }
+    .step-line {
+      width: 60px;
+      height: 3px;
+      background: #e5e7eb;
+      transition: background 0.3s;
+    }
+    .step-line.completed {
+      background: #10b981;
+    }
+    .step-content {
+      display: none;
+      animation: fadeIn 0.3s ease-in-out;
+    }
+    .step-content.active {
+      display: block;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
   </style>
 </head>
 
@@ -41,12 +85,29 @@
           <p class="text-gray-600 mt-2 text-lg">Lengkapi data pribadi Anda untuk akses sistem dan administrasi.</p>
         </div>
 
+        <div class="flex items-center justify-center mb-6">
+          <div class="flex items-center gap-3">
+            <div class="step-indicator active" data-step="1">1</div>
+            <div class="step-line" data-line="1"></div>
+            <div class="step-indicator" data-step="2">2</div>
+            <div class="step-line" data-line="2"></div>
+            <div class="step-indicator" data-step="3">3</div>
+          </div>
+        </div>
+        <div class="text-center mb-8">
+          <span id="step-label" class="text-lg font-semibold text-gray-700">Langkah 1 dari 3: Data Identitas Pribadi</span>
+        </div>
+
         <form id="profileForm">
           <input type="hidden" id="teacherId" name="teacherId">
           <input type="hidden" id="link_foto" name="link_foto">
+          <input type="hidden" id="link_ktp" name="link_ktp">
+          <input type="hidden" id="link_kk" name="link_kk">
+          <input type="hidden" id="link_ijazah" name="link_ijazah">
           <input type="hidden" id="assignments_json" name="assignments" required>
 
-          <div class="grid md:grid-cols-2 gap-10">
+          <!-- Step 1: Data Identitas Pribadi -->
+          <div class="step-content active" data-step="1">
             <div class="space-y-6">
               <h3 class="text-xl font-bold text-gray-900 flex items-center gap-2 border-b pb-3">
                 <i class="bi bi-person-badge text-primary"></i> Data Identitas Pribadi
@@ -154,8 +215,37 @@
                   class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 bg-white outline-none font-medium resize-none"
                   placeholder="Masukkan alamat lengkap..."></textarea>
               </div>
-            </div>
 
+              <!-- Upload KTP -->
+              <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Upload KTP <span
+                    class="text-red-500">*</span></label>
+                <div class="flex items-center gap-4 bg-gray-50 border border-gray-200 p-4 rounded-2xl">
+                  <div
+                    class="border-2 border-dashed border-gray-300 rounded-xl p-3 text-center flex-1 hover:border-primary transition cursor-pointer"
+                    id="ktpUploadArea">
+                    <input type="file" class="hidden" id="ktp" name="ktp" accept="image/*,.pdf">
+                    <i class="bi bi-file-earmark-text text-primary text-3xl mb-2"></i>
+                    <p class="text-gray-700 font-medium text-sm mb-1">Klik untuk upload KTP</p>
+                  </div>
+                  <div
+                    class="w-20 h-20 rounded-2xl border-2 border-gray-200 overflow-hidden bg-white flex-shrink-0 flex items-center justify-center relative">
+                    <img id="ktp-preview" class="w-full h-full object-cover hidden">
+                    <i class="bi bi-file-earmark-text text-gray-400 text-3xl absolute" id="ktp-icon"></i>
+                  </div>
+                </div>
+                <input type="hidden" id="link_ktp" name="link_ktp">
+                <div id="existing-ktp-info" class="mt-2 hidden">
+                  <small class="text-green-600">
+                    <i class="bi bi-check-circle-fill mr-1"></i>KTP sudah tersimpan di database
+                  </small>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 2: Data Kepegawaian -->
+          <div class="step-content" data-step="2">
             <div class="space-y-6">
               <h3 class="text-xl font-bold text-gray-900 flex items-center gap-2 border-b pb-3">
                 <i class="bi bi-briefcase text-primary"></i> Data Kepegawaian
@@ -189,50 +279,6 @@
                   <input type="date" id="tmt" name="tmt" required
                     class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 bg-white outline-none font-medium">
                 </div>
-              </div>
-
-              <div>
-                <label for="pendidikan_terakhir" class="block text-sm font-semibold text-gray-700 mb-2">Pendidikan
-                  Terakhir <span class="text-red-500">*</span></label>
-                <select id="pendidikan_terakhir" name="pendidikan_terakhir" required
-                  class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 bg-white outline-none font-medium">
-                  <option value="">Pilih Pendidikan</option>
-                  <option value="SD">SD</option>
-                  <option value="SMP">SMP</option>
-                  <option value="SMA">SMA</option>
-                  <option value="SMK">SMK</option>
-                  <option value="D1">D1</option>
-                  <option value="D2">D2</option>
-                  <option value="D3">D3</option>
-                  <option value="S1">S1</option>
-                  <option value="S2">S2</option>
-                  <option value="S3">S3</option>
-                  <option value="Lainnya">Lainnya</option>
-                </select>
-              </div>
-
-              <div id="jurusan-field" class="hidden">
-                <label for="jurusan" class="block text-sm font-semibold text-gray-700 mb-2">Nama Sekolah/Universitas
-                  <span class="text-red-500">*</span></label>
-                <input type="text" id="jurusan" name="jurusan" required
-                  class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 bg-white outline-none font-medium"
-                  placeholder="SMAN 1 Tomoni / IAIN / Universitas ...">
-              </div>
-
-              <div id="nama_sekolah-field" class="hidden">
-                <label for="nama_sekolah_pendidikan" class="block text-sm font-semibold text-gray-700 mb-2">Jurusan
-                  <span class="text-red-500">*</span></label>
-                <input type="text" id="nama_sekolah_pendidikan" name="nama_sekolah_pendidikan" required
-                  class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 bg-white outline-none font-medium"
-                  placeholder="IPA / Teknis Komputer / Pend. Agama Islam">
-              </div>
-
-              <div id="tahun-field" class="hidden">
-                <label for="tahun_angkatan" class="block text-sm font-semibold text-gray-700 mb-2">Tahun Lulus <span
-                    class="text-red-500">*</span></label>
-                <input type="text" id="tahun_angkatan" name="tahun_angkatan" required
-                  class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 bg-white outline-none font-medium"
-                  placeholder="2019">
               </div>
 
               <div class="grid grid-cols-2 gap-4">
@@ -289,6 +335,112 @@
                 </div>
               </div>
 
+              <!-- Upload KK -->
+              <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Upload KK <span
+                    class="text-red-500">*</span></label>
+                <div class="flex items-center gap-4 bg-gray-50 border border-gray-200 p-4 rounded-2xl">
+                  <div
+                    class="border-2 border-dashed border-gray-300 rounded-xl p-3 text-center flex-1 hover:border-primary transition cursor-pointer"
+                    id="kkUploadArea">
+                    <input type="file" class="hidden" id="kk" name="kk" accept="image/*,.pdf">
+                    <i class="bi bi-file-earmark-text text-primary text-3xl mb-2"></i>
+                    <p class="text-gray-700 font-medium text-sm mb-1">Klik untuk upload KK</p>
+                  </div>
+                  <div
+                    class="w-20 h-20 rounded-2xl border-2 border-gray-200 overflow-hidden bg-white flex-shrink-0 flex items-center justify-center relative">
+                    <img id="kk-preview" class="w-full h-full object-cover hidden">
+                    <i class="bi bi-file-earmark-text text-gray-400 text-3xl absolute" id="kk-icon"></i>
+                  </div>
+                </div>
+                <input type="hidden" id="link_kk" name="link_kk">
+                <div id="existing-kk-info" class="mt-2 hidden">
+                  <small class="text-green-600">
+                    <i class="bi bi-check-circle-fill mr-1"></i>KK sudah tersimpan di database
+                  </small>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 3: Data Pendidikan & Berkas -->
+          <div class="step-content" data-step="3">
+            <div class="space-y-6">
+              <h3 class="text-xl font-bold text-gray-900 flex items-center gap-2 border-b pb-3">
+                <i class="bi bi-book text-primary"></i> Data Pendidikan & Berkas
+              </h3>
+
+              <div>
+                <label for="pendidikan_terakhir" class="block text-sm font-semibold text-gray-700 mb-2">Pendidikan
+                  Terakhir <span class="text-red-500">*</span></label>
+                <select id="pendidikan_terakhir" name="pendidikan_terakhir" required
+                  class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 bg-white outline-none font-medium">
+                  <option value="">Pilih Pendidikan</option>
+                  <option value="SD">SD</option>
+                  <option value="SMP">SMP</option>
+                  <option value="SMA">SMA</option>
+                  <option value="SMK">SMK</option>
+                  <option value="D1">D1</option>
+                  <option value="D2">D2</option>
+                  <option value="D3">D3</option>
+                  <option value="S1">S1</option>
+                  <option value="S2">S2</option>
+                  <option value="S3">S3</option>
+                  <option value="Lainnya">Lainnya</option>
+                </select>
+              </div>
+
+              <div id="jurusan-field" class="hidden">
+                <label for="jurusan" class="block text-sm font-semibold text-gray-700 mb-2">Nama Sekolah/Universitas
+                  <span class="text-red-500">*</span></label>
+                <input type="text" id="jurusan" name="jurusan" required
+                  class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 bg-white outline-none font-medium"
+                  placeholder="SMAN 1 Tomoni / IAIN / Universitas ...">
+              </div>
+
+              <div id="nama_sekolah-field" class="hidden">
+                <label for="nama_sekolah_pendidikan" class="block text-sm font-semibold text-gray-700 mb-2">Jurusan
+                  <span class="text-red-500">*</span></label>
+                <input type="text" id="nama_sekolah_pendidikan" name="nama_sekolah_pendidikan" required
+                  class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 bg-white outline-none font-medium"
+                  placeholder="IPA / Teknis Komputer / Pend. Agama Islam">
+              </div>
+
+              <div id="tahun-field" class="hidden">
+                <label for="tahun_angkatan" class="block text-sm font-semibold text-gray-700 mb-2">Tahun Lulus <span
+                    class="text-red-500">*</span></label>
+                <input type="text" id="tahun_angkatan" name="tahun_angkatan" required
+                  class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 bg-white outline-none font-medium"
+                  placeholder="2019">
+              </div>
+
+              <!-- Upload Ijazah -->
+              <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Upload Ijazah <span
+                    class="text-red-500">*</span></label>
+                <div class="flex items-center gap-4 bg-gray-50 border border-gray-200 p-4 rounded-2xl">
+                  <div
+                    class="border-2 border-dashed border-gray-300 rounded-xl p-3 text-center flex-1 hover:border-primary transition cursor-pointer"
+                    id="ijazahUploadArea">
+                    <input type="file" class="hidden" id="ijazah" name="ijazah" accept="image/*,.pdf">
+                    <i class="bi bi-file-earmark-text text-primary text-3xl mb-2"></i>
+                    <p class="text-gray-700 font-medium text-sm mb-1">Klik untuk upload Ijazah</p>
+                  </div>
+                  <div
+                    class="w-20 h-20 rounded-2xl border-2 border-gray-200 overflow-hidden bg-white flex-shrink-0 flex items-center justify-center relative">
+                    <img id="ijazah-preview" class="w-full h-full object-cover hidden">
+                    <i class="bi bi-file-earmark-text text-gray-400 text-3xl absolute" id="ijazah-icon"></i>
+                  </div>
+                </div>
+                <input type="hidden" id="link_ijazah" name="link_ijazah">
+                <div id="existing-ijazah-info" class="mt-2 hidden">
+                  <small class="text-green-600">
+                    <i class="bi bi-check-circle-fill mr-1"></i>Ijazah sudah tersimpan di database
+                  </small>
+                </div>
+              </div>
+
+              <!-- Upload Pas Foto -->
               <div>
                 <label class="block text-sm font-semibold text-gray-700 mb-2">Upload Pas Foto <span
                     class="text-red-500">*</span></label>
@@ -308,19 +460,33 @@
                 </div>
                 <div id="existing-photo-info" class="mt-2 hidden">
                   <small class="text-green-600">
-                    <i class="bi bi-check-circle-fill mr-1"></i>
-                    Foto sudah tersimpan di database
+                    <i class="bi bi-check-circle-fill mr-1"></i>Foto sudah tersimpan di database
                   </small>
+                </div>
+              </div>
+
+              <!-- Review Section -->
+              <div id="review-section" class="mt-8 p-6 bg-blue-50 border border-blue-200 rounded-2xl">
+                <h4 class="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                  <i class="bi bi-check-circle text-blue-600"></i> Ringkasan Data
+                </h4>
+                <div id="review-content" class="grid md:grid-cols-2 gap-4">
+                  <p class="text-gray-500 col-span-2">Data akan ditampilkan setelah Anda mengisi semua langkah.</p>
                 </div>
               </div>
             </div>
           </div>
 
-          <div class="pt-10 border-t border-gray-100">
-            <button type="submit"
-              class="w-full max-w-lg mx-auto bg-[#066e3a] text-white font-extrabold py-4 px-8 rounded-3xl text-xl flex items-center justify-center gap-3 shadow-lg transform hover:scale-[1.02] transition">
-              <i class="bi bi-cloud-arrow-up-fill"></i>
-              SIMPAN DATA PROFIL
+          <!-- Step Navigation -->
+          <div class="step-navigation flex justify-between items-center mt-8 pt-6 border-t border-gray-100">
+            <button type="button" id="prevBtn" class="hidden px-6 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition">
+              <i class="bi bi-arrow-left mr-2"></i>Sebelumnya
+            </button>
+            <button type="button" id="nextBtn" class="px-6 py-3 bg-[#066e3a] text-white rounded-xl font-bold hover:bg-[#066e3a]/90 transition">
+              Selanjutnya<i class="bi bi-arrow-right ml-2"></i>
+            </button>
+            <button type="submit" id="submitBtn" class="hidden px-6 py-3 bg-[#066e3a] text-white rounded-xl font-bold hover:bg-[#066e3a]/90 transition">
+              <i class="bi bi-cloud-arrow-up-fill mr-2"></i>Simpan
             </button>
           </div>
         </form>
@@ -345,7 +511,7 @@
         </div>
         <div>
           <label class="block text-sm font-semibold text-gray-700 mb-2">Jabatan</label>
-<select id="assignmentJabatan" required
+          <select id="assignmentJabatan" required
             class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-primary outline-none font-medium">
             <option value="">Pilih Jabatan</option>
             <option value="Ketua">Ketua</option>
@@ -393,7 +559,7 @@
     fetchTeacherData();
     fetchTenants();
 
-async function fetchTeacherData() {
+  async function fetchTeacherData() {
        try {
          const response = await fetch('/api/public/teachers/' + teacherId);
          const res = await response.json();
@@ -408,310 +574,512 @@ async function fetchTeacherData() {
        } catch (error) {
          console.error('Error fetching teacher data:', error);
        }
+    }
+
+  async function fetchTenants() {
+     try {
+       const response = await fetch('/api/tenants');
+       if (response.ok) {
+         const res = await response.json();
+         if (res.success) {
+           populateTenantSelect(res.data);
+         }
+       }
+     } catch (error) {
+       console.error('Error fetching tenants:', error);
+     }
+   }
+
+  function populateTenantSelect(tenants) {
+     const select = document.getElementById('assignmentUnit');
+     select.innerHTML = '<option value="">Pilih Unit Sekolah</option>';
+     tenants.forEach(tenant => {
+       const option = document.createElement('option');
+       option.value = tenant.tenant_id;
+       option.textContent = tenant.nama_sekolah + ' (' + tenant.tenant_id + ')';
+       select.appendChild(option);
+     });
+   }
+
+  function populateForm(teacher) {
+       const setValue = (id, value) => {
+         const el = document.getElementById(id);
+         if (el) {
+           el.value = value || '';
+         }
+       };
+
+       setValue('nama', teacher.nama);
+       if (teacher.nik && !String(teacher.nik).startsWith('NIK-')) {
+         document.getElementById('nik').value = teacher.nik;
+       } else {
+         document.getElementById('nik').value = '';
+       }
+       setValue('nip', teacher.nip);
+       setValue('tempat_lahir', teacher.tempat_lahir);
+       setValue('tanggal_lahir', teacher.tanggal_lahir);
+       setValue('jenis_kelamin', teacher.jenis_kelamin);
+       setValue('alamat', teacher.alamat);
+       setValue('email', teacher.email);
+       setValue('no_wa', teacher.no_wa);
+       setValue('status_kepegawaian', teacher.status_kepegawaian);
+       setValue('tmt', teacher.tmt);
+       setValue('status_aktif', teacher.status_aktif);
+
+       if (teacher.pendidikan_terakhir) {
+         const parts = teacher.pendidikan_terakhir.split('/');
+         if (parts[0]) document.getElementById('pendidikan_terakhir').value = parts[0];
+         if (parts[1]) document.getElementById('jurusan').value = parts[1];
+         if (parts[2]) document.getElementById('nama_sekolah_pendidikan').value = parts[2];
+         if (parts[3]) document.getElementById('tahun_angkatan').value = parts[3];
+         if (parts[0]) updatePendidikanFields(parts[0]);
+       }
+
+  setValue('nomor_rekening', teacher.nomor_rekening);
+       const bankValue = teacher.bank ? String(teacher.bank).trim() : '';
+       console.log('Bank value from API:', bankValue);
+       setValue('bank', bankValue);
+
+       const bankSelect = document.getElementById('bank');
+       if (bankSelect && bankValue) {
+         let found = Array.from(bankSelect.options).some(o => o.value === bankValue);
+         console.log('Bank found in options:', found);
+         if (!found) {
+           const opt = document.createElement('option');
+           opt.value = bankValue;
+           opt.textContent = bankValue;
+           bankSelect.appendChild(opt);
+         }
+         bankSelect.value = bankValue;
+         console.log('Bank select value set to:', bankSelect.value);
+       }
+
+       setValue('status_perkawinan', teacher.status_perkawinan);
+       setValue('jumlah_anak', teacher.jumlah_anak || 0);
+       initPerkawinanToggle();
+
+       if (teacher.data_keluarga && Array.isArray(teacher.data_keluarga)) {
+         document.getElementById('pasangan_list').innerHTML = '';
+         teacher.data_keluarga.forEach(item => addPasanganField(item.nik, item.nama, item.tipe));
+       }
+
+       if (teacher.link_foto) {
+         document.getElementById('photo-preview').src = teacher.link_foto;
+         document.getElementById('photo-preview').classList.remove('hidden');
+         document.getElementById('photo-icon').classList.add('hidden');
+         document.getElementById('existing-photo-info').classList.remove('hidden');
+         document.getElementById('link_foto').value = teacher.link_foto;
+       }
+
+       if (teacher.link_ktp) {
+         document.getElementById('ktp-preview').src = teacher.link_ktp;
+         document.getElementById('ktp-preview').classList.remove('hidden');
+         document.getElementById('ktp-icon').classList.add('hidden');
+         document.getElementById('existing-ktp-info').classList.remove('hidden');
+         document.getElementById('link_ktp').value = teacher.link_ktp;
+       }
+
+       if (teacher.link_kk) {
+         document.getElementById('kk-preview').src = teacher.link_kk;
+         document.getElementById('kk-preview').classList.remove('hidden');
+         document.getElementById('kk-icon').classList.add('hidden');
+         document.getElementById('existing-kk-info').classList.remove('hidden');
+         document.getElementById('link_kk').value = teacher.link_kk;
+       }
+
+       if (teacher.link_ijazah) {
+         document.getElementById('ijazah-preview').src = teacher.link_ijazah;
+         document.getElementById('ijazah-preview').classList.remove('hidden');
+         document.getElementById('ijazah-icon').classList.add('hidden');
+         document.getElementById('existing-ijazah-info').classList.remove('hidden');
+         document.getElementById('link_ijazah').value = teacher.link_ijazah;
+       }
      }
 
-    async function fetchTenants() {
-      try {
-        const response = await fetch('/api/tenants');
-        if (response.ok) {
-          const res = await response.json();
-          if (res.success) {
-            populateTenantSelect(res.data);
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching tenants:', error);
-      }
-    }
+  function initPerkawinanToggle() {
+     const status = document.getElementById('status_perkawinan').value;
+     const showPasangan = ['Menikah', 'Cerai Hidup'].includes(status);
+     const showAnak = ['Menikah', 'Cerai Hidup', 'Cerai Mati'].includes(status);
 
-    function populateTenantSelect(tenants) {
-      const select = document.getElementById('assignmentUnit');
-      select.innerHTML = '<option value="">Pilih Unit Sekolah</option>';
-      tenants.forEach(tenant => {
-        const option = document.createElement('option');
-        option.value = tenant.tenant_id;
-        option.textContent = tenant.nama_sekolah + ' (' + tenant.tenant_id + ')';
-        select.appendChild(option);
-      });
-    }
+     document.getElementById('pasangan_fields').classList.toggle('hidden', !showPasangan);
+     document.getElementById('jumlah_anak_field').classList.toggle('hidden', !showAnak);
 
-function populateForm(teacher) {
-      const setValue = (id, value) => {
-        const el = document.getElementById(id);
-        if (el) {
-          el.value = value || '';
-        }
-      };
+     document.querySelectorAll('.pasangan-nik').forEach(input => {
+       input.required = showPasangan;
+     });
 
-      setValue('nama', teacher.nama);
-      if (teacher.nik && !String(teacher.nik).startsWith('NIK-')) {
-        document.getElementById('nik').value = teacher.nik;
-      } else {
-        document.getElementById('nik').value = '';
-      }
-      setValue('nip', teacher.nip);
-      setValue('tempat_lahir', teacher.tempat_lahir);
-      setValue('tanggal_lahir', teacher.tanggal_lahir);
-      setValue('jenis_kelamin', teacher.jenis_kelamin);
-      setValue('alamat', teacher.alamat);
-      setValue('email', teacher.email);
-      setValue('no_wa', teacher.no_wa);
-      setValue('status_kepegawaian', teacher.status_kepegawaian);
-      setValue('tmt', teacher.tmt);
-      setValue('status_aktif', teacher.status_aktif);
+     const jumlahAnakInput = document.getElementById('jumlah_anak');
+     if (jumlahAnakInput) {
+       jumlahAnakInput.required = showAnak;
+     }
+   }
 
-      if (teacher.pendidikan_terakhir) {
-        const parts = teacher.pendidikan_terakhir.split('/');
-        if (parts[0]) document.getElementById('pendidikan_terakhir').value = parts[0];
-        if (parts[1]) document.getElementById('jurusan').value = parts[1];
-        if (parts[2]) document.getElementById('nama_sekolah_pendidikan').value = parts[2];
-        if (parts[3]) document.getElementById('tahun_angkatan').value = parts[3];
-        // Tampilkan field terkait (tahun lulus, jurusan, nama sekolah) sesuai jenjang
-        if (parts[0]) updatePendidikanFields(parts[0]);
-      }
+  function addPasanganField(nik = '', nama = '', tipe = '') {
+     const list = document.getElementById('pasangan_list');
+     const jk = document.getElementById('jenis_kelamin').value;
+     const status = document.getElementById('status_perkawinan').value;
+     const isMenikah = status === 'Menikah';
+     const label = tipe ? (tipe === 'suami' ? 'NIK Suami' : tipe === 'istri' ? 'NIK Istri' : 'NIK Mantan') : (isMenikah ? (jk === 'P' ? 'NIK Suami' : 'NIK Istri') : 'NIK Mantan');
 
-setValue('nomor_rekening', teacher.nomor_rekening);
-      const bankValue = teacher.bank ? String(teacher.bank).trim() : '';
-      console.log('Bank value from API:', bankValue);
-      setValue('bank', bankValue);
+     const div = document.createElement('div');
+     div.className = 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_auto_auto] gap-2 items-center pasangan-row';
+     div.dataset.tipe = tipe || (isMenikah ? (jk === 'P' ? 'suami' : 'istri') : 'mantan');
+     div.innerHTML = `
+       <input type="text" placeholder="${label}" class="pasangan-nik px-4 py-3 rounded-xl border-2 border-gray-200 bg-white outline-none font-medium" value="${nik}">
+       <input type="text" placeholder="Nama" class="pasangan-nama px-4 py-3 rounded-xl border-2 border-gray-200 bg-white outline-none font-medium" value="${nama}" readonly>
+       <button type="button" class="cari-nik-btn px-4 py-3 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700">Cari</button>
+       <button type="button" class="hapus-pasangan-btn px-4 py-3 bg-red-600 text-white rounded-xl text-sm font-bold hover:bg-red-700"><i class="bi bi-trash"></i></button>
+     `;
+     list.appendChild(div);
 
-      // Pre-select bank from DB, create option if value not in the list
-      const bankSelect = document.getElementById('bank');
-      if (bankSelect && bankValue) {
-        let found = Array.from(bankSelect.options).some(o => o.value === bankValue);
-        console.log('Bank found in options:', found);
-        if (!found) {
-          const opt = document.createElement('option');
-          opt.value = bankValue;
-          opt.textContent = bankValue;
-          bankSelect.appendChild(opt);
-        }
-        bankSelect.value = bankValue;
-        console.log('Bank select value set to:', bankSelect.value);
-      }
+     const nikInput = div.querySelector('.pasangan-nik');
+     const namaInput = div.querySelector('.pasangan-nama');
+     const cariBtn = div.querySelector('.cari-nik-btn');
+     const hapusBtn = div.querySelector('.hapus-pasangan-btn');
 
-      setValue('status_perkawinan', teacher.status_perkawinan);
-      setValue('jumlah_anak', teacher.jumlah_anak || 0);
-      initPerkawinanToggle();
+     cariBtn.addEventListener('click', async () => {
+       const nikVal = nikInput.value.trim();
+       if (!nikVal) return alert('Masukkan NIK');
+       try {
+         const res = await fetch('/api/public/lookup-nik?nik=' + encodeURIComponent(nikVal));
+         const data = await res.json();
+         if (data.success && data.nama) {
+           namaInput.value = data.nama;
+         } else {
+           namaInput.value = '';
+           alert('NIK tidak ditemukan');
+         }
+       } catch (e) {
+         console.error('Lookup NIK error:', e);
+       }
+     });
 
-      if (teacher.data_keluarga && Array.isArray(teacher.data_keluarga)) {
-        document.getElementById('pasangan_list').innerHTML = '';
-        teacher.data_keluarga.forEach(item => addPasanganField(item.nik, item.nama, item.tipe));
-      }
+     hapusBtn.addEventListener('click', () => {
+       div.remove();
+     });
+   }
 
-      if (teacher.link_foto) {
-        document.getElementById('photo-preview').src = teacher.link_foto;
-        document.getElementById('photo-preview').classList.remove('hidden');
-        document.getElementById('photo-icon').classList.add('hidden');
-        document.getElementById('existing-photo-info').classList.remove('hidden');
-        document.getElementById('link_foto').value = teacher.link_foto;
-      }
-    }
+  function updatePendidikanFields(value) {
+     document.getElementById('tahun-field').classList.toggle('hidden', !['SD', 'SMP', 'SMA', 'SMK', 'S1', 'S2', 'S3'].includes(value));
+     document.getElementById('jurusan-field').classList.toggle('hidden', !['SMK', 'S1', 'S2', 'S3'].includes(value));
+     document.getElementById('nama_sekolah-field').classList.toggle('hidden', !['SMK', 'S1', 'S2', 'S3'].includes(value));
+     document.getElementById('tahun_angkatan').required = ['SD', 'SMP', 'SMA', 'SMK', 'S1', 'S2', 'S3'].includes(value);
+     document.getElementById('jurusan').required = ['SMK', 'S1', 'S2', 'S3'].includes(value);
+     document.getElementById('nama_sekolah_pendidikan').required = ['SMK', 'S1', 'S2', 'S3'].includes(value);
+   }
 
-    function initPerkawinanToggle() {
-      const status = document.getElementById('status_perkawinan').value;
-      const showPasangan = ['Menikah', 'Cerai Hidup'].includes(status);
-      const showAnak = ['Menikah', 'Cerai Hidup', 'Cerai Mati'].includes(status);
+  function initPendidikanToggle() {
+     const pendidikanSelect = document.getElementById('pendidikan_terakhir');
+     pendidikanSelect?.addEventListener('change', function () {
+       updatePendidikanFields(this.value);
+     });
+   }
 
-      document.getElementById('pasangan_fields').classList.toggle('hidden', !showPasangan);
-      document.getElementById('jumlah_anak_field').classList.toggle('hidden', !showAnak);
+  let localAssignments = [];
 
-      // Mark pasangan NIK as required when visible
-      document.querySelectorAll('.pasangan-nik').forEach(input => {
-        input.required = showPasangan;
-      });
+  function displayAssignments(assignments) {
+     if (assignments !== undefined) localAssignments = assignments;
+     const tbody = document.getElementById('assignments-table-body');
+     if (!tbody) return;
+     tbody.innerHTML = localAssignments.length === 0 ? '<tr><td colspan="3" class="text-center py-4 text-gray-500">Belum ada penugasan</td></tr>' :
+       localAssignments.map((a, i) => `<tr><td class="px-4 py-3">${a.tenant_id || '-'}</td><td class="px-4 py-3">${a.jabatan_di_unit || '-'}</td><td class="px-4 py-3 text-center"><button type="button" data-index="${i}" class="text-red-600 remove-assignment-btn"><i class="bi bi-trash"></i></button></td></tr>`).join('');
+   }
 
-      // Mark jumlah_anak as required when visible
-      const jumlahAnakInput = document.getElementById('jumlah_anak');
-      if (jumlahAnakInput) {
-        jumlahAnakInput.required = showAnak;
-      }
-    }
+  function showStep(step) {
+     document.querySelectorAll('.step-content').forEach(el => el.classList.remove('active'));
+     document.querySelectorAll('.step-indicator').forEach(el => el.classList.remove('active', 'completed'));
+     document.querySelectorAll('.step-line').forEach(el => el.classList.remove('completed'));
 
-    function addPasanganField(nik = '', nama = '', tipe = '') {
-      const list = document.getElementById('pasangan_list');
-      const jk = document.getElementById('jenis_kelamin').value;
-      const status = document.getElementById('status_perkawinan').value;
-      const isMenikah = status === 'Menikah';
-      const label = tipe ? (tipe === 'suami' ? 'NIK Suami' : tipe === 'istri' ? 'NIK Istri' : 'NIK Mantan') : (isMenikah ? (jk === 'P' ? 'NIK Suami' : 'NIK Istri') : 'NIK Mantan');
+     document.querySelector(`.step-content[data-step="${step}"]`)?.classList.add('active');
+     document.querySelector(`.step-indicator[data-step="${step}"]`)?.classList.add('active');
 
-      const div = document.createElement('div');
-      div.className = 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_auto_auto] gap-2 items-center pasangan-row';
-      div.dataset.tipe = tipe || (isMenikah ? (jk === 'P' ? 'suami' : 'istri') : 'mantan');
-      div.innerHTML = `
-        <input type="text" placeholder="${label}" class="pasangan-nik px-4 py-3 rounded-xl border-2 border-gray-200 bg-white outline-none font-medium" value="${nik}">
-        <input type="text" placeholder="Nama" class="pasangan-nama px-4 py-3 rounded-xl border-2 border-gray-200 bg-white outline-none font-medium" value="${nama}" readonly>
-        <button type="button" class="cari-nik-btn px-4 py-3 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700">Cari</button>
-        <button type="button" class="hapus-pasangan-btn px-4 py-3 bg-red-600 text-white rounded-xl text-sm font-bold hover:bg-red-700"><i class="bi bi-trash"></i></button>
-      `;
-      list.appendChild(div);
+     for (let i = 1; i < step; i++) {
+       document.querySelector(`.step-indicator[data-step="${i}"]`)?.classList.add('completed');
+       document.querySelector(`.step-line[data-line="${i}"]`)?.classList.add('completed');
+     }
 
-      const nikInput = div.querySelector('.pasangan-nik');
-      const namaInput = div.querySelector('.pasangan-nama');
-      const cariBtn = div.querySelector('.cari-nik-btn');
-      const hapusBtn = div.querySelector('.hapus-pasangan-btn');
+     const labels = {
+       1: 'Langkah 1 dari 3: Data Identitas Pribadi',
+       2: 'Langkah 2 dari 3: Data Kepegawaian',
+       3: 'Langkah 3 dari 3: Data Pendidikan & Berkas'
+     };
+     document.getElementById('step-label').textContent = labels[step] || '';
 
-      cariBtn.addEventListener('click', async () => {
-        const nikVal = nikInput.value.trim();
-        if (!nikVal) return alert('Masukkan NIK');
-        try {
-          const res = await fetch('/api/public/lookup-nik?nik=' + encodeURIComponent(nikVal));
-          const data = await res.json();
-          if (data.success && data.nama) {
-            namaInput.value = data.nama;
-          } else {
-            namaInput.value = '';
-            alert('NIK tidak ditemukan');
-          }
-        } catch (e) {
-          console.error('Lookup NIK error:', e);
-        }
-      });
+     document.getElementById('prevBtn').classList.toggle('hidden', step === 1);
+     document.getElementById('nextBtn').classList.toggle('hidden', step === 3);
+     document.getElementById('submitBtn').classList.toggle('hidden', step !== 3);
 
-      hapusBtn.addEventListener('click', () => {
-        div.remove();
-      });
-    }
+     if (step === 3) {
+       generateReview();
+     }
+   }
 
-    function updatePendidikanFields(value) {
-      document.getElementById('tahun-field').classList.toggle('hidden', !['SD', 'SMP', 'SMA', 'SMK', 'S1', 'S2', 'S3'].includes(value));
-      document.getElementById('jurusan-field').classList.toggle('hidden', !['SMK', 'S1', 'S2', 'S3'].includes(value));
-      document.getElementById('nama_sekolah-field').classList.toggle('hidden', !['SMK', 'S1', 'S2', 'S3'].includes(value));
-      // Enable/disable required on visible fields
-      document.getElementById('tahun_angkatan').required = ['SD', 'SMP', 'SMA', 'SMK', 'S1', 'S2', 'S3'].includes(value);
-      document.getElementById('jurusan').required = ['SMK', 'S1', 'S2', 'S3'].includes(value);
-      document.getElementById('nama_sekolah_pendidikan').required = ['SMK', 'S1', 'S2', 'S3'].includes(value);
-    }
+  function validateStep(step) {
+     if (step === 1) {
+       const requiredIds = ['nama', 'nik', 'email', 'tempat_lahir', 'tanggal_lahir', 'jenis_kelamin', 'no_wa', 'status_perkawinan', 'alamat'];
+       for (const id of requiredIds) {
+         const el = document.getElementById(id);
+         if (el && !el.value) {
+           el.reportValidity();
+           return false;
+         }
+       }
+       if (!document.getElementById('link_ktp').value && !document.getElementById('ktp').files[0]) {
+         Swal.fire('Error', 'Upload KTP wajib diisi.', 'error');
+         return false;
+       }
+     } else if (step === 2) {
+       const requiredIds = ['status_kepegawaian', 'status_aktif', 'tmt', 'bank', 'nomor_rekening'];
+       for (const id of requiredIds) {
+         const el = document.getElementById(id);
+         if (el && !el.value) {
+           el.reportValidity();
+           return false;
+         }
+       }
+       if (localAssignments.length === 0) {
+         Swal.fire('Error', 'Minimal satu penempatan unit sekolah harus dipilih.', 'error');
+         return false;
+       }
+       if (!document.getElementById('link_kk').value && !document.getElementById('kk').files[0]) {
+         Swal.fire('Error', 'Upload KK wajib diisi.', 'error');
+         return false;
+       }
+     }
+     return true;
+   }
 
-    function initPendidikanToggle() {
-      const pendidikanSelect = document.getElementById('pendidikan_terakhir');
-      pendidikanSelect?.addEventListener('change', function () {
-        updatePendidikanFields(this.value);
-      });
-    }
+  function previewFile(input, previewId, iconId, existingInfoId) {
+     const file = input.files[0];
+     if (file) {
+       const reader = new FileReader();
+       reader.onload = e => {
+         const preview = document.getElementById(previewId);
+         const icon = document.getElementById(iconId);
+         const existingInfo = document.getElementById(existingInfoId);
+         if (preview) {
+           preview.src = e.target.result;
+           preview.classList.remove('hidden');
+         }
+         if (icon) icon.classList.add('hidden');
+         if (existingInfo) existingInfo.classList.add('hidden');
+       };
+       reader.readAsDataURL(file);
+     }
+   }
 
-    let localAssignments = [];
+  function generateReview() {
+     const reviewContent = document.getElementById('review-content');
+     if (!reviewContent) return;
 
-    function displayAssignments(assignments) {
-      if (assignments !== undefined) localAssignments = assignments;
-      const tbody = document.getElementById('assignments-table-body');
-      if (!tbody) return;
-      tbody.innerHTML = localAssignments.length === 0 ? '<tr><td colspan="3" class="text-center py-4 text-gray-500">Belum ada penugasan</td></tr>' :
-        localAssignments.map((a, i) => `<tr><td class="px-4 py-3">${a.tenant_id || '-'}</td><td class="px-4 py-3">${a.jabatan_di_unit || '-'}</td><td class="px-4 py-3 text-center"><button type="button" data-index="${i}" class="text-red-600 remove-assignment-btn"><i class="bi bi-trash"></i></button></td></tr>`).join('');
-    }
+     const fields = [
+       { label: 'Nama Lengkap', id: 'nama' },
+       { label: 'NIY', id: 'nip' },
+       { label: 'NIK', id: 'nik' },
+       { label: 'Email Aktif', id: 'email' },
+       { label: 'Tempat Lahir', id: 'tempat_lahir' },
+       { label: 'Tanggal Lahir', id: 'tanggal_lahir' },
+       { label: 'Jenis Kelamin', id: 'jenis_kelamin', isSelect: true },
+       { label: 'No. WhatsApp', id: 'no_wa' },
+       { label: 'Status Perkawinan', id: 'status_perkawinan', isSelect: true },
+       { label: 'Alamat', id: 'alamat' },
+       { label: 'Status Kepegawaian', id: 'status_kepegawaian', isSelect: true },
+       { label: 'Status Aktif', id: 'status_aktif', isSelect: true },
+       { label: 'TMT', id: 'tmt' },
+       { label: 'Bank', id: 'bank', isSelect: true },
+       { label: 'Nomor Rekening', id: 'nomor_rekening' },
+       { label: 'Pendidikan Terakhir', id: 'pendidikan_terakhir', isSelect: true },
+       { label: 'Nama Sekolah/Universitas', id: 'jurusan' },
+       { label: 'Jurusan', id: 'nama_sekolah_pendidikan' },
+       { label: 'Tahun Lulus', id: 'tahun_angkatan' },
+     ];
 
-    document.addEventListener('DOMContentLoaded', function () {
-      document.getElementById('addAssignmentBtn')?.addEventListener('click', () => {
-        document.getElementById('modal-penempatan').classList.remove('hidden');
-        document.getElementById('modal-penempatan').classList.add('flex');
-      });
-      document.getElementById('photoUploadArea')?.addEventListener('click', () => {
-        document.getElementById('foto').click();
-      });
-      document.getElementById('foto')?.addEventListener('change', e => previewPhoto(e.target));
-      document.getElementById('closeAssignmentBtn')?.addEventListener('click', () => {
-        document.getElementById('modal-penempatan').classList.add('hidden');
-        document.getElementById('modal-penempatan').classList.remove('flex');
-      });
-      document.getElementById('saveAssignmentBtn')?.addEventListener('click', saveAssignment);
-      document.addEventListener('click', e => {
-        if (e.target.closest('.remove-assignment-btn')) {
-          const btn = e.target.closest('.remove-assignment-btn');
-          removeAssignment(parseInt(btn.getAttribute('data-index')));
-        }
-      });
-      initPendidikanToggle();
+     let html = '<div class="grid md:grid-cols-2 gap-4">';
+     fields.forEach(f => {
+       const el = document.getElementById(f.id);
+       if (!el) return;
+       let value = '';
+       if (f.isSelect) {
+         const selectedOption = el.options[el.selectedIndex];
+         value = selectedOption ? selectedOption.textContent : '-';
+       } else {
+         value = el.value || '-';
+       }
+       html += `<div><span class="text-sm text-gray-500">${f.label}</span><p class="font-medium text-gray-900">${value}</p></div>`;
+     });
 
-      document.getElementById('status_perkawinan')?.addEventListener('change', initPerkawinanToggle);
-      document.getElementById('add_pasangan_btn')?.addEventListener('click', () => addPasanganField());
-    });
+     const uploads = [
+       { label: 'KTP', linkId: 'link_ktp' },
+       { label: 'KK', linkId: 'link_kk' },
+       { label: 'Ijazah', linkId: 'link_ijazah' },
+       { label: 'Pas Foto', linkId: 'link_foto' },
+     ];
 
-    function saveAssignment() {
-      const tenantId = document.getElementById('assignmentUnit').value;
-      const jabatan = document.getElementById('assignmentJabatan').value;
-      if (!tenantId || !jabatan) return alert('Pilih Unit Sekolah dan Jabatan');
-      if (localAssignments.some(a => a.tenant_id === tenantId && a.jabatan_di_unit === jabatan)) return alert('Penugasan ini sudah ada');
-      localAssignments.push({ tenant_id: tenantId, jabatan_di_unit: jabatan });
-      displayAssignments();
-      document.getElementById('modal-penempatan').classList.add('hidden');
-      document.getElementById('modal-penempatan').classList.remove('flex');
-    }
+     uploads.forEach(u => {
+       const linkEl = document.getElementById(u.linkId);
+       const hasFile = linkEl && linkEl.value;
+       html += `<div><span class="text-sm text-gray-500">${u.label}</span><p class="font-medium ${hasFile ? 'text-green-600' : 'text-red-600'}">${hasFile ? '<i class="bi bi-check-circle"></i> Sudah upload' : '<i class="bi bi-x-circle"></i> Belum upload'}</p></div>`;
+     });
 
-    function removeAssignment(index) {
-      if (!confirm('Hapus penugasan ini?')) return;
-      localAssignments.splice(index, 1);
-      displayAssignments();
-    }
+     html += '</div>';
 
-    function previewPhoto(input) {
-      const file = input.files[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = e => {
-          document.getElementById('photo-preview').src = e.target.result;
-          document.getElementById('photo-preview').classList.remove('hidden');
-          document.getElementById('photo-icon').classList.add('hidden');
-          document.getElementById('existing-photo-info').classList.add('hidden');
-        };
-        reader.readAsDataURL(file);
-      }
-    }
+     html += '<div class="mt-4 pt-4 border-t border-blue-200">';
+     html += '<span class="text-sm text-gray-500 block mb-2">Penempatan Unit Sekolah</span>';
+     if (localAssignments.length > 0) {
+       html += '<ul class="space-y-1">';
+       localAssignments.forEach(a => {
+         html += `<li class="font-medium text-gray-900"><i class="bi bi-building text-primary mr-2"></i>${a.tenant_id} - ${a.jabatan_di_unit}</li>`;
+       });
+       html += '</ul>';
+     } else {
+       html += '<p class="font-medium text-red-600">Belum ada penempatan</p>';
+     }
+     html += '</div>';
 
-    document.getElementById('profileForm').addEventListener('submit', async function (e) {
-      e.preventDefault();
+     reviewContent.innerHTML = html;
+   }
 
-      if (localAssignments.length === 0) {
-        return Swal.fire('Error', 'Minimal satu penempatan unit sekolah harus dipilih.', 'error');
-      }
+  document.addEventListener('DOMContentLoaded', function () {
+     showStep(1);
 
-      const pendidikan = document.getElementById('pendidikan_terakhir').value;
-      const tahun = document.getElementById('tahun_angkatan').value;
-      if (['SD', 'SMP', 'SMA', 'SMK', 'S1', 'S2', 'S3'].includes(pendidikan) && !tahun) {
-        return Swal.fire('Error', 'Tahun lulus wajib diisi.', 'error');
-      }
+     document.getElementById('addAssignmentBtn')?.addEventListener('click', () => {
+       document.getElementById('modal-penempatan').classList.remove('hidden');
+       document.getElementById('modal-penempatan').classList.add('flex');
+     });
+     document.getElementById('photoUploadArea')?.addEventListener('click', () => {
+       document.getElementById('foto').click();
+     });
+     document.getElementById('ktpUploadArea')?.addEventListener('click', () => {
+       document.getElementById('ktp').click();
+     });
+     document.getElementById('kkUploadArea')?.addEventListener('click', () => {
+       document.getElementById('kk').click();
+     });
+     document.getElementById('ijazahUploadArea')?.addEventListener('click', () => {
+       document.getElementById('ijazah').click();
+     });
+     document.getElementById('foto')?.addEventListener('change', e => previewFile(e.target, 'photo-preview', 'photo-icon', 'existing-photo-info'));
+     document.getElementById('ktp')?.addEventListener('change', e => previewFile(e.target, 'ktp-preview', 'ktp-icon', 'existing-ktp-info'));
+     document.getElementById('kk')?.addEventListener('change', e => previewFile(e.target, 'kk-preview', 'kk-icon', 'existing-kk-info'));
+     document.getElementById('ijazah')?.addEventListener('change', e => previewFile(e.target, 'ijazah-preview', 'ijazah-icon', 'existing-ijazah-info'));
+     document.getElementById('closeAssignmentBtn')?.addEventListener('click', () => {
+       document.getElementById('modal-penempatan').classList.add('hidden');
+       document.getElementById('modal-penempatan').classList.remove('flex');
+     });
+     document.getElementById('saveAssignmentBtn')?.addEventListener('click', saveAssignment);
+     document.addEventListener('click', e => {
+       if (e.target.closest('.remove-assignment-btn')) {
+         const btn = e.target.closest('.remove-assignment-btn');
+         removeAssignment(parseInt(btn.getAttribute('data-index')));
+       }
+     });
+     initPendidikanToggle();
 
-      const bank = document.getElementById('bank').value;
-      const nomor_rekening = document.getElementById('nomor_rekening').value;
-      if (!bank) {
-        return Swal.fire('Error', 'Bank wajib dipilih.', 'error');
-      }
-      if (!nomor_rekening) {
-        return Swal.fire('Error', 'Nomor rekening wajib diisi.', 'error');
-      }
+     document.getElementById('status_perkawinan')?.addEventListener('change', initPerkawinanToggle);
+     document.getElementById('add_pasangan_btn')?.addEventListener('click', () => addPasanganField());
 
-      const link_foto = document.getElementById('link_foto').value;
-      const foto = document.getElementById('foto').files[0];
-      if (!link_foto && !foto) {
-        return Swal.fire('Error', 'Pas foto wajib diupload.', 'error');
-      }
+     document.getElementById('prevBtn')?.addEventListener('click', () => {
+       const currentStep = parseInt(document.querySelector('.step-content.active')?.dataset.step || 1);
+       showStep(currentStep - 1);
+     });
+     document.getElementById('nextBtn')?.addEventListener('click', () => {
+       const currentStep = parseInt(document.querySelector('.step-content.active')?.dataset.step || 1);
+       if (validateStep(currentStep)) {
+         showStep(currentStep + 1);
+       }
+     });
+   });
 
-      const submitBtn = e.target.querySelector('button[type="submit"]');
-      submitBtn.disabled = true;
-      submitBtn.innerHTML = '<div class="inline-block animate-spin rounded-full h-5 w-5 border-4 border-white border-t-transparent mr-2"></div>Menyimpan...';
+  function saveAssignment() {
+     const tenantId = document.getElementById('assignmentUnit').value;
+     const jabatan = document.getElementById('assignmentJabatan').value;
+     if (!tenantId || !jabatan) return alert('Pilih Unit Sekolah dan Jabatan');
+     if (localAssignments.some(a => a.tenant_id === tenantId && a.jabatan_di_unit === jabatan)) return alert('Penugasan ini sudah ada');
+     localAssignments.push({ tenant_id: tenantId, jabatan_di_unit: jabatan });
+     displayAssignments();
+     document.getElementById('modal-penempatan').classList.add('hidden');
+     document.getElementById('modal-penempatan').classList.remove('flex');
+   }
 
-try {
-         const formData = new FormData(e.target);
-         formData.append('assignments_json', JSON.stringify(localAssignments));
+  function removeAssignment(index) {
+     if (!confirm('Hapus penugasan ini?')) return;
+     localAssignments.splice(index, 1);
+     displayAssignments();
+   }
 
-// Collect pasangan data
-          const pasanganList = [];
-          const statusPerkawinan = document.getElementById('status_perkawinan').value;
-          const jk = document.getElementById('jenis_kelamin').value;
-          let defaultTipe = null;
-          if (statusPerkawinan === 'Menikah') {
-            defaultTipe = jk === 'P' ? 'suami' : 'istri';
-          } else if (statusPerkawinan === 'Cerai Hidup') {
-            defaultTipe = 'mantan';
-          }
-          document.querySelectorAll('#pasangan_list > div').forEach(div => {
-            const nik = div.querySelector('.pasangan-nik')?.value.trim() || '';
-            const nama = div.querySelector('.pasangan-nama')?.value.trim() || '';
-            const tipe = div.dataset.tipe || defaultTipe;
-            if (nik) pasanganList.push({ nik, nama, tipe });
-          });
-          formData.append('data_keluarga', JSON.stringify(pasanganList));
+  document.getElementById('profileForm').addEventListener('submit', async function (e) {
+     e.preventDefault();
 
-         // Auto-detect employment status based on assignments
+     if (localAssignments.length === 0) {
+       return Swal.fire('Error', 'Minimal satu penempatan unit sekolah harus dipilih.', 'error');
+     }
+
+     const pendidikan = document.getElementById('pendidikan_terakhir').value;
+     const tahun = document.getElementById('tahun_angkatan').value;
+     if (['SD', 'SMP', 'SMA', 'SMK', 'S1', 'S2', 'S3'].includes(pendidikan) && !tahun) {
+       return Swal.fire('Error', 'Tahun lulus wajib diisi.', 'error');
+     }
+
+     const bank = document.getElementById('bank').value;
+     const nomor_rekening = document.getElementById('nomor_rekening').value;
+     if (!bank) {
+       return Swal.fire('Error', 'Bank wajib dipilih.', 'error');
+     }
+     if (!nomor_rekening) {
+       return Swal.fire('Error', 'Nomor rekening wajib diisi.', 'error');
+     }
+
+     const link_foto = document.getElementById('link_foto').value;
+     const foto = document.getElementById('foto').files[0];
+     if (!link_foto && !foto) {
+       return Swal.fire('Error', 'Pas foto wajib diupload.', 'error');
+     }
+
+     const link_ktp = document.getElementById('link_ktp').value;
+     const ktp = document.getElementById('ktp').files[0];
+     if (!link_ktp && !ktp) {
+       return Swal.fire('Error', 'Upload KTP wajib diisi.', 'error');
+     }
+
+     const link_kk = document.getElementById('link_kk').value;
+     const kk = document.getElementById('kk').files[0];
+     if (!link_kk && !kk) {
+       return Swal.fire('Error', 'Upload KK wajib diisi.', 'error');
+     }
+
+     const link_ijazah = document.getElementById('link_ijazah').value;
+     const ijazah = document.getElementById('ijazah').files[0];
+     if (!link_ijazah && !ijazah) {
+       return Swal.fire('Error', 'Upload Ijazah wajib diisi.', 'error');
+     }
+
+     const submitBtn = e.target.querySelector('button[type="submit"]');
+     submitBtn.disabled = true;
+     submitBtn.innerHTML = '<div class="inline-block animate-spin rounded-full h-5 w-5 border-4 border-white border-t-transparent mr-2"></div>Menyimpan...';
+
+  try {
+          const formData = new FormData(e.target);
+          formData.append('assignments_json', JSON.stringify(localAssignments));
+
+ // Collect pasangan data
+           const pasanganList = [];
+           const statusPerkawinan = document.getElementById('status_perkawinan').value;
+           const jk = document.getElementById('jenis_kelamin').value;
+           let defaultTipe = null;
+           if (statusPerkawinan === 'Menikah') {
+             defaultTipe = jk === 'P' ? 'suami' : 'istri';
+           } else if (statusPerkawinan === 'Cerai Hidup') {
+             defaultTipe = 'mantan';
+           }
+           document.querySelectorAll('#pasangan_list > div').forEach(div => {
+             const nik = div.querySelector('.pasangan-nik')?.value.trim() || '';
+             const nama = div.querySelector('.pasangan-nama')?.value.trim() || '';
+             const tipe = div.dataset.tipe || defaultTipe;
+             if (nik) pasanganList.push({ nik, nama, tipe });
+           });
+           formData.append('data_keluarga', JSON.stringify(pasanganList));
+
+          // Auto-detect employment status based on assignments
         const assignments = localAssignments.map(a => a.jabatan_di_unit);
         const hasGuruRole = assignments.some(j => ['Guru Mapel', 'Walikelas', 'Guru'].includes(j));
         const hasPegawaiRole = assignments.some(j => ['Admin', 'TU', 'Operator', 'Pimpinan', 'Kepala Sekolah', 'Bendahara'].includes(j));

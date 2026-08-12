@@ -17,6 +17,7 @@
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
   <style>
     body {
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -231,6 +232,11 @@
           class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-white/50 hover:text-gray-900 text-sm font-medium transition-all"
           data-tab="teachers">
           <i class="fas fa-users w-5"></i><span>Data Guru</span>
+        </button>
+        <button
+          class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-white/50 hover:text-gray-900 text-sm font-medium transition-all"
+          data-tab="pending-registrations">
+          <i class="fas fa-user-clock w-5"></i><span>Pendaftaran Baru</span>
         </button>
         <button
           class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-white/50 hover:text-gray-900 text-sm font-medium transition-all"
@@ -489,6 +495,71 @@
                 class="px-3 py-1.5 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled>Selanjutnya<i class="fas fa-chevron-right ml-1"></i></button>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pending Registrations Tab -->
+      <div id="pendingRegistrationsTab" class="tab-content hidden">
+        <div class="main-card p-6">
+          <div class="flex justify-between items-center mb-6">
+            <h3 class="text-lg font-semibold text-gray-900">Pendaftaran Guru Baru</h3>
+            <button onclick="loadPendingRegistrations()" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm">
+              <i class="fas fa-sync-alt mr-2"></i>Refresh
+            </button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full modern-table">
+              <thead class="border-b border-gray-200">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Nama</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">NIK</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Email</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">No WA</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Sekolah</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Jabatan</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Tanggal Daftar</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="pendingRegistrationsTable" class="divide-y divide-gray-100">
+                <tr><td colspan="8" class="px-4 py-8 text-center text-gray-500">Memuat data...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pending Assignment Modal -->
+      <div id="pendingAssignmentModal" style="display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.6); backdrop-filter: blur(4px); z-index: 1001; align-items: center; justify-content: center; padding: 1rem;">
+        <div style="max-width: 420px; width: 100%; background: #fff; border-radius: 1rem; padding: 1.5rem; box-sizing: border-box; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
+            <h3 style="margin: 0; font-size: 1.1rem; font-weight: 700; color: #0f172a;">Ubah Penempatan Guru</h3>
+            <button onclick="closePendingAssignmentModal()" style="background: none; border: none; color: #64748b; cursor: pointer; font-size: 1.25rem;">&times;</button>
+          </div>
+          <input type="hidden" id="pendingTeacherId">
+          <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+            <div>
+              <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #374151; margin-bottom: 0.25rem;">Sekolah (Tenant)</label>
+              <select id="pendingTenantId" style="width: 100%; padding: 0.65rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem; background: #fff;">
+                <option value="">Pilih Sekolah</option>
+              </select>
+            </div>
+            <div>
+              <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #374151; margin-bottom: 0.25rem;">Jabatan</label>
+              <select id="pendingJabatan" style="width: 100%; padding: 0.65rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem; background: #fff;">
+                <option value="Guru">Guru</option>
+                <option value="Wali Kelas">Wali Kelas</option>
+                <option value="TU">TU</option>
+                <option value="Tata Usaha">Tata Usaha</option>
+                <option value="Operator">Operator</option>
+                <option value="Kepala Sekolah">Kepala Sekolah</option>
+              </select>
+            </div>
+          </div>
+          <div style="display: flex; gap: 0.5rem; margin-top: 1.25rem; justify-content: flex-end;">
+            <button type="button" onclick="closePendingAssignmentModal()" style="padding: 0.65rem 1.25rem; border-radius: 0.5rem; border: 1px solid #cbd5e1; background: #fff; color: #475569; font-weight: 600; cursor: pointer;">Batal</button>
+            <button type="button" onclick="savePendingAssignment()" style="padding: 0.65rem 1.25rem; border-radius: 0.5rem; border: none; background: #2563eb; color: white; font-weight: 700; cursor: pointer;">Simpan</button>
           </div>
         </div>
       </div>
@@ -1492,20 +1563,40 @@ if (d.success) {
           showAssignmentModal(teacherId);
         }
 
-        async function showAssignmentModal(editTeacherId) {
+         async function showAssignmentModal(editTeacherId) {
           const modal = document.getElementById('assignmentModal');
           const form = document.getElementById('assignmentForm');
           const title = document.getElementById('assignmentModalTitle');
           const teacherSelect = document.getElementById('assignmentTeacherSelect');
           const teacherIdInput = document.getElementById('assignmentTeacherId');
+          const tenantSelect = document.getElementById('assignmentTenantId');
           const positionSelect = document.getElementById('assignmentPosition');
           const classSection = document.getElementById('assignmentClassSection');
           const classSelect = document.getElementById('assignmentClassId');
 
           form.reset();
           teacherIdInput.value = '';
+          tenantSelect.innerHTML = '<option value="">Pilih Sekolah</option>';
           classSelect.innerHTML = '<option value="">Pilih Kelas</option>';
           classSection.classList.add('hidden');
+
+          // Load tenants for dropdown
+          try {
+            const r = await fetch(apiUrl('/admin/tenants'), { headers: { 'Authorization': `Bearer ${authToken}` } });
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            const d = await r.json();
+            if (d.success) {
+              tenantSelect.innerHTML = '<option value="">Pilih Sekolah</option>';
+              (d.data || []).forEach(t => {
+                const opt = document.createElement('option');
+                opt.value = t.tenant_id;
+                opt.textContent = t.nama_sekolah || t.tenant_id;
+                tenantSelect.appendChild(opt);
+              });
+            }
+          } catch (e) {
+            console.error('[LOAD TENANTS FOR ASSIGNMENT]', e);
+          }
 
           // Load teachers for dropdown
           teacherSelect.innerHTML = '<option value="">Memuat...</option>';
@@ -1543,11 +1634,13 @@ if (d.success) {
               if (d.success) {
                 const teacher = (d.data || []).find(t => t.id == editTeacherId);
                 if (teacher) {
+                  if (tenantSelect.querySelector(`option[value="${teacher.tenant_id}"]`)) {
+                    tenantSelect.value = teacher.tenant_id;
+                  }
                   positionSelect.value = teacher.jabatan_di_unit || 'Guru';
                   if (teacher.jabatan_di_unit === 'Wali Kelas') {
                     await loadClassesForAssignment();
                     if (teacher.wali_kelas) {
-                      // Try to select by text
                       const classOpts = Array.from(classSelect.options);
                       const classFound = classOpts.find(o => o.textContent === teacher.wali_kelas);
                       if (classFound) classFound.selected = true;
@@ -1567,7 +1660,7 @@ if (d.success) {
           // Show/hide class dropdown based on position
           const showClass = positionSelect.value === 'Wali Kelas';
           classSection.classList.toggle('hidden', !showClass);
-          if (showClass && !classSelect.querySelector('option[value=""]:not([value=""])')) {
+          if (showClass && classSelect.options.length <= 1) {
             await loadClassesForAssignment();
           }
 
@@ -4151,6 +4244,14 @@ console.log('[ATTENDANCE] Fetching:', url);
                   </select>
                 </div>
                 <div class="mb-4">
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Sekolah (Tenant)</label>
+                  <select id="assignmentTenantId"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required>
+                    <option value="">Pilih Sekolah</option>
+                  </select>
+                </div>
+                <div class="mb-4">
                   <label class="block text-sm font-medium text-gray-700 mb-1">Jabatan</label>
                   <select id="assignmentPosition"
                     class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -4332,13 +4433,14 @@ console.log('[ATTENDANCE] Fetching:', url);
             assignmentForm.addEventListener('submit', async function (e) {
               e.preventDefault();
               var teacherId = document.getElementById('assignmentTeacherId').value;
+              var tenantId = document.getElementById('assignmentTenantId').value;
               var position = document.getElementById('assignmentPosition').value;
               var classId = document.getElementById('assignmentClassId').value || null;
               try {
                 var r = await fetch(apiUrl('/admin/teachers/' + teacherId + '/assignment'), {
                   method: 'PUT',
                   headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
-                  body: JSON.stringify({ jabatan_di_unit: position, class_id: classId })
+                  body: JSON.stringify({ tenant_id: tenantId, jabatan_di_unit: position, class_id: classId })
                 });
                 if (checkAuth401403(r)) return;
                 var d = await r.json();
@@ -4564,6 +4666,10 @@ console.log('[ATTENDANCE] Fetching:', url);
               <div class="text-center py-8 text-gray-500"><i class="fas fa-spinner fa-spin text-xl mb-2"></i>
                 <p>Memuat data...</p>
               </div>
+            </div>
+          </div>
+        </div>
+       </div>
       </div>
 
       <!-- Manual Attendance Modal -->
@@ -4576,14 +4682,39 @@ console.log('[ATTENDANCE] Fetching:', url);
             </div>
             <button onclick="closeManualAttendanceModal()" style="background: none; border: none; color: #64748b; cursor: pointer; font-size: 1.25rem;">&times;</button>
           </div>
-          <p style="margin: 0 0 1rem 0; font-size: 0.85rem; color: #64748b;">Isi absensi untuk guru yang tidak bisa absen sendiri. Status akan ditentukan otomatis dari aturan absensi.</p>
+          <p style="margin: 0 0 1rem 0; font-size: 0.85rem; color: #64748b;">Ada 2 cara absen manual: scan QR guru, atau isi form manual.</p>
 
-          <div style="display: flex; gap: 0.5rem; margin-bottom: 0.75rem; padding: 0.75rem; background: #f8fafc; border-radius: 0.5rem; border: 1px solid #e2e8f0;">
-            <input type="text" id="qrInput" placeholder="Tempel teks QR di sini..." style="flex: 1; padding: 0.5rem; border: 1px solid #cbd5e1; border-radius: 0.375rem; font-size: 0.85rem;">
-            <button type="button" onclick="decodeQR()" style="padding: 0.5rem 0.75rem; background: #2563eb; color: white; border: none; border-radius: 0.375rem; font-weight: 600; cursor: pointer; font-size: 0.85rem;">Baca QR</button>
+          <div style="display: flex; gap: 0.5rem; margin-bottom: 0.75rem;">
+            <button type="button" id="btnModeQR" onclick="setManualMode('qr')" style="flex: 1; padding: 0.6rem; background: #2563eb; color: white; border: none; border-radius: 0.5rem; font-weight: 700; cursor: pointer; font-size: 0.9rem;">Scan QR</button>
+            <button type="button" id="btnModeForm" onclick="setManualMode('form')" style="flex: 1; padding: 0.6rem; background: #e2e8f0; color: #334155; border: none; border-radius: 0.5rem; font-weight: 700; cursor: pointer; font-size: 0.9rem;">Isi Manual</button>
           </div>
 
-          <form id="manualAttendanceForm" onsubmit="submitManualAttendance(event)">
+          <div id="manualModeQR" style="display: block;">
+            <div style="display: flex; gap: 0.5rem; margin-bottom: 0.75rem; padding: 0.75rem; background: #f8fafc; border-radius: 0.5rem; border: 1px solid #e2e8f0;">
+              <label title="Upload Gambar QR" style="flex: 1; padding: 0.65rem; background: #7c3aed; color: white; border-radius: 0.375rem; font-weight: 600; cursor: pointer; font-size: 0.85rem; display: inline-flex; align-items: center; justify-content: center;">
+                <i class="fas fa-image" style="margin-right:0.35rem;"></i> Upload QR
+                <input type="file" id="qrFileInput" accept="image/*" style="display: none;" onchange="decodeQRFromFile(event)">
+              </label>
+              <button type="button" onclick="startQRScan()" title="Scan QR dari Kamera" style="flex: 1; padding: 0.65rem; background: #059669; color: white; border: none; border-radius: 0.375rem; font-weight: 600; cursor: pointer; font-size: 0.85rem; display: inline-flex; align-items: center; justify-content: center;">
+                <i class="fas fa-camera" style="margin-right:0.35rem;"></i> Scan Via Kamera
+              </button>
+            </div>
+
+            <div id="qrScannerModal" style="display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.8); z-index: 2000; align-items: center; justify-content: center; padding: 1rem;">
+              <div style="max-width: 500px; width: 100%; background: #fff; border-radius: 1rem; padding: 1.5rem; box-sizing: border-box; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.2);">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
+                  <h3 style="margin: 0; font-size: 1.1rem; font-weight: 700; color: #0f172a;">Scan QR Code</h3>
+                  <button onclick="stopQRScan()" style="background: none; border: none; color: #64748b; cursor: pointer; font-size: 1.25rem;">&times;</button>
+                </div>
+                <video id="qrVideo" autoplay playsinline muted style="width: 100%; border-radius: 0.5rem; background: #000;"></video>
+                <canvas id="qrCanvas" style="display: none;"></canvas>
+                <p style="margin-top: 0.5rem; font-size: 0.8rem; color: #64748b; text-align: center;">Arahkan kamera ke QR code guru</p>
+              </div>
+            </div>
+          </div>
+
+          <div id="manualModeForm" style="display: none;">
+            <form id="manualAttendanceForm" onsubmit="submitManualAttendance(event)">
             <div style="display: flex; flex-direction: column; gap: 0.75rem;">
               <div>
                 <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #374151; margin-bottom: 0.25rem;">Pilih Guru</label>
