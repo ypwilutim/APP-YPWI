@@ -1266,11 +1266,14 @@ router.put('/admin/teachers/:id/assignment', authenticateOperator, async (req, r
     }
 
     // Update or create assignment
-    const existingAssignment = await db.query('SELECT id FROM teacher_assignments WHERE teacher_id = ?', [id]);
+    const existingAssignment = await db.query(
+      'SELECT id FROM teacher_assignments WHERE teacher_id = ? AND tenant_id = ? AND jabatan_di_unit = ?',
+      [id, tenant_id, jabatan_di_unit || 'Guru']
+    );
     if (existingAssignment.length > 0) {
       await db.query(
-        'UPDATE teacher_assignments SET tenant_id = ?, jabatan_di_unit = ?, class_id = ? WHERE teacher_id = ?',
-        [tenant_id, jabatan_di_unit || 'Guru', class_id || null, id]
+        'UPDATE teacher_assignments SET class_id = ? WHERE id = ?',
+        [class_id || null, existingAssignment[0].id]
       );
     } else {
       await db.query(
@@ -4288,6 +4291,32 @@ router.post('/admin/restore', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Restore error:', error);
     res.status(500).json({ success: false, message: 'Error restoring backup' });
+  }
+});
+
+// POST /api/public/teachers/:teacherId/upload-document - Upload a single document directly to DB (no auth)
+const docTypeMap = {
+  foto: 'link_foto',
+  ktp: 'link_ktp',
+  kk: 'link_kk',
+  ijazah: 'link_ijazah'
+};
+router.post('/public/teachers/:teacherId/upload-document', berkasUpload.single('file'), async (req, res) => {
+  try {
+    const teacherId = req.params.teacherId;
+    const docType = req.body.doc_type;
+    if (!docType || !docTypeMap[docType]) {
+      return res.status(400).json({ success: false, message: 'doc_type tidak valid (foto/ktp/kk/ijazah)' });
+    }
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'Tidak ada file yang diupload.' });
+    }
+    const fileUrl = `/uploads/${req.file.filename}`;
+    await db.query(`UPDATE teachers SET ${docTypeMap[docType]} = ? WHERE id = ?`, [fileUrl, teacherId]);
+    res.json({ success: true, url: fileUrl, field: docTypeMap[docType], message: 'Dokumen berhasil diupload' });
+  } catch (error) {
+    console.error('Upload document error:', error);
+    res.status(500).json({ success: false, message: 'Gagal mengupload dokumen' });
   }
 });
 

@@ -235,6 +235,7 @@ const notificationsRoutes = require('./src/routes/notifications');
 const skGuruRoutes = require('./src/routes/sk-guru');
 const payrollRoutes = require('./src/routes/payroll');
 const wahaRoutes = require('./src/routes/waha');
+const waliKelasRoutes = require('./src/routes/wali-kelas');
 require('./src/notifications');
 
 // Start Baileys (WhatsApp Web) as the primary sender when WhatsApp is enabled
@@ -256,6 +257,7 @@ app.use('/api', skGuruRoutes);
 app.use('/api', payrollRoutes);
 app.use('/api', require('./src/routes/paktaIntegritas'));
 app.use('/api', wahaRoutes);
+app.use('/api', waliKelasRoutes);
 app.use('/api', require('./src/routes/treasurer'));
 app.use('/api', require('./src/routes/bsi-import'));
 app.use('/api', require('./src/routes/xendit'));

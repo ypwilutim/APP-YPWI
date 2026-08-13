@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard Wali Kelas - YPWI Lutim</title>
+  <link rel="icon" href="assets/images/YPWI LOGO HITAM.png" type="image/png">
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <style>
+    body { background: #f1f5f9; font-family: 'Segoe UI', Roboto, sans-serif; }
+    .sidebar { width: 260px; background: #0f172a; color: #fff; min-height: 100vh; position: fixed; left: 0; top: 0; z-index: 50; }
+    .main-content { margin-left: 260px; padding: 1.5rem; }
+    .nav-item { display: flex; align-items: center; gap: 0.75rem; width: 100%; padding: 0.75rem 1.25rem; color: #94a3b8; text-decoration: none; transition: all 0.2s; border-left: 3px solid transparent; }
+    .nav-item:hover, .nav-item.active { background: #1e293b; color: #fff; border-left-color: #2563eb; }
+    .card { background: #fff; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 1.5rem; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    .btn { padding: 0.6rem 1.2rem; border-radius: 0.5rem; font-weight: 600; border: none; cursor: pointer; transition: all 0.2s; }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-primary:hover { background: #1d4ed8; }
+    .btn-success { background: #10b981; color: #fff; }
+    .btn-success:hover { background: #059669; }
+    .btn-danger { background: #ef4444; color: #fff; }
+    .btn-danger:hover { background: #dc2626; }
+    .btn-warning { background: #f59e0b; color: #fff; }
+    .btn-warning:hover { background: #d97706; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid #e2e8f0; }
+    th { background: #f8fafc; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; color: #64748b; }
+    .badge { padding: 0.25rem 0.75rem; border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
+    .badge-success { background: #dcfce7; color: #15803d; }
+    .badge-warning { background: #fef3c7; color: #92400e; }
+    .badge-danger { background: #fee2e2; color: #dc2626; }
+    .badge-info { background: #dbeafe; color: #1e40af; }
+    .form-select, .form-input { width: 100%; padding: 0.5rem 0.75rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.9rem; }
+    .loading-overlay { position: fixed; inset: 0; background: rgba(255,255,255,0.8); display: flex; align-items: center; justify-content: center; z-index: 100; }
+    @media (max-width: 768px) {
+      .sidebar { width: 100%; position: relative; }
+      .main-content { margin-left: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="sidebar">
+    <div class="p-4 border-b border-gray-700">
+      <h1 class="text-xl font-bold">Wali Kelas</h1>
+      <p class="text-xs text-gray-400">YPWI Lutim</p>
+    </div>
+    <nav class="py-4">
+      <a href="#" class="nav-item active" data-tab="dashboard"><i class="bi bi-speedometer2"></i> Dashboard</a>
+      <a href="#" class="nav-item" data-tab="siswa"><i class="bi bi-people"></i> Daftar Siswa</a>
+      <a href="#" class="nav-item" data-tab="absensi"><i class="bi bi-check-circle"></i> Absensi Kelas</a>
+      <a href="#" class="nav-item" data-tab="rekap"><i class="bi bi-calendar-check"></i> Rekap Absensi</a>
+      <a href="#" class="nav-item" data-tab="izin"><i class="bi bi-file-medical"></i> Pengajuan Izin</a>
+      <a href="#" class="nav-item" data-tab="spp"><i class="bi bi-currency-dollar"></i> Informasi SPP</a>
+      <a href="#" class="nav-item" data-tab="edit-siswa"><i class="bi bi-pencil-square"></i> Edit Data Siswa</a>
+      <a href="#" class="nav-item" data-tab="jadwal"><i class="bi bi-calendar-week"></i> Jadwal Pelajaran</a>
+      <div class="border-t border-gray-700 my-2"></div>
+      <a href="dashboard.html" class="nav-item"><i class="bi bi-arrow-left"></i> Kembali ke Dashboard</a>
+      <a href="#" onclick="logout()" class="nav-item"><i class="bi bi-box-arrow-right"></i> Keluar</a>
+    </nav>
+  </div>
+
+  <div class="main-content">
+    <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+      <div>
+        <h2 class="text-2xl font-bold text-gray-900">Dashboard Wali Kelas</h2>
+        <p class="text-sm text-gray-500">Kelola kelas dan data siswa Anda</p>
+      </div>
+      <div class="flex items-center gap-3">
+        <select id="classSelector" class="form-select" style="width: auto;">
+          <option value="">Pilih Kelas</option>
+        </select>
+        <button onclick="refreshCurrentTab()" class="btn btn-primary"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+      </div>
+    </div>
+
+    <!-- Dashboard Tab -->
+    <div id="dashboard" class="tab-content active">
+      <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+        <div class="card text-center">
+          <p class="text-xs text-gray-500 uppercase tracking-wide">Total Siswa</p>
+          <p class="text-2xl font-bold text-gray-900 mt-1" id="dashTotalSiswa">-</p>
+        </div>
+        <div class="card text-center">
+          <p class="text-xs text-gray-500 uppercase tracking-wide">Hadir Hari Ini</p>
+          <p class="text-2xl font-bold text-green-600 mt-1" id="dashHadir">-</p>
+        </div>
+        <div class="card text-center">
+          <p class="text-xs text-gray-500 uppercase tracking-wide">Belum Hadir</p>
+          <p class="text-2xl font-bold text-red-600 mt-1" id="dashBelumHadir">-</p>
+        </div>
+        <div class="card text-center">
+          <p class="text-xs text-gray-500 uppercase tracking-wide">Izin Pending</p>
+          <p class="text-2xl font-bold text-amber-600 mt-1" id="dashIzinPending">-</p>
+        </div>
+        <div class="card text-center">
+          <p class="text-xs text-gray-500 uppercase tracking-wide">Tunggakan SPP</p>
+          <p class="text-2xl font-bold text-red-600 mt-1" id="dashSppTunggakan">-</p>
+        </div>
+        <div class="card text-center">
+          <p class="text-xs text-gray-500 uppercase tracking-wide">Kehadiran Kelas</p>
+          <p class="text-2xl font-bold text-blue-600 mt-1" id="dashKehadiranKelas">-</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="card">
+          <h3 class="text-lg font-semibold mb-4">Kehadiran Terbaru</h3>
+          <div id="recentAttendance" class="text-sm text-gray-500">Pilih kelas untuk melihat data</div>
+        </div>
+        <div class="card">
+          <h3 class="text-lg font-semibold mb-4">Ringkasan Izin Bulan Ini</h3>
+          <div id="izinSummary" class="text-sm text-gray-500">Pilih kelas untuk melihat data</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Daftar Siswa Tab -->
+    <div id="siswa" class="tab-content">
+      <div class="card">
+        <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+          <h3 class="text-lg font-semibold">Daftar Siswa</h3>
+          <input type="text" id="siswaSearch" placeholder="Cari nama/NISN..." class="form-input" style="width: auto;" onkeyup="loadSiswa()">
+        </div>
+        <div class="overflow-x-auto">
+          <table>
+            <thead><tr><th>Nama</th><th>NISN</th><th>JK</th><th>Nama Orang Tua</th><th>No WA</th><th>Iuran/Bln</th></tr></thead>
+            <tbody id="siswaTable"><tr><td colspan="6" class="text-center text-gray-500">Pilih kelas terlebih dahulu</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Absensi Kelas Tab -->
+    <div id="absensi" class="tab-content">
+      <div class="card">
+        <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+          <h3 class="text-lg font-semibold">Absensi Kelas</h3>
+          <div class="flex items-center gap-2">
+            <input type="date" id="absensiDate" class="form-input" style="width: auto;" onchange="loadAbsensi()">
+            <button onclick="saveAbsensi()" class="btn btn-success"><i class="bi bi-save"></i> Simpan</button>
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table>
+            <thead><tr><th>Nama Siswa</th><th>NISN</th><th>Masuk</th><th>Izin</th><th>Sakit</th><th>Alpha</th></tr></thead>
+            <tbody id="absensiTable"><tr><td colspan="6" class="text-center text-gray-500">Pilih kelas terlebih dahulu</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rekap Absensi Tab -->
+    <div id="rekap" class="tab-content">
+      <div class="card">
+        <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+          <h3 class="text-lg font-semibold">Rekap Absensi Bulanan</h3>
+          <div class="flex items-center gap-2">
+            <select id="rekapMonth" class="form-select" style="width: auto;">
+              <option value="1">Januari</option><option value="2">Februari</option><option value="3">Maret</option>
+              <option value="4">April</option><option value="5">Mei</option><option value="6">Juni</option>
+              <option value="7" selected>Juli</option><option value="8">Agustus</option><option value="9">September</option>
+              <option value="10">Oktober</option><option value="11">November</option><option value="12">Desember</option>
+            </select>
+            <select id="rekapYear" class="form-select" style="width: auto;"></select>
+            <button onclick="loadRekap()" class="btn btn-primary"><i class="bi bi-search"></i> Tampilkan</button>
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table>
+            <thead><tr><th>Nama</th><th>NISN</th><th>Hadir</th><th>Izin</th><th>Sakit</th><th>Alpha</th></tr></thead>
+            <tbody id="rekapTable"><tr><td colspan="6" class="text-center text-gray-500">Pilih kelas terlebih dahulu</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pengajuan Izin Tab -->
+    <div id="izin" class="tab-content">
+      <div class="card">
+        <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+          <h3 class="text-lg font-semibold">Pengajuan Izin Guru</h3>
+          <select id="izinFilter" class="form-select" style="width: auto;" onchange="loadIzin()">
+            <option value="pending">Pending</option>
+            <option value="approved">Disetujui</option>
+            <option value="rejected">Ditolak</option>
+          </select>
+        </div>
+        <div class="overflow-x-auto">
+          <table>
+            <thead><tr><th>Nama</th><th>NIP</th><th>Sekolah</th><th>Jenis</th><th>Tanggal</th><th>Keterangan</th><th>Status</th><th>Aksi</th></tr></thead>
+            <tbody id="izinTable"><tr><td colspan="8" class="text-center text-gray-500">Pilih kelas terlebih dahulu</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Informasi SPP Tab -->
+    <div id="spp" class="tab-content">
+      <div class="card">
+        <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+          <h3 class="text-lg font-semibold">Informasi SPP Siswa</h3>
+          <input type="text" id="sppSearch" placeholder="Cari nama/NISN..." class="form-input" style="width: auto;" onkeyup="loadSpp()">
+        </div>
+        <div class="overflow-x-auto">
+          <table>
+            <thead><tr><th>Nama</th><th>NISN</th><th>Sekolah</th><th>Iuran/Bln</th><th>Tunggakan</th><th>Status</th></tr></thead>
+            <tbody id="sppTable"><tr><td colspan="6" class="text-center text-gray-500">Pilih kelas terlebih dahulu</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit Data Siswa Tab -->
+    <div id="edit-siswa" class="tab-content">
+      <div class="card">
+        <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+          <h3 class="text-lg font-semibold">Edit Data Siswa</h3>
+          <select id="editSiswaSelector" class="form-select" style="width: auto;" onchange="loadEditSiswa()">
+            <option value="">Pilih Siswa</option>
+          </select>
+        </div>
+        <div id="editSiswaForm" class="hidden">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div><label class="block text-sm font-medium text-gray-700 mb-1">Nama Siswa</label><input type="text" id="editNama" class="form-input"></div>
+            <div><label class="block text-sm font-medium text-gray-700 mb-1">NISN</label><input type="text" id="editNisn" class="form-input"></div>
+            <div><label class="block text-sm font-medium text-gray-700 mb-1">Jenis Kelamin</label><select id="editJk" class="form-select"><option value="L">Laki-laki</option><option value="P">Perempuan</option></select></div>
+            <div><label class="block text-sm font-medium text-gray-700 mb-1">Iuran Bulanan</label><input type="number" id="editIuran" class="form-input" step="1000"></div>
+            <div><label class="block text-sm font-medium text-gray-700 mb-1">Nama Orang Tua</label><input type="text" id="editOrtu" class="form-input"></div>
+            <div><label class="block text-sm font-medium text-gray-700 mb-1">No WA Orang Tua</label><input type="text" id="editWaOrtu" class="form-input"></div>
+          </div>
+          <div class="mt-4">
+            <button onclick="saveEditSiswa()" class="btn btn-primary"><i class="bi bi-save"></i> Simpan Perubahan</button>
+          </div>
+        </div>
+        <div id="editSiswaPlaceholder" class="text-sm text-gray-500">Pilih siswa untuk mengedit data</div>
+      </div>
+    </div>
+
+    <!-- Jadwal Pelajaran Tab -->
+    <div id="jadwal" class="tab-content">
+      <div class="card">
+        <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+          <h3 class="text-lg font-semibold">Jadwal Pelajaran</h3>
+          <button onclick="openJadwalModal()" class="btn btn-primary"><i class="bi bi-plus-circle"></i> Tambah Jadwal</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table>
+            <thead><tr><th>Hari</th><th>Periode</th><th>Jam Mulai</th><th>Jam Selesai</th><th>Mata Pelajaran</th><th>Guru</th><th>Ruangan</th><th>Aksi</th></tr></thead>
+            <tbody id="jadwalTable"><tr><td colspan="8" class="text-center text-gray-500">Pilih kelas terlebih dahulu</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Jadwal Modal -->
+  <div id="jadwalModal" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] flex flex-col overflow-hidden">
+      <div class="flex justify-between items-center p-4 border-b sticky top-0 bg-white z-10">
+        <h4 class="font-semibold text-lg" id="jadwalModalTitle">Tambah Jadwal</h4>
+        <button onclick="closeJadwalModal()" class="text-gray-500 hover:text-gray-700 text-2xl leading-none">&times;</button>
+      </div>
+      <div class="p-4 overflow-auto flex-1">
+        <form id="jadwalForm">
+          <input type="hidden" id="jadwalId">
+          <div class="grid grid-cols-1 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Hari</label>
+              <select id="jadwalHari" class="form-select" required>
+                <option value="">Pilih Hari</option>
+                <option value="Senin">Senin</option>
+                <option value="Selasa">Selasa</option>
+                <option value="Rabu">Rabu</option>
+                <option value="Kamis">Kamis</option>
+                <option value="Jumat">Jumat</option>
+                <option value="Sabtu">Sabtu</option>
+                <option value="Minggu">Minggu</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Periode Ke</label>
+              <input type="number" id="jadwalPeriode" class="form-input" min="1" required>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Jam Mulai</label>
+                <input type="time" id="jadwalMulai" class="form-input" required>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Jam Selesai</label>
+                <input type="time" id="jadwalSelesai" class="form-input" required>
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Mata Pelajaran</label>
+              <input type="text" id="jadwalMapel" class="form-input" placeholder="Contoh: Matematika">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Guru</label>
+              <input type="text" id="jadwalGuru" class="form-input" placeholder="Nama guru pengajar">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Ruangan</label>
+              <input type="text" id="jadwalRuangan" class="form-input" placeholder="Contoh: R. 101">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Keterangan</label>
+              <textarea id="jadwalKeterangan" class="form-input" rows="2"></textarea>
+            </div>
+          </div>
+          <div class="mt-4 flex justify-end gap-2">
+            <button type="button" onclick="closeJadwalModal()" class="btn btn-danger">Batal</button>
+            <button type="submit" class="btn btn-primary"><i class="bi bi-save"></i> Simpan</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const token = localStorage.getItem('token');
+    let currentClassId = null;
+    let currentStudentId = null;
+    let allClasses = [];
+
+    function getAuthHeader() {
+      return token ? { 'Authorization': 'Bearer ' + token } : {};
+    }
+
+    function showToast(message, type = 'info') {
+      const toast = document.createElement('div');
+      toast.className = `fixed top-4 right-4 px-4 py-2 rounded-lg text-white font-semibold z-50 ${type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500'}`;
+      toast.textContent = message;
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
+    }
+
+    function logout() {
+      localStorage.removeItem('token');
+      window.location.href = 'login.html';
+    }
+
+    async function apiCall(url, options = {}) {
+      const res = await fetch(url, { headers: { 'Content-Type': 'application/json', ...getAuthHeader() }, ...options });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || 'Request failed');
+      return data;
+    }
+
+    // Load classes on init
+    async function init() {
+      try {
+        const data = await apiCall('/api/wali-kelas/classes');
+        allClasses = data.data || [];
+        const selector = document.getElementById('classSelector');
+        selector.innerHTML = '<option value="">Pilih Kelas</option>' + allClasses.map(c => `<option value="${c.class_id}">${c.nama_kelas} (${c.tingkatan}) - ${c.nama_sekolah}</option>`).join('');
+        if (allClasses.length === 1) {
+          selector.value = allClasses[0].class_id;
+          currentClassId = allClasses[0].class_id;
+          loadDashboard();
+        }
+        populateYearSelect();
+      } catch (e) {
+        showToast('Gagal memuat data kelas', 'error');
+      }
+    }
+
+    function populateYearSelect() {
+      const select = document.getElementById('rekapYear');
+      const year = new Date().getFullYear();
+      for (let y = year - 1; y <= year + 1; y++) {
+        const opt = document.createElement('option');
+        opt.value = y;
+        opt.textContent = y;
+        if (y === year) opt.selected = true;
+        select.appendChild(opt);
+      }
+    }
+
+    // Tab switching
+    document.querySelectorAll('.nav-item[data-tab]').forEach(btn => {
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        const tab = this.dataset.tab;
+        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        document.getElementById(tab)?.classList.add('active');
+        this.classList.add('active');
+        loadTabData(tab);
+      });
+    });
+
+    document.getElementById('classSelector')?.addEventListener('change', function () {
+      currentClassId = this.value ? parseInt(this.value) : null;
+      const activeTab = document.querySelector('.tab-content.active')?.id;
+      loadTabData(activeTab);
+    });
+
+    function refreshCurrentTab() {
+      const activeTab = document.querySelector('.tab-content.active')?.id;
+      loadTabData(activeTab);
+    }
+
+    async function loadTabData(tab) {
+      if (!currentClassId && tab !== 'dashboard') {
+        return;
+      }
+      switch (tab) {
+        case 'dashboard': await loadDashboard(); break;
+        case 'siswa': await loadSiswa(); break;
+        case 'absensi': await loadAbsensi(); break;
+        case 'rekap': await loadRekap(); break;
+        case 'izin': await loadIzin(); break;
+        case 'spp': await loadSpp(); break;
+        case 'edit-siswa': await loadEditSiswaList(); break;
+        case 'jadwal': await loadJadwal(); break;
+      }
+    }
+
+    // Dashboard
+    async function loadDashboard() {
+      if (!currentClassId) return;
+      try {
+        const data = await apiCall(`/api/wali-kelas/dashboard?class_id=${currentClassId}`);
+        const d = data.data;
+        const total = d.total_siswa || 0;
+        const hadir = d.hadir_hari_ini || 0;
+        const belumHadir = total > 0 ? total - hadir : 0;
+        const persenKehadiran = total > 0 ? Math.round((hadir / total) * 100) : 0;
+
+        document.getElementById('dashTotalSiswa').textContent = total;
+        document.getElementById('dashHadir').textContent = hadir;
+        document.getElementById('dashBelumHadir').textContent = belumHadir;
+        document.getElementById('dashIzinPending').textContent = d.izin_pending || 0;
+        document.getElementById('dashSppTunggakan').textContent = d.spp_tunggakan || 0;
+        document.getElementById('dashKehadiranKelas').textContent = persenKehadiran + '%';
+
+        const recentDiv = document.getElementById('recentAttendance');
+        if (d.recent_attendance && d.recent_attendance.length) {
+          recentDiv.innerHTML = '<table class="w-full text-sm"><thead><tr><th>Nama</th><th>Tanggal</th><th>Status</th></tr></thead><tbody>' +
+            d.recent_attendance.map(r => `<tr><td>${r.nama_siswa}</td><td>${r.tanggal}</td><td><span class="badge ${r.status === 'hadir' ? 'badge-success' : r.status === 'izin' ? 'badge-warning' : r.status === 'sakit' ? 'badge-info' : 'badge-danger'}">${r.status}</span></td></tr>`).join('') +
+            '</tbody></table>';
+        } else {
+          recentDiv.innerHTML = '<div class="text-center py-4 text-gray-400">Belum ada data absensi</div>';
+        }
+
+        const izinSummaryDiv = document.getElementById('izinSummary');
+        try {
+          const now = new Date();
+          const month = now.getMonth() + 1;
+          const year = now.getFullYear();
+          const izinData = await apiCall(`/api/wali-kelas/rekap?class_id=${currentClassId}&month=${month}&year=${year}`);
+          if (izinData.data && izinData.data.length) {
+            const totalIzin = izinData.data.reduce((sum, s) => sum + (s.izin || 0), 0);
+            const totalSakit = izinData.data.reduce((sum, s) => sum + (s.sakit || 0), 0);
+            const totalAlpha = izinData.data.reduce((sum, s) => sum + (s.alpha || 0), 0);
+            izinSummaryDiv.innerHTML = `
+              <div class="grid grid-cols-3 gap-4 text-center">
+                <div><p class="text-2xl font-bold text-amber-600">${totalIzin}</p><p class="text-xs text-gray-500">Izin</p></div>
+                <div><p class="text-2xl font-bold text-blue-600">${totalSakit}</p><p class="text-xs text-gray-500">Sakit</p></div>
+                <div><p class="text-2xl font-bold text-red-600">${totalAlpha}</p><p class="text-xs text-gray-500">Alpha</p></div>
+              </div>
+              <p class="text-xs text-gray-400 mt-2 text-center">Bulan ${month}/${year}</p>
+            `;
+          } else {
+            izinSummaryDiv.innerHTML = '<div class="text-center py-4 text-gray-400">Tidak ada data izin bulan ini</div>';
+          }
+        } catch (e) {
+          izinSummaryDiv.innerHTML = '<div class="text-center py-4 text-gray-400">Gagal memuat ringkasan izin</div>';
+        }
+      } catch (e) {
+        showToast('Gagal memuat dashboard', 'error');
+      }
+    }
+
+    // Siswa
+    async function loadSiswa() {
+      if (!currentClassId) return;
+      try {
+        const search = document.getElementById('siswaSearch')?.value || '';
+        const data = await apiCall(`/api/wali-kelas/siswa?class_id=${currentClassId}&search=${encodeURIComponent(search)}`);
+        const tbody = document.getElementById('siswaTable');
+        if (!data.data.length) { tbody.innerHTML = '<tr><td colspan="6" class="text-center text-gray-500">Tidak ada data</td></tr>'; return; }
+        tbody.innerHTML = data.data.map(s => `<tr><td>${s.nama_siswa}</td><td>${s.nisn || '-'}</td><td>${s.jenis_kelamin}</td><td>${s.nama_orang_tua || '-'}</td><td>${s.no_wa_ortu || '-'}</td><td>Rp ${Number(s.iuran_bulanan || 0).toLocaleString('id-ID')}</td></tr>`).join('');
+      } catch (e) { showToast('Gagal memuat data siswa', 'error'); }
+    }
+
+    // Absensi
+    async function loadAbsensi() {
+      if (!currentClassId) return;
+      const date = document.getElementById('absensiDate')?.value || new Date().toISOString().slice(0, 10);
+      try {
+        const data = await apiCall(`/api/wali-kelas/absensi?class_id=${currentClassId}&date=${date}`);
+        const tbody = document.getElementById('absensiTable');
+        if (!data.data.length) { tbody.innerHTML = '<tr><td colspan="6" class="text-center text-gray-500">Tidak ada data</td></tr>'; return; }
+        tbody.innerHTML = data.data.map(s => {
+          const att = data.attendance[s.id] || {};
+          const setRadio = (jenis, val) => `<label class="cursor-pointer"><input type="radio" name="att_${s.id}_${jenis}" value="hadir" ${att[jenis]?.status === 'hadir' ? 'checked' : ''}> Hadir <input type="radio" name="att_${s.id}_${jenis}" value="izin" ${att[jenis]?.status === 'izin' ? 'checked' : ''}> Izin <input type="radio" name="att_${s.id}_${jenis}" value="sakit" ${att[jenis]?.status === 'sakit' ? 'checked' : ''}> Sakit <input type="radio" name="att_${s.id}_${jenis}" value="alpha" ${att[jenis]?.status === 'alpha' ? 'checked' : ''}> Alpha</label>`;
+          return `<tr><td data-student-id="${s.id}">${s.nama_siswa}</td><td>${s.nisn || '-'}</td><td>${setRadio('masuk')}</td><td>${setRadio('izin')}</td><td>${setRadio('sakit')}</td><td>${setRadio('alpha')}</td></tr>`;
+        }).join('');
+      } catch (e) { showToast('Gagal memuat absensi', 'error'); }
+    }
+
+    async function saveAbsensi() {
+      if (!currentClassId) return;
+      const date = document.getElementById('absensiDate')?.value || new Date().toISOString().slice(0, 10);
+      const rows = document.querySelectorAll('#absensiTable tr');
+      const attendances = [];
+      rows.forEach(row => {
+        const cells = row.querySelectorAll('td');
+        if (cells.length < 6) return;
+        const studentId = cells[0]?.dataset?.studentId;
+        if (!studentId) return;
+        ['masuk', 'izin', 'sakit', 'alpha'].forEach(jenis => {
+          const checked = row.querySelector(`input[name="att_${studentId}_${jenis}"]:checked`);
+          if (checked && checked.value) {
+            attendances.push({ student_id: parseInt(studentId), jenis, status: checked.value });
+          }
+        });
+      });
+      if (!attendances.length) return showToast('Tidak ada data absensi untuk disimpan', 'error');
+      try {
+        await apiCall('/api/wali-kelas/absensi', {
+          method: 'POST',
+          body: JSON.stringify({ class_id: currentClassId, date, attendances })
+        });
+        showToast('Absensi berhasil disimpan', 'success');
+        loadAbsensi();
+      } catch (e) { showToast('Gagal menyimpan absensi', 'error'); }
+    }
+
+    // Rekap
+    async function loadRekap() {
+      if (!currentClassId) return;
+      const month = document.getElementById('rekapMonth')?.value || 7;
+      const year = document.getElementById('rekapYear')?.value || new Date().getFullYear();
+      try {
+        const data = await apiCall(`/api/wali-kelas/rekap?class_id=${currentClassId}&month=${month}&year=${year}`);
+        const tbody = document.getElementById('rekapTable');
+        if (!data.data.length) { tbody.innerHTML = '<tr><td colspan="6" class="text-center text-gray-500">Tidak ada data</td></tr>'; return; }
+        tbody.innerHTML = data.data.map(r => `<tr><td>${r.nama_siswa}</td><td>${r.nisn || '-'}</td><td>${r.hadir}</td><td>${r.izin}</td><td>${r.sakit}</td><td>${r.alpha}</td></tr>`).join('');
+      } catch (e) { showToast('Gagal memuat rekap', 'error'); }
+    }
+
+    // Izin
+    async function loadIzin() {
+      if (!currentClassId) return;
+      const status = document.getElementById('izinFilter')?.value || 'pending';
+      try {
+        const data = await apiCall(`/api/wali-kelas/izin?status=${status}`);
+        const tbody = document.getElementById('izinTable');
+        if (!data.data.length) { tbody.innerHTML = '<tr><td colspan="8" class="text-center text-gray-500">Tidak ada data</td></tr>'; return; }
+        tbody.innerHTML = data.data.map(iz => {
+          const badge = iz.status === 'approved' ? 'badge-success' : iz.status === 'rejected' ? 'badge-danger' : 'badge-warning';
+          const actions = iz.status === 'pending' ? `<button onclick="approveIzin(${iz.id})" class="btn btn-success btn-sm">Setuju</button> <button onclick="rejectIzin(${iz.id})" class="btn btn-danger btn-sm">Tolak</button>` : '-';
+          return `<tr><td>${iz.teacher_name}</td><td>${iz.nip || '-'}</td><td>${iz.nama_sekolah}</td><td>${iz.jenis}</td><td>${iz.tanggal_mulai}${iz.tanggal_selesai ? ' s/d ' + iz.tanggal_selesai : ''}</td><td>${iz.keterangan || '-'}</td><td><span class="badge ${badge}">${iz.status}</span></td><td>${actions}</td></tr>`;
+        }).join('');
+      } catch (e) { showToast('Gagal memuat izin', 'error'); }
+    }
+
+    async function approveIzin(id) {
+      const catatan = prompt('Catatan (opsional):') || 'Disetujui';
+      try {
+        await apiCall(`/api/wali-kelas/izin/${id}/approve`, { method: 'POST', body: JSON.stringify({ catatan }) });
+        showToast('Izin disetujui', 'success');
+        loadIzin();
+      } catch (e) { showToast('Gagal menyetujui izin', 'error'); }
+    }
+
+    async function rejectIzin(id) {
+      const catatan = prompt('Alasan penolakan:') || 'Ditolak';
+      try {
+        await apiCall(`/api/wali-kelas/izin/${id}/reject`, { method: 'POST', body: JSON.stringify({ catatan }) });
+        showToast('Izin ditolak', 'success');
+        loadIzin();
+      } catch (e) { showToast('Gagal menolak izin', 'error'); }
+    }
+
+    // SPP
+    async function loadSpp() {
+      if (!currentClassId) return;
+      const search = document.getElementById('sppSearch')?.value || '';
+      try {
+        const data = await apiCall(`/api/wali-kelas/spp?class_id=${currentClassId}&search=${encodeURIComponent(search)}`);
+        const tbody = document.getElementById('sppTable');
+        if (!data.data.length) { tbody.innerHTML = '<tr><td colspan="6" class="text-center text-gray-500">Tidak ada data</td></tr>'; return; }
+        tbody.innerHTML = data.data.map(s => {
+          const status = s.status_terakhir === 'lunas' ? '<span class="badge badge-success">Lunas</span>' : '<span class="badge badge-danger">Tunggakan</span>';
+          return `<tr><td>${s.nama_siswa}</td><td>${s.nisn || '-'}</td><td>${s.nama_sekolah}</td><td>Rp ${Number(s.iuran_bulanan || 0).toLocaleString('id-ID')}</td><td>Rp ${Number(s.saldo || 0).toLocaleString('id-ID')}</td><td>${status}</td></tr>`;
+        }).join('');
+      } catch (e) { showToast('Gagal memuat info SPP', 'error'); }
+    }
+
+    // Edit Siswa
+    async function loadEditSiswaList() {
+      if (!currentClassId) return;
+      try {
+        const data = await apiCall(`/api/wali-kelas/siswa?class_id=${currentClassId}`);
+        const selector = document.getElementById('editSiswaSelector');
+        selector.innerHTML = '<option value="">Pilih Siswa</option>' + data.data.map(s => `<option value="${s.id}">${s.nama_siswa} (${s.nisn || '-'})</option>`).join('');
+      } catch (e) { showToast('Gagal memuat daftar siswa', 'error'); }
+    }
+
+    async function loadEditSiswa() {
+      const id = document.getElementById('editSiswaSelector')?.value;
+      if (!id) {
+        document.getElementById('editSiswaForm').classList.add('hidden');
+        document.getElementById('editSiswaPlaceholder').classList.remove('hidden');
+        return;
+      }
+      currentStudentId = id;
+      try {
+        const data = await apiCall(`/api/wali-kelas/siswa/${id}`);
+        const s = data.data;
+        document.getElementById('editNama').value = s.nama_siswa || '';
+        document.getElementById('editNisn').value = s.nisn || '';
+        document.getElementById('editJk').value = s.jenis_kelamin || 'L';
+        document.getElementById('editIuran').value = s.iuran_bulanan || 0;
+        document.getElementById('editOrtu').value = s.nama_orang_tua || '';
+        document.getElementById('editWaOrtu').value = s.no_wa_ortu || '';
+        document.getElementById('editSiswaForm').classList.remove('hidden');
+        document.getElementById('editSiswaPlaceholder').classList.add('hidden');
+      } catch (e) { showToast('Gagal memuat data siswa', 'error'); }
+    }
+
+    async function saveEditSiswa() {
+      if (!currentStudentId) return;
+      try {
+        await apiCall(`/api/wali-kelas/siswa/${currentStudentId}`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            nama_siswa: document.getElementById('editNama').value,
+            nisn: document.getElementById('editNisn').value,
+            jenis_kelamin: document.getElementById('editJk').value,
+            iuran_bulanan: document.getElementById('editIuran').value,
+            nama_orang_tua: document.getElementById('editOrtu').value,
+            no_wa: document.getElementById('editWaOrtu').value
+          })
+        });
+        showToast('Data siswa berhasil diperbarui', 'success');
+      } catch (e) { showToast('Gagal menyimpan data', 'error'); }
+    }
+
+    // Jadwal Pelajaran
+    async function loadJadwal() {
+      if (!currentClassId) return;
+      try {
+        const data = await apiCall(`/api/wali-kelas/jadwal?class_id=${currentClassId}`);
+        const tbody = document.getElementById('jadwalTable');
+        if (!data.data.length) { tbody.innerHTML = '<tr><td colspan="8" class="text-center text-gray-500">Tidak ada jadwal</td></tr>'; return; }
+        const dayOrder = ['Senin','Selasa','Rabu','Kamis','Jumat','Sabtu','Minggu'];
+        const sorted = data.data.sort((a,b) => dayOrder.indexOf(a.hari) - dayOrder.indexOf(b.hari) || a.periode_ke - b.periode_ke);
+        tbody.innerHTML = sorted.map(j => `
+          <tr>
+            <td>${j.hari}</td>
+            <td>${j.periode_ke}</td>
+            <td>${j.jam_mulai}</td>
+            <td>${j.jam_selesai}</td>
+            <td>${j.mata_pelajaran || '-'}</td>
+            <td>${j.guru || '-'}</td>
+            <td>${j.ruangan || '-'}</td>
+            <td>
+              <button onclick="editJadwal(${j.id})" class="btn btn-primary btn-sm"><i class="bi bi-pencil"></i></button>
+              <button onclick="deleteJadwal(${j.id})" class="btn btn-danger btn-sm"><i class="bi bi-trash"></i></button>
+            </td>
+          </tr>
+        `).join('');
+      } catch (e) { showToast('Gagal memuat jadwal', 'error'); }
+    }
+
+    function openJadwalModal() {
+      document.getElementById('jadwalForm').reset();
+      document.getElementById('jadwalId').value = '';
+      document.getElementById('jadwalModalTitle').textContent = 'Tambah Jadwal';
+      document.getElementById('jadwalModal').classList.remove('hidden');
+    }
+
+    function closeJadwalModal() {
+      document.getElementById('jadwalModal').classList.add('hidden');
+    }
+
+    document.getElementById('jadwalForm')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!currentClassId) return showToast('Pilih kelas terlebih dahulu', 'error');
+      const id = document.getElementById('jadwalId').value;
+      const body = {
+        class_id: currentClassId,
+        hari: document.getElementById('jadwalHari').value,
+        periode_ke: document.getElementById('jadwalPeriode').value,
+        jam_mulai: document.getElementById('jadwalMulai').value,
+        jam_selesai: document.getElementById('jadwalSelesai').value,
+        mata_pelajaran: document.getElementById('jadwalMapel').value,
+        guru: document.getElementById('jadwalGuru').value,
+        ruangan: document.getElementById('jadwalRuangan').value,
+        keterangan: document.getElementById('jadwalKeterangan').value
+      };
+      try {
+        const method = id ? 'PUT' : 'POST';
+        const url = id ? `/api/wali-kelas/jadwal/${id}` : '/api/wali-kelas/jadwal';
+        await apiCall(url, { method, body: JSON.stringify(body) });
+        showToast(id ? 'Jadwal berhasil diperbarui' : 'Jadwal berhasil ditambahkan', 'success');
+        closeJadwalModal();
+        loadJadwal();
+      } catch (e) { showToast('Gagal menyimpan jadwal', 'error'); }
+    });
+
+    async function editJadwal(id) {
+      try {
+        const data = await apiCall(`/api/wali-kelas/jadwal/${id}`);
+        const j = data.data;
+        document.getElementById('jadwalId').value = j.id;
+        document.getElementById('jadwalHari').value = j.hari;
+        document.getElementById('jadwalPeriode').value = j.periode_ke;
+        document.getElementById('jadwalMulai').value = j.jam_mulai;
+        document.getElementById('jadwalSelesai').value = j.jam_selesai;
+        document.getElementById('jadwalMapel').value = j.mata_pelajaran || '';
+        document.getElementById('jadwalGuru').value = j.guru || '';
+        document.getElementById('jadwalRuangan').value = j.ruangan || '';
+        document.getElementById('jadwalKeterangan').value = j.keterangan || '';
+        document.getElementById('jadwalModalTitle').textContent = 'Edit Jadwal';
+        document.getElementById('jadwalModal').classList.remove('hidden');
+      } catch (e) { showToast('Gagal memuat data jadwal', 'error'); }
+    }
+
+    async function deleteJadwal(id) {
+      if (!confirm('Hapus jadwal ini?')) return;
+      try {
+        await apiCall(`/api/wali-kelas/jadwal/${id}`, { method: 'DELETE' });
+        showToast('Jadwal berhasil dihapus', 'success');
+        loadJadwal();
+      } catch (e) { showToast('Gagal menghapus jadwal', 'error'); }
+    }
+
+    init();
+  </script>
+</body>
+</html>

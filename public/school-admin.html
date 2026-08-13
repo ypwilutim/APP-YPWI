@@ -1708,38 +1708,6 @@ if (d.success) {
           document.getElementById('assignmentModal').classList.remove('show');
         }
 
-        if (document.getElementById('assignmentForm')) {
-          document.getElementById('assignmentForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const teacherId = document.getElementById('assignmentTeacherId').value || document.getElementById('assignmentTeacherSelect').value;
-            const position = document.getElementById('assignmentPosition').value;
-            const classId = document.getElementById('assignmentClassId').value || null;
-
-            if (!teacherId) {
-              showToast('Pilih guru terlebih dahulu', 'error');
-              return;
-            }
-
-            try {
-              const r = await fetch(apiUrl('/admin/teachers/' + teacherId + '/assignment'), {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
-                body: JSON.stringify({ jabatan_di_unit: position, class_id: classId })
-              });
-              if (checkAuth401403(r)) return;
-              if (!r.ok) {
-                let msg = 'Gagal';
-                try { const err = await r.json(); msg = err.message || msg; } catch (_) { }
-                showToast(msg, 'error');
-                return;
-              }
-              const d = await r.json();
-              if (d.success) { hideAssignmentModal(); loadAssignments(); showToast('Tugas guru berhasil disimpan', 'success'); }
-              else showToast(d.message || 'Gagal', 'error');
-            } catch (err) { console.error('[ASSIGNMENT FORM]', err); showToast('Terjadi kesalahan', 'error'); }
-          });
-        }
-
         window.showAddClassModal = function () {
           const form = document.getElementById('classForm');
           form.reset();
@@ -4427,28 +4395,32 @@ console.log('[ATTENDANCE] Fetching:', url);
             });
           }
 
-          var assignmentForm = document.getElementById('assignmentForm');
-          if (assignmentForm && !assignmentForm.dataset.listenerAttached) {
-            assignmentForm.dataset.listenerAttached = 'true';
-            assignmentForm.addEventListener('submit', async function (e) {
-              e.preventDefault();
-              var teacherId = document.getElementById('assignmentTeacherId').value;
-              var tenantId = document.getElementById('assignmentTenantId').value;
-              var position = document.getElementById('assignmentPosition').value;
-              var classId = document.getElementById('assignmentClassId').value || null;
-              try {
-                var r = await fetch(apiUrl('/admin/teachers/' + teacherId + '/assignment'), {
-                  method: 'PUT',
-                  headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
-                  body: JSON.stringify({ tenant_id: tenantId, jabatan_di_unit: position, class_id: classId })
-                });
-                if (checkAuth401403(r)) return;
-                var d = await r.json();
-                if (d.success) { hideAssignmentModal(); loadAssignments(); showToast('Tugas guru diupdate', 'success'); }
-                else showToast(d.message || 'Gagal', 'error');
-              } catch (err) { console.error('[ASSIGNMENT FORM]', err); showToast('Terjadi kesalahan', 'error'); }
-            });
-          }
+           var assignmentForm = document.getElementById('assignmentForm');
+           if (assignmentForm && !assignmentForm.dataset.listenerAttached) {
+             assignmentForm.dataset.listenerAttached = 'true';
+             assignmentForm.addEventListener('submit', async function (e) {
+               e.preventDefault();
+               var teacherId = document.getElementById('assignmentTeacherId').value || document.getElementById('assignmentTeacherSelect').value;
+               var tenantId = document.getElementById('assignmentTenantId').value;
+               var position = document.getElementById('assignmentPosition').value;
+               var classId = document.getElementById('assignmentClassId').value || null;
+               if (!teacherId) {
+                 showToast('Pilih guru terlebih dahulu', 'error');
+                 return;
+               }
+               try {
+                 var r = await fetch(apiUrl('/admin/teachers/' + teacherId + '/assignment'), {
+                   method: 'PUT',
+                   headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+                   body: JSON.stringify({ tenant_id: tenantId, jabatan_di_unit: position, class_id: classId })
+                 });
+                 if (checkAuth401403(r)) return;
+                 var d = await r.json();
+                 if (d.success) { hideAssignmentModal(); loadAssignments(); showToast('Tugas guru diupdate', 'success'); }
+                 else showToast(d.message || 'Gagal', 'error');
+               } catch (err) { console.error('[ASSIGNMENT FORM]', err); showToast('Terjadi kesalahan', 'error'); }
+             });
+           }
 
           var aturanForm = document.getElementById('aturanForm');
           if (aturanForm && !aturanForm.dataset.listenerAttached) {

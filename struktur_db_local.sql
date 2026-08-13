@@ -27,7 +27,7 @@ SET time_zone = "+00:00";
 -- Struktur dari tabel `attendance_logs`
 --
 
-CREATE TABLE `attendance_logs` (
+CREATE TABLE IF NOT EXISTS `attendance_logs` (
   `id` bigint(20) NOT NULL,
   `teacher_id` int(11) NOT NULL,
   `rule_id` int(11) DEFAULT NULL,
@@ -52,7 +52,7 @@ CREATE TABLE `attendance_logs` (
 -- Struktur dari tabel `attendance_rules`
 --
 
-CREATE TABLE `attendance_rules` (
+CREATE TABLE IF NOT EXISTS `attendance_rules` (
   `id` int(11) NOT NULL,
   `tenant_id` varchar(20) NOT NULL,
   `tipe` enum('Datang','Pulang') NOT NULL,
@@ -72,7 +72,7 @@ CREATE TABLE `attendance_rules` (
 -- Struktur dari tabel `attendance_summary`
 --
 
-CREATE TABLE `attendance_summary` (
+CREATE TABLE IF NOT EXISTS `attendance_summary` (
   `id` int(11) NOT NULL,
   `tenant_id` varchar(20) NOT NULL,
   `date` date NOT NULL,
@@ -90,7 +90,7 @@ CREATE TABLE `attendance_summary` (
 -- Struktur dari tabel `bill_settings`
 --
 
-CREATE TABLE `bill_settings` (
+CREATE TABLE IF NOT EXISTS `bill_settings` (
   `id` int(11) NOT NULL DEFAULT 1,
   `send_day` int(11) DEFAULT 1,
   `due_day` int(11) DEFAULT 10,
@@ -105,7 +105,7 @@ CREATE TABLE `bill_settings` (
 -- Struktur dari tabel `bsi_va_records`
 --
 
-CREATE TABLE `bsi_va_records` (
+CREATE TABLE IF NOT EXISTS `bsi_va_records` (
   `id` int(11) NOT NULL,
   `tenant_id` varchar(50) NOT NULL,
   `student_id` int(11) NOT NULL,
@@ -123,7 +123,7 @@ CREATE TABLE `bsi_va_records` (
 -- Struktur dari tabel `chat_messages`
 --
 
-CREATE TABLE `chat_messages` (
+CREATE TABLE IF NOT EXISTS `chat_messages` (
   `id` int(11) NOT NULL,
   `conversation_id` int(11) NOT NULL,
   `sender_id` int(11) NOT NULL,
@@ -140,7 +140,7 @@ CREATE TABLE `chat_messages` (
 -- Struktur dari tabel `classes`
 --
 
-CREATE TABLE `classes` (
+CREATE TABLE IF NOT EXISTS `classes` (
   `id` int(11) NOT NULL,
   `tenant_id` varchar(50) DEFAULT NULL,
   `nama_kelas` varchar(50) DEFAULT NULL,
@@ -153,7 +153,7 @@ CREATE TABLE `classes` (
 -- Struktur dari tabel `conversations`
 --
 
-CREATE TABLE `conversations` (
+CREATE TABLE IF NOT EXISTS `conversations` (
   `id` int(11) NOT NULL,
   `tenant_id` varchar(20) DEFAULT NULL,
   `is_global` tinyint(1) DEFAULT 0,
@@ -167,7 +167,7 @@ CREATE TABLE `conversations` (
 -- Struktur dari tabel `conversation_participants`
 --
 
-CREATE TABLE `conversation_participants` (
+CREATE TABLE IF NOT EXISTS `conversation_participants` (
   `id` int(11) NOT NULL,
   `conversation_id` int(11) NOT NULL,
   `user_id` int(11) NOT NULL,
@@ -185,7 +185,7 @@ CREATE TABLE `conversation_participants` (
 -- Struktur dari tabel `email_logs`
 --
 
-CREATE TABLE `email_logs` (
+CREATE TABLE IF NOT EXISTS `email_logs` (
   `id` int(11) NOT NULL,
   `from_email` varchar(255) NOT NULL,
   `to_email` varchar(255) NOT NULL,
@@ -211,7 +211,7 @@ CREATE TABLE `email_logs` (
 -- Struktur dari tabel `employment_rules`
 --
 
-CREATE TABLE `employment_rules` (
+CREATE TABLE IF NOT EXISTS `employment_rules` (
   `id` int(11) NOT NULL,
   `job_title_pattern` varchar(100) NOT NULL,
   `employment_type` enum('PTY','PTTY','GTY','GTTY') NOT NULL,
@@ -225,7 +225,7 @@ CREATE TABLE `employment_rules` (
 -- Struktur dari tabel `employment_status_rules`
 --
 
-CREATE TABLE `employment_status_rules` (
+CREATE TABLE IF NOT EXISTS `employment_status_rules` (
   `id` int(11) NOT NULL,
   `employment_type` enum('PTY','PTTY','GTY','GTTY') NOT NULL,
   `min_years` int(11) NOT NULL,
@@ -238,7 +238,7 @@ CREATE TABLE `employment_status_rules` (
 -- Struktur dari tabel `evaluations`
 --
 
-CREATE TABLE `evaluations` (
+CREATE TABLE IF NOT EXISTS `evaluations` (
   `id` int(11) NOT NULL,
   `teacher_id` int(11) NOT NULL,
   `evaluator_id` int(11) NOT NULL,
@@ -256,7 +256,7 @@ CREATE TABLE `evaluations` (
 -- Struktur dari tabel `idcard_templates`
 --
 
-CREATE TABLE `idcard_templates` (
+CREATE TABLE IF NOT EXISTS `idcard_templates` (
   `id` int(11) NOT NULL,
   `template_name` varchar(100) DEFAULT NULL,
   `template_data` longtext DEFAULT NULL,
@@ -273,7 +273,7 @@ CREATE TABLE `idcard_templates` (
 -- Struktur dari tabel `leave_requests`
 --
 
-CREATE TABLE `leave_requests` (
+CREATE TABLE IF NOT EXISTS `leave_requests` (
   `id` int(11) NOT NULL,
   `teacher_id` int(11) NOT NULL,
   `tenant_id` varchar(50) DEFAULT NULL,
@@ -292,7 +292,7 @@ CREATE TABLE `leave_requests` (
 -- Struktur dari tabel `midtrans_transactions`
 --
 
-CREATE TABLE `midtrans_transactions` (
+CREATE TABLE IF NOT EXISTS `midtrans_transactions` (
   `id` int(11) NOT NULL,
   `tenant_id` varchar(20) DEFAULT NULL,
   `student_id` int(11) DEFAULT NULL,
@@ -315,7 +315,7 @@ CREATE TABLE `midtrans_transactions` (
 -- Struktur dari tabel `mutasi_students`
 --
 
-CREATE TABLE `mutasi_students` (
+CREATE TABLE IF NOT EXISTS `mutasi_students` (
   `id` int(11) NOT NULL,
   `student_id` int(11) NOT NULL,
   `old_tenant_id` varchar(50) DEFAULT NULL,
@@ -330,7 +330,7 @@ CREATE TABLE `mutasi_students` (
 -- Struktur dari tabel `pakta_config`
 --
 
-CREATE TABLE `pakta_config` (
+CREATE TABLE IF NOT EXISTS `pakta_config` (
   `id` int(11) NOT NULL DEFAULT 1,
   `judul` varchar(255) NOT NULL DEFAULT 'Pakta Integritas',
   `teks_pakta` text NOT NULL COMMENT 'Teks isi pakta (HTML aman / plain)',
@@ -347,7 +347,7 @@ CREATE TABLE `pakta_config` (
 -- Struktur dari tabel `pakta_integritas`
 --
 
-CREATE TABLE `pakta_integritas` (
+CREATE TABLE IF NOT EXISTS `pakta_integritas` (
   `id` int(11) NOT NULL,
   `teacher_id` int(11) NOT NULL COMMENT 'FK ke teachers.id (penandatangan)',
   `tenant_id` varchar(20) NOT NULL COMMENT 'Tenant sekolah penandatangan',
@@ -366,7 +366,7 @@ CREATE TABLE `pakta_integritas` (
 -- Struktur dari tabel `parents`
 --
 
-CREATE TABLE `parents` (
+CREATE TABLE IF NOT EXISTS `parents` (
   `id` int(11) NOT NULL,
   `nama_orang_tua` varchar(255) DEFAULT NULL,
   `no_wa` varchar(30) DEFAULT NULL,
@@ -380,7 +380,7 @@ CREATE TABLE `parents` (
 -- Struktur dari tabel `payment_gateways`
 --
 
-CREATE TABLE `payment_gateways` (
+CREATE TABLE IF NOT EXISTS `payment_gateways` (
   `id` int(11) NOT NULL,
   `tenant_id` varchar(20) NOT NULL,
   `gateway` varchar(20) NOT NULL,
@@ -399,7 +399,7 @@ CREATE TABLE `payment_gateways` (
 -- Struktur dari tabel `payment_invoices`
 --
 
-CREATE TABLE `payment_invoices` (
+CREATE TABLE IF NOT EXISTS `payment_invoices` (
   `id` int(11) NOT NULL,
   `tenant_id` varchar(20) NOT NULL,
   `student_id` int(11) NOT NULL,
@@ -428,7 +428,7 @@ CREATE TABLE `payment_invoices` (
 -- Struktur dari tabel `payment_settings`
 --
 
-CREATE TABLE `payment_settings` (
+CREATE TABLE IF NOT EXISTS `payment_settings` (
   `tenant_id` varchar(20) NOT NULL,
   `monthly_amount` decimal(12,2) DEFAULT NULL,
   `due_day` int(11) DEFAULT 10,
@@ -443,7 +443,7 @@ CREATE TABLE `payment_settings` (
 -- Struktur dari tabel `payment_status_history`
 --
 
-CREATE TABLE `payment_status_history` (
+CREATE TABLE IF NOT EXISTS `payment_status_history` (
   `id` int(11) NOT NULL,
   `invoice_id` int(11) NOT NULL,
   `old_status` varchar(50) DEFAULT NULL,
@@ -459,7 +459,7 @@ CREATE TABLE `payment_status_history` (
 -- Struktur dari tabel `payment_transactions`
 --
 
-CREATE TABLE `payment_transactions` (
+CREATE TABLE IF NOT EXISTS `payment_transactions` (
   `id` bigint(20) NOT NULL,
   `tenant_id` varchar(20) NOT NULL,
   `student_id` int(11) DEFAULT NULL,
@@ -481,7 +481,7 @@ CREATE TABLE `payment_transactions` (
 -- Struktur dari tabel `payroll`
 --
 
-CREATE TABLE `payroll` (
+CREATE TABLE IF NOT EXISTS `payroll` (
   `id` int(11) NOT NULL,
   `teacher_id` int(11) NOT NULL,
   `tenant_id` varchar(50) DEFAULT NULL,
@@ -515,7 +515,7 @@ CREATE TABLE `payroll` (
 -- Struktur dari tabel `payroll_settings`
 --
 
-CREATE TABLE `payroll_settings` (
+CREATE TABLE IF NOT EXISTS `payroll_settings` (
   `id` int(11) NOT NULL DEFAULT 1,
   `potongan_terlambat` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT 'Rupiah potongan per kali terlambat',
   `potongan_izin` decimal(12,2) NOT NULL DEFAULT 0.00 COMMENT 'Rupiah potongan per hari izin/cuti',
@@ -533,7 +533,7 @@ CREATE TABLE `payroll_settings` (
 -- Struktur dari tabel `qr_attendance_logs`
 --
 
-CREATE TABLE `qr_attendance_logs` (
+CREATE TABLE IF NOT EXISTS `qr_attendance_logs` (
   `id` int(11) NOT NULL,
   `scan_id` varchar(20) NOT NULL,
   `teacher_id` int(11) DEFAULT NULL,
@@ -555,7 +555,7 @@ CREATE TABLE `qr_attendance_logs` (
 -- Struktur dari tabel `relief_requests`
 --
 
-CREATE TABLE `relief_requests` (
+CREATE TABLE IF NOT EXISTS `relief_requests` (
   `id` int(11) NOT NULL,
   `student_id` int(11) NOT NULL,
   `invoice_id` int(11) NOT NULL,
@@ -574,7 +574,7 @@ CREATE TABLE `relief_requests` (
 -- Struktur dari tabel `scanner_devices`
 --
 
-CREATE TABLE `scanner_devices` (
+CREATE TABLE IF NOT EXISTS `scanner_devices` (
   `id` int(11) NOT NULL,
   `device_id` varchar(100) NOT NULL,
   `tenant_id` varchar(20) NOT NULL,
@@ -593,7 +593,7 @@ CREATE TABLE `scanner_devices` (
 -- Struktur dari tabel `sk_automation_settings`
 --
 
-CREATE TABLE `sk_automation_settings` (
+CREATE TABLE IF NOT EXISTS `sk_automation_settings` (
   `id` int(11) NOT NULL,
   `min_service_years` int(11) NOT NULL DEFAULT 2,
   `auto_generate_enabled` tinyint(1) NOT NULL DEFAULT 1,
@@ -609,7 +609,7 @@ CREATE TABLE `sk_automation_settings` (
 -- Struktur dari tabel `sk_guru`
 --
 
-CREATE TABLE `sk_guru` (
+CREATE TABLE IF NOT EXISTS `sk_guru` (
   `id` int(11) NOT NULL,
   `teacher_id` int(11) NOT NULL,
   `tenant_id` varchar(20) NOT NULL,
@@ -632,7 +632,7 @@ CREATE TABLE `sk_guru` (
 -- Struktur dari tabel `sk_sequence`
 --
 
-CREATE TABLE `sk_sequence` (
+CREATE TABLE IF NOT EXISTS `sk_sequence` (
   `tenant_id` varchar(20) NOT NULL,
   `hijri_year` int(11) NOT NULL,
   `hijri_month` varchar(20) DEFAULT NULL,
@@ -646,7 +646,7 @@ CREATE TABLE `sk_sequence` (
 -- Struktur dari tabel `students`
 --
 
-CREATE TABLE `students` (
+CREATE TABLE IF NOT EXISTS `students` (
   `id` int(11) NOT NULL,
   `tenant_id` varchar(50) DEFAULT NULL,
   `parent_id` int(11) DEFAULT NULL,
@@ -667,7 +667,7 @@ CREATE TABLE `students` (
 -- Struktur dari tabel `tagihan_siswa`
 --
 
-CREATE TABLE `tagihan_siswa` (
+CREATE TABLE IF NOT EXISTS `tagihan_siswa` (
   `id` int(11) NOT NULL,
   `student_id` int(11) NOT NULL,
   `tenant_id` int(11) NOT NULL,
@@ -684,7 +684,7 @@ CREATE TABLE `tagihan_siswa` (
 -- Struktur dari tabel `teachers`
 --
 
-CREATE TABLE `teachers` (
+CREATE TABLE IF NOT EXISTS `teachers` (
   `id` int(11) NOT NULL,
   `nama` varchar(100) NOT NULL,
   `BANK` varchar(50) DEFAULT NULL,
@@ -724,7 +724,7 @@ CREATE TABLE `teachers` (
 -- Struktur dari tabel `teacher_family`
 --
 
-CREATE TABLE `teacher_family` (
+CREATE TABLE IF NOT EXISTS `teacher_family` (
   `id` int(11) NOT NULL,
   `teacher_id` int(11) NOT NULL,
   `nik` varchar(20) DEFAULT NULL,
@@ -738,6 +738,7 @@ CREATE TABLE `teacher_family` (
 -- Trigger `teachers`
 --
 DELIMITER $$
+DROP TRIGGER IF EXISTS `before_teacher_insert`;
 CREATE TRIGGER `before_teacher_insert` BEFORE INSERT ON `teachers` FOR EACH ROW BEGIN
     -- Jika TMT sudah 2 tahun atau lebih, NIP wajib diisi (tidak boleh NIK-RANDOM atau Kosong)
     IF NEW.tmt <= DATE_SUB(CURDATE(), INTERVAL 2 YEAR) THEN
@@ -756,7 +757,7 @@ DELIMITER ;
 -- Struktur dari tabel `teacher_assignments`
 --
 
-CREATE TABLE `teacher_assignments` (
+CREATE TABLE IF NOT EXISTS `teacher_assignments` (
   `id` int(11) NOT NULL,
   `teacher_id` int(11) NOT NULL,
   `tenant_id` varchar(20) NOT NULL,
@@ -772,7 +773,7 @@ CREATE TABLE `teacher_assignments` (
 -- Struktur dari tabel `teacher_attendance_stats`
 --
 
-CREATE TABLE `teacher_attendance_stats` (
+CREATE TABLE IF NOT EXISTS `teacher_attendance_stats` (
   `id` int(11) NOT NULL,
   `teacher_id` int(11) NOT NULL,
   `tenant_id` varchar(20) NOT NULL,
@@ -791,7 +792,7 @@ CREATE TABLE `teacher_attendance_stats` (
 -- Struktur dari tabel `temp_teachers`
 --
 
-CREATE TABLE `temp_teachers` (
+CREATE TABLE IF NOT EXISTS `temp_teachers` (
   `Nama` varchar(255) DEFAULT NULL,
   `NIY` varchar(100) DEFAULT NULL,
   `NIK` varchar(100) DEFAULT NULL,
@@ -826,7 +827,7 @@ CREATE TABLE `temp_teachers` (
 -- Struktur dari tabel `tenants`
 --
 
-CREATE TABLE `tenants` (
+CREATE TABLE IF NOT EXISTS `tenants` (
   `id` int(11) NOT NULL,
   `tenant_id` varchar(20) NOT NULL,
   `tipe_unit` enum('yayasan','sekolah','pondok','TKIT','SDIT','SMPIT','SMAIT') NOT NULL DEFAULT 'sekolah',
@@ -860,7 +861,7 @@ CREATE TABLE `tenants` (
 -- Struktur dari tabel `tenant_locations`
 --
 
-CREATE TABLE `tenant_locations` (
+CREATE TABLE IF NOT EXISTS `tenant_locations` (
   `id` int(11) NOT NULL,
   `tenant_id` varchar(20) NOT NULL,
   `location_name` varchar(100) NOT NULL DEFAULT 'Lokasi Utama',
@@ -878,7 +879,7 @@ CREATE TABLE `tenant_locations` (
 -- Struktur dari tabel `users`
 --
 
-CREATE TABLE `users` (
+CREATE TABLE IF NOT EXISTS `users` (
   `id` int(11) NOT NULL,
   `username` varchar(50) NOT NULL,
   `password` varchar(255) NOT NULL,
@@ -897,7 +898,7 @@ CREATE TABLE `users` (
 -- Struktur dari tabel `whatsapp_messages`
 --
 
-CREATE TABLE `whatsapp_messages` (
+CREATE TABLE IF NOT EXISTS `whatsapp_messages` (
   `id` int(11) NOT NULL,
   `from_phone` varchar(20) NOT NULL,
   `message` text DEFAULT NULL,
@@ -917,7 +918,7 @@ CREATE TABLE `whatsapp_messages` (
 -- Struktur dari tabel `xendit_invoices`
 --
 
-CREATE TABLE `xendit_invoices` (
+CREATE TABLE IF NOT EXISTS `xendit_invoices` (
   `id` int(11) NOT NULL,
   `tenant_id` varchar(20) NOT NULL,
   `student_id` int(11) DEFAULT NULL,
@@ -948,7 +949,7 @@ CREATE TABLE `xendit_invoices` (
 -- Struktur dari tabel `ypwi_database___database_siswa`
 --
 
-CREATE TABLE `ypwi_database___database_siswa` (
+CREATE TABLE IF NOT EXISTS `ypwi_database___database_siswa` (
   `nama_siswa` varchar(255) DEFAULT NULL,
   `jenis_kelamin` varchar(20) DEFAULT NULL,
   `tenant_id` varchar(100) DEFAULT NULL,
@@ -1250,11 +1251,26 @@ ALTER TABLE `teachers`
   ADD KEY `idx_scan_id` (`scan_id`),
   ADD KEY `idx_status_aktif` (`status_aktif`);
 
-ALTER TABLE `teachers`
-  ADD COLUMN `pending_password_hash` varchar(255) DEFAULT NULL AFTER `link_foto`,
-  ADD COLUMN `link_ktp` varchar(255) DEFAULT NULL AFTER `pending_password_hash`,
-  ADD COLUMN `link_kk` varchar(255) DEFAULT NULL AFTER `link_ktp`,
-  ADD COLUMN `link_ijazah` varchar(255) DEFAULT NULL AFTER `link_kk`;
+SET @col_exists_pending_password_hash := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'teachers' AND COLUMN_NAME = 'pending_password_hash');
+SET @sql_pending_password_hash := IF(@col_exists_pending_password_hash = 0, 'ALTER TABLE `teachers` ADD COLUMN `pending_password_hash` varchar(255) DEFAULT NULL AFTER `link_foto`', 'SELECT 1');
+PREPARE stmt_pending_password_hash FROM @sql_pending_password_hash;
+EXECUTE stmt_pending_password_hash;
+DEALLOCATE PREPARE stmt_pending_password_hash;
+SET @col_exists_link_ktp := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'teachers' AND COLUMN_NAME = 'link_ktp');
+SET @sql_link_ktp := IF(@col_exists_link_ktp = 0, 'ALTER TABLE `teachers` ADD COLUMN `link_ktp` varchar(255) DEFAULT NULL AFTER `pending_password_hash`', 'SELECT 1');
+PREPARE stmt_link_ktp FROM @sql_link_ktp;
+EXECUTE stmt_link_ktp;
+DEALLOCATE PREPARE stmt_link_ktp;
+SET @col_exists_link_kk := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'teachers' AND COLUMN_NAME = 'link_kk');
+SET @sql_link_kk := IF(@col_exists_link_kk = 0, 'ALTER TABLE `teachers` ADD COLUMN `link_kk` varchar(255) DEFAULT NULL AFTER `link_ktp`', 'SELECT 1');
+PREPARE stmt_link_kk FROM @sql_link_kk;
+EXECUTE stmt_link_kk;
+DEALLOCATE PREPARE stmt_link_kk;
+SET @col_exists_link_ijazah := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'teachers' AND COLUMN_NAME = 'link_ijazah');
+SET @sql_link_ijazah := IF(@col_exists_link_ijazah = 0, 'ALTER TABLE `teachers` ADD COLUMN `link_ijazah` varchar(255) DEFAULT NULL AFTER `link_kk`', 'SELECT 1');
+PREPARE stmt_link_ijazah FROM @sql_link_ijazah;
+EXECUTE stmt_link_ijazah;
+DEALLOCATE PREPARE stmt_link_ijazah;
 
 --
 -- Indeks untuk tabel `teacher_assignments`
@@ -1560,94 +1576,168 @@ ALTER TABLE `xendit_invoices`
 --
 -- Ketidakleluasaan untuk tabel `attendance_logs`
 --
-ALTER TABLE `attendance_logs`
-  ADD CONSTRAINT `attendance_logs_ibfk_1` FOREIGN KEY (`teacher_id`) REFERENCES `teachers` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `attendance_logs_ibfk_2` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`tenant_id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `attendance_logs_ibfk_3` FOREIGN KEY (`rule_id`) REFERENCES `attendance_rules` (`id`) ON DELETE SET NULL;
+SET @fk_exists_attendance_logs_ibfk_1 := (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'attendance_logs' AND CONSTRAINT_NAME = 'attendance_logs_ibfk_1');
+SET @sql_attendance_logs_ibfk_1 := IF(@fk_exists_attendance_logs_ibfk_1 = 0, 'ALTER TABLE `attendance_logs` ADD CONSTRAINT `attendance_logs_ibfk_1` FOREIGN KEY (`teacher_id`) REFERENCES `teachers` (`id`) ON DELETE CASCADE', 'SELECT 1');
+PREPARE stmt_attendance_logs_ibfk_1 FROM @sql_attendance_logs_ibfk_1;
+EXECUTE stmt_attendance_logs_ibfk_1;
+DEALLOCATE PREPARE stmt_attendance_logs_ibfk_1;
+SET @fk_exists_attendance_logs_ibfk_2 := (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'attendance_logs' AND CONSTRAINT_NAME = 'attendance_logs_ibfk_2');
+SET @sql_attendance_logs_ibfk_2 := IF(@fk_exists_attendance_logs_ibfk_2 = 0, 'ALTER TABLE `attendance_logs` ADD CONSTRAINT `attendance_logs_ibfk_2` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`tenant_id`) ON DELETE CASCADE', 'SELECT 1');
+PREPARE stmt_attendance_logs_ibfk_2 FROM @sql_attendance_logs_ibfk_2;
+EXECUTE stmt_attendance_logs_ibfk_2;
+DEALLOCATE PREPARE stmt_attendance_logs_ibfk_2;
+SET @fk_exists_attendance_logs_ibfk_3 := (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'attendance_logs' AND CONSTRAINT_NAME = 'attendance_logs_ibfk_3');
+SET @sql_attendance_logs_ibfk_3 := IF(@fk_exists_attendance_logs_ibfk_3 = 0, 'ALTER TABLE `attendance_logs` ADD CONSTRAINT `attendance_logs_ibfk_3` FOREIGN KEY (`rule_id`) REFERENCES `attendance_rules` (`id`) ON DELETE SET NULL', 'SELECT 1');
+PREPARE stmt_attendance_logs_ibfk_3 FROM @sql_attendance_logs_ibfk_3;
+EXECUTE stmt_attendance_logs_ibfk_3;
+DEALLOCATE PREPARE stmt_attendance_logs_ibfk_3;
 
 --
 -- Ketidakleluasaan untuk tabel `chat_messages`
 --
-ALTER TABLE `chat_messages`
-  ADD CONSTRAINT `chat_messages_ibfk_1` FOREIGN KEY (`conversation_id`) REFERENCES `conversations` (`id`) ON DELETE CASCADE;
+SET @fk_exists_chat_messages_ibfk_1 := (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'chat_messages' AND CONSTRAINT_NAME = 'chat_messages_ibfk_1');
+SET @sql_chat_messages_ibfk_1 := IF(@fk_exists_chat_messages_ibfk_1 = 0, 'ALTER TABLE `chat_messages` ADD CONSTRAINT `chat_messages_ibfk_1` FOREIGN KEY (`conversation_id`) REFERENCES `conversations` (`id`) ON DELETE CASCADE', 'SELECT 1');
+PREPARE stmt_chat_messages_ibfk_1 FROM @sql_chat_messages_ibfk_1;
+EXECUTE stmt_chat_messages_ibfk_1;
+DEALLOCATE PREPARE stmt_chat_messages_ibfk_1;
 
 --
 -- Ketidakleluasaan untuk tabel `classes`
 --
-ALTER TABLE `classes`
-  ADD CONSTRAINT `fk_classes_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`tenant_id`);
+SET @fk_exists_fk_classes_tenant := (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'classes' AND CONSTRAINT_NAME = 'fk_classes_tenant');
+SET @sql_fk_classes_tenant := IF(@fk_exists_fk_classes_tenant = 0, 'ALTER TABLE `classes` ADD CONSTRAINT `fk_classes_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`tenant_id`)', 'SELECT 1');
+PREPARE stmt_fk_classes_tenant FROM @sql_fk_classes_tenant;
+EXECUTE stmt_fk_classes_tenant;
+DEALLOCATE PREPARE stmt_fk_classes_tenant;
 
 --
 -- Ketidakleluasaan untuk tabel `conversation_participants`
 --
-ALTER TABLE `conversation_participants`
-  ADD CONSTRAINT `conversation_participants_ibfk_1` FOREIGN KEY (`conversation_id`) REFERENCES `conversations` (`id`) ON DELETE CASCADE;
+SET @fk_exists_conversation_participants_ibfk_1 := (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'conversation_participants' AND CONSTRAINT_NAME = 'conversation_participants_ibfk_1');
+SET @sql_conversation_participants_ibfk_1 := IF(@fk_exists_conversation_participants_ibfk_1 = 0, 'ALTER TABLE `conversation_participants` ADD CONSTRAINT `conversation_participants_ibfk_1` FOREIGN KEY (`conversation_id`) REFERENCES `conversations` (`id`) ON DELETE CASCADE', 'SELECT 1');
+PREPARE stmt_conversation_participants_ibfk_1 FROM @sql_conversation_participants_ibfk_1;
+EXECUTE stmt_conversation_participants_ibfk_1;
+DEALLOCATE PREPARE stmt_conversation_participants_ibfk_1;
 
 --
 -- Ketidakleluasaan untuk tabel `evaluations`
 --
-ALTER TABLE `evaluations`
-  ADD CONSTRAINT `evaluations_ibfk_1` FOREIGN KEY (`teacher_id`) REFERENCES `teachers` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `evaluations_ibfk_2` FOREIGN KEY (`evaluator_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
+SET @fk_exists_evaluations_ibfk_1 := (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'evaluations' AND CONSTRAINT_NAME = 'evaluations_ibfk_1');
+SET @sql_evaluations_ibfk_1 := IF(@fk_exists_evaluations_ibfk_1 = 0, 'ALTER TABLE `evaluations` ADD CONSTRAINT `evaluations_ibfk_1` FOREIGN KEY (`teacher_id`) REFERENCES `teachers` (`id`) ON DELETE CASCADE', 'SELECT 1');
+PREPARE stmt_evaluations_ibfk_1 FROM @sql_evaluations_ibfk_1;
+EXECUTE stmt_evaluations_ibfk_1;
+DEALLOCATE PREPARE stmt_evaluations_ibfk_1;
+SET @fk_exists_evaluations_ibfk_2 := (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'evaluations' AND CONSTRAINT_NAME = 'evaluations_ibfk_2');
+SET @sql_evaluations_ibfk_2 := IF(@fk_exists_evaluations_ibfk_2 = 0, 'ALTER TABLE `evaluations` ADD CONSTRAINT `evaluations_ibfk_2` FOREIGN KEY (`evaluator_id`) REFERENCES `users` (`id`) ON DELETE CASCADE', 'SELECT 1');
+PREPARE stmt_evaluations_ibfk_2 FROM @sql_evaluations_ibfk_2;
+EXECUTE stmt_evaluations_ibfk_2;
+DEALLOCATE PREPARE stmt_evaluations_ibfk_2;
 
 --
 -- Ketidakleluasaan untuk tabel `leave_requests`
 --
-ALTER TABLE `leave_requests`
-  ADD CONSTRAINT `fk_leave_teacher` FOREIGN KEY (`teacher_id`) REFERENCES `teachers` (`id`);
+SET @fk_exists_fk_leave_teacher := (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'leave_requests' AND CONSTRAINT_NAME = 'fk_leave_teacher');
+SET @sql_fk_leave_teacher := IF(@fk_exists_fk_leave_teacher = 0, 'ALTER TABLE `leave_requests` ADD CONSTRAINT `fk_leave_teacher` FOREIGN KEY (`teacher_id`) REFERENCES `teachers` (`id`)', 'SELECT 1');
+PREPARE stmt_fk_leave_teacher FROM @sql_fk_leave_teacher;
+EXECUTE stmt_fk_leave_teacher;
+DEALLOCATE PREPARE stmt_fk_leave_teacher;
 
 --
 -- Ketidakleluasaan untuk tabel `mutasi_students`
 --
-ALTER TABLE `mutasi_students`
-  ADD CONSTRAINT `mutasi_students_ibfk_1` FOREIGN KEY (`student_id`) REFERENCES `students` (`id`) ON DELETE CASCADE;
+SET @fk_exists_mutasi_students_ibfk_1 := (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'mutasi_students' AND CONSTRAINT_NAME = 'mutasi_students_ibfk_1');
+SET @sql_mutasi_students_ibfk_1 := IF(@fk_exists_mutasi_students_ibfk_1 = 0, 'ALTER TABLE `mutasi_students` ADD CONSTRAINT `mutasi_students_ibfk_1` FOREIGN KEY (`student_id`) REFERENCES `students` (`id`) ON DELETE CASCADE', 'SELECT 1');
+PREPARE stmt_mutasi_students_ibfk_1 FROM @sql_mutasi_students_ibfk_1;
+EXECUTE stmt_mutasi_students_ibfk_1;
+DEALLOCATE PREPARE stmt_mutasi_students_ibfk_1;
 
 --
 -- Ketidakleluasaan untuk tabel `payment_settings`
 --
-ALTER TABLE `payment_settings`
-  ADD CONSTRAINT `fk_payment_settings_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`tenant_id`) ON DELETE CASCADE;
+SET @fk_exists_fk_payment_settings_tenant := (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'payment_settings' AND CONSTRAINT_NAME = 'fk_payment_settings_tenant');
+SET @sql_fk_payment_settings_tenant := IF(@fk_exists_fk_payment_settings_tenant = 0, 'ALTER TABLE `payment_settings` ADD CONSTRAINT `fk_payment_settings_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`tenant_id`) ON DELETE CASCADE', 'SELECT 1');
+PREPARE stmt_fk_payment_settings_tenant FROM @sql_fk_payment_settings_tenant;
+EXECUTE stmt_fk_payment_settings_tenant;
+DEALLOCATE PREPARE stmt_fk_payment_settings_tenant;
 
 --
 -- Ketidakleluasaan untuk tabel `payment_status_history`
 --
-ALTER TABLE `payment_status_history`
-  ADD CONSTRAINT `fk_payment_status_history_invoice` FOREIGN KEY (`invoice_id`) REFERENCES `payment_invoices` (`id`) ON DELETE CASCADE;
+SET @fk_exists_fk_payment_status_history_invoice := (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'payment_status_history' AND CONSTRAINT_NAME = 'fk_payment_status_history_invoice');
+SET @sql_fk_payment_status_history_invoice := IF(@fk_exists_fk_payment_status_history_invoice = 0, 'ALTER TABLE `payment_status_history` ADD CONSTRAINT `fk_payment_status_history_invoice` FOREIGN KEY (`invoice_id`) REFERENCES `payment_invoices` (`id`) ON DELETE CASCADE', 'SELECT 1');
+PREPARE stmt_fk_payment_status_history_invoice FROM @sql_fk_payment_status_history_invoice;
+EXECUTE stmt_fk_payment_status_history_invoice;
+DEALLOCATE PREPARE stmt_fk_payment_status_history_invoice;
 
 --
 -- Ketidakleluasaan untuk tabel `qr_attendance_logs`
 --
-ALTER TABLE `qr_attendance_logs`
-  ADD CONSTRAINT `qr_attendance_logs_ibfk_device` FOREIGN KEY (`device_id`) REFERENCES `scanner_devices` (`device_id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `qr_attendance_logs_ibfk_teacher` FOREIGN KEY (`teacher_id`) REFERENCES `teachers` (`id`) ON DELETE SET NULL;
+SET @fk_exists_qr_attendance_logs_ibfk_device := (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'qr_attendance_logs' AND CONSTRAINT_NAME = 'qr_attendance_logs_ibfk_device');
+SET @sql_qr_attendance_logs_ibfk_device := IF(@fk_exists_qr_attendance_logs_ibfk_device = 0, 'ALTER TABLE `qr_attendance_logs` ADD CONSTRAINT `qr_attendance_logs_ibfk_device` FOREIGN KEY (`device_id`) REFERENCES `scanner_devices` (`device_id`) ON DELETE CASCADE', 'SELECT 1');
+PREPARE stmt_qr_attendance_logs_ibfk_device FROM @sql_qr_attendance_logs_ibfk_device;
+EXECUTE stmt_qr_attendance_logs_ibfk_device;
+DEALLOCATE PREPARE stmt_qr_attendance_logs_ibfk_device;
+SET @fk_exists_qr_attendance_logs_ibfk_teacher := (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'qr_attendance_logs' AND CONSTRAINT_NAME = 'qr_attendance_logs_ibfk_teacher');
+SET @sql_qr_attendance_logs_ibfk_teacher := IF(@fk_exists_qr_attendance_logs_ibfk_teacher = 0, 'ALTER TABLE `qr_attendance_logs` ADD CONSTRAINT `qr_attendance_logs_ibfk_teacher` FOREIGN KEY (`teacher_id`) REFERENCES `teachers` (`id`) ON DELETE SET NULL', 'SELECT 1');
+PREPARE stmt_qr_attendance_logs_ibfk_teacher FROM @sql_qr_attendance_logs_ibfk_teacher;
+EXECUTE stmt_qr_attendance_logs_ibfk_teacher;
+DEALLOCATE PREPARE stmt_qr_attendance_logs_ibfk_teacher;
 
 --
 -- Ketidakleluasaan untuk tabel `students`
 --
-ALTER TABLE `students`
-  ADD CONSTRAINT `fk_students_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`tenant_id`),
-  ADD CONSTRAINT `students_ibfk_1` FOREIGN KEY (`parent_id`) REFERENCES `parents` (`id`),
-  ADD CONSTRAINT `students_ibfk_2` FOREIGN KEY (`class_id`) REFERENCES `classes` (`id`);
+SET @fk_exists_fk_students_tenant := (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'students' AND CONSTRAINT_NAME = 'fk_students_tenant');
+SET @sql_fk_students_tenant := IF(@fk_exists_fk_students_tenant = 0, 'ALTER TABLE `students` ADD CONSTRAINT `fk_students_tenant` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`tenant_id`)', 'SELECT 1');
+PREPARE stmt_fk_students_tenant FROM @sql_fk_students_tenant;
+EXECUTE stmt_fk_students_tenant;
+DEALLOCATE PREPARE stmt_fk_students_tenant;
+SET @fk_exists_students_ibfk_1 := (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'students' AND CONSTRAINT_NAME = 'students_ibfk_1');
+SET @sql_students_ibfk_1 := IF(@fk_exists_students_ibfk_1 = 0, 'ALTER TABLE `students` ADD CONSTRAINT `students_ibfk_1` FOREIGN KEY (`parent_id`) REFERENCES `parents` (`id`)', 'SELECT 1');
+PREPARE stmt_students_ibfk_1 FROM @sql_students_ibfk_1;
+EXECUTE stmt_students_ibfk_1;
+DEALLOCATE PREPARE stmt_students_ibfk_1;
+SET @fk_exists_students_ibfk_2 := (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'students' AND CONSTRAINT_NAME = 'students_ibfk_2');
+SET @sql_students_ibfk_2 := IF(@fk_exists_students_ibfk_2 = 0, 'ALTER TABLE `students` ADD CONSTRAINT `students_ibfk_2` FOREIGN KEY (`class_id`) REFERENCES `classes` (`id`)', 'SELECT 1');
+PREPARE stmt_students_ibfk_2 FROM @sql_students_ibfk_2;
+EXECUTE stmt_students_ibfk_2;
+DEALLOCATE PREPARE stmt_students_ibfk_2;
 
 --
 -- Ketidakleluasaan untuk tabel `teacher_assignments`
 --
-ALTER TABLE `teacher_assignments`
-  ADD CONSTRAINT `teacher_assignments_ibfk_1` FOREIGN KEY (`teacher_id`) REFERENCES `teachers` (`id`) ON DELETE CASCADE,
-  ADD CONSTRAINT `teacher_assignments_ibfk_2` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`tenant_id`) ON DELETE CASCADE;
+SET @fk_exists_teacher_assignments_ibfk_1 := (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'teacher_assignments' AND CONSTRAINT_NAME = 'teacher_assignments_ibfk_1');
+SET @sql_teacher_assignments_ibfk_1 := IF(@fk_exists_teacher_assignments_ibfk_1 = 0, 'ALTER TABLE `teacher_assignments` ADD CONSTRAINT `teacher_assignments_ibfk_1` FOREIGN KEY (`teacher_id`) REFERENCES `teachers` (`id`) ON DELETE CASCADE', 'SELECT 1');
+PREPARE stmt_teacher_assignments_ibfk_1 FROM @sql_teacher_assignments_ibfk_1;
+EXECUTE stmt_teacher_assignments_ibfk_1;
+DEALLOCATE PREPARE stmt_teacher_assignments_ibfk_1;
+SET @fk_exists_teacher_assignments_ibfk_2 := (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'teacher_assignments' AND CONSTRAINT_NAME = 'teacher_assignments_ibfk_2');
+SET @sql_teacher_assignments_ibfk_2 := IF(@fk_exists_teacher_assignments_ibfk_2 = 0, 'ALTER TABLE `teacher_assignments` ADD CONSTRAINT `teacher_assignments_ibfk_2` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`tenant_id`) ON DELETE CASCADE', 'SELECT 1');
+PREPARE stmt_teacher_assignments_ibfk_2 FROM @sql_teacher_assignments_ibfk_2;
+EXECUTE stmt_teacher_assignments_ibfk_2;
+DEALLOCATE PREPARE stmt_teacher_assignments_ibfk_2;
 
 --
 -- Ketidakleluasaan untuk tabel `teacher_attendance_stats`
 --
-ALTER TABLE `teacher_attendance_stats`
-  ADD CONSTRAINT `teacher_attendance_stats_ibfk_1` FOREIGN KEY (`teacher_id`) REFERENCES `teachers` (`id`) ON DELETE CASCADE;
+SET @fk_exists_teacher_attendance_stats_ibfk_1 := (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'teacher_attendance_stats' AND CONSTRAINT_NAME = 'teacher_attendance_stats_ibfk_1');
+SET @sql_teacher_attendance_stats_ibfk_1 := IF(@fk_exists_teacher_attendance_stats_ibfk_1 = 0, 'ALTER TABLE `teacher_attendance_stats` ADD CONSTRAINT `teacher_attendance_stats_ibfk_1` FOREIGN KEY (`teacher_id`) REFERENCES `teachers` (`id`) ON DELETE CASCADE', 'SELECT 1');
+PREPARE stmt_teacher_attendance_stats_ibfk_1 FROM @sql_teacher_attendance_stats_ibfk_1;
+EXECUTE stmt_teacher_attendance_stats_ibfk_1;
+DEALLOCATE PREPARE stmt_teacher_attendance_stats_ibfk_1;
 
 --
 -- Ketidakleluasaan untuk tabel `users`
 --
-ALTER TABLE `users`
-  ADD CONSTRAINT `users_ibfk_1` FOREIGN KEY (`guru_id`) REFERENCES `teachers` (`id`) ON DELETE SET NULL,
-  ADD CONSTRAINT `users_ibfk_2` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`tenant_id`) ON DELETE CASCADE;
+SET @fk_exists_users_ibfk_1 := (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND CONSTRAINT_NAME = 'users_ibfk_1');
+SET @sql_users_ibfk_1 := IF(@fk_exists_users_ibfk_1 = 0, 'ALTER TABLE `users` ADD CONSTRAINT `users_ibfk_1` FOREIGN KEY (`guru_id`) REFERENCES `teachers` (`id`) ON DELETE SET NULL', 'SELECT 1');
+PREPARE stmt_users_ibfk_1 FROM @sql_users_ibfk_1;
+EXECUTE stmt_users_ibfk_1;
+DEALLOCATE PREPARE stmt_users_ibfk_1;
+SET @fk_exists_users_ibfk_2 := (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND CONSTRAINT_NAME = 'users_ibfk_2');
+SET @sql_users_ibfk_2 := IF(@fk_exists_users_ibfk_2 = 0, 'ALTER TABLE `users` ADD CONSTRAINT `users_ibfk_2` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`tenant_id`) ON DELETE CASCADE', 'SELECT 1');
+PREPARE stmt_users_ibfk_2 FROM @sql_users_ibfk_2;
+EXECUTE stmt_users_ibfk_2;
+DEALLOCATE PREPARE stmt_users_ibfk_2;
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;

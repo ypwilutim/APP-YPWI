@@ -49,6 +49,26 @@ CREATE TABLE `attendance_logs` (
 -- --------------------------------------------------------
 
 --
+-- Struktur dari tabel `student_attendance`
+--
+
+CREATE TABLE `student_attendance` (
+  `id` int(11) NOT NULL,
+  `student_id` int(11) NOT NULL,
+  `class_id` int(11) DEFAULT NULL,
+  `tenant_id` varchar(50) DEFAULT NULL,
+  `tanggal` date NOT NULL,
+  `status` enum('hadir','izin','sakit','alpha') NOT NULL,
+  `keterangan` text DEFAULT NULL,
+  `recorded_by` int(11) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  UNIQUE KEY `uniq_student_tanggal` (`student_id`, `tanggal`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Struktur dari tabel `attendance_rules`
 --
 
@@ -1420,6 +1440,12 @@ ALTER TABLE `teachers`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
+-- AUTO_INCREMENT untuk tabel `student_attendance`
+--
+ALTER TABLE `student_attendance`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT untuk tabel `teacher_assignments`
 --
 ALTER TABLE `teacher_assignments`
@@ -1549,6 +1575,15 @@ ALTER TABLE `teacher_attendance_stats`
 --
 ALTER TABLE `tenant_locations`
   ADD CONSTRAINT `tenant_locations_ibfk_1` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`tenant_id`) ON DELETE CASCADE;
+
+--
+-- Ketidakleluasaan untuk tabel `student_attendance`
+--
+ALTER TABLE `student_attendance`
+  ADD CONSTRAINT `student_attendance_ibfk_1` FOREIGN KEY (`student_id`) REFERENCES `students` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `student_attendance_ibfk_2` FOREIGN KEY (`class_id`) REFERENCES `classes` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `student_attendance_ibfk_3` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`tenant_id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `student_attendance_ibfk_4` FOREIGN KEY (`recorded_by`) REFERENCES `teachers` (`id`) ON DELETE SET NULL;
 
 --
 -- Ketidakleluasaan untuk tabel `users`

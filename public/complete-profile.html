@@ -92,10 +92,12 @@
             <div class="step-indicator" data-step="2">2</div>
             <div class="step-line" data-line="2"></div>
             <div class="step-indicator" data-step="3">3</div>
+            <div class="step-line" data-line="3"></div>
+            <div class="step-indicator" data-step="4">4</div>
           </div>
         </div>
         <div class="text-center mb-8">
-          <span id="step-label" class="text-lg font-semibold text-gray-700">Langkah 1 dari 3: Data Identitas Pribadi</span>
+          <span id="step-label" class="text-lg font-semibold text-gray-700">Langkah 1 dari 4: Data Identitas Pribadi</span>
         </div>
 
         <form id="profileForm">
@@ -104,7 +106,7 @@
           <input type="hidden" id="link_ktp" name="link_ktp">
           <input type="hidden" id="link_kk" name="link_kk">
           <input type="hidden" id="link_ijazah" name="link_ijazah">
-          <input type="hidden" id="assignments_json" name="assignments" required>
+          <input type="hidden" id="assignments_json" name="assignments">
 
           <!-- Step 1: Data Identitas Pribadi -->
           <div class="step-content active" data-step="1">
@@ -462,8 +464,19 @@
                 </div>
               </div>
 
+              <p class="mt-6 text-sm text-gray-500 text-center">Dokumen yang Anda pilih akan langsung terupload ke sistem. Pastikan berkas sudah benar sebelum lanjut.</p>
+            </div>
+          </div>
+
+          <!-- Step 4: Review & Kirim -->
+          <div class="step-content" data-step="4">
+            <div class="space-y-6">
+              <h3 class="text-xl font-bold text-gray-900 flex items-center gap-2 border-b pb-3">
+                <i class="bi bi-clipboard-check text-primary"></i> Tinjau & Kirim Data
+              </h3>
+
               <!-- Review Section -->
-              <div id="review-section" class="mt-8 p-6 bg-blue-50 border border-blue-200 rounded-2xl">
+              <div id="review-section" class="p-6 bg-blue-50 border border-blue-200 rounded-2xl">
                 <h4 class="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
                   <i class="bi bi-check-circle text-blue-600"></i> Ringkasan Data
                 </h4>
@@ -483,7 +496,7 @@
               Selanjutnya<i class="bi bi-arrow-right ml-2"></i>
             </button>
             <button type="submit" id="submitBtn" class="hidden px-6 py-3 bg-[#066e3a] text-white rounded-xl font-bold hover:bg-[#066e3a]/90 transition">
-              <i class="bi bi-cloud-arrow-up-fill mr-2"></i>Simpan
+              <i class="bi bi-cloud-arrow-up-fill mr-2"></i>Kirim Data
             </button>
           </div>
         </form>
@@ -693,23 +706,25 @@
        }
      }
 
-  function initPerkawinanToggle() {
-     const status = document.getElementById('status_perkawinan').value;
-     const showPasangan = ['Menikah', 'Cerai Hidup'].includes(status);
-     const showAnak = ['Menikah', 'Cerai Hidup', 'Cerai Mati'].includes(status);
+   function initPerkawinanToggle() {
+      const status = document.getElementById('status_perkawinan').value;
+      const showPasangan = ['Menikah', 'Cerai Hidup'].includes(status);
+      const showAnak = ['Menikah', 'Cerai Hidup', 'Cerai Mati'].includes(status);
 
-     document.getElementById('pasangan_fields').classList.toggle('hidden', !showPasangan);
-     document.getElementById('jumlah_anak_field').classList.toggle('hidden', !showAnak);
+      document.getElementById('pasangan_fields').classList.toggle('hidden', !showPasangan);
+      document.getElementById('jumlah_anak_field').classList.toggle('hidden', !showAnak);
 
-     document.querySelectorAll('.pasangan-nik').forEach(input => {
-       input.required = showPasangan;
-     });
+      // NIK pasangan wajib hanya untuk Menikah; Cerai Hidup opsional (bisa diisi tapi tidak wajib)
+      const nikPasanganRequired = status === 'Menikah';
+      document.querySelectorAll('.pasangan-nik').forEach(input => {
+        input.required = nikPasanganRequired;
+      });
 
-     const jumlahAnakInput = document.getElementById('jumlah_anak');
-     if (jumlahAnakInput) {
-       jumlahAnakInput.required = showAnak;
-     }
-   }
+      const jumlahAnakInput = document.getElementById('jumlah_anak');
+      if (jumlahAnakInput) {
+        jumlahAnakInput.required = showAnak;
+      }
+    }
 
   function addPasanganField(nik = '', nama = '', tipe = '') {
      const list = document.getElementById('pasangan_list');
@@ -795,75 +810,104 @@
        document.querySelector(`.step-line[data-line="${i}"]`)?.classList.add('completed');
      }
 
-     const labels = {
-       1: 'Langkah 1 dari 3: Data Identitas Pribadi',
-       2: 'Langkah 2 dari 3: Data Kepegawaian',
-       3: 'Langkah 3 dari 3: Data Pendidikan & Berkas'
-     };
+      const labels = {
+        1: 'Langkah 1 dari 4: Data Identitas Pribadi',
+        2: 'Langkah 2 dari 4: Data Kepegawaian',
+        3: 'Langkah 3 dari 4: Upload Dokumen',
+        4: 'Langkah 4 dari 4: Tinjau & Kirim Data'
+      };
      document.getElementById('step-label').textContent = labels[step] || '';
 
-     document.getElementById('prevBtn').classList.toggle('hidden', step === 1);
-     document.getElementById('nextBtn').classList.toggle('hidden', step === 3);
-     document.getElementById('submitBtn').classList.toggle('hidden', step !== 3);
+      document.getElementById('prevBtn').classList.toggle('hidden', step === 1);
+      document.getElementById('nextBtn').classList.toggle('hidden', step === 4);
+      document.getElementById('submitBtn').classList.toggle('hidden', step !== 4);
 
-     if (step === 3) {
-       generateReview();
-     }
+      if (step === 4) {
+        generateReview();
+      }
    }
 
-  function validateStep(step) {
-     if (step === 1) {
-       const requiredIds = ['nama', 'nik', 'email', 'tempat_lahir', 'tanggal_lahir', 'jenis_kelamin', 'no_wa', 'status_perkawinan', 'alamat'];
-       for (const id of requiredIds) {
-         const el = document.getElementById(id);
-         if (el && !el.value) {
-           el.reportValidity();
-           return false;
-         }
-       }
-       if (!document.getElementById('link_ktp').value && !document.getElementById('ktp').files[0]) {
-         Swal.fire('Error', 'Upload KTP wajib diisi.', 'error');
-         return false;
-       }
-     } else if (step === 2) {
-       const requiredIds = ['status_kepegawaian', 'status_aktif', 'tmt', 'bank', 'nomor_rekening'];
-       for (const id of requiredIds) {
-         const el = document.getElementById(id);
-         if (el && !el.value) {
-           el.reportValidity();
-           return false;
-         }
-       }
-       if (localAssignments.length === 0) {
-         Swal.fire('Error', 'Minimal satu penempatan unit sekolah harus dipilih.', 'error');
-         return false;
-       }
-       if (!document.getElementById('link_kk').value && !document.getElementById('kk').files[0]) {
-         Swal.fire('Error', 'Upload KK wajib diisi.', 'error');
-         return false;
-       }
-     }
-     return true;
-   }
+   function validateStep(step) {
+      if (step === 1) {
+        const requiredIds = ['nama', 'nik', 'email', 'tempat_lahir', 'tanggal_lahir', 'jenis_kelamin', 'no_wa', 'status_perkawinan', 'alamat'];
+        for (const id of requiredIds) {
+          const el = document.getElementById(id);
+          if (!el) continue;
+          if (el.offsetParent === null) continue; // lewati field tersembunyi
+          if (!el.value) {
+            el.reportValidity();
+            return false;
+          }
+        }
+        if (!document.getElementById('link_ktp').value && !document.getElementById('ktp').files[0]) {
+          Swal.fire('Error', 'Upload KTP wajib diisi.', 'error');
+          return false;
+        }
+      } else if (step === 2) {
+        const requiredIds = ['status_kepegawaian', 'status_aktif', 'tmt', 'bank', 'nomor_rekening'];
+        for (const id of requiredIds) {
+          const el = document.getElementById(id);
+          if (!el) continue;
+          if (el.offsetParent === null) continue; // lewati field tersembunyi
+          if (!el.value) {
+            el.reportValidity();
+            return false;
+          }
+        }
+        if (localAssignments.length === 0) {
+          Swal.fire('Error', 'Minimal satu penempatan unit sekolah harus dipilih.', 'error');
+          return false;
+        }
+        if (!document.getElementById('link_kk').value && !document.getElementById('kk').files[0]) {
+          Swal.fire('Error', 'Upload KK wajib diisi.', 'error');
+          return false;
+        }
+      }
+      return true;
+    }
 
-  function previewFile(input, previewId, iconId, existingInfoId) {
-     const file = input.files[0];
-     if (file) {
-       const reader = new FileReader();
-       reader.onload = e => {
-         const preview = document.getElementById(previewId);
-         const icon = document.getElementById(iconId);
-         const existingInfo = document.getElementById(existingInfoId);
-         if (preview) {
-           preview.src = e.target.result;
-           preview.classList.remove('hidden');
-         }
-         if (icon) icon.classList.add('hidden');
-         if (existingInfo) existingInfo.classList.add('hidden');
-       };
-       reader.readAsDataURL(file);
-     }
-   }
+   function previewFile(input, previewId, iconId, existingInfoId, docType) {
+      const file = input.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = e => {
+          const preview = document.getElementById(previewId);
+          const icon = document.getElementById(iconId);
+          const existingInfo = document.getElementById(existingInfoId);
+          if (preview) {
+            preview.src = e.target.result;
+            preview.classList.remove('hidden');
+          }
+          if (icon) icon.classList.add('hidden');
+          if (existingInfo) existingInfo.classList.add('hidden');
+        };
+        reader.readAsDataURL(file);
+
+        // Upload langsung ke database
+        if (docType) uploadDocument(docType, file);
+      }
+    }
+
+    async function uploadDocument(docType, file) {
+      try {
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('doc_type', docType);
+        const res = await fetch('/api/public/teachers/' + teacherId + '/upload-document', {
+          method: 'POST',
+          body: fd
+        });
+        const data = await res.json();
+        if (data.success) {
+          const linkInput = document.getElementById('link_' + docType);
+          if (linkInput) linkInput.value = data.url;
+        } else {
+          console.error('Upload', docType, 'gagal:', data.message);
+        }
+      } catch (e) {
+        console.error('Upload', docType, 'error:', e);
+      }
+    }
 
   function generateReview() {
      const reviewContent = document.getElementById('review-content');
@@ -955,10 +999,10 @@
      document.getElementById('ijazahUploadArea')?.addEventListener('click', () => {
        document.getElementById('ijazah').click();
      });
-     document.getElementById('foto')?.addEventListener('change', e => previewFile(e.target, 'photo-preview', 'photo-icon', 'existing-photo-info'));
-     document.getElementById('ktp')?.addEventListener('change', e => previewFile(e.target, 'ktp-preview', 'ktp-icon', 'existing-ktp-info'));
-     document.getElementById('kk')?.addEventListener('change', e => previewFile(e.target, 'kk-preview', 'kk-icon', 'existing-kk-info'));
-     document.getElementById('ijazah')?.addEventListener('change', e => previewFile(e.target, 'ijazah-preview', 'ijazah-icon', 'existing-ijazah-info'));
+      document.getElementById('foto')?.addEventListener('change', e => previewFile(e.target, 'photo-preview', 'photo-icon', 'existing-photo-info', 'foto'));
+      document.getElementById('ktp')?.addEventListener('change', e => previewFile(e.target, 'ktp-preview', 'ktp-icon', 'existing-ktp-info', 'ktp'));
+      document.getElementById('kk')?.addEventListener('change', e => previewFile(e.target, 'kk-preview', 'kk-icon', 'existing-kk-info', 'kk'));
+      document.getElementById('ijazah')?.addEventListener('change', e => previewFile(e.target, 'ijazah-preview', 'ijazah-icon', 'existing-ijazah-info', 'ijazah'));
      document.getElementById('closeAssignmentBtn')?.addEventListener('click', () => {
        document.getElementById('modal-penempatan').classList.add('hidden');
        document.getElementById('modal-penempatan').classList.remove('flex');
@@ -1026,29 +1070,25 @@
        return Swal.fire('Error', 'Nomor rekening wajib diisi.', 'error');
      }
 
-     const link_foto = document.getElementById('link_foto').value;
-     const foto = document.getElementById('foto').files[0];
-     if (!link_foto && !foto) {
-       return Swal.fire('Error', 'Pas foto wajib diupload.', 'error');
-     }
+      const link_foto = document.getElementById('link_foto').value;
+      if (!link_foto) {
+        return Swal.fire('Error', 'Pas foto wajib diupload.', 'error');
+      }
 
-     const link_ktp = document.getElementById('link_ktp').value;
-     const ktp = document.getElementById('ktp').files[0];
-     if (!link_ktp && !ktp) {
-       return Swal.fire('Error', 'Upload KTP wajib diisi.', 'error');
-     }
+      const link_ktp = document.getElementById('link_ktp').value;
+      if (!link_ktp) {
+        return Swal.fire('Error', 'Upload KTP wajib diisi.', 'error');
+      }
 
-     const link_kk = document.getElementById('link_kk').value;
-     const kk = document.getElementById('kk').files[0];
-     if (!link_kk && !kk) {
-       return Swal.fire('Error', 'Upload KK wajib diisi.', 'error');
-     }
+      const link_kk = document.getElementById('link_kk').value;
+      if (!link_kk) {
+        return Swal.fire('Error', 'Upload KK wajib diisi.', 'error');
+      }
 
-     const link_ijazah = document.getElementById('link_ijazah').value;
-     const ijazah = document.getElementById('ijazah').files[0];
-     if (!link_ijazah && !ijazah) {
-       return Swal.fire('Error', 'Upload Ijazah wajib diisi.', 'error');
-     }
+      const link_ijazah = document.getElementById('link_ijazah').value;
+      if (!link_ijazah) {
+        return Swal.fire('Error', 'Upload Ijazah wajib diisi.', 'error');
+      }
 
      const submitBtn = e.target.querySelector('button[type="submit"]');
      submitBtn.disabled = true;
@@ -1101,19 +1141,26 @@
           body: formData
         });
 
-        if (response.ok) {
-          await fetch('/api/profile-complete/' + teacherId, { method: 'PUT', headers: { 'Content-Type': 'application/json' } });
-          Swal.fire({ title: 'Berhasil!', text: 'Profil berhasil diperbarui!', icon: 'success', timer: 3000, showConfirmButton: false }).then(() => {
-            window.location.href = 'login.html';
-          });
-        } else {
-          throw new Error('Update failed');
-        }
-      } catch (error) {
-        Swal.fire({ title: 'Gagal', text: 'Terjadi kesalahan.', icon: 'error' });
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = '<i class="bi bi-cloud-arrow-up-fill"></i> SIMPAN DATA PROFIL';
-      }
+         if (response.ok) {
+           await fetch('/api/profile-complete/' + teacherId, { method: 'PUT', headers: { 'Content-Type': 'application/json' } });
+           Swal.fire({ title: 'Berhasil!', text: 'Profil berhasil diperbarui!', icon: 'success', timer: 3000, showConfirmButton: false }).then(() => {
+             window.location.href = 'login.html';
+           });
+         } else {
+           let msg = 'Update gagal (status ' + response.status + ')';
+           try {
+             const errJson = await response.json();
+             if (errJson && errJson.message) msg = errJson.message;
+           } catch (e) {}
+           Swal.fire({ title: 'Gagal', text: msg, icon: 'error' });
+           submitBtn.disabled = false;
+           submitBtn.innerHTML = '<i class="bi bi-cloud-arrow-up-fill"></i> SIMPAN DATA PROFIL';
+         }
+       } catch (error) {
+         Swal.fire({ title: 'Gagal', text: 'Terjadi kesalahan: ' + (error && error.message ? error.message : 'unknown'), icon: 'error' });
+         submitBtn.disabled = false;
+         submitBtn.innerHTML = '<i class="bi bi-cloud-arrow-up-fill"></i> SIMPAN DATA PROFIL';
+       }
     });
   </script>
 </body>
