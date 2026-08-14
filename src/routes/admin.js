@@ -660,6 +660,63 @@ router.post('/admin/tenant-locations', authenticateOperator, async (req, res) =>
   }
 });
 
+// PUT /api/admin/tenant-locations/:id - Update location
+router.put('/admin/tenant-locations/:id', authenticateOperator, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { location_name, latitude, longitude, location_radius, is_active, use_central_rules } = req.body;
+
+    const [existing] = await db.query('SELECT tenant_id FROM tenant_locations WHERE id = ?', [id]);
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Lokasi tidak ditemukan' });
+    }
+
+    const tenantId = req.query.tenant_id || existing.tenant_id;
+    if (!verifyTenantAccess(req, tenantId)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+
+    const updates = {};
+    if (location_name !== undefined) updates.location_name = location_name;
+    if (latitude !== undefined) updates.latitude = latitude;
+    if (longitude !== undefined) updates.longitude = longitude;
+    if (location_radius !== undefined) updates.location_radius = location_radius;
+    if (is_active !== undefined) updates.is_active = is_active;
+    if (use_central_rules !== undefined) updates.use_central_rules = use_central_rules;
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ success: false, message: 'Tidak ada field yang diupdate' });
+    }
+
+    const setClause = Object.keys(updates).map(k => `${k} = ?`).join(', ');
+    const values = [...Object.values(updates), id];
+    await db.query(`UPDATE tenant_locations SET ${setClause} WHERE id = ?`, values);
+
+    res.json({ success: true, message: 'Lokasi berhasil diperbarui' });
+  } catch (error) {
+    console.error('Update location error:', error.message);
+    res.status(500).json({ success: false, message: 'Error updating location' });
+  }
+});
+
+// GET /api/admin/tenant-locations/:id - Get single location
+router.get('/admin/tenant-locations/:id', authenticateOperator, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [location] = await db.query('SELECT * FROM tenant_locations WHERE id = ?', [id]);
+    if (!location) {
+      return res.status(404).json({ success: false, message: 'Lokasi tidak ditemukan' });
+    }
+    if (!verifyTenantAccess(req, location.tenant_id)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+    res.json({ success: true, data: location });
+  } catch (error) {
+    console.error('Get location error:', error.message);
+    res.status(500).json({ success: false, message: 'Error fetching location' });
+  }
+});
+
 // DELETE /api/admin/tenant-locations/:id - Delete location
 router.delete('/admin/tenant-locations/:id', authenticateOperator, async (req, res) => {
   try {

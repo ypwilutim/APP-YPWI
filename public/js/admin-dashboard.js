@@ -2571,52 +2571,94 @@ document.getElementById('locationForm')?.addEventListener('submit', async (e) =>
 });
 
 // ── Tenant Location Modal (Tambah / Edit Lokasi Tenant) ──
-document.getElementById('tenantLocationForm')
-    .addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const formData = new FormData(e.target);
-        const data = Object.fromEntries(formData);
-        const tenantId = data.tenant_id;
+let _tenantLocationFormListenerAdded = false;
+function initTenantLocationForm() {
+  if (_tenantLocationFormListenerAdded) return;
+  const form = document.getElementById('tenantLocationForm');
+  if (!form) return;
+  _tenantLocationFormListenerAdded = true;
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
 
-        const submitBtn = e.target.querySelector('button[type="submit"]');
-        const originalText = submitBtn.textContent;
-        submitBtn.disabled = true;
-        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menyimpan...';
+    const locationId = document.getElementById('locationId').value;
+    const tenantId = document.getElementById('locationTenantId').value;
+    const locationName = document.getElementById('locationName').value;
+    const latitude = parseFloat(document.getElementById('locationLat').value);
+    const longitude = parseFloat(document.getElementById('locationLng').value);
+    const locationRadius = parseInt(document.getElementById('locationRadius').value) || 100;
 
-        try {
-            const response = await fetch(`/api/admin/tenants/${tenantId}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}`
-                },
-                body: JSON.stringify(data)
-            });
+    if (!tenantId) {
+      showToast('Pilih sekolah/tenant terlebih dahulu', 'error');
+      return;
+    }
+    if (!locationName) {
+      showToast('Nama lokasi wajib diisi', 'error');
+      return;
+    }
+    if (isNaN(latitude) || isNaN(longitude)) {
+      showToast('Latitude dan Longitude wajib diisi', 'error');
+      return;
+    }
 
-            if (response.status === 401 || response.status === 403) {
-                console.warn('[TENANT LOCATION] Token expired / unauthorized, redirecting to login');
-                localStorage.removeItem('token');
-                localStorage.removeItem('user');
-                // window.location.replace("login.html");
-                return;
-            }
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const originalText = submitBtn.textContent;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menyimpan...';
 
-            const res = await response.json();
-            if (res.success) {
-                hideTenantLocationModal();
-                fetchTenantLocations();
-                showToast('Lokasi tenant berhasil disimpan', 'success');
-            } else {
-                showToast('Gagal menyimpan: ' + (res.message || 'Terjadi kesalahan'), 'error');
-            }
-        } catch (error) {
-            console.error('Tenant location form submit error:', error);
-            showToast('Terjadi kesalahan saat menyimpan lokasi tenant', 'error');
-        } finally {
-            submitBtn.disabled = false;
-            submitBtn.textContent = originalText;
-        }
-    });
+    try {
+      const body = {
+        tenant_id: tenantId,
+        location_name: locationName,
+        latitude: latitude,
+        longitude: longitude,
+        location_radius: locationRadius,
+        is_active: true
+      };
+
+      let url, method;
+      if (locationId) {
+        url = `/api/admin/tenant-locations/${locationId}`;
+        method = 'PUT';
+      } else {
+        url = '/api/admin/tenant-locations';
+        method = 'POST';
+      }
+
+      const response = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}`
+        },
+        body: JSON.stringify(body)
+      });
+
+      if (response.status === 401 || response.status === 403) {
+        console.warn('[TENANT LOCATION] Token expired / unauthorized, redirecting to login');
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.replace('login.html');
+        return;
+      }
+
+      const res = await response.json();
+      if (res.success) {
+        hideTenantLocationModal();
+        loadTenantLocations();
+        showToast('Lokasi berhasil disimpan', 'success');
+      } else {
+        showToast('Gagal menyimpan: ' + (res.message || 'Terjadi kesalahan'), 'error');
+      }
+    } catch (error) {
+      console.error('Tenant location form submit error:', error);
+      showToast('Terjadi kesalahan saat menyimpan lokasi', 'error');
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = originalText;
+    }
+  });
+}
+initTenantLocationForm();
 
 document.addEventListener('DOMContentLoaded', function () {
     // Run auth check first
@@ -2630,10 +2672,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
     try {
         const user = JSON.parse(userData);
-        if (user.role !== 'admin') {
-            // window.location.replace("/login.html");
-            return;
-        }
         window.authToken = token;
         window.currentUser = user;
 
@@ -2677,6 +2715,26 @@ function initAllUI() {
     // Add coordinate preview listeners
     document.getElementById('latitudeInput')?.addEventListener('input', updateCoordinatePreview);
     document.getElementById('longitudeInput')?.addEventListener('input', updateCoordinatePreview);
+
+    // Add modal coordinate preview listeners for tenant location modal
+    document.getElementById('locationLat')?.addEventListener('input', () => {
+      const lat = document.getElementById('locationLat')?.value;
+      const lng = document.getElementById('locationLng')?.value;
+      const preview = document.getElementById('coordinatePreviewModal');
+      if (preview) {
+        if (lat && lng) preview.innerHTML = `<span class="font-mono">${parseFloat(lat).toFixed(6)}, ${parseFloat(lng).toFixed(6)}</span>`;
+        else preview.innerHTML = '<span class="text-gray-500">Belum ada koordinat dipilih</span>';
+      }
+    });
+    document.getElementById('locationLng')?.addEventListener('input', () => {
+      const lat = document.getElementById('locationLat')?.value;
+      const lng = document.getElementById('locationLng')?.value;
+      const preview = document.getElementById('coordinatePreviewModal');
+      if (preview) {
+        if (lat && lng) preview.innerHTML = `<span class="font-mono">${parseFloat(lat).toFixed(6)}, ${parseFloat(lng).toFixed(6)}</span>`;
+        else preview.innerHTML = '<span class="text-gray-500">Belum ada koordinat dipilih</span>';
+      }
+    });
 
     // Add modal auto-detect button listener
     document.getElementById('detectLocationBtn')?.addEventListener('click', (event) => autoDetectLocationModal(event));
@@ -3372,7 +3430,6 @@ window.refreshTenantLocations = refreshTenantLocations;
 window.openWhatsAppMessenger = function () { };
 window.showMutasiTeachersModal = function () { };
 window.loadStudentPaymentSummary = function () { };
-window.loadTenantLocations = function () { };
 window.loadEmploymentRules = function () { };
 window.createBackup = function () { };
 window.restoreDatabase = function () { };
@@ -3991,9 +4048,165 @@ window.handleSubmitDevice = async function (event) {
         alert('Terjadi kesalahan sistem');
     }
 };
-window.showAddLocationModal = function () { };
-window.toggleLocationStatus = function (id, status) { };
-window.deleteTenantLocation = function (id) { };
+// Location management for locations-multi settings
+window.loadTenantLocations = async function () {
+  try {
+    const container = document.getElementById('tenantLocationsList');
+    if (!container) return;
+    container.innerHTML = '<div class="text-center py-12"><div class="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mx-auto mb-4"></div><p class="text-gray-600">Memuat data lokasi...</p></div>';
+
+    const response = await fetch('/api/admin/tenant-locations', {
+      headers: { 'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}` }
+    });
+
+    if (response.status === 401 || response.status === 403) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      return;
+    }
+
+    const res = await response.json();
+    const items = res.success ? res.data : [];
+
+    if (items.length === 0) {
+      container.innerHTML = '<div class="text-center py-12 text-gray-500 text-sm">Belum ada lokasi pecahan</div>';
+      return;
+    }
+
+    container.innerHTML = items.map(loc => `
+      <div class="bg-white border border-gray-200 rounded-lg p-4 mb-2">
+        <div class="flex items-start justify-between mb-3">
+          <div class="flex-1">
+            <h5 class="font-medium text-gray-900">${loc.location_name || 'Lokasi Pecahan'}</h5>
+            <p class="text-sm text-gray-600 mt-1">ID: ${loc.id} | Tenant: ${loc.tenant_id || '-'}</p>
+          </div>
+          <span class="px-2 py-1 text-xs font-semibold rounded-full ${loc.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">${loc.is_active ? 'Aktif' : 'Nonaktif'}</span>
+        </div>
+        <div class="grid grid-cols-2 gap-4 mb-3">
+          <div><span class="text-xs text-gray-500">Lat:</span> <span class="font-mono text-gray-900">${loc.latitude ? parseFloat(loc.latitude).toFixed(6) : '-'}</span></div>
+          <div><span class="text-xs text-gray-500">Lng:</span> <span class="font-mono text-gray-900">${loc.longitude ? parseFloat(loc.longitude).toFixed(6) : '-'}</span></div>
+        </div>
+        <div class="flex space-x-2 pt-2 border-t border-gray-100">
+          <button onclick="showAddLocationModal(${loc.id})" class="inline-flex items-center px-2 py-1 border border-blue-300 rounded-md text-xs font-medium text-blue-700 bg-blue-50 hover:bg-blue-100"><i class="fas fa-edit mr-1"></i>Edit</button>
+          <button onclick="toggleLocationStatus(${loc.id}, ${loc.is_active})" class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium ${loc.is_active ? 'border border-orange-300 text-orange-700 bg-orange-50 hover:bg-orange-100' : 'border border-green-300 text-green-700 bg-green-50 hover:bg-green-100'}"><i class="fas fa-${loc.is_active ? 'pause' : 'play'} mr-1"></i>${loc.is_active ? 'Nonaktifkan' : 'Aktifkan'}</button>
+          <button onclick="deleteTenantLocation(${loc.id})" class="inline-flex items-center px-2 py-1 border border-red-300 rounded-md text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100"><i class="fas fa-trash mr-1"></i>Hapus</button>
+        </div>
+      </div>
+    `).join('');
+  } catch (e) {
+    console.error('Load tenant locations error:', e);
+    const container = document.getElementById('tenantLocationsList');
+    if (container) container.innerHTML = '<p class="text-red-500 text-center py-4">Error memuat data lokasi</p>';
+  }
+};
+
+window.showAddLocationModal = async function (locationId) {
+  currentMapContext = 'add';
+  const modal = document.getElementById('tenantLocationModal');
+  if (!modal) return;
+
+  const title = document.getElementById('tenantLocationModalTitle');
+  if (title) title.textContent = locationId ? 'Edit Lokasi' : 'Tambah Lokasi Baru';
+
+  const form = document.getElementById('tenantLocationForm');
+  if (form) form.reset();
+  const locIdInput = document.getElementById('locationId');
+  if (locIdInput) locIdInput.value = locationId ? locationId : '';
+
+  // Populate tenant dropdown if the field exists (admin-dashboard.html has it, school-admin.html may not)
+  const tenantSelect = document.getElementById('locationTenantId');
+  const tenantIdField = document.getElementById('locationTenantIdHidden');
+  if (tenantSelect) {
+    try {
+      const r = await fetch('/api/admin/tenants', {
+        headers: { 'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}` }
+      });
+      const d = await r.json();
+      if (d.success && d.data) {
+        tenantSelect.innerHTML = '<option value="">Pilih Sekolah</option>' + d.data.map(t =>
+          `<option value="${t.tenant_id}">${t.nama_sekolah || t.tenant_id}</option>`
+        ).join('');
+      }
+    } catch (e) {
+      console.error('Error loading tenants for location modal:', e);
+    }
+  }
+  // For school-admin.html which uses a hidden tenant_id field
+  if (tenantIdField && !tenantSelect) {
+    if (window.tenantId) tenantIdField.value = window.tenantId;
+  }
+
+  // If editing, populate form with existing data
+  if (locationId) {
+    try {
+      const r = await fetch(`/api/admin/tenant-locations/${locationId}`, {
+        headers: { 'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}` }
+      });
+      const d = await r.json();
+      if (d.success && d.data) {
+        const loc = d.data;
+        if (tenantSelect) tenantSelect.value = loc.tenant_id || '';
+        const nameInput = document.getElementById('locationName');
+        if (nameInput) nameInput.value = loc.location_name || '';
+        const latInput = document.getElementById('locationLat');
+        if (latInput) latInput.value = loc.latitude || '';
+        const lngInput = document.getElementById('locationLng');
+        if (lngInput) lngInput.value = loc.longitude || '';
+        const radiusInput = document.getElementById('locationRadius');
+        if (radiusInput) radiusInput.value = loc.location_radius || 100;
+
+        const coordPreview = document.getElementById('coordinatePreviewModal');
+        if (coordPreview) coordPreview.innerHTML = `<span class="font-mono">${loc.latitude || '?'}, ${loc.longitude || '?'}</span>`;
+      }
+    } catch (e) {
+      console.error('Error loading location detail:', e);
+    }
+  }
+
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+};
+
+window.toggleLocationStatus = async function (id, status) {
+  if (!confirm(`Yakin ${!status ? 'mengaktifkan' : 'menonaktifkan'} lokasi ini?`)) return;
+  try {
+    const r = await fetch(`/api/admin/tenant-locations/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}` },
+      body: JSON.stringify({ is_active: !status })
+    });
+    const d = await r.json();
+    if (d.success) {
+      loadTenantLocations();
+      showToast(`Lokasi ${!status ? 'diaktifkan' : 'dinonaktifkan'}`, 'success');
+    } else {
+      showToast(d.message || 'Gagal memperbarui status', 'error');
+    }
+  } catch (e) {
+    console.error('Toggle location status error:', e);
+    showToast('Terjadi kesalahan', 'error');
+  }
+};
+
+window.deleteTenantLocation = async function (id) {
+  if (!confirm('Yakin ingin menghapus lokasi ini?')) return;
+  try {
+    const r = await fetch(`/api/admin/tenant-locations/${id}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}` }
+    });
+    const d = await r.json();
+    if (d.success) {
+      loadTenantLocations();
+      showToast('Lokasi berhasil dihapus', 'success');
+    } else {
+      showToast(d.message || 'Gagal menghapus lokasi', 'error');
+    }
+  } catch (e) {
+    console.error('Delete location error:', e);
+    showToast('Terjadi kesalahan', 'error');
+  }
+};
 
 // Access request management
 window.loadAccessRequests = async function () {

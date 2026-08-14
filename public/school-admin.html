@@ -3754,6 +3754,26 @@ console.log('[ATTENDANCE] Fetching:', url);
               } catch (err) { console.error('[CENTRAL TOGGLE]', err); showToast('Terjadi kesalahan', 'error'); }
             });
           }
+
+          // Attach detectLocationBtn listener for tenant location modal
+          const detectBtn = document.getElementById('detectLocationBtn');
+          if (detectBtn && !detectBtn.dataset.listenerAdded) {
+            detectBtn.addEventListener('click', function () {
+              if (!navigator.geolocation) { alert('Browser tidak mendukung geolokasi'); return; }
+              const btn = this, ot = btn.innerHTML;
+              btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Detecting...';
+              btn.disabled = true;
+
+              navigator.geolocation.getCurrentPosition(function (pos) {
+                document.getElementById('locationLat').value = pos.coords.latitude.toFixed(6);
+                document.getElementById('locationLng').value = pos.coords.longitude.toFixed(6);
+                btn.innerHTML = ot; btn.disabled = false;
+              }, function () {
+                btn.innerHTML = ot; btn.disabled = false;
+              }, { enableHighAccuracy: true });
+            });
+            detectBtn.dataset.listenerAdded = 'true';
+          }
         });
       </script>
 
