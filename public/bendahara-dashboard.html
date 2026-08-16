@@ -761,7 +761,7 @@
       if (!tenantId || !month || !year) { showToast('Pilih sekolah, bulan, dan tahun', 'error'); return; }
       content.innerHTML = '<p class="text-center py-8"><i class="fas fa-spinner fa-spin"></i> Memuat...</p>';
       try {
-        const res = await fetch('/api/admin/attendance-monthly?tenant_id=' + tenantId + '&bulan=' + month + '&tahun=' + year);
+        const res = await fetch('/api/admin/attendance-monthly?tenant_id=' + tenantId + '&bulan=' + month + '&tahun=' + year, { headers: getAuthHeader() });
         const json = await res.json();
         if (!json.success) { showToast('Gagal memuat data', 'error'); return; }
         const data = json.data;
@@ -1492,11 +1492,7 @@ async function openBsiVaModal() {
       tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-gray-500"><i class="fas fa-spinner fa-spin"></i> Memuat data...</td></tr>';
 
       try {
-        const res = await fetch('/api/treasurer/public/send-all-spp-reminders', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
-          body: JSON.stringify({ tenant_id: tenantId || undefined })
-        });
+        const res = await fetch('/api/treasurer/public/payment-defaulters?tenant_id=' + (tenantId || ''), { headers: getAuthHeader() });
         const data = await res.json();
         if (data.success && data.data && data.data.length > 0) {
           tbody.innerHTML = data.data.map(s => `
