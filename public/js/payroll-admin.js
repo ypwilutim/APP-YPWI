@@ -254,7 +254,7 @@ window.loadMonthlyRecap = async function() {
         const daysInMonth = json.daysInMonth || 30;
         let headerHtml = '<tr><th rowspan="2" class="p-1 border">No</th><th rowspan="2" class="p-1 border">Nama</th><th colspan="' + daysInMonth + '" class="p-1 border">Bulan: ' + monthNames[parseInt(month)] + ' ' + year + '</th><th colspan="7" class="p-1 border">Keterangan</th></tr><tr>';
         for (let d = 1; d <= daysInMonth; d++) headerHtml += '<th class="p-1 border">' + d + '</th>';
-        headerHtml += '<th class="p-1 border">H</th><th class="p-1 border">T</th><th class="p-1 border">I</th><th class="p-1 border">S</th><th class="p-1 border">D</th><th class="p-1 border">C</th><th class="p-1 border">-</th></tr>';
+        headerHtml += '<th class="p-1 border">H</th><th class="p-1 border">T</th><th class="p-1 border">I</th><th class="p-1 border">S</th><th class="p-1 border">D</th><th class="p-1 border">C</th><th class="p-1 border">TK</th></tr>';
         let bodyHtml = '';
         data.forEach((d, i) => {
             bodyHtml += '<tr><td class="p-1 text-center border">' + (i + 1) + '</td><td class="p-1 border">' + (d.nama || '') + '</td>';
@@ -270,13 +270,27 @@ window.exportMonthlyPdfFromRecap = async function() {
     const month = document.getElementById('recapMonthSelect')?.value;
     const year = document.getElementById('recapYearSelect')?.value;
     const tenantName = document.getElementById('recapTenantSelect')?.selectedOptions[0]?.text || '';
+    if (!tenantId || !month || !year) { showToast('Pilih sekolah, bulan, dan tahun', 'error'); return; }
     const token = localStorage.getItem('token');
-    const a = document.createElement('a');
-    a.href = '/api/admin/attendance-export-pdf?tenant_id=' + tenantId + '&bulan=' + month + '&tahun=' + year + '&tenant_name=' + encodeURIComponent(tenantName) + '&token=' + token;
-    a.target = '_blank';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    try {
+        const res = await fetch('/api/admin/attendance-export-pdf?tenant_id=' + tenantId + '&bulan=' + month + '&tahun=' + year + '&tenant_name=' + encodeURIComponent(tenantName), { headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
+        if (!res.ok) {
+            const json = await res.json().catch(() => ({ message: 'Gagal export PDF' }));
+            showToast(json.message || 'Gagal export PDF', 'error');
+            return;
+        }
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'rekap_absensi_' + tenantId + '_' + year + String(month).padStart(2, '0') + '.pdf';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    } catch (e) {
+        showToast('Gagal export PDF: ' + e.message, 'error');
+    }
 };
 
 window.loadTenantFilters = async function() {

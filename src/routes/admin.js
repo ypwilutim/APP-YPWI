@@ -5028,40 +5028,58 @@ router.get('/admin/attendance-monthly', authenticateOperator, async (req, res) =
       'SELECT al.teacher_id, DAY(al.waktu_scan) as hari, al.status, al.dinas_luar, al.keterangan, al.waktu_scan FROM attendance_logs al WHERE MONTH(al.waktu_scan) = ? AND YEAR(al.waktu_scan) = ? AND al.teacher_id IN (SELECT teacher_id FROM teacher_assignments WHERE tenant_id = ?)',
       [bulan, tahun, tenantId]
     );
-    
-    const daysInMonth = new Date(tahun, bulan, 0).getDate();
-    const weekendDays = [];
-    for (let d = 1; d <= daysInMonth; d++) {
-      const date = new Date(tahun, bulan - 1, d);
-      if (date.getDay() === 0 || date.getDay() === 6) weekendDays.push(d);
-    }
-    
-    const result = teachers.map(t => {
-      const row = { id: t.id, nama: t.nama };
-      for (let d = 1; d <= daysInMonth; d++) row['tgl_' + d] = '';
-      let hadir = 0, terlambat = 0, izin = 0, cuti = 0, dinas_luar = 0, sakit = 0;
-      logs.filter(l => l.teacher_id === t.id).forEach(l => {
-        const day = parseInt(l.hari);
-        if (day >= 1 && day <= daysInMonth) {
-          const date = new Date(tahun, bulan - 1, day);
-          const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-          if (l.status === 'tepat_waktu') { row['tgl_' + day] = '<span class="text-green-600 font-bold">H</span>'; hadir++; }
-          else if (l.status === 'terlambat') { row['tgl_' + day] = '<span class="text-yellow-600 font-bold">T</span>'; terlambat++; }
-          else if (l.dinas_luar) { row['tgl_' + day] = '<span class="text-blue-600 font-bold">DL</span>'; dinas_luar++; }
-          else if (l.keterangan && l.keterangan.toLowerCase().includes('izin')) { row['tgl_' + day] = '<span class="text-purple-600 font-bold">I</span>'; izin++; }
-          else if (l.keterangan && l.keterangan.toLowerCase().includes('cuti')) { row['tgl_' + day] = '<span class="text-gray-600 font-bold">C</span>'; cuti++; }
-          else if (l.keterangan && l.keterangan.toLowerCase().includes('sakit')) { row['tgl_' + day] = '<span class="text-red-600 font-bold">S</span>'; sakit++; }
-          if (isWeekend && !row['tgl_' + day]) {
-            row['tgl_' + day] = '<span class="text-gray-400">-</span>';
-          }
-        }
-      });
-      row.hadir = hadir; row.terlambat = terlambat; row.izin = izin; row.cuti = cuti; row.dinas_luar = dinas_luar; row.sakit = sakit;
-      row.weekendDays = weekendDays;
-      const totalActiveDays = daysInMonth - weekendDays.length;
-      row.tanpa_keterangan = totalActiveDays - (hadir + terlambat + izin + cuti + dinas_luar + sakit);
-      return row;
-    });
+     
+     const daysInMonth = new Date(tahun, bulan, 0).getDate();
+     const weekendDays = [];
+     for (let d = 1; d <= daysInMonth; d++) {
+       const date = new Date(tahun, bulan - 1, d);
+       if (date.getDay() === 0 || date.getDay() === 6) weekendDays.push(d);
+     }
+     
+     const activeWeekdays = new Set();
+     logs.forEach(l => {
+       const day = parseInt(l.hari);
+       const date = new Date(tahun, bulan - 1, day);
+       if (date.getDay() !== 0 && date.getDay() !== 6) activeWeekdays.add(day);
+     });
+     
+     const result = teachers.map(t => {
+       const row = { id: t.id, nama: t.nama };
+       for (let d = 1; d <= daysInMonth; d++) row['tgl_' + d] = '';
+       let hadir = 0, terlambat = 0, izin = 0, cuti = 0, dinas_luar = 0, sakit = 0;
+       logs.filter(l => l.teacher_id === t.id).forEach(l => {
+         const day = parseInt(l.hari);
+         if (day >= 1 && day <= daysInMonth) {
+           const date = new Date(tahun, bulan - 1, day);
+           const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+           if (l.status === 'tepat_waktu') { row['tgl_' + day] = '<span class="text-green-600 font-bold">H</span>'; hadir++; }
+           else if (l.status === 'terlambat') { row['tgl_' + day] = '<span class="text-yellow-600 font-bold">T</span>'; terlambat++; }
+           else if (l.dinas_luar) { row['tgl_' + day] = '<span class="text-blue-600 font-bold">DL</span>'; dinas_luar++; }
+           else if (l.keterangan && l.keterangan.toLowerCase().includes('izin')) { row['tgl_' + day] = '<span class="text-purple-600 font-bold">I</span>'; izin++; }
+           else if (l.keterangan && l.keterangan.toLowerCase().includes('cuti')) { row['tgl_' + day] = '<span class="text-gray-600 font-bold">C</span>'; cuti++; }
+           else if (l.keterangan && l.keterangan.toLowerCase().includes('sakit')) { row['tgl_' + day] = '<span class="text-red-600 font-bold">S</span>'; sakit++; }
+         }
+       });
+       for (let d = 1; d <= daysInMonth; d++) {
+         if (!row['tgl_' + d]) {
+           const date = new Date(tahun, bulan - 1, d);
+           const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+           if (isWeekend) {
+             row['tgl_' + d] = '<span class="text-gray-400">-</span>';
+           } else if (activeWeekdays.has(d)) {
+             row['tgl_' + d] = '<span class="text-red-600 font-bold">TK</span>';
+           } else {
+             row['tgl_' + d] = '<span class="text-gray-400">-</span>';
+           }
+         }
+       }
+       row.hadir = hadir; row.terlambat = terlambat; row.izin = izin; row.cuti = cuti; row.dinas_luar = dinas_luar; row.sakit = sakit;
+       row.weekendDays = weekendDays;
+       row.holidayWeekdays = Array.from({length: daysInMonth}, (_, i) => i + 1).filter(d => !activeWeekdays.has(d) && (new Date(tahun, bulan - 1, d).getDay() !== 0 && new Date(tahun, bulan - 1, d).getDay() !== 6));
+       const totalActiveDays = activeWeekdays.size;
+       row.tanpa_keterangan = totalActiveDays - (hadir + terlambat + izin + cuti + dinas_luar + sakit);
+       return row;
+     });
     
     res.json({ success: true, data: result, daysInMonth });
   } catch (error) {
@@ -5096,42 +5114,59 @@ router.get('/admin/monthly-report/html', authenticateOperator, async (req, res) 
       'SELECT al.teacher_id, DAY(al.waktu_scan) as hari, al.status, al.dinas_luar, al.keterangan, al.waktu_scan FROM attendance_logs al WHERE MONTH(al.waktu_scan) = ? AND YEAR(al.waktu_scan) = ? AND al.teacher_id IN (SELECT teacher_id FROM teacher_assignments WHERE tenant_id = ?)',
       [bulan, tahun, tenantId]
     );
+     
+     const daysInMonth = new Date(tahun, bulan, 0).getDate();
+     const monthNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
 
-    const daysInMonth = new Date(tahun, bulan, 0).getDate();
-    const monthNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+     const weekendDays = [];
+     for (let d = 1; d <= daysInMonth; d++) {
+       const date = new Date(tahun, bulan - 1, d);
+       if (date.getDay() === 0 || date.getDay() === 6) weekendDays.push(d);
+     }
 
-    const weekendDays = [];
-    for (let d = 1; d <= daysInMonth; d++) {
-      const date = new Date(tahun, bulan - 1, d);
-      if (date.getDay() === 0 || date.getDay() === 6) weekendDays.push(d);
-    }
+     const activeWeekdays = new Set();
+     logs.forEach(l => {
+       const day = parseInt(l.hari);
+       const date = new Date(tahun, bulan - 1, day);
+       if (date.getDay() !== 0 && date.getDay() !== 6) activeWeekdays.add(day);
+     });
 
-    const result = teachers.map(t => {
-      const row = { id: t.id, nama: t.nama };
-      for (let d = 1; d <= daysInMonth; d++) row['tgl_' + d] = '';
-      let hadir = 0, terlambat = 0, izin = 0, cuti = 0, dinas_luar = 0, sakit = 0;
-      logs.filter(l => l.teacher_id === t.id).forEach(l => {
-        const day = parseInt(l.hari);
-        if (day >= 1 && day <= daysInMonth) {
-          const date = new Date(tahun, bulan - 1, day);
-          const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-          if (l.status === 'tepat_waktu') { row['tgl_' + day] = '<span class="text-green-600 font-bold">H</span>'; hadir++; }
-          else if (l.status === 'terlambat') { row['tgl_' + day] = '<span class="text-yellow-600 font-bold">T</span>'; terlambat++; }
-          else if (l.dinas_luar) { row['tgl_' + day] = '<span class="text-blue-600 font-bold">DL</span>'; dinas_luar++; }
-          else if (l.keterangan && l.keterangan.toLowerCase().includes('izin')) { row['tgl_' + day] = '<span class="text-purple-600 font-bold">I</span>'; izin++; }
-          else if (l.keterangan && l.keterangan.toLowerCase().includes('cuti')) { row['tgl_' + day] = '<span class="text-gray-600 font-bold">C</span>'; cuti++; }
-          else if (l.keterangan && l.keterangan.toLowerCase().includes('sakit')) { row['tgl_' + day] = '<span class="text-red-600 font-bold">S</span>'; sakit++; }
-          if (isWeekend && !row['tgl_' + day]) {
-            row['tgl_' + day] = '<span class="text-gray-400">-</span>';
-          }
-        }
-      });
-      row.hadir = hadir; row.terlambat = terlambat; row.izin = izin; row.cuti = cuti; row.dinas_luar = dinas_luar; row.sakit = sakit;
-      row.weekendDays = weekendDays;
-      const totalActiveDays = daysInMonth - weekendDays.length;
-      row.tanpa_keterangan = totalActiveDays - (hadir + terlambat + izin + cuti + dinas_luar + sakit);
-      return row;
-    });
+     const result = teachers.map(t => {
+       const row = { id: t.id, nama: t.nama };
+       for (let d = 1; d <= daysInMonth; d++) row['tgl_' + d] = '';
+       let hadir = 0, terlambat = 0, izin = 0, cuti = 0, dinas_luar = 0, sakit = 0;
+       logs.filter(l => l.teacher_id === t.id).forEach(l => {
+         const day = parseInt(l.hari);
+         if (day >= 1 && day <= daysInMonth) {
+           const date = new Date(tahun, bulan - 1, day);
+           const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+           if (l.status === 'tepat_waktu') { row['tgl_' + day] = '<span class="text-green-600 font-bold">H</span>'; hadir++; }
+           else if (l.status === 'terlambat') { row['tgl_' + day] = '<span class="text-yellow-600 font-bold">T</span>'; terlambat++; }
+           else if (l.dinas_luar) { row['tgl_' + day] = '<span class="text-blue-600 font-bold">DL</span>'; dinas_luar++; }
+           else if (l.keterangan && l.keterangan.toLowerCase().includes('izin')) { row['tgl_' + day] = '<span class="text-purple-600 font-bold">I</span>'; izin++; }
+           else if (l.keterangan && l.keterangan.toLowerCase().includes('cuti')) { row['tgl_' + day] = '<span class="text-gray-600 font-bold">C</span>'; cuti++; }
+           else if (l.keterangan && l.keterangan.toLowerCase().includes('sakit')) { row['tgl_' + day] = '<span class="text-red-600 font-bold">S</span>'; sakit++; }
+         }
+       });
+       for (let d = 1; d <= daysInMonth; d++) {
+         if (!row['tgl_' + d]) {
+           const date = new Date(tahun, bulan - 1, d);
+           const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+           if (isWeekend) {
+             row['tgl_' + d] = '<span class="text-gray-400">-</span>';
+           } else if (activeWeekdays.has(d)) {
+             row['tgl_' + d] = '<span class="text-red-600 font-bold">TK</span>';
+           } else {
+             row['tgl_' + d] = '<span class="text-gray-400">-</span>';
+           }
+         }
+       }
+       row.hadir = hadir; row.terlambat = terlambat; row.izin = izin; row.cuti = cuti; row.dinas_luar = dinas_luar; row.sakit = sakit;
+       row.weekendDays = weekendDays;
+       const totalActiveDays = activeWeekdays.size;
+       row.tanpa_keterangan = totalActiveDays - (hadir + terlambat + izin + cuti + dinas_luar + sakit);
+       return row;
+     });
 
     let html = `
       <div class="p-4">

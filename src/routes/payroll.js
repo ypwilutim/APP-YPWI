@@ -438,58 +438,79 @@ router.get('/admin/attendance-export-pdf', authenticateOperator, async (req, res
     const tenantName = req.query.tenant_name || '';
 
     const PDFDocument = require('pdfkit');
-    const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 36 });
+    const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 24 });
 
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="rekap_absensi_${tenantId}_${tahun}${bulan}.pdf"`);
 
     doc.pipe(res);
 
+    const pageWidth = 595.28;
+    const margin = 24;
+    const usableWidth = pageWidth - margin * 2;
+
+    const noWidth = 28;
+    const namaWidth = Math.min(140, usableWidth * 0.18);
+    const keteranganWidth = Math.min(28, (usableWidth - noWidth - namaWidth) / 7);
+    const dayWidth = (usableWidth - noWidth - namaWidth - keteranganWidth * 7) / daysInMonth;
+
     // Header image
     const headerPath = path.join(__dirname, '../../public/assets/images/header-yayasan-landscape.png');
     if (fs.existsSync(headerPath)) {
-      doc.image(headerPath, 0, 0, { width: 595, height: 80 });
+      doc.image(headerPath, 0, 0, { width: pageWidth, height: 70 });
     }
 
-    doc.moveDown();
-    doc.fontSize(14).text(`Rekap Absensi - ${tenantName} ${monthNames[parseInt(bulan)]} ${tahun}`, { align: 'center' });
-    doc.moveDown();
+    doc.moveDown(0.5);
+    doc.fontSize(13).text(`Rekap Absensi - ${tenantName} ${monthNames[parseInt(bulan)]} ${tahun}`, { align: 'center' });
+    doc.moveDown(0.3);
 
-    // Table header
-    const colWidth = 25;
-    const startX = 20;
+    const startX = margin;
     let y = doc.y;
 
-    doc.fontSize(7);
-    doc.text('No', startX, y, { width: 20, textAlign: 'center' });
-    doc.text('Nama', startX + 20, y, { width: 120, textAlign: 'center' });
+    doc.fontSize(6.5);
+    doc.rect(startX, y, usableWidth, 14).stroke();
 
+    let x = startX;
+    doc.text('No', x + 2, y + 2, { width: noWidth - 4, textAlign: 'center' });
+    x += noWidth;
+    doc.text('Nama', x + 2, y + 2, { width: namaWidth - 4, textAlign: 'center' });
+    x += namaWidth;
     for (let d = 1; d <= daysInMonth; d++) {
-      doc.text(String(d), startX + 140 + (d - 1) * colWidth, y, { width: colWidth, textAlign: 'center' });
+      doc.text(String(d), x + 1, y + 2, { width: dayWidth - 2, textAlign: 'center' });
+      x += dayWidth;
     }
-
-    const keteranganLabels = ['H', 'T', 'I', 'S', 'D', 'C', '-'];
+    const keteranganLabels = ['H', 'T', 'I', 'S', 'D', 'C', 'TK'];
     for (let i = 0; i < 7; i++) {
-      doc.text(keteranganLabels[i], startX + 140 + daysInMonth * colWidth + i * colWidth, y, { width: colWidth, textAlign: 'center' });
+      doc.text(keteranganLabels[i], x + 1, y + 2, { width: keteranganWidth - 2, textAlign: 'center' });
+      x += keteranganWidth;
     }
 
-    y += 15;
+    y += 14;
 
-    // Data rows
     data.forEach((d, i) => {
-      y += 12;
-      doc.text(String(i + 1), startX, y, { width: 20, textAlign: 'center' });
-      doc.text(d.nama || '', startX + 20, y, { width: 120, textAlign: 'left' });
-      for (let day = 1; day <= daysInMonth; day++) {
-        doc.text(d['tgl_' + day] || '', startX + 140 + (day - 1) * colWidth, y, { width: colWidth, textAlign: 'center' });
+      y += 10;
+      if (y > 500) {
+        doc.addPage();
+        y = doc.y + 10;
       }
-      doc.text(String(d.hadir || 0), startX + 140 + daysInMonth * colWidth, y, { width: colWidth, textAlign: 'center' });
-      doc.text(String(d.terlambat || 0), startX + 140 + (daysInMonth + 1) * colWidth, y, { width: colWidth, textAlign: 'center' });
-      doc.text(String(d.izin || 0), startX + 140 + (daysInMonth + 2) * colWidth, y, { width: colWidth, textAlign: 'center' });
-      doc.text(String(d.sakit || 0), startX + 140 + (daysInMonth + 3) * colWidth, y, { width: colWidth, textAlign: 'center' });
-      doc.text(String(d.dinas_luar || 0), startX + 140 + (daysInMonth + 4) * colWidth, y, { width: colWidth, textAlign: 'center' });
-      doc.text(String(d.cuti || 0), startX + 140 + (daysInMonth + 5) * colWidth, y, { width: colWidth, textAlign: 'center' });
-      doc.text(String(d.tanpa_keterangan || 0), startX + 140 + (daysInMonth + 6) * colWidth, y, { width: colWidth, textAlign: 'center' });
+      x = startX;
+      doc.text(String(i + 1), x + 2, y, { width: noWidth - 4, textAlign: 'center' });
+      x += noWidth;
+      doc.text(d.nama || '', x + 2, y, { width: namaWidth - 4, textAlign: 'left' });
+      x += namaWidth;
+      for (let day = 1; day <= daysInMonth; day++) {
+        const cellText = d['tgl_' + day] || '';
+        const txt = cellText.replace(/<[^>]+>/g, '').trim();
+        if (txt) {
+          doc.text(txt, x + 1, y, { width: dayWidth - 2, textAlign: 'center' });
+        }
+        x += dayWidth;
+      }
+      const vals = [d.hadir || 0, d.terlambat || 0, d.izin || 0, d.sakit || 0, d.dinas_luar || 0, d.cuti || 0, d.tanpa_keterangan || 0];
+      for (let i2 = 0; i2 < 7; i2++) {
+        doc.text(String(vals[i2]), x + 1, y, { width: keteranganWidth - 2, textAlign: 'center' });
+        x += keteranganWidth;
+      }
     });
 
     doc.end();
