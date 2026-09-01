@@ -350,9 +350,9 @@ router.get('/admin/attendance-logs', authenticateOperator, async (req, res) => {
     const limit = parseInt(req.query.limit) || 50;
     const offset = (page - 1) * limit;
 
-    // Prioritas: query param > user.tenant_id (dari JWT) > assignments[0]
+    // Prioritas: query param > user.tenant_id (dari JWT) > assignments
     let tenantId = Array.isArray(req.query.tenant_id) ? req.query.tenant_id[0] : req.query.tenant_id;
-    tenantId = tenantId || req.user.tenant_id || (req.user && req.user.assignments && req.user.assignments.length === 1 ? req.user.assignments[0].tenant_id : null);
+    tenantId = tenantId || req.user.tenant_id;
 
     // Cek apakah user memiliki assignment dengan jabatan admin/operator
     const hasAdminAssignment = (req.user.assignments || []).some(a => {
@@ -360,34 +360,51 @@ router.get('/admin/attendance-logs', authenticateOperator, async (req, res) => {
       return roles.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''));
     });
 
-    // Admin atau user dengan admin assignment bisa melihat semua data
+    // Admin atau user dengan admin assignment
     const isAdmin = req.user.role === 'admin' || hasAdminAssignment;
 
-    // Operator: force tenant_id from assignment if not provided
-    if (req.user.role !== 'admin' && !tenantId && hasAdminAssignment) {
-      // Jika multiple assignments, biarkan null (lihat semua data admin)
-      console.log('[ATTENDANCE_LOGS] User with multiple admin assignments - showing all data');
-    } else if (req.user.role !== 'admin' && !tenantId) {
+    // Tentukan tenant_id berdasarkan assignment
+    if (!tenantId && hasAdminAssignment) {
       const adminAssignments = (req.user.assignments || []).filter(a => {
         const roles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin', 'bendahara'];
         return roles.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''));
       });
       if (adminAssignments.length === 1) {
+        // Single assignment: filter by tenant
         tenantId = adminAssignments[0].tenant_id;
+      } else if (adminAssignments.length > 1) {
+        // Multiple assignments: jangan tampilkan semua, biarkan null
+        // User harus pilih tenant dari dropdown
+        tenantId = null;
       }
+    } else if (!tenantId && req.user.assignments && req.user.assignments.length === 1) {
+      tenantId = req.user.assignments[0].tenant_id;
     }
 
-    // Admin bisa melihat semua data tanpa filter tenant_id
+    // Jika tetap null dan bukan admin penuh, minta tenant_id
     if (!tenantId && !isAdmin) {
       return res.status(400).json({ success: false, message: 'tenant_id required' });
+    }
+
+    // Jika admin dengan multiple assignments dan tidak pilih tenant, 
+    // tampilkan data semua tenant yang di-assign (bukan semua data di database)
+    let tenantIds = null;
+    if (!tenantId && isAdmin) {
+      // Get all tenant IDs from assignments
+      tenantIds = (req.user.assignments || []).map(a => a.tenant_id).filter(Boolean);
     }
 
     let whereClauses = [];
     const params = [];
 
+    // Filter by tenant
     if (tenantId) {
       whereClauses.push('al.tenant_id = ?');
       params.push(tenantId);
+    } else if (tenantIds && tenantIds.length > 0) {
+      // Multiple assignments: filter by all assigned tenants
+      whereClauses.push(`al.tenant_id IN (${tenantIds.map(() => '?').join(',')})`);
+      params.push(...tenantIds);
     }
 
     if (dateFilter) {
