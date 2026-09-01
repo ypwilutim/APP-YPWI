@@ -266,6 +266,7 @@ app.use('/api', require('./src/routes/midtrans'));
 app.use('/api', require('./src/routes/doku'));
 app.use('/api', require('./src/routes/public'));
 app.use('/api', require('./src/routes/whatsapp-inbound'));
+app.use('/api/cs', require('./src/routes/whatsapp'));
 
 const logFilePath = path.join(__dirname, 'logs', 'app.log');
 // Ensure logs directory exists
@@ -424,6 +425,30 @@ function verifyTenantAccess(req, requestedTenantId) {
     if (allowedTenants.includes(requestedTenantId)) return true;
   }
 
+  return false;
+}
+
+// Helper: YPWILUTIM leadership (Ketua/Pimpinan/Kepala Sekolah) dapat melihat data yayasan
+// NOTE: req.user.assignments may be empty/undefined for guru users (see auth.js loader),
+// so we verify directly from the database by guru_id.
+async function isYayasanLeader(user) {
+  if (!user) return false;
+  if (user.role === 'admin') return true;
+  if (user.role === 'guru' && user.guru_id) {
+    try {
+      const terms = ['ketua', 'kepala', 'pimpinan', 'yayasan'];
+      const rows = await db.query(
+        'SELECT jabatan_di_unit FROM teacher_assignments WHERE teacher_id = ? AND tenant_id = ?',
+        [user.guru_id, 'YPWILUTIM']
+      );
+      return (rows || []).some(r => terms.some(t =>
+        (r.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '').includes(t)
+      ));
+    } catch (e) {
+      console.error('isYayasanLeader DB error:', e.message);
+      return false;
+    }
+  }
   return false;
 }
 
@@ -1440,21 +1465,21 @@ async function startServer() {
   // Run auto evaluation for all teachers
   app.post('/api/evaluations/auto-calculate', authenticateToken, async (req, res) => {
     try {
-      const userRole = req.user.role;
-      const isAdmin = userRole === 'admin';
+       const userRole = req.user.role;
+       const isAdmin = await isYayasanLeader(req.user);
 
-      // Get user's assigned tenant if not admin
-      let tenantId = null;
-      if (!isAdmin) {
-        const assignments = await db.query(
-          'SELECT tenant_id FROM teacher_assignments WHERE user_id = ? AND jabatan_di_unit IN (?, ?) LIMIT 1',
-          [req.user.id, 'kepala_sekolah', 'pimpinan_pondok']
-        );
-        if (assignments.length === 0) {
-          return res.status(403).json({ success: false, message: 'Akses ditolak' });
-        }
-        tenantId = assignments[0].tenant_id;
-      }
+       // Get user's assigned tenant if not admin
+       let tenantId = null;
+       if (!isAdmin) {
+         const assignments = await db.query(
+           'SELECT tenant_id FROM teacher_assignments WHERE user_id = ? AND jabatan_di_unit IN (?, ?) LIMIT 1',
+           [req.user.id, 'kepala_sekolah', 'pimpinan_pondok']
+         );
+         if (assignments.length === 0) {
+           return res.status(403).json({ success: false, message: 'Akses ditolak' });
+         }
+         tenantId = assignments[0].tenant_id;
+       }
 
       // Get teachers based on role
       let teachers;
@@ -1490,7 +1515,7 @@ async function startServer() {
   // Get all evaluations (for Ketua Yayasan - admin can see all)
   app.get('/api/evaluations/all', authenticateToken, async (req, res) => {
     try {
-      if (req.user.role !== 'admin') {
+      if (!(await isYayasanLeader(req.user))) {
         return res.status(403).json({ success: false, message: 'Hanya Ketua Yayasan yang bisa melihat semua nilai' });
       }
 
@@ -1514,7 +1539,7 @@ async function startServer() {
   // Get evaluation summary across all schools (for Ketua Yayasan dashboard)
   app.get('/api/evaluations/yayasan-summary', authenticateToken, async (req, res) => {
     try {
-      if (req.user.role !== 'admin') {
+      if (!(await isYayasanLeader(req.user))) {
         return res.status(403).json({ success: false, message: 'Hanya Ketua Yayasan yang bisa melihat ringkasan yayasan' });
       }
 
@@ -1613,12 +1638,12 @@ async function startServer() {
 
                const parentId = parent?.[0]?.id || null;
 
-               await db.query(
-                 `INSERT INTO whatsapp_messages 
-                  (from_phone, message, message_type, wa_message_id, profile_name, parent_id) 
-                  VALUES (?, ?, ?, ?, ?, ?)`,
-                 [from, textBody || '', messageType, msg.id, profileName, parentId]
-               );
+                await db.query(
+                  `INSERT INTO whatsapp_messages 
+                   (from_phone, message, message_type, wa_message_id, profile_name, parent_id, status, direction) 
+                   VALUES (?, ?, ?, ?, ?, ?, 'received', 'incoming')`,
+                  [from, textBody || '', messageType, msg.id, profileName, parentId]
+                );
              } catch (e) {
                console.error('[WA] Gagal menyimpan pesan masuk:', e.message);
              }
@@ -1638,6 +1663,28 @@ async function startServer() {
         if (change.field === 'messaging_status') {
           const status = change.value;
           console.log('[WA] Status Update:', JSON.stringify(status));
+          
+          // Update message status in database
+          try {
+            const messageId = status.id;
+            const messageStatus = status.status; // sent, delivered, read, failed
+            
+            if (messageId && messageStatus) {
+              await db.query(
+                'UPDATE whatsapp_messages SET status = ? WHERE wa_message_id = ?',
+                [messageStatus, messageId]
+              );
+              console.log(`[WA] Status updated: ${messageId} -> ${messageStatus}`);
+              
+              // Log read receipts
+              if (messageStatus === 'read') {
+                const timestamp = status.timestamp ? new Date(parseInt(status.timestamp) * 1000) : new Date();
+                console.log(`[WA] Message read at ${timestamp.toISOString()}`);
+              }
+            }
+          } catch (e) {
+            console.error('[WA] Error updating status:', e.message);
+          }
         }
       });
     });

@@ -1,6 +1,7 @@
 const cron = require('node-cron');
 const db = require('./db');
 const { sendBillTemplate, formatPhoneNumber } = require('./src/utils/whatsappTemplate');
+const { generateBilling, recalcTenant } = require('./src/utils/billing');
 const axios = require('axios');
 
 // Ensure settings table exists on startup
@@ -15,12 +16,32 @@ async function initBillSettings() {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `);
-  
+
   // Insert default if not exists
   const existing = await db.query('SELECT id FROM bill_settings LIMIT 1');
   if (existing.length === 0) {
     await db.query('INSERT INTO bill_settings (send_day, due_day, is_enabled) VALUES (1, 10, 0)');
   }
+
+  // Create auto-billing report table
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS auto_billing_reports (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      tenant_id VARCHAR(50) NOT NULL,
+      periode VARCHAR(20) NOT NULL,
+      student_id INT NOT NULL,
+      nama_siswa VARCHAR(255),
+      no_wa VARCHAR(20),
+      saldo DECIMAL(10,2) DEFAULT 0,
+      status ENUM('terkirim', 'gagal', 'no_wa') NOT NULL,
+      message_id VARCHAR(100),
+      error_message TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_periode (periode),
+      INDEX idx_tenant (tenant_id),
+      INDEX idx_status (status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `);
 }
 
 function getIndonesianMonthName(date) {
@@ -33,117 +54,291 @@ function getCurrentPeriode() {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
 
+async function ensureBillingTables() {
+  // Ensure tagihan_siswa table exists
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS tagihan_siswa (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      student_id INT NOT NULL,
+      tenant_id INT NOT NULL,
+      periode VARCHAR(20) NOT NULL,
+      jumlah_tagihan DECIMAL(10,2) DEFAULT 0,
+      status ENUM('terkirim', 'gagal', 'diterima') DEFAULT 'terkirim',
+      message_id VARCHAR(100),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY unique_tagihan (student_id, periode)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `);
+
+  // Create auto-billing report table
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS auto_billing_reports (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      tenant_id VARCHAR(50) NOT NULL,
+      periode VARCHAR(20) NOT NULL,
+      student_id INT NOT NULL,
+      nama_siswa VARCHAR(255),
+      no_wa VARCHAR(20),
+      saldo DECIMAL(10,2) DEFAULT 0,
+      status ENUM('terkirim', 'gagal', 'no_wa') NOT NULL,
+      message_id VARCHAR(100),
+      error_message TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_periode (periode),
+      INDEX idx_tenant (tenant_id),
+      INDEX idx_status (status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+  // Fix collation if table already existed with wrong collation
+  await db.query(`ALTER TABLE auto_billing_reports CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
+}
+
+// Run at 00:00 - Generate billing only
+async function runAutoBillGeneration() {
+  try {
+    await ensureBillingTables();
+
+    const now = new Date();
+    const today = now.getDate();
+    const periode = getCurrentPeriode();
+
+    // Check if billing already generated this month
+    const alreadyGenerated = await db.query(
+      'SELECT COUNT(*) as count FROM auto_billing_reports WHERE periode = ?',
+      [periode]
+    );
+
+    if (alreadyGenerated[0].count > 0) {
+      console.log('[BILL_GEN] Billing already generated this month, skipping...');
+      return;
+    }
+
+    // Generate billing for all tenants
+    console.log('[BILL_GEN] Generating billing for all tenants...');
+    const tenants = await db.query('SELECT tenant_id FROM tenants');
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const tenant of tenants) {
+      try {
+        await generateBilling(tenant.tenant_id);
+        await recalcTenant(tenant.tenant_id);
+        console.log(`[BILL_GEN] Billing generated for tenant ${tenant.tenant_id}`);
+        successCount++;
+      } catch (err) {
+        console.error(`[BILL_GEN] Billing failed for tenant ${tenant.tenant_id}:`, err.message);
+        failCount++;
+      }
+    }
+
+    console.log(`[BILL_GEN] Completed: ${successCount} tenants processed, ${failCount} failed`);
+  } catch (err) {
+    console.error('[BILL_GEN] Error:', err.message);
+  }
+}
+
+// Run at 07:00 - Send WhatsApp messages
 async function runAutoBillReminder() {
   try {
-    // Ensure tables exist
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS tagihan_siswa (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        student_id INT NOT NULL,
-        tenant_id INT NOT NULL,
-        periode VARCHAR(20) NOT NULL,
-        jumlah_tagihan DECIMAL(10,2) DEFAULT 0,
-        status ENUM('terkirim', 'gagal', 'diterima') DEFAULT 'terkirim',
-        message_id VARCHAR(100),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE KEY unique_tagihan (student_id, periode)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-    `);
-    
+    await ensureBillingTables();
+
     // Get settings
     const settings = await db.query('SELECT send_day, due_day, is_enabled FROM bill_settings LIMIT 1');
     if (!settings.length || !settings[0].is_enabled) {
       console.log('[BILL_REMINDER] Auto bill sending is disabled, skipping...');
       return;
     }
-    
+
     const now = new Date();
     const today = now.getDate();
     const sendDay = settings[0].send_day;
-    
+
     // Only run on send day
     if (today !== sendDay) {
       console.log(`[BILL_REMINDER] Today is ${today}, scheduled day is ${sendDay}, skipping...`);
       return;
     }
-    
+
     const periode = getCurrentPeriode();
-    const dueDate = settings[0].due_day;
-    const jatuhTempo = `${String(dueDate).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
-    
+    const dueDay = settings[0].due_day;
+    const jatuhTempo = `${String(dueDay).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+
     // Check if already sent this month
     const alreadySent = await db.query(
-      'SELECT COUNT(*) as count FROM tagihan_siswa WHERE periode = ?',
+      'SELECT COUNT(*) as count FROM auto_billing_reports WHERE periode = ? AND status IN ("terkirim", "gagal", "no_wa")',
       [periode]
     );
-    
+
     if (alreadySent[0].count > 0) {
       console.log('[BILL_REMINDER] Bill already sent this month, skipping...');
       return;
     }
-    
-    // Get all students with parent WA numbers
-    let students;
-    try {
-      students = await db.query(`
-        SELECT s.id, s.nama_siswa, s.iuran_bulanan, s.tenant_id, s.parent_id, p.no_wa as parent_wa
-        FROM students s
-        LEFT JOIN parents p ON s.parent_id = p.id
-        WHERE p.no_wa IS NOT NULL AND p.no_wa != ''
-      `);
-    } catch (err) {
-      console.log('[BILL_REMINDER] Query error, using empty list:', err.message);
-      students = [];
+
+    // Get students with saldo < 0 (tunggakan) AND have VA number
+    console.log('[BILL_REMINDER] Getting students with arrears and VA...');
+    const studentsWithArrears = await db.query(`
+      SELECT s.id, s.nama_siswa, s.tenant_id, s.va_number, s.class_id,
+        c.nama_kelas, c.tingkatan, tn.nama_sekolah,
+        p.no_wa as parent_wa, p.nama_orang_tua,
+        ss.saldo
+      FROM saldo_siswa ss
+      JOIN students s ON ss.student_id = s.id
+      JOIN tenants tn ON s.tenant_id = tn.tenant_id
+      LEFT JOIN parents p ON s.parent_id = p.id
+      LEFT JOIN classes c ON s.class_id = c.id
+      WHERE ss.saldo < 0 AND s.status = 'aktif'
+        AND s.va_number IS NOT NULL AND s.va_number != ''
+      ORDER BY tn.nama_sekolah ASC, s.nama_siswa ASC
+    `);
+
+    console.log(`[BILL_REMINDER] Found ${studentsWithArrears.length} students with arrears`);
+
+    // Get treasurer phone for each tenant
+    console.log('[BILL_REMINDER] Sending WhatsApp messages...');
+    const treasurerPhones = {};
+    for (const student of studentsWithArrears) {
+      if (!treasurerPhones[student.tenant_id]) {
+        const [bendahara] = await db.query(
+          `SELECT t.no_wa FROM teacher_assignments ta
+           JOIN teachers t ON ta.teacher_id = t.id
+           WHERE ta.tenant_id = ? AND ta.jabatan_di_unit = 'bendahara'
+           LIMIT 1`,
+          [student.tenant_id]
+        );
+        treasurerPhones[student.tenant_id] = bendahara?.no_wa || '';
+      }
     }
-    
-    let successCount = 0;
+
+    let sentCount = 0;
     let failCount = 0;
-    
-    for (const student of students) {
+    let noWaCount = 0;
+
+    // Send WA messages
+    for (const student of studentsWithArrears) {
+      const saldoVal = parseFloat(student.saldo || 0);
+      const jumlahTagihan = Math.abs(saldoVal);
+
+      // Skip if no WA number
+      if (!student.parent_wa) {
+        noWaCount++;
+        await db.query(
+          `INSERT INTO auto_billing_reports (tenant_id, periode, student_id, nama_siswa, no_wa, saldo, status, error_message)
+           VALUES (?, ?, ?, ?, ?, ?, 'no_wa', 'Tidak memiliki nomor WA')`,
+          [student.tenant_id, periode, student.id, student.nama_siswa, student.parent_wa, saldoVal]
+        );
+        console.log(`[BILL_REMINDER] SKIP (no WA): ${student.nama_siswa}`);
+        continue;
+      }
+
       try {
         const formattedPhone = formatPhoneNumber(student.parent_wa);
         if (!formattedPhone) {
-          console.log('[BILL_REMINDER] Invalid WA for student', student.nama_siswa);
-          failCount++;
+          noWaCount++;
+          await db.query(
+            `INSERT INTO auto_billing_reports (tenant_id, periode, student_id, nama_siswa, no_wa, saldo, status, error_message)
+             VALUES (?, ?, ?, ?, ?, ?, 'no_wa', 'Format nomor WA tidak valid')`,
+            [student.tenant_id, periode, student.id, student.nama_siswa, student.parent_wa, saldoVal]
+          );
+          console.log(`[BILL_REMINDER] SKIP (invalid WA): ${student.nama_siswa}`);
           continue;
         }
-        
-        // Get tenant bank account info
-        let tenant;
-        try {
-          const tenantRows = await db.query(
-            'SELECT bank_account_number, bank_account_name FROM tenants WHERE tenant_id = ?',
-            [student.tenant_id]
-          );
-          tenant = tenantRows[0] || {};
-        } catch (err) {
-          tenant = {};
-        }
-        
+
+        const namaSekolah = student.nama_sekolah || '';
+        const teleponBendahara = treasurerPhones[student.tenant_id] || '';
+        // Add + prefix for WhatsApp click-to-chat link
+        const teleponBendaharaFormatted = teleponBendahara ? `+${teleponBendahara.replace(/[^0-9]/g, '')}` : '';
+        const infoSekolah = teleponBendaharaFormatted ? `${namaSekolah} - ${teleponBendaharaFormatted}` : namaSekolah;
+
+        const vaRaw = (student.va_number || '').replace(/[^0-9]/g, '');
+        const vaNumber = vaRaw ? `BSI ${vaRaw}` : '-';
+        const kelas = student.nama_kelas || (student.tingkatan ? `Kelas ${student.tingkatan}` : '-');
+
         const result = await sendBillTemplate(formattedPhone, {
           nama_siswa: student.nama_siswa,
           bulan: getIndonesianMonthName(now),
-          jumlah_tagihan: `Rp ${(student.iuran_bulanan || 0).toLocaleString('id-ID')}`,
+          jumlah_tagihan: `Rp ${jumlahTagihan.toLocaleString('id-ID')}`,
           tanggal_jatuh_tempo: jatuhTempo,
-          nomor_rekening: tenant?.bank_account_number || '-',
-          nama_penerima: tenant?.bank_account_name || '-'
-        });
-        
+          nomor_rekening: vaNumber,
+          nama_penerima: (student.nama_siswa || '').replace(/,/g, ' '),
+          kelas: kelas,
+          nama_siswa_2: student.nama_siswa,
+          info_sekolah: infoSekolah,
+          nama_sekolah: namaSekolah,
+          va_raw: vaRaw
+        }, 'tagihan_spp_bsi_tunggakan');
+
         await db.query(
-          'INSERT INTO tagihan_siswa (student_id, tenant_id, periode, jumlah_tagihan, status, message_id) VALUES (?, ?, ?, ?, ?, ?)',
-          [student.id, student.tenant_id, periode, student.iuran_bulanan || 0, 'terkirim', result.messageId]
+          `INSERT INTO auto_billing_reports (tenant_id, periode, student_id, nama_siswa, no_wa, saldo, status, message_id)
+           VALUES (?, ?, ?, ?, ?, ?, 'terkirim', ?)`,
+          [student.tenant_id, periode, student.id, student.nama_siswa, student.parent_wa, saldoVal, result.messageId]
         );
-        
-        successCount++;
+
+        // Also insert to tagihan_siswa for compatibility
+        await db.query(
+          `INSERT IGNORE INTO tagihan_siswa (student_id, tenant_id, periode, jumlah_tagihan, status, message_id)
+           VALUES (?, ?, ?, ?, 'terkirim', ?)`,
+          [student.id, student.tenant_id, periode, jumlahTagihan, result.messageId]
+        );
+
+        sentCount++;
+        console.log(`[BILL_REMINDER] SENT: ${student.nama_siswa} (${formattedPhone})`);
       } catch (error) {
-        console.error('[BILL_REMINDER] Failed for', student.nama_siswa, ':', error.message);
         failCount++;
+        await db.query(
+          `INSERT INTO auto_billing_reports (tenant_id, periode, student_id, nama_siswa, no_wa, saldo, status, error_message)
+           VALUES (?, ?, ?, ?, ?, ?, 'gagal', ?)`,
+          [student.tenant_id, periode, student.id, student.nama_siswa, student.parent_wa, saldoVal, error.message]
+        );
+        console.error(`[BILL_REMINDER] FAILED: ${student.nama_siswa} - ${error.message}`);
       }
     }
+
+    console.log(`[BILL_REMINDER] Completed: ${sentCount} sent, ${failCount} failed, ${noWaCount} no WA`);
     
-    console.log(`[BILL_REMINDER] Completed: ${successCount} sent, ${failCount} failed`);
+    // Send failure notification if there are failures
+    if (failCount > 0 || noWaCount > 0) {
+      await sendAutoBillingNotification(periode, sentCount, failCount, noWaCount);
+    }
   } catch (err) {
     console.error('[BILL_REMINDER] Error:', err.message);
+    // Send critical error notification
+    await sendAutoBillingNotification(periode, 0, 0, 0, err.message);
+  }
+}
+
+// Send notification to admin about auto billing results
+async function sendAutoBillingNotification(periode, sentCount, failCount, noWaCount, errorMessage = null) {
+  try {
+    // Get admin/phone numbers for notification
+    const admins = await db.query(`
+      SELECT t.no_wa FROM teacher_assignments ta
+      JOIN teachers t ON ta.teacher_id = t.id
+      WHERE ta.jabatan_di_unit IN ('bendahara', 'admin', 'kepala_sekolah')
+      AND t.no_wa IS NOT NULL AND t.no_wa != ''
+      LIMIT 5
+    `);
+    
+    let message;
+    if (errorMessage) {
+      message = `[ALERT] Auto Billing GAGAL\nPeriode: ${periode}\nError: ${errorMessage}\n\nSegera periksa sistem.`;
+    } else {
+      const total = sentCount + failCount + noWaCount;
+      message = `[REPORT] Auto Billing Selesai\nPeriode: ${periode}\n\nTotal: ${total}\nTerkirim: ${sentCount}\nGagal: ${failCount}\nTidak Ada WA: ${noWaCount}`;
+    }
+    
+    // Send WhatsApp notification to admins
+    const { sendFreeMessage } = require('./src/utils/whatsappTemplate');
+    for (const admin of admins) {
+      try {
+        if (admin.no_wa) {
+          await sendFreeMessage(admin.no_wa, message);
+        }
+      } catch (err) {
+        console.error('[NOTIFY] Failed to send notification:', err.message);
+      }
+    }
+  } catch (err) {
+    console.error('[NOTIFY] Error sending notification:', err.message);
   }
 }
 
@@ -303,7 +498,13 @@ Hubungi admin/bendahara jika ada kendala. Terima kasih.`;
 // Run on 1st day of every month at 08:00 AM
 cron.schedule('0 8 1 * *', runAutoMonthlyInvoiceGeneration);
 
-module.exports = { runAutoSkGeneration, runAutoBillReminder, runAutoMonthlyInvoiceGeneration };
+// Run auto billing generation at 00:00 every day (will only process on 1st of month)
+cron.schedule('0 0 * * *', runAutoBillGeneration);
+
+// Run auto bill reminder at 07:00 WITA every day (will only process on configured send_day)
+cron.schedule('0 7 * * *', runAutoBillReminder);
+
+module.exports = { runAutoSkGeneration, runAutoBillGeneration, runAutoBillReminder, runAutoMonthlyInvoiceGeneration };
 
 async function runAutoSkGeneration() {
   try {
@@ -420,4 +621,4 @@ function gregorianToHijri(gregorianDate) {
   return { day: hijriDay, month: hijriMonth, year: hijriYear };
 }
 
-module.exports = { runAutoSkGeneration, runAutoBillReminder, runAutoMonthlyInvoiceGeneration };
+module.exports = { runAutoSkGeneration, runAutoBillGeneration, runAutoBillReminder, runAutoMonthlyInvoiceGeneration };

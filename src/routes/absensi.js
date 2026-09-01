@@ -640,6 +640,8 @@ router.post('/leave-request', authenticateToken, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Jenis izin tidak valid' });
     }
 
+    const tenantIdStr = Array.isArray(tenant_id) ? tenant_id.join(',') : String(tenant_id || '');
+
     // Cek duplikasi izin pada hari yang sama atau dalam rentang (semua status kecuali rejected)
     const existing = await db.query(
       `SELECT id, status FROM leave_requests 
@@ -671,9 +673,9 @@ router.post('/leave-request', authenticateToken, async (req, res) => {
 
     // Simpan ke tabel leave_requests
     const result = await db.query(
-      `INSERT INTO leave_requests (teacher_id, jenis, keterangan, tanggal_mulai, tanggal_selesai, status, created_at) 
-             VALUES (?, ?, ?, ?, ?, 'pending', NOW())`,
-      [req.user.guru_id, jenis, keterangan, tanggal_mulai, tanggal_selesai || tanggal_mulai]
+      `INSERT INTO leave_requests (teacher_id, jenis, keterangan, tanggal_mulai, tanggal_selesai, status, tenant_id, created_at) 
+             VALUES (?, ?, ?, ?, ?, 'pending', ?, NOW())`,
+      [req.user.guru_id, jenis, keterangan, tanggal_mulai, tanggal_selesai || tanggal_mulai, tenantIdStr]
     );
 
     // Notifikasi WhatsApp untuk pengajuan izin

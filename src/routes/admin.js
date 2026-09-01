@@ -742,6 +742,77 @@ router.delete('/admin/tenant-locations/:id', authenticateOperator, async (req, r
 });
 
 // ============================================================
+// WHATSAPP NUMBER ROUTE (for QR sharing)
+// ============================================================
+
+// GET /api/admin/whatsapp-number - Get admin WhatsApp number for sharing QR
+router.get('/admin/whatsapp-number', authenticateOperator, async (req, res) => {
+  try {
+    const tenantId = req.query.tenant_id || req.user.tenant_id;
+
+    // Get admin/bendahara/kepala_sekolah WhatsApp number for this tenant
+    const admins = await db.query(`
+      SELECT t.id, t.nama, t.no_wa, ta.jabatan_di_unit
+      FROM teacher_assignments ta
+      JOIN teachers t ON ta.teacher_id = t.id
+      WHERE ta.tenant_id = ?
+      AND ta.jabatan_di_unit IN ('bendahara', 'admin', 'kepala_sekolah', 'tata_usaha', 'operator')
+      AND t.no_wa IS NOT NULL AND t.no_wa != ''
+      ORDER BY
+        CASE ta.jabatan_di_unit
+          WHEN 'admin' THEN 1
+          WHEN 'kepala_sekolah' THEN 2
+          WHEN 'bendahara' THEN 3
+          WHEN 'tata_usaha' THEN 4
+          WHEN 'operator' THEN 5
+          ELSE 6
+        END
+      LIMIT 1
+    `, [tenantId]);
+
+    if (admins.length > 0) {
+      res.json({
+        success: true,
+        data: {
+          no_wa: admins[0].no_wa,
+          nama: admins[0].nama,
+          jabatan: admins[0].jabatan_di_unit
+        }
+      });
+    } else {
+      // Fallback: get any teacher with WhatsApp number in this tenant
+      const teachers = await db.query(`
+        SELECT t.id, t.nama, t.no_wa, ta.jabatan_di_unit
+        FROM teacher_assignments ta
+        JOIN teachers t ON ta.teacher_id = t.id
+        WHERE ta.tenant_id = ?
+        AND t.no_wa IS NOT NULL AND t.no_wa != ''
+        LIMIT 1
+      `, [tenantId]);
+
+      if (teachers.length > 0) {
+        res.json({
+          success: true,
+          data: {
+            no_wa: teachers[0].no_wa,
+            nama: teachers[0].nama,
+            jabatan: teachers[0].jabatan_di_unit
+          }
+        });
+      } else {
+        res.json({
+          success: false,
+          message: 'Tidak ditemukan nomor WhatsApp admin untuk sekolah ini'
+        });
+      }
+    }
+  } catch (error) {
+    console.error('Error fetching admin WhatsApp number:', error);
+    res.status(500).json({ success: false, message: 'Error mengambil nomor WhatsApp admin' });
+  }
+});
+
+// ============================================================
 // SCANNER DEVICES ROUTES (for school admin/operator)
 // ============================================================
 
@@ -1065,9 +1136,11 @@ router.delete('/admin/teachers/:id', authenticateOperator, async (req, res) => {
 // ============================================================
 router.post('/admin/attendance/manual', authenticateOperator, async (req, res) => {
   try {
+    console.log('[MANUAL_ATTENDANCE] Request received:', req.body);
     const { teacher_id, tenant_id, tanggal, jenis, jam } = req.body;
 
     if (!teacher_id || !tenant_id || !tanggal || !jenis || !jam) {
+      console.log('[MANUAL_ATTENDANCE] Missing fields:', { teacher_id, tenant_id, tanggal, jenis, jam });
       return res.status(400).json({ success: false, message: 'Semua field wajib diisi: guru, sekolah, tanggal, jenis, jam' });
     }
 
@@ -1112,13 +1185,13 @@ router.post('/admin/attendance/manual', authenticateOperator, async (req, res) =
       status = matchingRules[0].status_log;
     }
 
-    const waktuScan = scanDate.toISOString().slice(0, 16).replace('T', ' ');
+    const waktuScan = `${tanggal} ${jam}:00`;
 
-    const [existing] = await db.query(
+    const existingRecords = await db.query(
       'SELECT id FROM attendance_logs WHERE teacher_id = ? AND jenis = ? AND DATE(waktu_scan) = ?',
       [teacher_id, jenis, tanggal]
     );
-    if (existing.length > 0) {
+    if (existingRecords && existingRecords.length > 0) {
       return res.status(409).json({ success: false, message: `Guru sudah absen ${jenis.toUpperCase()} pada tanggal ${tanggal}` });
     }
 
@@ -1160,7 +1233,11 @@ router.post('/admin/attendance/manual', authenticateOperator, async (req, res) =
 </html>`;
 
     if (typeof global.sendEmail === 'function') {
-      await global.sendEmail(teacher.email, subject, htmlMessage, '', [], 'manual_attendance');
+      try {
+        await global.sendEmail(teacher.email, subject, htmlMessage, '', [], 'manual_attendance');
+      } catch (emailErr) {
+        console.error('[MANUAL_ATTENDANCE] Email send failed:', emailErr.message);
+      }
     }
 
     res.json({ success: true, message: 'Absensi manual berhasil disimpan', data: { teacher_id, tenant_id, tanggal, jenis, jam, status, waktu_scan: waktuScan } });
@@ -1491,8 +1568,8 @@ router.post('/public/register-guru', registrationUpload.fields([
       return res.status(400).json({ success: false, message: 'Semua berkas wajib diupload (Foto, KTP, KK, Ijazah)' });
     }
 
-    const [existingNik] = await db.query('SELECT id FROM teachers WHERE nik = ? AND status_aktif = 0', [nik]);
-    if (existingNik.length > 0) {
+    const existingNikRecords = await db.query('SELECT id FROM teachers WHERE nik = ? AND status_aktif = 0', [nik]);
+    if (existingNikRecords && existingNikRecords.length > 0) {
       return res.status(409).json({ success: false, message: 'Pendaftaran dengan NIK ini sedang menunggu persetujuan' });
     }
 
@@ -1593,8 +1670,8 @@ router.post('/admin/approve-registration/:id', authenticateOperator, async (req,
     );
 
     if (tenant_id && jabatan_di_unit) {
-      const [existingAssignment] = await db.query('SELECT id FROM teacher_assignments WHERE teacher_id = ?', [id]);
-      if (existingAssignment.length > 0) {
+      const existingAssignmentRecords = await db.query('SELECT id FROM teacher_assignments WHERE teacher_id = ?', [id]);
+      if (existingAssignmentRecords && existingAssignmentRecords.length > 0) {
         await db.query(
           'UPDATE teacher_assignments SET tenant_id = ?, jabatan_di_unit = ? WHERE teacher_id = ?',
           [tenant_id, jabatan_di_unit || 'Guru', id]
@@ -3231,26 +3308,94 @@ router.get('/admin/classes', authenticateOperator, async (req, res) => {
 // POST /api/admin/students - Create student
 router.post('/admin/students', authenticateOperator, async (req, res) => {
   try {
-    const { tenant_id, nis, nisn, nama_siswa, jenis_kelamin, class_id, parent_id, iuran_bulanan } = req.body;
+    const {
+      tenant_id, nis, nisn, nama_siswa, jenis_kelamin, class_id, parent_id, iuran_bulanan,
+      ransportasi, privat, biaya_lain, biaya_lain_nama,
+      tanggal_masuk, status,
+      nama_orang_tua, no_wa, email_orang_tua, nik_orang_tua
+    } = req.body;
 
-    if (!nis || !nama_siswa || !tenant_id) {
-      return res.status(400).json({ success: false, message: 'NIS, nama siswa, dan tenant_id wajib diisi' });
+    const fields = {
+      tenant_id: tenant_id,
+      nis, nisn, nama_siswa, jenis_kelamin, class_id,
+      iuran_bulanan: parseFloat(iuran_bulanan) || 0, ransportasi: parseFloat(ransportasi) || 0,
+      privat: parseFloat(privat) || 0, biaya_lain: parseFloat(biaya_lain) || 0, biaya_lain_nama: biaya_lain_nama || null,
+      tanggal_masuk: tanggal_masuk || null, status: status || 'aktif',
+      nama_orang_tua, no_wa, email_orang_tua, nik_orang_tua
+    };
+
+    if (!fields.nama_siswa || !fields.tenant_id) {
+      return res.status(400).json({ success: false, message: 'Nama siswa dan tenant_id wajib diisi' });
     }
 
-    const existing = await db.query('SELECT id FROM students WHERE nis = ?', [nis]);
-    if (existing.length > 0) {
-      return res.status(400).json({ success: false, message: 'NIS sudah digunakan' });
+    let nisValue = fields.nis || null;
+
+    let resolvedParentId = parent_id || null;
+    if (!resolvedParentId && (nama_orang_tua || no_wa)) {
+      const ins = await db.query('INSERT INTO parents (nama_orang_tua, no_wa, email, nik) VALUES (?, ?, ?, ?)', [nama_orang_tua || null, no_wa || null, email_orang_tua || null, nik_orang_tua || null]);
+      resolvedParentId = ins.insertId;
     }
+
+    let studentCols = 'tenant_id, nis, nisn, nama_siswa, jenis_kelamin, class_id, parent_id, iuran_bulanan';
+    let studentVals = [fields.tenant_id, nisValue, fields.nisn || null, fields.nama_siswa, fields.jenis_kelamin || null, fields.class_id || null, resolvedParentId, fields.iuran_bulanan];
+
+    try { await db.query('SELECT ransportasi FROM students LIMIT 1'); studentCols += ', ransportasi'; studentVals.push(fields.ransportasi); } catch (e) {}
+    try { await db.query('SELECT privat FROM students LIMIT 1'); studentCols += ', privat'; studentVals.push(fields.privat); } catch (e) {}
+    try { await db.query('SELECT biaya_lain FROM students LIMIT 1'); studentCols += ', biaya_lain'; studentVals.push(fields.biaya_lain); } catch (e) {}
+    try { await db.query('SELECT biaya_lain_nama FROM students LIMIT 1'); studentCols += ', biaya_lain_nama'; studentVals.push(fields.biaya_lain_nama); } catch (e) {}
+    try { await db.query('SELECT tanggal_masuk FROM students LIMIT 1'); studentCols += ', tanggal_masuk'; studentVals.push(fields.tanggal_masuk); } catch (e) {}
+    try { await db.query('SELECT tahun_masuk FROM students LIMIT 1'); studentCols += ', tahun_masuk'; let derivedTahun = null; if (fields.tanggal_masuk) { derivedTahun = String(new Date(fields.tanggal_masuk).getFullYear()); } else if (fields.tahun_masuk) { derivedTahun = fields.tahun_masuk; } studentVals.push(derivedTahun); } catch (e) {}
+    try { await db.query('SELECT status FROM students LIMIT 1'); studentCols += ', status'; studentVals.push(fields.status); } catch (e) {}
+
+    studentCols = studentCols + ', created_at, updated_at';
+    studentVals.push(new Date(), new Date());
 
     const result = await db.query(
-      'INSERT INTO students (tenant_id, nis, nisn, nama_siswa, jenis_kelamin, class_id, parent_id, iuran_bulanan) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [tenant_id, nis, nisn || null, nama_siswa, jenis_kelamin, class_id || null, parent_id || null, iuran_bulanan || 0]
+      'INSERT INTO students (' + studentCols + ') VALUES (' + studentVals.map(() => '?').join(', ') + ')',
+      studentVals
     );
 
-    res.json({ success: true, message: 'Siswa berhasil ditambahkan', id: result.insertId });
+    if (!nisValue) {
+      let tahun = fields.tahun_masuk || null;
+      if (!tahun && fields.tanggal_masuk) {
+        tahun = String(new Date(fields.tanggal_masuk).getFullYear());
+      }
+      if (!tahun) {
+        tahun = String(new Date().getFullYear());
+      }
+      tahun = String(tahun).padStart(4, '0');
+
+      let tenantNumericId = '0';
+      try {
+        const tenantRes = await db.query('SELECT id FROM tenants WHERE tenant_id = ? LIMIT 1', [fields.tenant_id]);
+        if (tenantRes.length > 0 && tenantRes[0].id) {
+          tenantNumericId = String(tenantRes[0].id);
+        }
+      } catch (e) {}
+
+      const tenantPart = tenantNumericId.padStart(2, '0');
+      const parentPart = String(resolvedParentId || 0).padStart(3, '0');
+      const studentPart = String(result.insertId).padStart(4, '0');
+
+      nisValue = tahun + tenantPart + parentPart + studentPart;
+
+      const existing = await db.query('SELECT id FROM students WHERE id != ? AND nis = ?', [result.insertId, nisValue]);
+      if (existing.length > 0) {
+        return res.status(400).json({ success: false, message: 'NIS sudah digunakan: ' + nisValue });
+      }
+
+      await db.query('UPDATE students SET nis = ? WHERE id = ?', [nisValue, result.insertId]);
+    } else {
+      const existing = await db.query('SELECT id FROM students WHERE id != ? AND nis = ?', [result.insertId, nisValue]);
+      if (existing.length > 0) {
+        return res.status(400).json({ success: false, message: 'NIS sudah digunakan: ' + nisValue });
+      }
+    }
+
+    res.json({ success: true, message: 'Siswa berhasil ditambahkan', id: result.insertId, nis: nisValue });
   } catch (error) {
-    console.error('Create student error:', error);
-    res.status(500).json({ success: false, message: 'Error creating student' });
+    console.error('Create student error:', { message: error.message, code: error.code, sqlMessage: error.sqlMessage });
+    res.status(500).json({ success: false, message: error.sqlMessage || error.message || 'Error creating student' });
   }
 });
 

@@ -591,7 +591,7 @@
                 onchange="importIncompleteStudents(this)">
               <input type="file" id="studentNewImportInput" accept=".xlsx,.xls,.csv" class="hidden"
                 onchange="importNewStudents(this)">
-              <button onclick="showAddStudentModal()"
+              <button onclick="showStudentWizardModal()"
                 class="btn-primary text-white px-4 py-2 rounded-lg text-sm flex items-center"><i
                   class="fas fa-plus mr-2"></i>Tambah Siswa</button>
             </div>
@@ -2672,7 +2672,7 @@ if (d.success) {
           if (modal) modal.classList.remove('show');
         };
 
-        window.showAddStudentModal = function () {
+        window.showStudentWizardModal = function () {
           const form = document.getElementById('studentForm');
           form.reset();
           delete form.dataset.editId;
@@ -2680,31 +2680,109 @@ if (d.success) {
           document.getElementById('studentTenantId').value = tenantId;
           document.getElementById('studentModal').classList.add('show');
           loadStudentClasses();
+          resetStudentSteps();
         };
 
-        function hideStudentModal() {
-          document.getElementById('studentModal')?.classList.remove('show');
-        }
+        window.generateNis = function () {
+          const tanggalMasuk = document.getElementById('studentTanggalMasuk') ? document.getElementById('studentTanggalMasuk').value : '';
+          const year = tanggalMasuk ? new Date(tanggalMasuk).getFullYear() : new Date().getFullYear();
+          const preview = String(year).padStart(4, '0') + '00' + '0000000';
+          document.getElementById('studentNisInput').value = preview;
+        };
 
-        const studentFormEl = document.getElementById('studentForm');
-        if (studentFormEl) {
-          studentFormEl.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const data = Object.fromEntries(new FormData(e.target));
-            data.tenant_id = tenantId;
-            try {
-              const r = await fetch(apiUrl('/admin/students'), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
-                body: JSON.stringify(data)
-              });
-              if (checkAuth401403(r)) return;
-              const d = await r.json();
-              if (d.success) { hideStudentModal(); loadStudents(currentStudentPage); showToast('Siswa ditambahkan', 'success'); }
-              else showToast(d.message || 'Gagal', 'error');
-            } catch (err) { console.error('[STUDENT FORM]', err); showToast('Terjadi kesalahan', 'error'); }
-          });
-        }
+        window.resetStudentSteps = function () {
+          document.getElementById('step1Content').classList.remove('hidden');
+          document.getElementById('step2Content').classList.add('hidden');
+          document.getElementById('step3Content').classList.add('hidden');
+          document.getElementById('step1Bar').className = 'flex-1 text-center py-2 bg-blue-600 text-white rounded-l-md';
+          document.getElementById('step2Bar').className = 'flex-1 text-center py-2 bg-gray-300 text-gray-700';
+          document.getElementById('step3Bar').className = 'flex-1 text-center py-2 bg-gray-300 text-gray-700 rounded-r-md';
+          document.getElementById('prevStepBtn').classList.add('hidden');
+          document.getElementById('nextStepBtn').classList.remove('hidden');
+          document.getElementById('submitBtn').classList.add('hidden');
+        };
+
+        window.nextStudentStep = function () {
+          const s1 = document.getElementById('step1Content');
+          const s2 = document.getElementById('step2Content');
+          const s3 = document.getElementById('step3Content');
+          const namaSiswa = s1.querySelector('input[name="nama_siswa"]').value.trim();
+          if (s1.classList.contains('hidden')) {
+            if (!namaSiswa) { showToast('Nama siswa wajib diisi', 'error'); return; }
+            s1.classList.add('hidden');
+            s2.classList.remove('hidden');
+            document.getElementById('step1Bar').className = 'flex-1 text-center py-2 bg-gray-300 text-gray-700';
+            document.getElementById('step2Bar').className = 'flex-1 text-center py-2 bg-blue-600 text-white';
+            document.getElementById('prevStepBtn').classList.remove('hidden');
+            return;
+          }
+          if (s2.classList.contains('hidden') || (!s1.classList.contains('hidden') && !s2.classList.contains('hidden'))) {
+            if (!s1.classList.contains('hidden')) {
+              s1.classList.add('hidden');
+              s2.classList.remove('hidden');
+              document.getElementById('step1Bar').className = 'flex-1 text-center py-2 bg-gray-300 text-gray-700';
+              document.getElementById('step2Bar').className = 'flex-1 text-center py-2 bg-blue-600 text-white';
+              document.getElementById('prevStepBtn').classList.remove('hidden');
+              return;
+            }
+          }
+          if (!s2.classList.contains('hidden')) {
+            s2.classList.add('hidden');
+            s3.classList.remove('hidden');
+            document.getElementById('step2Bar').className = 'flex-1 text-center py-2 bg-gray-300 text-gray-700';
+            document.getElementById('step3Bar').className = 'flex-1 text-center py-2 bg-blue-600 text-white';
+            document.getElementById('nextStepBtn').classList.add('hidden');
+            document.getElementById('submitBtn').classList.remove('hidden');
+          }
+        };
+
+        window.prevStudentStep = function () {
+          const s1 = document.getElementById('step1Content');
+          const s2 = document.getElementById('step2Content');
+          const s3 = document.getElementById('step3Content');
+          if (!s3.classList.contains('hidden')) {
+            s3.classList.add('hidden');
+            s2.classList.remove('hidden');
+            document.getElementById('step2Bar').className = 'flex-1 text-center py-2 bg-blue-600 text-white';
+            document.getElementById('step3Bar').className = 'flex-1 text-center py-2 bg-gray-300 text-gray-700 rounded-r-md';
+            document.getElementById('nextStepBtn').classList.remove('hidden');
+            document.getElementById('submitBtn').classList.add('hidden');
+            return;
+          }
+          if (!s2.classList.contains('hidden')) {
+            s2.classList.add('hidden');
+            s1.classList.remove('hidden');
+            document.getElementById('step1Bar').className = 'flex-1 text-center py-2 bg-blue-600 text-white rounded-l-md';
+            document.getElementById('step2Bar').className = 'flex-1 text-center py-2 bg-gray-300 text-gray-700';
+            document.getElementById('prevStepBtn').classList.add('hidden');
+            return;
+          }
+        };
+
+        window.hideStudentModal = function () {
+          document.getElementById('studentModal')?.classList.remove('show');
+        };
+
+        window.submitStudentForm = async function () {
+          const form = document.getElementById('studentForm');
+          const data = Object.fromEntries(new FormData(form));
+          data.tenant_id = tenantId;
+          document.getElementById('submitBtn').disabled = true;
+          document.getElementById('submitBtn').innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Menyimpan...';
+          try {
+            const r = await fetch(apiUrl('/admin/students'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+              body: JSON.stringify(data)
+            });
+            if (checkAuth401403(r)) return;
+            const d = await r.json();
+            if (d.success) { hideStudentModal(); loadStudents(currentStudentPage); showToast('Siswa ditambahkan' + (d.nis ? ' (NIS: ' + d.nis + ')' : ''), 'success'); }
+            else showToast(d.message || 'Gagal', 'error');
+          } catch (err) { console.error('[STUDENT FORM]', err); showToast('Terjadi kesalahan', 'error'); }
+          document.getElementById('submitBtn').disabled = false;
+          document.getElementById('submitBtn').innerHTML = 'Simpan';
+        };
 
         window.showAddTeacherModal = function () {
           const form = document.getElementById('teacherForm');
@@ -4116,56 +4194,168 @@ console.log('[ATTENDANCE] Fetching:', url);
         </div>
       </div>
 
-      <!-- Student Modal -->
+      <!-- Student Modal - 3 Step Wizard -->
       <div id="studentModal" class="modal fixed inset-0 bg-black bg-opacity-50 z-50 justify-center items-center">
-        <div class="bg-white rounded-lg max-w-md w-full mx-4">
+        <div class="bg-white rounded-lg max-w-3xl w-full mx-4">
           <div class="p-6">
-            <h3 class="text-lg font-semibold mb-4" id="studentModalTitle">Tambah Siswa Baru</h3>
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-lg font-semibold" id="studentModalTitle">Tambah Siswa Baru</h3>
+              <button type="button" onclick="hideStudentModal()"
+                class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times text-xl"></i>
+              </button>
+            </div>
             <form id="studentForm">
               <input type="hidden" name="tenant_id" id="studentTenantId" value="">
-              <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-700 mb-1">Nama Siswa</label>
-                <input type="text" name="nama_siswa"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required>
+
+              <!-- Step Indicator -->
+              <div class="flex mb-6">
+                <div id="step1Bar" class="flex-1 text-center py-2 bg-blue-600 text-white rounded-l-md">1. Data Pribadi</div>
+                <div id="step2Bar" class="flex-1 text-center py-2 bg-gray-300 text-gray-700">2. Data Orang Tua</div>
+                <div id="step3Bar" class="flex-1 text-center py-2 bg-gray-300 text-gray-700 rounded-r-md">3. Data SPP & Biaya</div>
               </div>
-              <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-700 mb-1">NIS</label>
-                <input type="text" name="nis"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required>
+
+              <!-- Step 1: Data Pribadi Siswa -->
+              <div id="step1Content">
+                <div class="mb-4">
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Nama Siswa <span class="text-red-500">*</span></label>
+                  <input type="text" name="nama_siswa"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">NIS</label>
+                    <div class="flex">
+                      <input type="text" name="nis" id="studentNisInput"
+                        class="flex-1 px-3 py-2 border border-gray-300 rounded-l-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="Auto-generate (YYYY+tenant+parent+student, hanya angka)">
+                      <button type="button" onclick="generateNis()"
+                        class="px-3 py-1 bg-gray-100 text-gray-600 border border-gray-300 rounded-r-md hover:bg-gray-200 text-sm">Generate</button>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1">NIS auto-generate dari tahun, tenant, parent, dan ID siswa</p>
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">NISN</label>
+                    <input type="text" name="nisn"
+                      class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Opsional">
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Kelas</label>
+                    <select name="class_id" id="studentClassSelect"
+                      class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                      <option value="">Pilih Kelas</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Jenis Kelamin</label>
+                    <select name="jenis_kelamin"
+                      class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                      <option value="">Pilih</option>
+                      <option value="L">Laki-laki</option>
+                      <option value="P">Perempuan</option>
+                    </select>
+                  </div>
+                </div>
+
+                 <div class="mb-4">
+                   <label class="block text-sm font-medium text-gray-700 mb-1">Tanggal Masuk <span class="text-red-500">*</span></label>
+                   <input type="date" name="tanggal_masuk" id="studentTanggalMasuk"
+                     class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                     required>
+                 </div>
+
+                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                   <div>
+                     <label class="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                     <select name="status"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                       <option value="aktif">Aktif</option>
+                       <option value="alumni">Alumni</option>
+                       <option value="mutasi">Mutasi</option>
+                       <option value="keluar">Keluar</option>
+                     </select>
+                   </div>
+                 </div>
+               </div>
+
+              <!-- Step 2: Data Orang Tua Siswa -->
+              <div id="step2Content" class="hidden">
+                <div class="mb-4">
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Nama Orang Tua/Wali</label>
+                  <input type="text" name="nama_orang_tua"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Opsional">
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">No. WhatsApp</label>
+                    <input type="text" name="no_wa"
+                      class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="08xxx">
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">NIK Orang Tua</label>
+                    <input type="text" name="nik_orang_tua"
+                      class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Opsional">
+                  </div>
+                </div>
+
+                <div class="mb-4">
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Email Orang Tua</label>
+                  <input type="email" name="email_orang_tua"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Opsional">
+                </div>
               </div>
-              <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-700 mb-1">NISN</label>
-                <input type="text" name="nisn"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+
+              <!-- Step 3: Data SPP & Biaya -->
+              <div id="step3Content" class="hidden">
+                <h4 class="text-sm font-semibold text-gray-700 mb-3">Biaya Bulanan</h4>
+                <div class="mb-4">
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Iuran Bulanan (Rp)</label>
+                  <input type="number" name="iuran_bulanan" value="0" min="0" step="1000"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+                <div class="mb-4">
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Ransportasi (Rp)</label>
+                  <input type="number" name="ransportasi" value="0" min="0" step="1000"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+                <div class="mb-4">
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Privat (Rp)</label>
+                  <input type="number" name="privat" value="0" min="0" step="1000"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+                <div class="mb-4">
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Biaya Lain (Rp)</label>
+                  <input type="number" name="biaya_lain" value="0" min="0" step="1000"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+                <div class="mb-4">
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Nama Biaya Lain</label>
+                  <input type="text" name="biaya_lain_nama"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Contoh: Seragam, Buku, Kegiatan">
+                </div>
               </div>
-              <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-700 mb-1">Kelas</label>
-                <select name="class_id" id="studentClassSelect"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                  <option value="">Pilih Kelas</option>
-                </select>
-              </div>
-              <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-700 mb-1">Jenis Kelamin</label>
-                <select name="jenis_kelamin"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                  <option value="">Pilih</option>
-                  <option value="L">Laki-laki</option>
-                  <option value="P">Perempuan</option>
-                </select>
-              </div>
-              <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-700 mb-1">Iuran Bulanan (Rp)</label>
-                <input type="number" name="iuran_bulanan" value="0"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-              </div>
-              <div class="flex justify-end space-x-3">
-                <button type="button" onclick="hideStudentModal()"
-                  class="px-4 py-2 text-gray-600 hover:text-gray-800">Batal</button>
-                <button type="submit"
-                  class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Simpan</button>
+
+              <div class="flex justify-end space-x-3 mt-6">
+                <button type="button" id="prevStepBtn" onclick="prevStudentStep()"
+                  class="px-4 py-2 text-gray-600 hover:text-gray-800">Kembali</button>
+                <button type="button" id="nextStepBtn" onclick="nextStudentStep()"
+                  class="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400">Lanjut</button>
+                <button type="button" id="submitBtn"
+                  class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 hidden">
+                  Simpan
+                </button>
               </div>
             </form>
           </div>

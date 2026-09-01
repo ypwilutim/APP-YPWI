@@ -244,7 +244,23 @@ const data = defaulters.map(s => ({
 // POST /api/treasurer/public/send-spp-reminder - Kirim pengingat SPP via Meta WhatsApp template
 router.post('/treasurer/public/send-spp-reminder', async (req, res) => {
   try {
-    const { no_wa, nama_siswa, jumlah_tagihan, bulan, tanggal_jatuh_tempo, tenant_id, student_id } = req.body;
+    const { no_wa, nama_siswa, jumlah_tagihan, bulan, tanggal_jatuh_tempo, tenant_id, student_id, template_type } = req.body;
+
+    let resolvedTemplate = template_type;
+    if (template_type === 'bsi_auto' && student_id) {
+      const [saldo] = await db.query(
+        'SELECT saldo FROM saldo_siswa WHERE student_id = ? LIMIT 1',
+        [student_id]
+      );
+      const saldoVal = parseFloat(saldo?.saldo || 0);
+      if (saldoVal >= 0) {
+        return res.json({ success: false, message: 'Siswa tidak memiliki tunggakan', skipped: true });
+      }
+      resolvedTemplate = 'tagihan_spp_bsi_tunggakan';
+    } else if (template_type === 'bsi_auto') {
+      resolvedTemplate = 'tagihan_spp_bsi';
+    }
+    const templateName = resolvedTemplate === 'tagihan_spp_bsi_tunggakan' ? 'tagihan_spp_bsi_tunggakan' : (resolvedTemplate === 'tagihan_spp_bsi' ? 'tagihan_spp_bsi' : (resolvedTemplate === 'tagihan_spp' ? 'tagihan_spp' : 'invoice_spp'));
 
     if (!no_wa) {
       return res.status(400).json({ success: false, message: 'Nomor WA tidak tersedia' });
@@ -253,29 +269,91 @@ router.post('/treasurer/public/send-spp-reminder', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Nama siswa tidak tersedia' });
     }
 
-    let invoiceUrl = null;
-    if (student_id) {
-      const [inv] = await db.query(
-        'SELECT external_id FROM xendit_invoices WHERE student_id = ? AND status = "PENDING" ORDER BY created_at DESC LIMIT 1',
-        [student_id]
-      );
-      if (inv?.external_id) {
-        invoiceUrl = `xendit-payment.html?external_id=${inv.external_id}`;
-      }
-    }
-    const finalInvoiceUrl = invoiceUrl || `xendit-payment.html?student_id=${student_id || ''}`;
-
     const now = new Date();
     const bulanPengiriman = bulan || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     const jatuhTempo = tanggal_jatuh_tempo || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-10`;
 
-    const result = await sendBillTemplate(no_wa, {
+    let params = {
       nama_siswa,
       bulan: bulanPengiriman,
       jumlah_tagihan: jumlah_tagihan ? `${Number(jumlah_tagihan).toLocaleString('id-ID')}` : '-',
-      tanggal_jatuh_tempo: jatuhTempo,
-      invoice_url: finalInvoiceUrl
-    }, 'invoice_spp');
+      tanggal_jatuh_tempo: jatuhTempo
+    };
+
+    if (templateName === 'invoice_spp') {
+      let invoiceUrl = null;
+      if (student_id) {
+        const [inv] = await db.query(
+          'SELECT external_id FROM xendit_invoices WHERE student_id = ? AND status = "PENDING" ORDER BY created_id DESC LIMIT 1',
+          [student_id]
+        );
+        if (inv?.external_id) {
+          invoiceUrl = `xendit-payment.html?external_id=${inv.external_id}`;
+        }
+      }
+      params.invoice_url = invoiceUrl || `xendit-payment.html?student_id=${student_id || ''}`;
+      params.nama_pembayaran = 'SPP';
+    } else if (templateName === 'tagihan_spp_bsi' || templateName === 'tagihan_spp_bsi_tunggakan') {
+      let vaRaw = '';
+      let vaNumber = '-';
+      let vaName = '-';
+      let kelas = '-';
+      let infoSekolah = '-';
+      let namaSekolah = '-';
+      if (student_id) {
+        const [stu] = await db.query(
+          `SELECT s.va_number, s.nama_siswa, s.class_id, c.nama_kelas, c.tingkatan, tn.nama_sekolah
+           FROM students s
+           LEFT JOIN classes c ON s.class_id = c.id
+           LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id
+           WHERE s.id = ? LIMIT 1`,
+          [student_id]
+        );
+        if (stu) {
+          vaRaw = (stu.va_number || '').replace(/[^0-9]/g, '');
+          vaNumber = vaRaw ? `BSI ${vaRaw}` : '-';
+          vaName = (stu.nama_siswa || '').replace(/,/g, ' ');
+          kelas = stu.nama_kelas || (stu.tingkatan ? `Kelas ${stu.tingkatan}` : '-');
+          namaSekolah = stu.nama_sekolah || '-';
+          infoSekolah = namaSekolah;
+        }
+        // Get treasurer phone from teacher assignment
+        const [bendahara] = await db.query(
+          `SELECT t.no_wa FROM teacher_assignments ta
+           JOIN teachers t ON ta.teacher_id = t.id
+           WHERE ta.tenant_id = ? AND ta.jabatan_di_unit = 'bendahara'
+           LIMIT 1`,
+          [tenant_id]
+        );
+        if (bendahara && bendahara.no_wa) {
+          // Add + prefix for WhatsApp click-to-chat link
+          const waBendahara = `+${bendahara.no_wa.replace(/[^0-9]/g, '')}`;
+          infoSekolah = `${namaSekolah} - ${waBendahara}`;
+        }
+      }
+      params.nomor_rekening = vaNumber;
+      params.nama_penerima = vaName;
+      params.kelas = kelas;
+      params.nama_siswa_2 = nama_siswa;
+      params.info_sekolah = infoSekolah;
+      params.nama_sekolah = namaSekolah;
+      params.va_raw = vaRaw;
+    } else {
+      let vaNumber = '-';
+      let vaName = '-';
+      if (student_id) {
+        const [stu] = await db.query('SELECT s.va_number, s.nama_siswa FROM students s WHERE s.id = ? LIMIT 1', [student_id]);
+        if (stu) {
+          vaNumber = (stu.va_number || '').replace(/[^0-9]/g, '');
+          vaNumber = vaNumber ? `BSI ${vaNumber}` : '-';
+          vaName = (stu.nama_siswa || '').replace(/,/g, ' ');
+        }
+      }
+      params.nomor_rekening = vaNumber;
+      params.nama_penerima = vaName;
+    }
+
+    const result = await sendBillTemplate(no_wa, params, templateName);
 
     res.json({
       success: true,
@@ -291,15 +369,20 @@ router.post('/treasurer/public/send-spp-reminder', async (req, res) => {
 // POST /api/treasurer/public/send-all-spp-reminders - Kirim pengingat ke semua siswa belum bayar
 router.post('/treasurer/public/send-all-spp-reminders', async (req, res) => {
   try {
-    const { tenant_id } = req.body;
+    const { tenant_id, template_type } = req.body;
+    const resolvedTemplate = template_type === 'bsi_auto' ? 'tagihan_spp_bsi_tunggakan' : template_type;
+    const templateName = resolvedTemplate === 'tagihan_spp_bsi_tunggakan' ? 'tagihan_spp_bsi_tunggakan' : (resolvedTemplate === 'tagihan_spp_bsi' ? 'tagihan_spp_bsi' : (resolvedTemplate === 'tagihan_spp' ? 'tagihan_spp' : 'invoice_spp'));
     let tenantId = tenant_id || null;
 
     let defaulterQuery = `
-      SELECT s.id, s.nama_siswa, s.nisn, s.no_wa, tn.nama_sekolah, tn.tenant_id,
+      SELECT s.id, s.nama_siswa, s.nisn, s.no_wa, s.va_number, s.class_id, c.nama_kelas, c.tingkatan, p.nama_orang_tua, tn.nama_sekolah, tn.tenant_id,
         COALESCE(CASE WHEN s.kelas = 'PI' THEN s.arrears_pi WHEN s.kelas = 'XI' THEN s.arrears_xi ELSE 0 END, 0) as total_arrears
       FROM students s
       JOIN tenants tn ON s.tenant_id = tn.tenant_id
+      LEFT JOIN parents p ON s.parent_id = p.id
+      LEFT JOIN classes c ON s.class_id = c.id
       WHERE s.status = 'active'
+        AND s.va_number IS NOT NULL AND s.va_number != ''
     `;
     const params = [];
     if (tenantId) {
@@ -318,6 +401,21 @@ router.post('/treasurer/public/send-all-spp-reminders', async (req, res) => {
     const bulanPengiriman = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     const jatuhTempo = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-10`;
 
+    // Get treasurer phone from teacher assignment
+    let teleponBendahara = '';
+    if (tenantId) {
+      const [bendahara] = await db.query(
+        `SELECT t.no_wa FROM teacher_assignments ta
+         JOIN teachers t ON ta.teacher_id = t.id
+         WHERE ta.tenant_id = ? AND ta.jabatan_di_unit = 'bendahara'
+         LIMIT 1`,
+        [tenantId]
+      );
+      if (bendahara && bendahara.no_wa) {
+        teleponBendahara = bendahara.no_wa;
+      }
+    }
+
     let sent = 0, failed = 0;
     const results = [];
 
@@ -326,25 +424,51 @@ router.post('/treasurer/public/send-all-spp-reminders', async (req, res) => {
 
       const number = student.no_wa.replace(/[^0-9]/g, '');
 
-      let invoiceUrl = null;
-      const [inv] = await db.query(
-        'SELECT external_id FROM xendit_invoices WHERE student_id = ? AND status = "PENDING" ORDER BY created_at DESC LIMIT 1',
-        [student.id]
-      );
-      if (inv?.external_id) {
-        invoiceUrl = `xendit-payment.html?external_id=${inv.external_id}`;
+      const templateParams = {
+        nama_siswa: student.nama_siswa,
+        bulan: bulanPengiriman,
+        jumlah_tagihan: student.total_arrears ? `${Number(student.total_arrears).toLocaleString('id-ID')}` : '-',
+        tanggal_jatuh_tempo: jatuhTempo
+      };
+
+      if (templateName === 'invoice_spp') {
+        let invoiceUrl = null;
+        const [inv] = await db.query(
+          'SELECT external_id FROM xendit_invoices WHERE student_id = ? AND status = "PENDING" ORDER BY created_at DESC LIMIT 1',
+          [student.id]
+        );
+        if (inv?.external_id) {
+          invoiceUrl = `xendit-payment.html?external_id=${inv.external_id}`;
+        } else {
+          invoiceUrl = `xendit-payment.html?student_id=${student.id}`;
+        }
+        templateParams.invoice_url = invoiceUrl;
+        templateParams.nama_pembayaran = 'SPP';
+      } else if (templateName === 'tagihan_spp_bsi' || templateName === 'tagihan_spp_bsi_tunggakan') {
+        const vaRaw = (student.va_number || '').replace(/[^0-9]/g, '');
+        const kelas = student.nama_kelas || (student.tingkatan ? `Kelas ${student.tingkatan}` : '-');
+        const namaSekolah = student.nama_sekolah || '-';
+        let infoSekolah = namaSekolah;
+        if (teleponBendahara) {
+          // Add + prefix for WhatsApp click-to-chat link
+          const waBendahara = `+${teleponBendahara.replace(/[^0-9]/g, '')}`;
+          infoSekolah = `${namaSekolah} - ${waBendahara}`;
+        }
+        templateParams.nomor_rekening = vaRaw ? `BSI ${vaRaw}` : '-';
+        templateParams.nama_penerima = (student.nama_siswa || '').replace(/,/g, ' ');
+        templateParams.kelas = kelas;
+        templateParams.nama_siswa_2 = student.nama_siswa;
+        templateParams.info_sekolah = infoSekolah;
+        templateParams.nama_sekolah = namaSekolah;
+        templateParams.va_raw = vaRaw;
       } else {
-        invoiceUrl = `xendit-payment.html?student_id=${student.id}`;
+        const vaRaw = (student.va_number || '').replace(/[^0-9]/g, '');
+        templateParams.nomor_rekening = vaRaw ? `BSI ${vaRaw}` : '-';
+        templateParams.nama_penerima = (student.nama_siswa || '').replace(/,/g, ' ');
       }
 
       try {
-        const result = await sendBillTemplate(number, {
-          nama_siswa: student.nama_siswa,
-          bulan: bulanPengiriman,
-          jumlah_tagihan: student.total_arrears ? `${Number(student.total_arrears).toLocaleString('id-ID')}` : '-',
-          tanggal_jatuh_tempo: jatuhTempo,
-          invoice_url: invoiceUrl
-        }, 'invoice_spp');
+        const result = await sendBillTemplate(number, templateParams, templateName);
         sent++;
         results.push({ id: student.id, success: true });
       } catch (e) {
@@ -777,9 +901,9 @@ router.get('/treasurer/public/financial-report', async (req, res) => {
     const month = req.query.month || new Date().toISOString().slice(0, 7);
 
     let incomeQuery = `
-      SELECT SUM(pi.amount) as total_income
+      SELECT SUM(xi.amount) as total_income
       FROM xendit_invoices xi
-      WHERE pi.status = 'paid' AND DATE_FORMAT(xi.created_at, '%Y-%m') = ?
+      WHERE xi.status = 'paid' AND DATE_FORMAT(xi.created_at, '%Y-%m') = ?
     `;
     let incomeParams = [month];
 
@@ -1014,9 +1138,9 @@ router.get('/treasurer/financial-report', authenticateOperator, async (req, res)
     }
 
     let incomeQuery = `
-      SELECT SUM(pi.amount) as total_income
+      SELECT SUM(xi.amount) as total_income
       FROM xendit_invoices xi
-      WHERE pi.status = 'paid' AND DATE_FORMAT(xi.created_at, '%Y-%m') = ?
+      WHERE xi.status = 'paid' AND DATE_FORMAT(xi.created_at, '%Y-%m') = ?
     `;
     let incomeParams = [month];
 
@@ -1659,16 +1783,54 @@ router.post('/treasurer/bendahara/billing/generate', authenticateBendahara, asyn
   try {
     await billing.ensureBillingTables();
     const { tenant_id } = req.body;
-    if (!tenant_id) {
-      return res.status(400).json({ success: false, message: 'tenant_id required' });
+    
+    // If tenant_id is provided, generate for that tenant only
+    // Otherwise, generate for all tenants
+    if (tenant_id) {
+      const result = await billing.generateBilling(tenant_id);
+      res.json({
+        success: true,
+        message: `Billing dibuat: ${result.created} baris, ${result.skipped} dilewati`,
+        created: result.created,
+        skipped: result.skipped
+      });
+    } else {
+      // Generate for all tenants
+      const tenants = await db.query('SELECT tenant_id, nama_sekolah FROM tenants');
+      let totalCreated = 0;
+      let totalSkipped = 0;
+      const details = [];
+      
+      for (const tenant of tenants) {
+        try {
+          const result = await billing.generateBilling(tenant.tenant_id);
+          totalCreated += result.created;
+          totalSkipped += result.skipped;
+          details.push({
+            tenant_id: tenant.tenant_id,
+            nama_sekolah: tenant.nama_sekolah,
+            created: result.created,
+            skipped: result.skipped
+          });
+        } catch (err) {
+          console.error(`[BILLING] Failed for tenant ${tenant.tenant_id}:`, err.message);
+          details.push({
+            tenant_id: tenant.tenant_id,
+            nama_sekolah: tenant.nama_sekolah,
+            error: err.message
+          });
+        }
+      }
+      
+      res.json({
+        success: true,
+        message: `Billing dibuat untuk ${tenants.length} sekolah: ${totalCreated} baris, ${totalSkipped} dilewati`,
+        total_created: totalCreated,
+        total_skipped: totalSkipped,
+        tenants_processed: tenants.length,
+        details: details
+      });
     }
-    const result = await billing.generateBilling(tenant_id);
-    res.json({
-      success: true,
-      message: `Billing dibuat: ${result.created} baris, ${result.skipped} dilewati`,
-      created: result.created,
-      skipped: result.skipped
-    });
   } catch (error) {
     console.error('Generate billing error:', error);
     res.status(500).json({ success: false, message: 'Gagal generate billing' });
@@ -1680,15 +1842,47 @@ router.post('/treasurer/bendahara/billing/recalc', authenticateBendahara, async 
   try {
     await billing.ensureBillingTables();
     const { tenant_id } = req.body;
-    if (!tenant_id) {
-      return res.status(400).json({ success: false, message: 'tenant_id required' });
+    
+    if (tenant_id) {
+      const result = await billing.recalcTenant(tenant_id);
+      res.json({
+        success: true,
+        message: `Saldo dihitung ulang untuk ${result.updated} siswa`,
+        updated: result.updated
+      });
+    } else {
+      // Recalc for all tenants
+      const tenants = await db.query('SELECT tenant_id, nama_sekolah FROM tenants');
+      let totalUpdated = 0;
+      const details = [];
+      
+      for (const tenant of tenants) {
+        try {
+          const result = await billing.recalcTenant(tenant.tenant_id);
+          totalUpdated += result.updated;
+          details.push({
+            tenant_id: tenant.tenant_id,
+            nama_sekolah: tenant.nama_sekolah,
+            updated: result.updated
+          });
+        } catch (err) {
+          console.error(`[RECALC] Failed for tenant ${tenant.tenant_id}:`, err.message);
+          details.push({
+            tenant_id: tenant.tenant_id,
+            nama_sekolah: tenant.nama_sekolah,
+            error: err.message
+          });
+        }
+      }
+      
+      res.json({
+        success: true,
+        message: `Saldo dihitung ulang untuk ${tenants.length} sekolah: ${totalUpdated} siswa`,
+        total_updated: totalUpdated,
+        tenants_processed: tenants.length,
+        details: details
+      });
     }
-    const result = await billing.recalcTenant(tenant_id);
-    res.json({
-      success: true,
-      message: `Saldo dihitung ulang untuk ${result.updated} siswa`,
-      updated: result.updated
-    });
   } catch (error) {
     console.error('Recalc billing error:', error);
     res.status(500).json({ success: false, message: 'Gagal hitung ulang saldo' });
@@ -1843,6 +2037,112 @@ router.post('/treasurer/bsi/create-single', authenticateBendahara, async (req, r
   }
 });
 
+// POST /api/treasurer/bsi/create-all - buat VA BSI untuk semua siswa aktif (semua sekolah)
+// body: { only_without_va: true/false } -> hanya buat untuk siswa yang belum punya VA
+router.post('/treasurer/bsi/create-all', authenticateBendahara, async (req, res) => {
+  try {
+    const { only_without_va = true } = req.body;
+    const vaPrefix = (process.env.BSI_VA_PREFIX || '832231').replace(/[^0-9]/g, '');
+    
+    // Get all active students
+    let query = `
+      SELECT s.id, s.nama_siswa, s.tenant_id, s.iuran_bulanan, s.va_number, tn.nama_sekolah
+      FROM students s
+      JOIN tenants tn ON s.tenant_id = tn.tenant_id
+      WHERE (s.status = 'active' OR s.status = 'aktif' OR s.status IS NULL)
+    `;
+    
+    if (only_without_va) {
+      query += ' AND (s.va_number IS NULL OR s.va_number = "")';
+    }
+    
+    query += ' ORDER BY tn.nama_sekolah, s.nama_siswa';
+    
+    const students = await db.query(query);
+    
+    if (!students || students.length === 0) {
+      return res.json({ success: true, message: 'Tidak ada siswa yang perlu dibuat VA', created: 0, skipped: 0 });
+    }
+    
+    let created = 0;
+    let skipped = 0;
+    const details = [];
+    
+    for (const student of students) {
+      try {
+        let vaNumber = student.va_number ? String(student.va_number).replace(/[^0-9]/g, '') : '';
+        
+        // Generate new VA if doesn't exist
+        if (!vaNumber || vaNumber.length < 10) {
+          const vaSuffix = String(Math.floor(1000000000 + Math.random() * 9000000000));
+          vaNumber = `${vaPrefix}${vaSuffix}`;
+          
+          await db.query(
+            'UPDATE students SET va_number = ?, va_name = ? WHERE id = ?',
+            [vaNumber, student.nama_siswa, student.id]
+          );
+          
+          // Insert payment transaction
+          const finalAmount = parseFloat(student.iuran_bulanan) || 0;
+          await db.query(
+            `INSERT INTO payment_transactions (tenant_id, student_id, gateway, external_id, amount, status, payment_method, description, metadata)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE amount = VALUES(amount), description = VALUES(description)`,
+            [
+              student.tenant_id,
+              student.id,
+              'bsi_manual',
+              vaNumber,
+              finalAmount,
+              'pending',
+              'BSI VA',
+              `VA BSI ${vaNumber} - ${student.nama_siswa}`,
+              JSON.stringify({ student_name: student.nama_siswa })
+            ]
+          );
+          
+          created++;
+          details.push({
+            student_id: student.id,
+            nama_siswa: student.nama_siswa,
+            nama_sekolah: student.nama_sekolah,
+            va_number: vaNumber,
+            status: 'created'
+          });
+        } else {
+          skipped++;
+          details.push({
+            student_id: student.id,
+            nama_siswa: student.nama_siswa,
+            nama_sekolah: student.nama_sekolah,
+            va_number: vaNumber,
+            status: 'skipped_existing'
+          });
+        }
+      } catch (err) {
+        console.error(`[VA ALL] Failed for student ${student.id}:`, err.message);
+        details.push({
+          student_id: student.id,
+          nama_siswa: student.nama_siswa,
+          error: err.message
+        });
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: `VA dibuat: ${created} baru, ${skipped} sudah ada, ${students.length} total`,
+      total_students: students.length,
+      created: created,
+      skipped: skipped,
+      details: details
+    });
+  } catch (error) {
+    console.error('Create all VA error:', error);
+    res.status(500).json({ success: false, message: 'Gagal buat VA untuk semua siswa' });
+  }
+});
+
 // GET /api/treasurer/bsi/generate-csv?tenant_id=XXX - download CSV sesuai format BSI CUZ
 // Header: Type,Parent Account,Virtual Account Number,Virtual Account Name,Amount,Remark,Transaction Date
 router.get('/treasurer/bsi/generate-csv', authenticateBendahara, async (req, res) => {
@@ -1874,11 +2174,16 @@ router.get('/treasurer/bsi/generate-csv', authenticateBendahara, async (req, res
 
     const header1 = 'Type,Parent Account,Virtual Account Number (Prefix VA + Number),Virtual Account Name,Virtual Account Scheme,Limit Debit,Limit Credit,Limit Transaction,Physical Card,Auto Renewal Limit,,Expire Date,KYC,,,,,Additional Info,,,,,,,,,,';
     const header2 = ',,,,,,,,,,Every,Date / Day,,Name,Mobile Phone,ID Type,ID Number,Address,Label1;Value1,Label2;Value2,Label3;Value3,Label4;Value4,Label5;Value5,Label6;Value6,Label7;Value7,Label8;Value8,Label9;Value10;Value10';
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth(); // 0-indexed
-    const lastDay = new Date(year, month + 1, 0).getDate();
-    const expireDate = `${String(lastDay).padStart(2, '0')}/${String(month + 1).padStart(2, '0')}/${year}`;
+    let expireDate;
+    if (req.query.expire_date) {
+      expireDate = req.query.expire_date;
+    } else {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth();
+      const lastDay = new Date(year, month + 1, 0).getDate();
+      expireDate = `${String(lastDay).padStart(2, '0')}/${String(month + 1).padStart(2, '0')}/${year}`;
+    }
     const rows = (students || []).map(s => {
       const rawVa = (s.va_number || `${vaPrefix}${String(s.id).padStart(10, '0')}`).replace(/[^0-9]/g, '');
       const va = rawVa.padStart(16, '0').slice(-16); // Pastikan 16 digit tanpa spasi
@@ -2097,6 +2402,152 @@ router.put('/treasurer/bendahara/spp/:id', authenticateBendahara, async (req, re
     res.json({ success: true, message: 'Iuran diupdate' });
   } catch (e) {
     res.status(500).json({ success: false, message: 'Gagal update SPP' });
+  }
+});
+
+// ==================== AUTO BILLING REPORT & SETTINGS ====================
+
+// GET /api/treasurer/bendahara/auto-billing/settings - Get auto billing settings
+router.get('/treasurer/bendahara/auto-billing/settings', authenticateBendahara, async (req, res) => {
+  try {
+    // Ensure table exists
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS bill_settings (
+        id INT PRIMARY KEY DEFAULT 1,
+        send_day INT DEFAULT 1,
+        due_day INT DEFAULT 10,
+        is_enabled TINYINT(1) DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+    // Insert default if not exists
+    const existing = await db.query('SELECT id FROM bill_settings LIMIT 1');
+    if (existing.length === 0) {
+      await db.query('INSERT INTO bill_settings (send_day, due_day, is_enabled) VALUES (1, 10, 0)');
+    }
+    const settings = await db.query('SELECT send_day, due_day, is_enabled FROM bill_settings LIMIT 1');
+    res.json({
+      success: true,
+      data: settings[0] || { send_day: 1, due_day: 10, is_enabled: 0 }
+    });
+  } catch (error) {
+    console.error('Get auto billing settings error:', error);
+    res.status(500).json({ success: false, message: 'Gagal mengambil pengaturan' });
+  }
+});
+
+// POST /api/treasurer/bendahara/auto-billing/toggle - Toggle auto billing on/off
+router.post('/treasurer/bendahara/auto-billing/toggle', authenticateBendahara, async (req, res) => {
+  try {
+    // Ensure table exists
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS bill_settings (
+        id INT PRIMARY KEY DEFAULT 1,
+        send_day INT DEFAULT 1,
+        due_day INT DEFAULT 10,
+        is_enabled TINYINT(1) DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+    const { is_enabled, send_day, due_day } = req.body;
+    await db.query(
+      'UPDATE bill_settings SET is_enabled = ?, send_day = ?, due_day = ? WHERE id = 1',
+      [is_enabled ? 1 : 0, send_day || 1, due_day || 10]
+    );
+    res.json({
+      success: true,
+      message: is_enabled ? 'Auto billing diaktifkan' : 'Auto billing dinonaktifkan'
+    });
+  } catch (error) {
+    console.error('Toggle auto billing error:', error);
+    res.status(500).json({ success: false, message: 'Gagal mengubah pengaturan' });
+  }
+});
+
+// GET /api/treasurer/bendahara/auto-billing/report - Get auto billing report
+router.get('/treasurer/bendahara/auto-billing/report', authenticateBendahara, async (req, res) => {
+  try {
+    // Ensure table exists with correct collation
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS auto_billing_reports (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id VARCHAR(50) NOT NULL,
+        periode VARCHAR(20) NOT NULL,
+        student_id INT NOT NULL,
+        nama_siswa VARCHAR(255),
+        no_wa VARCHAR(20),
+        saldo DECIMAL(10,2) DEFAULT 0,
+        status ENUM('terkirim', 'gagal', 'no_wa') NOT NULL,
+        message_id VARCHAR(100),
+        error_message TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_periode (periode),
+        INDEX idx_tenant (tenant_id),
+        INDEX idx_status (status)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    // Fix collation if table already existed with wrong collation
+    await db.query(`ALTER TABLE auto_billing_reports CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
+
+    const { periode, status } = req.query;
+
+    let query = `
+      SELECT 
+        abr.tenant_id,
+        abr.periode,
+        abr.student_id,
+        abr.nama_siswa,
+        abr.no_wa,
+        abr.saldo,
+        abr.status,
+        abr.message_id,
+        abr.error_message,
+        abr.created_at,
+        tn.nama_sekolah
+      FROM auto_billing_reports abr
+      LEFT JOIN tenants tn ON abr.tenant_id = tn.tenant_id
+      WHERE 1=1
+    `;
+    const params = [];
+
+    if (periode) {
+      query += ' AND abr.periode = ?';
+      params.push(periode);
+    }
+
+    if (status) {
+      query += ' AND abr.status = ?';
+      params.push(status);
+    }
+
+    query += ' ORDER BY abr.created_at DESC, tn.nama_sekolah ASC, abr.nama_siswa ASC';
+
+    const reports = await db.query(query, params);
+
+    // Summary
+    const summaryQuery = `
+      SELECT 
+        periode,
+        COUNT(*) as total,
+        SUM(CASE WHEN status = 'terkirim' THEN 1 ELSE 0 END) as total_terkirim,
+        SUM(CASE WHEN status = 'gagal' THEN 1 ELSE 0 END) as total_gagal,
+        SUM(CASE WHEN status = 'no_wa' THEN 1 ELSE 0 END) as total_no_wa
+      FROM auto_billing_reports
+      GROUP BY periode
+      ORDER BY periode DESC
+    `;
+    const summary = await db.query(summaryQuery);
+
+    res.json({
+      success: true,
+      data: reports,
+      summary: summary
+    });
+  } catch (error) {
+    console.error('Get auto billing report error:', error);
+    res.status(500).json({ success: false, message: 'Gagal mengambil laporan' });
   }
 });
 

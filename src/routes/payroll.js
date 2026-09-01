@@ -157,11 +157,18 @@ router.get('/admin/payroll/settings', authenticateOperator, async (req, res) => 
     const tenantId = resolveTenantId(req);
     const bulan = parseInt(req.query.bulan) || (new Date().getMonth() + 1);
     const tahun = parseInt(req.query.tahun) || new Date().getFullYear();
+    console.log('Payroll settings called:', { tenantId, bulan, tahun, userRole: req.user?.role, userGuruId: req.user?.guru_id });
     const result = await getPayrollData(tenantId, bulan, tahun);
     res.json({ success: true, ...result });
   } catch (error) {
-    console.error('Payroll settings error:', error);
-    res.status(500).json({ success: false, message: 'Error fetching payroll' });
+    console.error('Payroll settings error:', {
+      message: error.message,
+      code: error.code,
+      sqlMessage: error.sqlMessage,
+      sqlState: error.sqlState,
+      tenantId: resolveTenantId(req)
+    });
+    res.status(500).json({ success: false, message: error.sqlMessage || error.message || 'Error fetching payroll' });
   }
 });
 

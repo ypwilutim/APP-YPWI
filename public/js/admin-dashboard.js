@@ -874,12 +874,15 @@ async function fetchAttendanceLogs() {
 
     async function submitManualAttendance(event) {
         event.preventDefault();
+        console.log('[MANUAL_ATTENDANCE] submitManualAttendance called');
         const teacherId = document.getElementById('manualTeacherId').value;
         const tenantId = document.getElementById('manualTenantId').value;
         const tanggal = document.getElementById('manualTanggal').value;
         const jam = document.getElementById('manualJam').value;
         const jenis = document.getElementById('manualJenis').value;
         const submitBtn = document.getElementById('manualAttendanceSubmit');
+
+        console.log('[MANUAL_ATTENDANCE] Form data:', { teacherId, tenantId, tanggal, jam, jenis });
 
         if (!teacherId || !tenantId || !tanggal || !jam || !jenis) {
             Swal.fire('Error', 'Semua field wajib diisi', 'error');
@@ -891,14 +894,20 @@ async function fetchAttendanceLogs() {
         submitBtn.innerHTML = '<i class="fas fa-spinner spinner" style="margin-right:0.5rem;"></i>Menyimpan...';
 
         try {
+            console.log('[MANUAL_ATTENDANCE] Sending POST request...');
+            const token = window.authToken || localStorage.getItem('token') || '';
+            console.log('[MANUAL_ATTENDANCE] Token available:', !!token);
+            const postBody = { teacher_id: parseInt(teacherId), tenant_id: tenantId, tanggal, jenis, jam };
+            console.log('[MANUAL_ATTENDANCE] POST body:', postBody);
             const response = await fetch('/api/admin/attendance/manual', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}`
+                    'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({ teacher_id: parseInt(teacherId), tenant_id, tanggal, jenis, jam })
+                body: JSON.stringify(postBody)
             });
+            console.log('[MANUAL_ATTENDANCE] Response received:', response.status);
 
             const result = await response.json();
             if (result.success) {
@@ -911,8 +920,8 @@ async function fetchAttendanceLogs() {
                 Swal.fire({ title: 'Gagal', text: result.message, icon: 'error', confirmButtonColor: '#dc2626' });
             }
         } catch (error) {
-            console.error('Manual attendance submit error:', error);
-            Swal.fire({ title: 'Error', text: 'Terjadi kesalahan jaringan', icon: 'error', confirmButtonColor: '#dc2626' });
+            console.error('[MANUAL_ATTENDANCE] Error:', error);
+            Swal.fire({ title: 'Error', text: 'Terjadi kesalahan jaringan: ' + error.message, icon: 'error', confirmButtonColor: '#dc2626' });
         } finally {
             submitBtn.disabled = false;
             submitBtn.innerHTML = originalText;
@@ -1409,6 +1418,7 @@ function showTab(tabName) {
     else if (tabName === 'qr-generator') {
         loadScannerDevices();
         loadQRLogs();
+        initQRGenerator();
     }
     else if (tabName === 'settings') {
         showSettingsTab('locations');
@@ -4359,7 +4369,7 @@ window.denyAccessRequest = async function (id) {
     });
 
     const result = await response.json();
-    
+
     if (result.success) {
       alert('Permintaan akses ditolak');
       loadAccessRequests();
@@ -4371,3 +4381,405 @@ window.denyAccessRequest = async function (id) {
     alert('Terjadi kesalahan sistem');
   }
 };
+
+// ============================================================
+// QR CODE GENERATOR FUNCTIONALITY
+// ============================================================
+
+let qrTeacherSearchTimeout = null;
+let currentQRData = null;
+
+function initQRGenerator() {
+  const form = document.getElementById('qr-generate-form');
+  const searchInput = document.getElementById('qr-teacher-search');
+  const suggestionsBox = document.getElementById('qr-teacher-suggestions');
+  const tenantSelect = document.getElementById('qr-tenant-select');
+  const downloadBtn = document.getElementById('download-qr');
+  const printBtn = document.getElementById('print-qr');
+  const whatsappBtn = document.getElementById('share-qr-whatsapp');
+
+  // Load tenants for dropdown
+  if (tenantSelect) {
+    loadTenantsForQR();
+  }
+
+  // Teacher search with debounce
+  if (searchInput) {
+    searchInput.addEventListener('input', function() {
+      clearTimeout(qrTeacherSearchTimeout);
+      const query = this.value.trim();
+
+      if (query.length < 2) {
+        if (suggestionsBox) suggestionsBox.classList.add('hidden');
+        return;
+      }
+
+      qrTeacherSearchTimeout = setTimeout(() => searchTeachers(query), 300);
+    });
+
+    // Hide suggestions when clicking outside
+    document.addEventListener('click', function(e) {
+      if (!searchInput.contains(e.target) && suggestionsBox && !suggestionsBox.contains(e.target)) {
+        suggestionsBox.classList.add('hidden');
+      }
+    });
+  }
+
+  // Form submission
+  if (form) {
+    form.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      await generateQRCode();
+    });
+  }
+
+  // Download button
+  if (downloadBtn) {
+    downloadBtn.addEventListener('click', downloadQRCode);
+  }
+
+  // Print button
+  if (printBtn) {
+    printBtn.addEventListener('click', printQRCode);
+  }
+
+  // WhatsApp share button
+  if (whatsappBtn) {
+    whatsappBtn.addEventListener('click', shareQRViaWhatsApp);
+  }
+}
+
+async function loadTenantsForQR() {
+  const select = document.getElementById('qr-tenant-select');
+  if (!select) return;
+
+  try {
+    const response = await fetch('/api/admin/tenants', {
+      headers: { 'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}` }
+    });
+
+    const data = await response.json();
+    if (data.success && data.data) {
+      select.innerHTML = '<option value="">Pilih Sekolah</option>' +
+        data.data.map(t => `<option value="${t.tenant_id}">${t.nama_sekolah || t.tenant_id}</option>`).join('');
+    }
+  } catch (error) {
+    console.error('Error loading tenants for QR:', error);
+  }
+}
+
+async function searchTeachers(query) {
+  const suggestionsBox = document.getElementById('qr-tenant-select');
+  const tenantId = suggestionsBox ? suggestionsBox.value : '';
+
+  try {
+    let url = `/api/admin/teachers?search=${encodeURIComponent(query)}`;
+    if (tenantId) url += `&tenant_id=${encodeURIComponent(tenantId)}`;
+
+    const response = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}` }
+    });
+
+    const data = await response.json();
+    const suggestionsEl = document.getElementById('qr-teacher-suggestions');
+
+    if (data.success && data.data && data.data.length > 0 && suggestionsEl) {
+      suggestionsEl.innerHTML = data.data.map(t => `
+        <div class="px-4 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-0"
+             onclick="selectQRTeacher(${t.id}, '${t.nama.replace(/'/g, "\\'")}', '${t.nik || t.id}')">
+          <div class="font-medium text-gray-900">${t.nama}</div>
+          <div class="text-xs text-gray-500">NIK: ${t.nik || '-'}</div>
+        </div>
+      `).join('');
+      suggestionsEl.classList.remove('hidden');
+    } else if (suggestionsEl) {
+      suggestionsEl.innerHTML = '<div class="px-4 py-2 text-gray-500">Tidak ada guru ditemukan</div>';
+      suggestionsEl.classList.remove('hidden');
+    }
+  } catch (error) {
+    console.error('Error searching teachers:', error);
+  }
+}
+
+function selectQRTeacher(id, name, nik) {
+  document.getElementById('qr-teacher-id').value = id;
+  document.getElementById('qr-teacher-search').value = name;
+  document.getElementById('qr-teacher-name').value = name;
+  document.getElementById('qr-scan-id').value = nik || id;
+  const suggestionsBox = document.getElementById('qr-teacher-suggestions');
+  if (suggestionsBox) suggestionsBox.classList.add('hidden');
+}
+
+async function generateQRCode() {
+  const teacherId = document.getElementById('qr-teacher-id').value;
+  const scanId = document.getElementById('qr-scan-id').value;
+  const tenantId = document.getElementById('qr-tenant-select').value;
+  const expiryHours = document.getElementById('qr-expiry-hours').value || 24;
+  const generateBtn = document.getElementById('generate-qr-btn');
+
+  if (!teacherId || !scanId) {
+    Swal.fire({ title: 'Data Tidak Lengkap', text: 'Pilih guru terlebih dahulu', icon: 'warning', confirmButtonColor: '#d97706' });
+    return;
+  }
+
+  if (!tenantId) {
+    Swal.fire({ title: 'Data Tidak Lengkap', text: 'Pilih sekolah terlebih dahulu', icon: 'warning', confirmButtonColor: '#d97706' });
+    return;
+  }
+
+  // Disable button and show loading
+  if (generateBtn) {
+    generateBtn.disabled = true;
+    generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Generating...';
+  }
+
+  try {
+    // Calculate expiry time
+    const now = new Date();
+    const expiryTime = new Date(now.getTime() + parseInt(expiryHours) * 60 * 60 * 1000);
+    const timestamp = now.getTime();
+
+    // Create QR data payload
+    const qrPayload = {
+      scan_id: scanId,
+      teacher_id: parseInt(teacherId),
+      tenant_id: tenantId,
+      timestamp: timestamp,
+      expiry: expiryTime.toISOString(),
+      type: 'masuk'
+    };
+
+    // Encode to base64
+    const qrString = btoa(JSON.stringify(qrPayload));
+
+    // Generate QR code using the API
+    const response = await fetch(`/api/qrcode/${encodeURIComponent(qrString)}?size=300`, {
+      headers: { 'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}` }
+    });
+
+    const result = await response.json();
+
+    if (result.success && result.qr_url) {
+      // Store current QR data for download/print/share
+      currentQRData = {
+        qrUrl: result.qr_url,
+        qrString: qrString,
+        teacherName: document.getElementById('qr-teacher-name').value,
+        scanId: scanId,
+        expiry: expiryTime.toLocaleString('id-ID')
+      };
+
+      // Display QR code
+      const container = document.getElementById('qr-image-container');
+      const resultDiv = document.getElementById('qr-result');
+      const expirySpan = document.getElementById('qr-expiry-time');
+
+      if (container) {
+        container.innerHTML = `<img src="${result.qr_url}" alt="QR Code" class="max-w-full h-auto">`;
+      }
+      if (expirySpan) {
+        expirySpan.textContent = currentQRData.expiry;
+      }
+      if (resultDiv) {
+        resultDiv.classList.remove('hidden');
+      }
+    } else {
+      throw new Error(result.message || 'Gagal generate QR code');
+    }
+  } catch (error) {
+    console.error('QR generation error:', error);
+    Swal.fire({ title: 'Gagal', text: 'Gagal generate QR code: ' + error.message, icon: 'error', confirmButtonColor: '#dc2626' });
+  } finally {
+    // Re-enable button
+    if (generateBtn) {
+      generateBtn.disabled = false;
+      generateBtn.innerHTML = '<i class="fas fa-qrcode mr-2"></i>Generate QR Code';
+    }
+  }
+}
+
+function downloadQRCode() {
+  if (!currentQRData) {
+    Swal.fire({ title: 'Tidak Ada QR', text: 'Generate QR code terlebih dahulu', icon: 'warning', confirmButtonColor: '#d97706' });
+    return;
+  }
+
+  const link = document.createElement('a');
+  link.href = currentQRData.qrUrl;
+  link.download = `QR_${currentQRData.teacherName.replace(/\s+/g, '_')}_${currentQRData.scanId}.png`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+function printQRCode() {
+  if (!currentQRData) {
+    Swal.fire({ title: 'Tidak Ada QR', text: 'Generate QR code terlebih dahulu', icon: 'warning', confirmButtonColor: '#d97706' });
+    return;
+  }
+
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) {
+    Swal.fire({ title: 'Pop-up Diblokir', text: 'Izinkan pop-up untuk mencetak QR code', icon: 'warning', confirmButtonColor: '#d97706' });
+    return;
+  }
+
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>QR Code - ${currentQRData.teacherName}</title>
+      <style>
+        body { display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; font-family: Arial, sans-serif; }
+        .qr-container { text-align: center; padding: 20px; }
+        .qr-container img { max-width: 300px; }
+        .qr-container h2 { margin: 10px 0; color: #333; }
+        .qr-container p { color: #666; margin: 5px 0; }
+        .qr-container .expiry { color: #dc2626; font-weight: bold; margin-top: 15px; }
+        @media print { body { margin: 0; } }
+      </style>
+    </head>
+    <body>
+      <div class="qr-container">
+        <h2>${currentQRData.teacherName}</h2>
+        <p>Scan ID: ${currentQRData.scanId}</p>
+        <img src="${currentQRData.qrUrl}" alt="QR Code">
+        <p class="expiry">Berlaku sampai: ${currentQRData.expiry}</p>
+      </div>
+      <script>window.onload = function() { window.print(); }<\/script>
+    </body>
+    </html>
+  `);
+  printWindow.document.close();
+}
+
+function shareQRViaWhatsApp() {
+  if (!currentQRData) {
+    Swal.fire({ title: 'Tidak Ada QR', text: 'Generate QR code terlebih dahulu', icon: 'warning', confirmButtonColor: '#d97706' });
+    return;
+  }
+
+  // Show loading
+  Swal.fire({
+    title: 'Mengambil nomor Admin...',
+    text: 'Mohon tunggu sebentar',
+    allowOutsideClick: false,
+    didOpen: () => {
+      Swal.showLoading();
+    }
+  });
+
+  // Get tenant_id from the selected tenant
+  const tenantId = document.getElementById('qr-tenant-select')?.value || '';
+
+  // Fetch admin WhatsApp number from API
+  fetch(`/api/admin/whatsapp-number?tenant_id=${encodeURIComponent(tenantId)}`, {
+    headers: { 'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}` }
+  })
+    .then(res => res.json())
+    .then(result => {
+      Swal.close();
+
+      if (result.success && result.data && result.data.no_wa) {
+        // Format nomor WA (hapus karakter non-digit, tambah kode negara jika perlu)
+        let noWa = result.data.no_wa.replace(/\D/g, '');
+        // Jika dimulai dengan 0, ganti dengan 62 (Indonesia)
+        if (noWa.startsWith('0')) {
+          noWa = '62' + noWa.substring(1);
+        }
+        // Jika belum ada kode negara, tambahkan 62
+        if (!noWa.startsWith('62')) {
+          noWa = '62' + noWa;
+        }
+
+        // Create message text
+        const message = `Halo ${currentQRData.teacherName},\n\n` +
+          `Berikut adalah QR Code absensi Anda:\n\n` +
+          `📋 Scan ID: ${currentQRData.scanId}\n` +
+          `⏰ Berlaku sampai: ${currentQRData.expiry}\n\n` +
+          `Silakan scan QR code ini untuk absensi.\n` +
+          `Jangan bagikan QR code ini kepada orang lain!\n\n` +
+          `---\n` +
+          `QR Code: ${currentQRData.qrString}`;
+
+        // Encode message for URL
+        const encodedMessage = encodeURIComponent(message);
+
+        // Open WhatsApp directly to admin's number with pre-filled message
+        const whatsappUrl = `https://wa.me/${noWa}?text=${encodedMessage}`;
+
+        // Open in new window
+        const whatsappWindow = window.open(whatsappUrl, '_blank');
+        if (!whatsappWindow) {
+          Swal.fire({ title: 'Pop-up Diblokir', text: 'Izinkan pop-up untuk membuka WhatsApp', icon: 'warning', confirmButtonColor: '#d97706' });
+        }
+      } else {
+        // Fallback: tanpa nomor, user harus memilih kontak manual
+        Swal.fire({
+          title: 'Nomor Admin Tidak Ditemukan',
+          text: 'Nomor WhatsApp admin tidak tersedia. WhatsApp akan terbuka tanpa nomor tujuan.',
+          icon: 'warning',
+          confirmButtonColor: '#d97706',
+          confirmButtonText: 'Lanjutkan'
+        }).then((res) => {
+          if (res.isConfirmed) {
+            // Create message text
+            const message = `Halo ${currentQRData.teacherName},\n\n` +
+              `Berikut adalah QR Code absensi Anda:\n\n` +
+              `📋 Scan ID: ${currentQRData.scanId}\n` +
+              `⏰ Berlaku sampai: ${currentQRData.expiry}\n\n` +
+              `Silakan scan QR code ini untuk absensi.\n` +
+              `Jangan bagikan QR code ini kepada orang lain!\n\n` +
+              `---\n` +
+              `QR Code: ${currentQRData.qrString}`;
+
+            const encodedMessage = encodeURIComponent(message);
+            const whatsappUrl = `https://wa.me/?text=${encodedMessage}`;
+            const whatsappWindow = window.open(whatsappUrl, '_blank');
+            if (!whatsappWindow) {
+              Swal.fire({ title: 'Pop-up Diblokir', text: 'Izinkan pop-up untuk membuka WhatsApp', icon: 'warning', confirmButtonColor: '#d97706' });
+            }
+          }
+        });
+      }
+    })
+    .catch(error => {
+      Swal.close();
+      console.error('Error fetching admin WhatsApp:', error);
+
+      // Fallback: tanpa nomor, user harus memilih kontak manual
+      Swal.fire({
+        title: 'Gagal Mengambil Nomor',
+        text: 'Terjadi kesalahan. WhatsApp akan terbuka tanpa nomor tujuan.',
+        icon: 'warning',
+        confirmButtonColor: '#d97706',
+        confirmButtonText: 'Lanjutkan'
+      }).then((res) => {
+        if (res.isConfirmed) {
+          const message = `Halo ${currentQRData.teacherName},\n\n` +
+            `Berikut adalah QR Code absensi Anda:\n\n` +
+            `📋 Scan ID: ${currentQRData.scanId}\n` +
+            `⏰ Berlaku sampai: ${currentQRData.expiry}\n\n` +
+            `Silakan scan QR code ini untuk absensi.\n` +
+            `Jangan bagikan QR code ini kepada orang lain!\n\n` +
+            `---\n` +
+            `QR Code: ${currentQRData.qrString}`;
+
+          const encodedMessage = encodeURIComponent(message);
+          const whatsappUrl = `https://wa.me/?text=${encodedMessage}`;
+          const whatsappWindow = window.open(whatsappUrl, '_blank');
+          if (!whatsappWindow) {
+            Swal.fire({ title: 'Pop-up Diblokir', text: 'Izinkan pop-up untuk membuka WhatsApp', icon: 'warning', confirmButtonColor: '#d97706' });
+          }
+        }
+      });
+    });
+}
+
+// Initialize QR generator when DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+  // Only initialize if we're on the admin dashboard with QR generator
+  if (document.getElementById('qr-generate-form')) {
+    initQRGenerator();
+  }
+});

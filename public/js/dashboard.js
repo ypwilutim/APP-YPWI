@@ -2990,6 +2990,19 @@ function showProblemQR() {
     const container = document.getElementById('problemQRImage');
     if (!modal || !container) return;
 
+    // Reset stored data
+    currentProblemQRData = null;
+
+    // Reset tombol: tampilkan Download, sembunyikan WhatsApp
+    const downloadBtn = document.getElementById('btn-download-qr');
+    const whatsappBtn = document.getElementById('btn-share-qr-whatsapp');
+    if (downloadBtn) {
+        downloadBtn.style.display = 'flex';
+    }
+    if (whatsappBtn) {
+        whatsappBtn.style.display = 'none';
+    }
+
     container.innerHTML = '<div style="text-align:center;padding:2rem;"><i class="fas fa-spinner fa-spin" style="font-size:1.5rem;color:#2563eb;"></i><p style="margin-top:0.5rem;color:#64748b;font-size:0.875rem;">Membuat QR...</p></div>';
     modal.style.display = 'flex';
 
@@ -3022,6 +3035,15 @@ function showProblemQR() {
             const qrData = await qrRes.json();
 
             if (qrData.success && qrData.qr_url) {
+                // Store QR data for sharing
+                currentProblemQRData = {
+                    qrUrl: qrData.qr_url,
+                    qrString: encoded,
+                    teacherName: teacher.nama || '',
+                    scanId: String(scanId),
+                    email: teacher.email || '',
+                    noWa: teacher.no_wa || ''
+                };
                 container.innerHTML = '<img src="' + qrData.qr_url + '" style="max-width:200px;height:auto;border-radius:0.5rem;" alt="QR Absen Masalah">';
             } else {
                 container.innerHTML = '<p style="color:#dc2626;text-align:center;">Gagal generate QR</p>';
@@ -3036,4 +3058,151 @@ function showProblemQR() {
 function closeProblemQRModal() {
     const modal = document.getElementById('problemQRModal');
     if (modal) modal.style.display = 'none';
+    // Reset stored data when modal is closed
+    currentProblemQRData = null;
+}
+
+// ============================================================
+// PROBLEM QR WHATSAPP SHARE & DOWNLOAD
+// ============================================================
+
+// Global variable to store problem QR data for sharing
+let currentProblemQRData = null;
+
+async function shareProblemQRViaWhatsApp() {
+    if (!currentProblemQRData) {
+        Swal.fire({
+            title: 'Tidak Ada QR',
+            text: 'QR code belum tersedia. Silakan buka ulang modal.',
+            icon: 'warning',
+            confirmButtonColor: '#d97706'
+        });
+        return;
+    }
+
+    // Show loading
+    Swal.fire({
+        title: 'Mengambil nomor Admin...',
+        text: 'Mohon tunggu sebentar',
+        allowOutsideClick: false,
+        didOpen: () => {
+            Swal.showLoading();
+        }
+    });
+
+    try {
+        const token = window.token || localStorage.getItem('token');
+
+        // Fetch admin WhatsApp number from API
+        const response = await fetch('/api/admin/whatsapp-number', {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const result = await response.json();
+
+        Swal.close();
+
+        // Get admin WhatsApp number
+        let noWa = null;
+        let adminName = 'Admin';
+
+        if (result.success && result.data && result.data.no_wa) {
+            adminName = result.data.nama || 'Admin';
+            // Format nomor WA (hapus karakter non-digit, tambah kode negara jika perlu)
+            noWa = result.data.no_wa.replace(/\D/g, '');
+            // Jika dimulai dengan 0, ganti dengan 62 (Indonesia)
+            if (noWa.startsWith('0')) {
+                noWa = '62' + noWa.substring(1);
+            }
+            // Jika belum ada kode negara, tambahan 62
+            if (!noWa.startsWith('62')) {
+                noWa = '62' + noWa;
+            }
+        }
+
+        // Download QR code first (works on all devices including iPhone)
+        downloadQRCodeFile();
+
+        // Open WhatsApp with admin's number
+        openWhatsAppWithMessage(noWa, adminName);
+
+    } catch (error) {
+        Swal.close();
+        console.error('Error sharing QR:', error);
+
+        // Fallback: download QR and open WhatsApp without number
+        downloadQRCodeFile();
+        openWhatsAppWithMessage(null, 'Admin');
+    }
+}
+
+// Download QR code file
+function downloadQRCodeFile() {
+    if (!currentProblemQRData) return;
+
+    const link = document.createElement('a');
+    link.href = currentProblemQRData.qrUrl;
+    link.download = `QR_Absen_${currentProblemQRData.teacherName.replace(/\s+/g, '_')}.png`;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+// Open WhatsApp with message
+function openWhatsAppWithMessage(noWa, adminName) {
+    if (!currentProblemQRData) return;
+
+    const message = `Halo ${adminName},\n\n` +
+        `Saya ${currentProblemQRData.teacherName} mengalami masalah saat absen.\n\n` +
+        `Mohon bantuan untuk dicatat secara manual.\n\n` +
+        `QR Code sudah di-download, silakan lampirkan.`;
+
+    const encodedMessage = encodeURIComponent(message);
+
+    // Use wa.me link (works on both Android and iPhone)
+    let whatsappUrl;
+    if (noWa) {
+        whatsappUrl = `https://wa.me/${noWa}?text=${encodedMessage}`;
+    } else {
+        whatsappUrl = `https://wa.me/?text=${encodedMessage}`;
+    }
+
+    // Open WhatsApp - works on both Android and iPhone
+    window.open(whatsappUrl, '_blank');
+}
+
+function openProblemQRWhatsAppWithoutNumber() {
+    if (!currentProblemQRData) return;
+
+    // Download QR code
+    downloadQRCodeFile();
+
+    // Open WhatsApp without number
+    openWhatsAppWithMessage(null, 'Admin');
+}
+
+function downloadProblemQR() {
+    if (!currentProblemQRData) {
+        Swal.fire({
+            title: 'Tidak Ada QR',
+            text: 'QR code belum tersedia. Silakan buka ulang modal.',
+            icon: 'warning',
+            confirmButtonColor: '#d97706'
+        });
+        return;
+    }
+
+    // Download QR code
+    downloadQRCodeFile();
+
+    // Setelah download selesai, tampilkan tombol WhatsApp dan sembunyikan tombol Download
+    const downloadBtn = document.getElementById('btn-download-qr');
+    const whatsappBtn = document.getElementById('btn-share-qr-whatsapp');
+
+    if (downloadBtn) {
+        downloadBtn.style.display = 'none';
+    }
+    if (whatsappBtn) {
+        whatsappBtn.style.display = 'flex';
+    }
 }

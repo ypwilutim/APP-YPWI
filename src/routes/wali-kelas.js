@@ -369,28 +369,39 @@ router.get('/wali-kelas/rekap', authenticateToken, async (req, res) => {
   }
 });
 
-// GET /api/wali-kelas/izin - Leave requests for teachers in wali's school
+// GET /api/wali-kelas/izin - Student leave requests (izin siswa) for wali's class
 router.get('/wali-kelas/izin', authenticateToken, async (req, res) => {
   try {
     const teacherId = req.user.guru_id;
     const status = req.query.status || 'pending';
 
     const classes = await getWaliKelasClasses(teacherId);
-    const tenantIds = [...new Set(classes.map(c => c.tenant_id))];
-    if (tenantIds.length === 0) {
+    const classIds = classes.map(c => c.class_id);
+    if (classIds.length === 0) {
       return res.json({ success: true, data: [] });
     }
 
-    const placeholders = tenantIds.map(() => '?').join(',');
-    const params = [status, ...tenantIds];
+    const placeholders = classIds.map(() => '?').join(',');
+    const params = [...classIds];
+    let whereExtra = '';
+
+    if (status === 'pending') {
+      whereExtra = ` AND (sa.status = 'izin' OR sa.status = 'sakit') AND sa.recorded_by IS NULL`;
+    } else if (status !== 'all') {
+      whereExtra = ' AND sa.status = ?';
+      params.push(status);
+    }
 
     const izinList = await db.query(
-      `SELECT lr.*, t.nama as teacher_name, t.nip, tn.nama_sekolah
-       FROM leave_requests lr
-       JOIN teachers t ON lr.teacher_id = t.id
-       JOIN tenants tn ON lr.tenant_id = tn.tenant_id
-       WHERE lr.status = ? AND FIND_IN_SET(tn.tenant_id, lr.tenant_id) > 0
-       ORDER BY lr.created_at DESC`,
+      `SELECT sa.id, sa.student_id, sa.class_id, sa.tenant_id, sa.tanggal,
+              sa.status, sa.keterangan, sa.recorded_by, sa.created_at, sa.updated_at,
+              s.nama_siswa, s.nisn, c.nama_kelas, tn.nama_sekolah
+       FROM student_attendance sa
+       JOIN students s ON sa.student_id = s.id
+       JOIN classes c ON sa.class_id = c.id
+       LEFT JOIN tenants tn ON sa.tenant_id = tn.tenant_id
+       WHERE sa.class_id IN (${placeholders})${whereExtra}
+       ORDER BY sa.tanggal DESC, sa.created_at DESC`,
       params
     );
 
@@ -401,7 +412,7 @@ router.get('/wali-kelas/izin', authenticateToken, async (req, res) => {
   }
 });
 
-// POST /api/wali-kelas/izin/:id/approve - Approve leave request
+// POST /api/wali-kelas/izin/:id/approve - Approve student leave request
 router.post('/wali-kelas/izin/:id/approve', authenticateToken, async (req, res) => {
   try {
     const teacherId = req.user.guru_id;
@@ -409,31 +420,35 @@ router.post('/wali-kelas/izin/:id/approve', authenticateToken, async (req, res) 
     const { catatan } = req.body;
 
     const classes = await getWaliKelasClasses(teacherId);
-    const tenantIds = classes.map(c => c.tenant_id);
-
-    const izin = await db.query('SELECT * FROM leave_requests WHERE id = ?', [izinId]);
-    if (!izin || !izin.length) {
-      return res.status(404).json({ success: false, message: 'Izin tidak ditemukan' });
-    }
-
-    const hasAccess = tenantIds.some(tid => izin.tenant_id && izin.tenant_id.split(',').includes(tid));
-    if (!hasAccess) {
+    const classIds = classes.map(c => c.class_id);
+    if (classIds.length === 0) {
       return res.status(403).json({ success: false, message: 'Akses ditolak' });
     }
 
+    const izin = (await db.query('SELECT * FROM student_attendance WHERE id = ?', [izinId]))[0];
+    if (!izin) {
+      return res.status(404).json({ success: false, message: 'Izin tidak ditemukan' });
+    }
+
+    if (!classIds.includes(izin.class_id)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+
+    const finalKeterangan = catatan ? `${izin.keterangan || ''} | Wali: ${catatan}`.trim() : izin.keterangan;
+
     await db.query(
-      'UPDATE leave_requests SET status = "approved", catatan = ?, updated_at = NOW() WHERE id = ?',
-      [catatan || 'Disetujui oleh wali kelas', izinId]
+      'UPDATE student_attendance SET status = ?, keterangan = ?, recorded_by = ?, updated_at = NOW() WHERE id = ?',
+      ['hadir', finalKeterangan, teacherId, izinId]
     );
 
-    res.json({ success: true, message: 'Izin berhasil disetujui' });
+    res.json({ success: true, message: 'Izin siswa berhasil disetujui' });
   } catch (error) {
     console.error('Approve izin error:', error.message);
     res.status(500).json({ success: false, message: 'Error approving leave request' });
   }
 });
 
-// POST /api/wali-kelas/izin/:id/reject - Reject leave request
+// POST /api/wali-kelas/izin/:id/reject - Reject student leave request
 router.post('/wali-kelas/izin/:id/reject', authenticateToken, async (req, res) => {
   try {
     const teacherId = req.user.guru_id;
@@ -441,24 +456,28 @@ router.post('/wali-kelas/izin/:id/reject', authenticateToken, async (req, res) =
     const { catatan } = req.body;
 
     const classes = await getWaliKelasClasses(teacherId);
-    const tenantIds = classes.map(c => c.tenant_id);
-
-    const izin = await db.query('SELECT * FROM leave_requests WHERE id = ?', [izinId]);
-    if (!izin || !izin.length) {
-      return res.status(404).json({ success: false, message: 'Izin tidak ditemukan' });
-    }
-
-    const hasAccess = tenantIds.some(tid => izin.tenant_id && izin.tenant_id.split(',').includes(tid));
-    if (!hasAccess) {
+    const classIds = classes.map(c => c.class_id);
+    if (classIds.length === 0) {
       return res.status(403).json({ success: false, message: 'Akses ditolak' });
     }
 
+    const izin = (await db.query('SELECT * FROM student_attendance WHERE id = ?', [izinId]))[0];
+    if (!izin) {
+      return res.status(404).json({ success: false, message: 'Izin tidak ditemukan' });
+    }
+
+    if (!classIds.includes(izin.class_id)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+
+    const finalKeterangan = catatan ? `${izin.keterangan || ''} | Wali: ${catatan}`.trim() : izin.keterangan;
+
     await db.query(
-      'UPDATE leave_requests SET status = "rejected", catatan = ?, updated_at = NOW() WHERE id = ?',
-      [catatan || 'Ditolak oleh wali kelas', izinId]
+      'UPDATE student_attendance SET status = ?, keterangan = ?, recorded_by = ?, updated_at = NOW() WHERE id = ?',
+      ['alpha', finalKeterangan, teacherId, izinId]
     );
 
-    res.json({ success: true, message: 'Izin berhasil ditolak' });
+    res.json({ success: true, message: 'Izin siswa berhasil ditolak' });
   } catch (error) {
     console.error('Reject izin error:', error.message);
     res.status(500).json({ success: false, message: 'Error rejecting leave request' });

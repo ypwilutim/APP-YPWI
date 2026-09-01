@@ -106,6 +106,12 @@
         </button>
         <button
           class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+          data-tab="autoBilling">
+          <i class="fas fa-robot"></i>
+          <span>Auto Billing</span>
+        </button>
+        <button
+          class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
           data-tab="payroll">
           <i class="fas fa-wallet"></i>
           <span>Penggajian Guru</span>
@@ -121,6 +127,12 @@
           data-tab="payment-gateway">
           <i class="fas fa-credit-card"></i>
           <span>Payment Gateway</span>
+        </button>
+        <button
+          class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+          data-tab="customerService">
+          <i class="fas fa-headset"></i>
+          <span>Customer Service</span>
         </button>
       </nav>
     </aside>
@@ -446,6 +458,119 @@
         </div>
       </div>
 
+      <!-- Auto Billing Report Tab -->
+      <div id="autoBillingTab" class="tab-content hidden">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-4">
+          <h3 class="text-lg font-semibold text-gray-900 mb-4">Auto Billing & Kirim Tagihan Otomatis</h3>
+
+          <!-- Settings -->
+          <div class="bg-gray-50 rounded-lg p-4 mb-6">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div class="flex items-center gap-4">
+                <label class="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" id="autoBillingToggle" class="sr-only peer" onchange="toggleAutoBilling()">
+                  <div class="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                  <span class="ml-3 text-sm font-medium text-gray-700" id="autoBillingStatus">Nonaktif</span>
+                </label>
+                <div class="text-sm text-gray-500">
+                  <span id="autoBillingInfo">Aktifkan untuk kirim tagihan otomatis setiap bulan</span>
+                </div>
+              </div>
+              <div class="flex items-center gap-3">
+                <div>
+                  <label class="block text-xs font-medium text-gray-600 mb-1">Tanggal Kirim</label>
+                  <select id="autoBillingSendDay" class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                    <option value="1">Tanggal 1</option>
+                    <option value="2">Tanggal 2</option>
+                    <option value="3">Tanggal 3</option>
+                    <option value="4">Tanggal 4</option>
+                    <option value="5">Tanggal 5</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-600 mb-1">Jatuh Tempo</label>
+                  <select id="autoBillingDueDay" class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                    <option value="5">Tanggal 5</option>
+                    <option value="10">Tanggal 10</option>
+                    <option value="15">Tanggal 15</option>
+                    <option value="20">Tanggal 20</option>
+                  </select>
+                </div>
+                <button onclick="saveAutoBillingSettings()" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm">
+                  <i class="fas fa-save mr-1"></i>Simpan
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Filter -->
+          <div class="flex flex-wrap items-center gap-3 mb-4">
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Periode</label>
+              <select id="autoBillingPeriode" onchange="loadAutoBillingReport()" class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                <option value="">Semua Periode</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Status</label>
+              <select id="autoBillingStatusFilter" onchange="loadAutoBillingReport()" class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                <option value="">Semua Status</option>
+                <option value="terkirim">Terkirim</option>
+                <option value="gagal">Gagal</option>
+                <option value="no_wa">Tidak Ada WA</option>
+              </select>
+            </div>
+            <button onclick="loadAutoBillingReport()" class="px-3 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 text-sm">
+              <i class="fas fa-sync-alt mr-1"></i>Refresh
+            </button>
+          </div>
+
+          <!-- Summary Cards -->
+          <div id="autoBillingSummary" class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+            <div class="bg-blue-50 rounded-lg p-4">
+              <p class="text-sm text-blue-600 font-medium">Total</p>
+              <p class="text-2xl font-bold text-blue-800" id="summaryTotal">0</p>
+            </div>
+            <div class="bg-green-50 rounded-lg p-4">
+              <p class="text-sm text-green-600 font-medium">Terkirim</p>
+              <p class="text-2xl font-bold text-green-800" id="summaryTerkirim">0</p>
+            </div>
+            <div class="bg-red-50 rounded-lg p-4">
+              <p class="text-sm text-red-600 font-medium">Gagal</p>
+              <p class="text-2xl font-bold text-red-800" id="summaryGagal">0</p>
+            </div>
+            <div class="bg-yellow-50 rounded-lg p-4">
+              <p class="text-sm text-yellow-600 font-medium">Tidak Ada WA</p>
+              <p class="text-2xl font-bold text-yellow-800" id="summaryNoWa">0</p>
+            </div>
+          </div>
+
+          <!-- Report Table -->
+          <div class="overflow-x-auto">
+            <table class="w-full">
+              <thead class="bg-gray-50 border-b border-gray-100">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Periode</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Siswa</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Sekolah</th>
+                  <th class="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Tunggakan</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">No. WA</th>
+                  <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Status</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Keterangan</th>
+                </tr>
+              </thead>
+              <tbody id="autoBillingTable" class="divide-y divide-gray-100">
+                <tr>
+                  <td colspan="7" class="px-4 py-8 text-center text-gray-500">
+                    <p>Belum ada data pengiriman otomatis</p>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+         </div>
+      </div>
+
       <!-- Attendance Recap Tab -->
       <div id="attendanceRecapTab" class="tab-content hidden">
         <div class="bg-white rounded-xl shadow-sm border-2 border-purple-200 p-6 mb-4">
@@ -602,13 +727,73 @@
           <button onclick="createBsiVaSelected()" id="bsiCreateBtn"
             class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium">
             <i class="fas fa-plus-circle mr-1"></i>Buat VA Terpilih
-          </button>
+           </button>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- BSI VA Progress Modal -->
+  <!-- Customer Service Tab -->
+  <div id="customerServiceTab" class="tab-content hidden">
+    <div class="bg-white rounded-xl shadow-sm border-2 border-blue-200 p-6 mb-4">
+      <div class="flex justify-between items-center mb-4">
+        <h3 class="text-lg font-semibold">Customer Service - WhatsApp</h3>
+        <div class="flex items-center gap-2">
+          <span class="text-sm text-gray-500">24h Window</span>
+          <span id="csUnreadBadge" class="px-2 py-1 bg-red-500 text-white text-xs rounded-full hidden">0</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <!-- Contacts List -->
+        <div class="bg-gray-50 rounded-lg p-4">
+          <div class="flex items-center justify-between mb-3">
+            <h4 class="font-medium text-gray-700">Kontak</h4>
+            <input type="text" id="csSearchContact" placeholder="Cari..." class="px-2 py-1 text-sm border rounded w-32" onkeyup="filterCSContacts()">
+          </div>
+          <div id="csContactsList" class="space-y-2 max-h-96 overflow-y-auto">
+            <p class="text-sm text-gray-500 text-center py-4">Memuat kontak...</p>
+          </div>
+        </div>
+
+        <!-- Conversation -->
+        <div class="bg-white border rounded-lg p-4 lg:col-span-2">
+          <div id="csConversationHeader" class="flex items-center justify-between pb-3 border-b mb-3">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                <i class="fas fa-user text-blue-600"></i>
+              </div>
+              <div>
+                <p id="csSelectedContactName" class="font-medium">Pilih kontak</p>
+                <p id="csSelectedContactPhone" class="text-sm text-gray-500">-</p>
+              </div>
+            </div>
+            <div id="csConversationStatus" class="hidden">
+              <span class="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Aktif</span>
+            </div>
+          </div>
+
+          <div id="csMessagesList" class="space-y-3 max-h-80 overflow-y-auto mb-4">
+            <p class="text-sm text-gray-500 text-center py-8">Pilih kontak untuk melihat percakapan</p>
+          </div>
+
+          <!-- Reply Box -->
+          <div id="csReplyBox" class="hidden border-t pt-3">
+            <div class="flex items-end gap-2">
+              <textarea id="csReplyMessage" rows="2" placeholder="Ketik balasan..." class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"></textarea>
+              <button onclick="sendCSReply()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                <i class="fas fa-paper-plane"></i>
+              </button>
+            </div>
+            <div class="flex items-center justify-between mt-2">
+              <input type="text" id="csNote" placeholder="Catatan (opsional)..." class="flex-1 px-2 py-1 text-sm border rounded mr-2">
+              <button onclick="closeCSConversation()" class="px-3 py-1 text-sm bg-gray-300 text-gray-700 rounded hover:bg-gray-400">Tutup</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
   <div id="bsiProgressModal" class="hidden fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
     <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
       <h4 class="font-semibold text-lg mb-1">Membuat Virtual Account BSI</h4>
@@ -618,6 +803,52 @@
         </div>
       </div>
       <p id="bsiProgressPercent" class="text-center text-2xl font-bold text-indigo-600 mt-3">0%</p>
+    </div>
+  </div>
+
+  <!-- BSI VA Expire Date Modal -->
+  <div id="bsiExpireDateModal" class="hidden fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6">
+      <h4 class="font-semibold text-lg mb-1">Pilih Expire Date VA BSI</h4>
+      <p class="text-sm text-gray-600 mb-4">Tanggal expire untuk file VA yang akan didownload.</p>
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Expire Date</label>
+        <input type="date" id="bsiExpireDateInput" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+      </div>
+      <div class="flex justify-end gap-2">
+        <button onclick="closeBsiExpireDateModal()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400">Batal</button>
+        <button onclick="downloadBsiCsvWithExpire()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium">Download TXT</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- WA Template Choice Modal -->
+  <div id="waTemplateModal" class="hidden fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6">
+      <h4 class="font-semibold text-lg mb-1">Pilih Template WhatsApp</h4>
+      <p class="text-sm text-gray-600 mb-4">Pilih format dan isi periode pembayaran.</p>
+      <div class="mb-3">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Bulan Pembayaran</label>
+        <input type="month" id="waBulanInput" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
+      </div>
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Batas Waktu</label>
+        <input type="date" id="waJatuhTempoInput" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
+      </div>
+      <div class="flex flex-col gap-2">
+        <button onclick="sendWithTemplate('tagihan_spp')" class="w-full px-4 py-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium text-left">
+          <i class="fas fa-file-alt mr-2"></i>Format Normal (template tagihan_spp)
+        </button>
+        <button onclick="sendWithTemplate('bsi_auto')" class="w-full px-4 py-3 bg-teal-600 text-white rounded-lg hover:bg-teal-700 font-medium text-left">
+          <i class="fas fa-university mr-2"></i>Format Tombol BSI (auto: normal/tunggakan)
+        </button>
+        <button onclick="sendWithTemplate('invoice_spp')" class="w-full px-4 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium text-left">
+          <i class="fas fa-credit-card mr-2"></i>Gateway Payment (template invoice_spp)
+        </button>
+      </div>
+      <div class="mt-4 flex justify-end">
+        <button onclick="closeWaTemplateModal()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400">Batal</button>
+      </div>
     </div>
   </div>
 
@@ -724,12 +955,14 @@
           document.getElementById(tabName + 'Tab').classList.remove('hidden');
           this.classList.add('bg-emerald-600', 'text-white');
 
-           if (tabName === 'dashboard') loadDashboardData();
-           if (tabName === 'payments') loadSaldo();
-           if (tabName === 'payroll') loadPayroll();
-           if (tabName === 'payment-gateway') loadBsiTenants();
-           if (tabName === 'attendanceRecap') loadAttendanceRecap();
-           if (tabName === 'sppReminder') loadPaymentDefaulters();
+            if (tabName === 'dashboard') loadDashboardData();
+            if (tabName === 'payments') loadSaldo();
+            if (tabName === 'payroll') loadPayroll();
+            if (tabName === 'payment-gateway') loadBsiTenants();
+            if (tabName === 'attendanceRecap') loadAttendanceRecap();
+            if (tabName === 'sppReminder') loadPaymentDefaulters();
+            if (tabName === 'autoBilling') { loadAutoBillingSettings(); loadAutoBillingReport(); }
+            if (tabName === 'customerService') { loadCSContacts(); }
         });
       });
     }
@@ -1377,8 +1610,28 @@ async function openBsiVaModal() {
       const tenantId = document.getElementById('bsiTenantSelect').value;
       if (!tenantId) { showToast('Pilih sekolah terlebih dahulu', 'error'); return; }
       if (tenantId === 'all') { showToast('Tidak bisa generate CSV untuk Semua Sekolah. Pilih sekolah tertentu.', 'error'); return; }
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth();
+      const lastDay = new Date(year, month + 1, 0).getDate();
+      const defaultDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+      document.getElementById('bsiExpireDateInput').value = defaultDate;
+      document.getElementById('bsiExpireDateModal').classList.remove('hidden');
+    }
+
+    function closeBsiExpireDateModal() {
+      document.getElementById('bsiExpireDateModal').classList.add('hidden');
+    }
+
+    async function downloadBsiCsvWithExpire() {
+      const tenantId = document.getElementById('bsiTenantSelect').value;
+      const dateVal = document.getElementById('bsiExpireDateInput').value;
+      if (!dateVal) { showToast('Pilih expire date terlebih dahulu', 'error'); return; }
+      const [yyyy, mm, dd] = dateVal.split('-');
+      const expireDate = `${dd}/${mm}/${yyyy}`;
+      closeBsiExpireDateModal();
       try {
-        const res = await fetch('/api/treasurer/bsi/generate-csv?tenant_id=' + encodeURIComponent(tenantId), {
+        const res = await fetch('/api/treasurer/bsi/generate-csv?tenant_id=' + encodeURIComponent(tenantId) + '&expire_date=' + encodeURIComponent(expireDate), {
           headers: getAuthHeader()
         });
         if (!res.ok) {
@@ -1533,37 +1786,443 @@ async function openBsiVaModal() {
     async function sendReminder(noWa, namaSiswa, totalArrears, studentId) {
       const btn = event.target.closest('button');
       if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Mengirim...'; }
-      try {
-        const number = (noWa || '').replace(/[^0-9]/g, '');
-        if (!number) { showToast('Nomor WA tidak tersedia', 'error'); if (btn) { btn.innerHTML = '<i class="fab fa-whatsapp mr-1"></i>Kirim WA'; btn.disabled = false; } return; }
-        const res = await fetch('/api/treasurer/public/send-spp-reminder', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
-          body: JSON.stringify({ no_wa: number, nama_siswa: namaSiswa, jumlah_tagihan: totalArrears || 0, student_id: studentId })
-        });
-        const data = await res.json();
-        if (data.success) { showToast('Pengingat SPP berhasil dikirim via WhatsApp', 'success'); }
-        else { showToast(data.message || 'Gagal mengirim pengingat', 'error'); }
-      } catch (e) { showToast('Gagal mengirim pengingat WhatsApp', 'error'); }
-      if (btn) { btn.innerHTML = '<i class="fab fa-whatsapp mr-1"></i>Kirim WA'; btn.disabled = false; }
+      pendingWaSend = { type: 'single', noWa, namaSiswa, totalArrears, studentId, btn, originalHtml: btn.innerHTML };
+      const now = new Date();
+      document.getElementById('waBulanInput').value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      document.getElementById('waJatuhTempoInput').value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-10`;
+      document.getElementById('waTemplateModal').classList.remove('hidden');
     }
 
     async function sendAllReminders() {
       const tenantId = document.getElementById('reminderTenantFilter')?.value || '';
       const btn = event.target.closest('button');
       if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Mengirim...'; }
+      pendingWaSend = { type: 'bulk', tenantId, btn, originalHtml: btn.innerHTML };
+      const now = new Date();
+      document.getElementById('waBulanInput').value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      document.getElementById('waJatuhTempoInput').value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-10`;
+      document.getElementById('waTemplateModal').classList.remove('hidden');
+    }
+
+    let pendingWaSend = null;
+
+    function closeWaTemplateModal() {
+      document.getElementById('waTemplateModal').classList.add('hidden');
+      if (pendingWaSend?.btn) {
+        pendingWaSend.btn.innerHTML = pendingWaSend.originalHtml || '<i class="fab fa-whatsapp mr-1"></i>Kirim WA';
+        pendingWaSend.btn.disabled = false;
+      }
+      pendingWaSend = null;
+    }
+
+    async function sendWithTemplate(templateType) {
+      if (!pendingWaSend) { closeWaTemplateModal(); return; }
+      const { type, noWa, namaSiswa, totalArrears, studentId, tenantId, btn } = pendingWaSend;
+      const bulan = document.getElementById('waBulanInput').value;
+      const jatuhTempo = document.getElementById('waJatuhTempoInput').value;
+      closeWaTemplateModal();
       try {
-        const res = await fetch('/api/treasurer/public/send-all-spp-reminders', {
+        if (type === 'single') {
+          const number = (noWa || '').replace(/[^0-9]/g, '');
+          if (!number) { showToast('Nomor WA tidak tersedia', 'error'); return; }
+          const res = await fetch('/api/treasurer/public/send-spp-reminder', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+            body: JSON.stringify({ no_wa: number, nama_siswa: namaSiswa, jumlah_tagihan: totalArrears || 0, student_id: studentId, template_type: templateType, bulan, tanggal_jatuh_tempo: jatuhTempo })
+          });
+          const data = await res.json();
+          if (data.success) { showToast('Pengingat SPP berhasil dikirim via WhatsApp', 'success'); }
+          else { showToast(data.message || 'Gagal mengirim pengingat', 'error'); }
+          if (btn) { btn.innerHTML = '<i class="fab fa-whatsapp mr-1"></i>Kirim WA'; btn.disabled = false; }
+        } else if (type === 'bulk') {
+          const res = await fetch('/api/treasurer/public/send-all-spp-reminders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+            body: JSON.stringify({ tenant_id: tenantId || undefined, template_type: templateType, bulan, tanggal_jatuh_tempo: jatuhTempo })
+          });
+          const data = await res.json();
+          if (data.success) { showToast(data.message || 'Pengingat berhasil dikirim', 'success'); loadPaymentDefaulters(); }
+          else { showToast(data.message || 'Gagal mengirim pengingat', 'error'); }
+          if (btn) { btn.innerHTML = '<i class="fab fa-whatsapp mr-2"></i>Kirim Semua'; btn.disabled = false; }
+        }
+      } catch (e) { showToast('Gagal mengirim pengingat', 'error'); }
+      pendingWaSend = null;
+    }
+
+    // ==================== AUTO BILLING FUNCTIONS ====================
+
+    async function loadAutoBillingSettings() {
+      try {
+        const res = await fetch('/api/treasurer/bendahara/auto-billing/settings', { headers: getAuthHeader() });
+        const data = await res.json();
+        if (data.success) {
+          const settings = data.data;
+          document.getElementById('autoBillingToggle').checked = settings.is_enabled == 1;
+          document.getElementById('autoBillingStatus').textContent = settings.is_enabled == 1 ? 'Aktif' : 'Nonaktif';
+          document.getElementById('autoBillingSendDay').value = settings.send_day || 1;
+          document.getElementById('autoBillingDueDay').value = settings.due_day || 10;
+        }
+      } catch (e) {
+        console.error('Failed to load auto billing settings:', e);
+      }
+    }
+
+    async function toggleAutoBilling() {
+      const isEnabled = document.getElementById('autoBillingToggle').checked;
+      const sendDay = parseInt(document.getElementById('autoBillingSendDay').value);
+      const dueDay = parseInt(document.getElementById('autoBillingDueDay').value);
+
+      try {
+        const res = await fetch('/api/treasurer/bendahara/auto-billing/toggle', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
-          body: JSON.stringify({ tenant_id: tenantId || undefined })
+          body: JSON.stringify({ is_enabled: isEnabled, send_day: sendDay, due_day: dueDay })
         });
         const data = await res.json();
-        if (data.success) { showToast(data.message || 'Pengingat berhasil dikirim', 'success'); loadPaymentDefaulters(); }
-        else { showToast(data.message || 'Gagal mengirim pengingat', 'error'); }
-      } catch (e) { showToast('Gagal mengirim pengingat', 'error'); }
-      if (btn) { btn.innerHTML = '<i class="fab fa-whatsapp mr-2"></i>Kirim Semua'; btn.disabled = false; }
+        if (data.success) {
+          document.getElementById('autoBillingStatus').textContent = isEnabled ? 'Aktif' : 'Nonaktif';
+          showToast(data.message, 'success');
+        } else {
+          showToast(data.message || 'Gagal mengubah pengaturan', 'error');
+          document.getElementById('autoBillingToggle').checked = !isEnabled;
+        }
+      } catch (e) {
+        showToast('Gagal mengubah pengaturan', 'error');
+        document.getElementById('autoBillingToggle').checked = !isEnabled;
+      }
     }
+
+    async function saveAutoBillingSettings() {
+      const isEnabled = document.getElementById('autoBillingToggle').checked;
+      const sendDay = parseInt(document.getElementById('autoBillingSendDay').value);
+      const dueDay = parseInt(document.getElementById('autoBillingDueDay').value);
+
+      try {
+        const res = await fetch('/api/treasurer/bendahara/auto-billing/toggle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+          body: JSON.stringify({ is_enabled: isEnabled, send_day: sendDay, due_day: dueDay })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast('Pengaturan berhasil disimpan', 'success');
+        } else {
+          showToast(data.message || 'Gagal menyimpan pengaturan', 'error');
+        }
+      } catch (e) {
+        showToast('Gagal menyimpan pengaturan', 'error');
+      }
+    }
+
+    async function loadAutoBillingReport() {
+      const periode = document.getElementById('autoBillingPeriode').value;
+      const status = document.getElementById('autoBillingStatusFilter').value;
+
+      try {
+        let url = '/api/treasurer/bendahara/auto-billing/report?';
+        if (periode) url += `periode=${periode}&`;
+        if (status) url += `status=${status}&`;
+
+        const res = await fetch(url, { headers: getAuthHeader() });
+        const data = await res.json();
+
+        if (data.success) {
+          // Update periode dropdown
+          const periodeSelect = document.getElementById('autoBillingPeriode');
+          const currentPeriode = periodeSelect.value;
+          periodeSelect.innerHTML = '<option value="">Semua Periode</option>';
+          data.summary.forEach(s => {
+            const selected = s.periode === currentPeriode ? 'selected' : '';
+            periodeSelect.innerHTML += `<option value="${s.periode}" ${selected}>${s.periode}</option>`;
+          });
+          periodeSelect.value = currentPeriode;
+
+          // Update summary for selected periode
+          const selectedSummary = data.summary.find(s => s.periode === periode) || data.summary[0];
+          if (selectedSummary) {
+            document.getElementById('summaryTotal').textContent = selectedSummary.total || 0;
+            document.getElementById('summaryTerkirim').textContent = selectedSummary.total_terkirim || 0;
+            document.getElementById('summaryGagal').textContent = selectedSummary.total_gagal || 0;
+            document.getElementById('summaryNoWa').textContent = selectedSummary.total_no_wa || 0;
+          } else {
+            document.getElementById('summaryTotal').textContent = 0;
+            document.getElementById('summaryTerkirim').textContent = 0;
+            document.getElementById('summaryGagal').textContent = 0;
+            document.getElementById('summaryNoWa').textContent = 0;
+          }
+
+          // Update table
+          const tbody = document.getElementById('autoBillingTable');
+          if (data.data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">Belum ada data pengiriman otomatis</td></tr>';
+          } else {
+            tbody.innerHTML = data.data.map(r => {
+              const statusBadge = r.status === 'terkirim'
+                ? '<span class="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">Terkirim</span>'
+                : r.status === 'gagal'
+                ? '<span class="px-2 py-1 bg-red-100 text-red-800 rounded-full text-xs font-medium">Gagal</span>'
+                : '<span class="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-medium">Tidak Ada WA</span>';
+
+              const saldo = Math.abs(parseFloat(r.saldo || 0)).toLocaleString('id-ID');
+
+              return `
+                <tr class="hover:bg-gray-50">
+                  <td class="px-4 py-3 text-sm text-gray-900">${r.periode || '-'}</td>
+                  <td class="px-4 py-3 text-sm text-gray-900">${r.nama_siswa || '-'}</td>
+                  <td class="px-4 py-3 text-sm text-gray-600">${r.nama_sekolah || '-'}</td>
+                  <td class="px-4 py-3 text-sm text-right font-medium text-red-600">Rp ${saldo}</td>
+                  <td class="px-4 py-3 text-sm text-gray-600">${r.no_wa || '-'}</td>
+                  <td class="px-4 py-3 text-center">${statusBadge}</td>
+                  <td class="px-4 py-3 text-sm text-gray-500">${r.error_message || r.message_id || '-'}</td>
+                </tr>
+              `;
+            }).join('');
+          }
+        }
+      } catch (e) {
+        console.error('Failed to load auto billing report:', e);
+        document.getElementById('autoBillingTable').innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-red-500">Gagal memuat data</td></tr>';
+      }
+    }
+
+    // Load auto billing data when tab is shown
+    document.addEventListener('DOMContentLoaded', () => {
+      const autoBillingTab = document.getElementById('autoBillingTab');
+      if (autoBillingTab) {
+        const observer = new MutationObserver((mutations) => {
+          mutations.forEach((mutation) => {
+            if (mutation.target.id === 'autoBillingTab' && !mutation.target.classList.contains('hidden')) {
+              loadAutoBillingSettings();
+              loadAutoBillingReport();
+            }
+          });
+        });
+        observer.observe(autoBillingTab, { attributes: true, attributeFilter: ['class'] });
+      }
+    });
+
+    // ==================== CUSTOMER SERVICE FUNCTIONS ====================
+
+    let csSelectedPhone = null;
+    let csRefreshInterval = null;
+
+    async function loadCSContacts() {
+      try {
+        const search = document.getElementById('csSearchContact')?.value || '';
+        let url = '/api/cs/whatsapp/contacts';
+        if (search) url += `?search=${encodeURIComponent(search)}`;
+
+        const res = await fetch(url, { headers: getAuthHeader() });
+        const data = await res.json();
+
+        if (data.success) {
+          const container = document.getElementById('csContactsList');
+          if (data.data.length === 0) {
+            container.innerHTML = '<p class="text-sm text-gray-500 text-center py-4">Belum ada kontak</p>';
+          } else {
+            container.innerHTML = data.data.map(c => {
+              const lastMsg = c.last_message ? c.last_message.substring(0, 30) + (c.last_message.length > 30 ? '...' : '') : 'Belum ada pesan';
+              const lastTime = c.last_message_time ? new Date(c.last_message_time).toLocaleString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '';
+              const windowIcon = c.within_24h_window 
+                ? '<i class="fas fa-clock text-green-500 ml-1" title="24h window aktif"></i>' 
+                : '<i class="fas fa-clock text-red-500 ml-1" title="Window berakhir"></i>';
+
+              return `
+                <div onclick="openCSConversation('${c.phone_number}')" class="p-3 rounded-lg border cursor-pointer hover:bg-gray-100 bg-white border-gray-200">
+                  <div class="flex items-center justify-between">
+                    <p class="font-medium text-sm">${c.contact_name || c.phone_number}</p>
+                    <span class="text-xs text-gray-500">${lastTime} ${windowIcon}</span>
+                  </div>
+                  <p class="text-xs text-gray-500 mt-1">${c.student?.nama_siswa || ''}</p>
+                  <p class="text-xs text-gray-600 mt-1 truncate">${lastMsg}</p>
+                </div>
+              `;
+            }).join('');
+          }
+        }
+      } catch (e) {
+        console.error('Failed to load CS contacts:', e);
+      }
+    }
+
+    function filterCSContacts() {
+      loadCSContacts();
+    }
+
+    async function openCSConversation(phone) {
+      csSelectedPhone = phone;
+      
+      // Update header
+      document.getElementById('csReplyBox').classList.remove('hidden');
+      document.getElementById('csConversationStatus').classList.remove('hidden');
+
+      // Load conversation
+      try {
+        const res = await fetch(`/api/cs/whatsapp/conversation/${phone}`, { headers: getAuthHeader() });
+        const data = await res.json();
+
+        if (data.success) {
+          document.getElementById('csSelectedContactName').textContent = data.contact?.contact_name || data.contact?.phone_number || phone;
+          document.getElementById('csSelectedContactPhone').textContent = phone;
+          document.getElementById('csSelectedContactPhone').textContent += data.contact?.student?.nama_siswa ? ` (${data.contact.student.nama_siswa})` : '';
+
+          // Show 24h window status
+          const windowStatus = data.window_status;
+          const statusEl = document.getElementById('csConversationStatus');
+          if (windowStatus) {
+            if (windowStatus.within_24h_window) {
+              statusEl.innerHTML = `<span class="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">24h Window Aktif (${windowStatus.hours_since_last_message}h lalu)</span>`;
+            } else {
+              statusEl.innerHTML = `<span class="px-2 py-1 bg-red-100 text-red-800 text-xs rounded-full">Window Berakhir (${windowStatus.hours_since_last_message}h lalu)</span>`;
+            }
+          }
+
+          const messagesList = document.getElementById('csMessagesList');
+          if (data.data.length === 0) {
+            messagesList.innerHTML = '<p class="text-sm text-gray-500 text-center py-8">Belum ada percakapan</p>';
+          } else {
+            messagesList.innerHTML = data.data.map(msg => {
+              const isIncoming = msg.direction === 'incoming';
+              const bubbleClass = isIncoming 
+                ? 'bg-gray-100 text-gray-800 rounded-tl-none' 
+                : 'bg-blue-600 text-white rounded-tr-none';
+              const time = new Date(msg.created_at).toLocaleString('id-ID', { hour: '2-digit', minute: '2-digit' });
+              
+              // Status indicator for outgoing messages
+              let statusIcon = '';
+              if (!isIncoming) {
+                if (msg.message_status === 'read') {
+                  statusIcon = '<span class="text-blue-300">✓✓</span>';
+                } else if (msg.message_status === 'delivered') {
+                  statusIcon = '<span class="text-blue-200">✓✓</span>';
+                } else if (msg.message_status === 'sent') {
+                  statusIcon = '<span class="text-blue-200">✓</span>';
+                } else if (msg.message_status === 'failed') {
+                  statusIcon = '<span class="text-red-300">✗</span>';
+                }
+              }
+
+              // Show reply reference
+              let replyRef = '';
+              if (msg.reply_to_message_id && !isIncoming) {
+                replyRef = '<p class="text-xs text-blue-200 mt-1"><i class="fas fa-reply"></i> Membalas pesan #' + msg.reply_to_message_id + '</p>';
+              }
+
+              return `
+                <div class="flex ${isIncoming ? 'justify-start' : 'justify-end'}">
+                  <div class="max-w-xs px-4 py-2 rounded-lg ${bubbleClass}">
+                    <p class="text-sm">${msg.message_content}</p>
+                    <p class="text-xs ${isIncoming ? 'text-gray-500' : 'text-blue-200'} mt-1 text-right">${time} ${statusIcon}</p>
+                    ${replyRef}
+                  </div>
+                </div>
+              `;
+            }).join('');
+            
+            // Scroll to bottom
+            messagesList.scrollTop = messagesList.scrollHeight;
+          }
+        }
+      } catch (e) {
+        console.error('Failed to load conversation:', e);
+      }
+    }
+
+    async function sendCSReply() {
+      if (!csSelectedPhone) return;
+      
+      const message = document.getElementById('csReplyMessage').value.trim();
+      const note = document.getElementById('csNote').value.trim();
+      
+      if (!message) {
+        showToast('Pesan tidak boleh kosong', 'error');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/cs/whatsapp/reply', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+          body: JSON.stringify({ phone_number: csSelectedPhone, message, note })
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+          document.getElementById('csReplyMessage').value = '';
+          document.getElementById('csNote').value = '';
+          showToast(data.message, 'success');
+          openCSConversation(csSelectedPhone); // Reload conversation
+        } else {
+          // Check if it's a 24h window error
+          if (res.status === 403 && data.within_24h_window === false) {
+            // Show option to send as template
+            if (confirm(`${data.message}\n\nKirim sebagai pesan template?`)) {
+              sendCSTemplateReply(message, note);
+            }
+          } else {
+            showToast(data.message || 'Gagal mengirim balasan', 'error');
+          }
+        }
+      } catch (e) {
+        showToast('Gagal mengirim balasan', 'error');
+      }
+    }
+
+    async function sendCSTemplateReply(message, note) {
+      if (!csSelectedPhone) return;
+      
+      try {
+        const res = await fetch('/api/cs/whatsapp/reply', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+          body: JSON.stringify({ phone_number: csSelectedPhone, message, note, force_template: true })
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+          document.getElementById('csReplyMessage').value = '';
+          document.getElementById('csNote').value = '';
+          showToast(data.message, 'success');
+          openCSConversation(csSelectedPhone);
+        } else {
+          showToast(data.message || 'Gagal mengirim template', 'error');
+        }
+      } catch (e) {
+        showToast('Gagal mengirim template', 'error');
+      }
+    }
+
+    async function closeCSConversation() {
+      if (!csSelectedPhone) return;
+      
+      const note = document.getElementById('csNote').value.trim() || 'Ditutup oleh CS';
+      
+      try {
+        await fetch(`/api/cs/whatsapp/conversation/${csSelectedPhone}/archive`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+          body: JSON.stringify({ note })
+        });
+        
+        csSelectedPhone = null;
+        document.getElementById('csReplyBox').classList.add('hidden');
+        document.getElementById('csConversationStatus').classList.add('hidden');
+        document.getElementById('csSelectedContactName').textContent = 'Pilih kontak';
+        document.getElementById('csSelectedContactPhone').textContent = '-';
+        document.getElementById('csMessagesList').innerHTML = '<p class="text-sm text-gray-500 text-center py-8">Pilih kontak untuk melihat percakapan</p>';
+        loadCSContacts();
+        showToast('Percakapan ditutup', 'success');
+      } catch (e) {
+        showToast('Gagal menutup percakapan', 'error');
+      }
+    }
+
+    // Auto-refresh conversation every 10 seconds when active
+    setInterval(() => {
+      if (csSelectedPhone && !document.getElementById('customerServiceTab').classList.contains('hidden')) {
+        openCSConversation(csSelectedPhone);
+      }
+    }, 10000);
   </script>
 
   <!-- Student Billing Detail Modal -->

@@ -546,18 +546,20 @@
       } catch (e) { showToast('Gagal memuat rekap', 'error'); }
     }
 
-    // Izin
+    // Izin Siswa
     async function loadIzin() {
       if (!currentClassId) return;
       const status = document.getElementById('izinFilter')?.value || 'pending';
       try {
         const data = await apiCall(`/api/wali-kelas/izin?status=${status}`);
         const tbody = document.getElementById('izinTable');
-        if (!data.data.length) { tbody.innerHTML = '<tr><td colspan="8" class="text-center text-gray-500">Tidak ada data</td></tr>'; return; }
+        if (!data.data.length) { tbody.innerHTML = '<tr><td colspan="7" class="text-center text-gray-500">Tidak ada data</td></tr>'; return; }
         tbody.innerHTML = data.data.map(iz => {
-          const badge = iz.status === 'approved' ? 'badge-success' : iz.status === 'rejected' ? 'badge-danger' : 'badge-warning';
-          const actions = iz.status === 'pending' ? `<button onclick="approveIzin(${iz.id})" class="btn btn-success btn-sm">Setuju</button> <button onclick="rejectIzin(${iz.id})" class="btn btn-danger btn-sm">Tolak</button>` : '-';
-          return `<tr><td>${iz.teacher_name}</td><td>${iz.nip || '-'}</td><td>${iz.nama_sekolah}</td><td>${iz.jenis}</td><td>${iz.tanggal_mulai}${iz.tanggal_selesai ? ' s/d ' + iz.tanggal_selesai : ''}</td><td>${iz.keterangan || '-'}</td><td><span class="badge ${badge}">${iz.status}</span></td><td>${actions}</td></tr>`;
+          const statusBadge = iz.status === 'hadir' ? 'badge-success' : iz.status === 'alpha' ? 'badge-danger' : iz.status === 'sakit' ? 'badge-warning' : 'badge-info';
+          const statusLabel = iz.status === 'hadir' ? 'Disetujui' : iz.status === 'alpha' ? 'Ditolak' : iz.status === 'sakit' ? 'Sakit' : 'Izin';
+          const isPending = iz.status === 'izin' || (iz.status === 'sakit' && !iz.recorded_by);
+          const actions = isPending ? `<button onclick="approveIzin(${iz.id})" class="btn btn-success btn-sm">Setujui</button> <button onclick="rejectIzin(${iz.id})" class="btn btn-danger btn-sm">Tolak</button>` : '-';
+          return `<tr><td>${iz.nama_siswa}</td><td>${iz.nisn || '-'}</td><td>${iz.nama_kelas || '-'}</td><td>${iz.tanggal}</td><td>${iz.keterangan || '-'}</td><td><span class="badge ${statusBadge}">${statusLabel}</span></td><td>${actions}</td></tr>`;
         }).join('');
       } catch (e) { showToast('Gagal memuat izin', 'error'); }
     }
