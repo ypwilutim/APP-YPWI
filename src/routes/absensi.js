@@ -354,8 +354,20 @@ router.get('/admin/attendance-logs', authenticateOperator, async (req, res) => {
     let tenantId = Array.isArray(req.query.tenant_id) ? req.query.tenant_id[0] : req.query.tenant_id;
     tenantId = tenantId || req.user.tenant_id || (req.user && req.user.assignments && req.user.assignments.length === 1 ? req.user.assignments[0].tenant_id : null);
 
+    // Cek apakah user memiliki assignment dengan jabatan admin/operator
+    const hasAdminAssignment = (req.user.assignments || []).some(a => {
+      const roles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin', 'bendahara'];
+      return roles.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''));
+    });
+
+    // Admin atau user dengan admin assignment bisa melihat semua data
+    const isAdmin = req.user.role === 'admin' || hasAdminAssignment;
+
     // Operator: force tenant_id from assignment if not provided
-    if (req.user.role !== 'admin' && !tenantId) {
+    if (req.user.role !== 'admin' && !tenantId && hasAdminAssignment) {
+      // Jika multiple assignments, biarkan null (lihat semua data admin)
+      console.log('[ATTENDANCE_LOGS] User with multiple admin assignments - showing all data');
+    } else if (req.user.role !== 'admin' && !tenantId) {
       const adminAssignments = (req.user.assignments || []).filter(a => {
         const roles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin', 'bendahara'];
         return roles.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''));
@@ -366,7 +378,6 @@ router.get('/admin/attendance-logs', authenticateOperator, async (req, res) => {
     }
 
     // Admin bisa melihat semua data tanpa filter tenant_id
-    const isAdmin = req.user.role === 'admin';
     if (!tenantId && !isAdmin) {
       return res.status(400).json({ success: false, message: 'tenant_id required' });
     }
@@ -390,28 +401,71 @@ router.get('/admin/attendance-logs', authenticateOperator, async (req, res) => {
     }
 
     const whereSql = whereClauses.length > 0 ? 'WHERE ' + whereClauses.join(' AND ') : '';
-    const query = `SELECT al.id, al.teacher_id, al.waktu_scan, al.jenis, al.status, al.metode, t.nama AS nama, t.nip, ten.nama_sekolah, al.tenant_id as scan_tenant_id, al.dinas_luar FROM attendance_logs al JOIN teachers t ON al.teacher_id = t.id JOIN tenants ten ON al.tenant_id = ten.tenant_id ${whereSql} ORDER BY al.waktu_scan DESC LIMIT ? OFFSET ?`;
+    
+    // Query utama dengan JOIN
+    let query = `SELECT al.id, al.teacher_id, al.waktu_scan, al.jenis, al.status, al.metode, t.nama AS nama, t.nip, ten.nama_sekolah, al.tenant_id as scan_tenant_id, al.dinas_luar FROM attendance_logs al JOIN teachers t ON al.teacher_id = t.id JOIN tenants ten ON al.tenant_id = ten.tenant_id ${whereSql} ORDER BY al.waktu_scan DESC LIMIT ? OFFSET ?`;
     params.push(limit, offset);
 
-    const totalRes = await db.query(`SELECT COUNT(*) as total FROM attendance_logs al ${whereSql}`, params.slice(0, -2));
-
-    const logs = await db.query(query, params);
-    const processedLogs = logs.map(l => ({
-      ...l,
-      jenis: l.jenis ? (l.jenis.charAt(0).toUpperCase() + l.jenis.slice(1).toLowerCase()) : (l.status === 'tepat_waktu' ? 'Masuk' : 'Pulang')
-    }));
-    console.log('[ATTENDANCE DEBUG]', { tenantId, dateFilter, statusFilter, count: processedLogs.length, sample: processedLogs.slice(0, 3).map(l => ({teacher_id: l.teacher_id, scan_tenant_id: l.scan_tenant_id, nama: l.nama})) });
-
-    res.json({ 
-      success: true, 
-      data: processedLogs,
-      pagination: {
-        page,
-        limit,
-        total: totalRes[0].total,
-        totalPages: Math.ceil(totalRes[0].total / limit)
+    let logs = [];
+    try {
+      const totalRes = await db.query(`SELECT COUNT(*) as total FROM attendance_logs al JOIN teachers t ON al.teacher_id = t.id JOIN tenants ten ON al.tenant_id = ten.tenant_id ${whereSql}`, params.slice(0, -2));
+      const logsRes = await db.query(query, params);
+      logs = logsRes;
+      
+      res.json({ 
+        success: true, 
+        data: logs.map(l => ({
+          ...l,
+          jenis: l.jenis ? (l.jenis.charAt(0).toUpperCase() + l.jenis.slice(1).toLowerCase()) : (l.status === 'tepat_waktu' ? 'Masuk' : 'Pulang')
+        })),
+        pagination: {
+          page,
+          limit,
+          total: totalRes[0]?.total || 0,
+          totalPages: Math.ceil((totalRes[0]?.total || 0) / limit)
+        }
+      });
+    } catch (queryErr) {
+      console.log('[ATTENDANCE_LOGS] Main query failed, trying fallback:', queryErr.message);
+      
+      // Fallback: query tanpa JOIN jika schema berbeda
+      try {
+        const fallbackQuery = `SELECT al.id, al.teacher_id, al.waktu_scan, al.jenis, al.status, al.metode, al.tenant_id as scan_tenant_id, al.dinas_luar FROM attendance_logs al ${whereSql} ORDER BY al.waktu_scan DESC LIMIT ? OFFSET ?`;
+        const fallbackRes = await db.query(fallbackQuery, params);
+        
+        // Get teacher names separately
+        const teacherIds = [...new Set(fallbackRes.map(l => l.teacher_id))];
+        let teacherMap = {};
+        if (teacherIds.length > 0) {
+          const teachers = await db.query(`SELECT id, nama, nip FROM teachers WHERE id IN (${teacherIds.map(() => '?').join(',')})`, teacherIds);
+          teachers.forEach(t => teacherMap[t.id] = t);
+        }
+        
+        res.json({ 
+          success: true, 
+          data: fallbackRes.map(l => ({
+            ...l,
+            nama: teacherMap[l.teacher_id]?.nama || '-',
+            nip: teacherMap[l.teacher_id]?.nip || '-',
+            nama_sekolah: '-',
+            jenis: l.jenis ? (l.jenis.charAt(0).toUpperCase() + l.jenis.slice(1).toLowerCase()) : (l.status === 'tepat_waktu' ? 'Masuk' : 'Pulang')
+          })),
+          pagination: {
+            page,
+            limit,
+            total: fallbackRes.length,
+            totalPages: 1
+          }
+        });
+      } catch (fallbackErr) {
+        console.error('[ATTENDANCE_LOGS] Fallback query also failed:', fallbackErr.message);
+        res.json({ 
+          success: true, 
+          data: [],
+          pagination: { page, limit, total: 0, totalPages: 0 }
+        });
       }
-    });
+    }
   } catch (error) {
     console.error('Admin attendance logs error:', error);
     res.status(500).json({ success: false, message: 'Error fetching attendance logs' });
