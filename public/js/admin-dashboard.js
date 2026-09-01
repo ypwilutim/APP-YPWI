@@ -4539,14 +4539,13 @@ async function generateQRCode() {
     const expiryTime = new Date(now.getTime() + parseInt(expiryHours) * 60 * 60 * 1000);
     const timestamp = now.getTime();
 
-    // Create QR data payload
+    // Create QR data payload (tanpa type - otomatis ditentukan scanner)
     const qrPayload = {
       scan_id: scanId,
       teacher_id: parseInt(teacherId),
       tenant_id: tenantId,
       timestamp: timestamp,
-      expiry: expiryTime.toISOString(),
-      type: 'masuk'
+      expiry: expiryTime.toISOString()
     };
 
     // Encode to base64

@@ -254,15 +254,11 @@ router.post('/scanner/attendance', async (req, res) => {
   try {
     const { scan_id, timestamp, type, device_id, signature, offline_validated, expiry } = req.body;
 
-    if (!scan_id || !timestamp || !type || !device_id || !signature) {
+    if (!scan_id || !timestamp || !device_id || !signature) {
       return res.status(400).json({
         success: false,
-        message: 'scan_id, timestamp, type, device_id, dan signature wajib diisi'
+        message: 'scan_id, timestamp, device_id, dan signature wajib diisi'
       });
-    }
-
-    if (!['masuk', 'pulang'].includes(type)) {
-      return res.status(400).json({ success: false, message: 'Tipe harus masuk atau pulang' });
     }
 
     // [DIPERBARUI] Hanya device yang berstatus 'active' yang diizinkan memproses absensi ke database online
@@ -286,14 +282,18 @@ router.post('/scanner/attendance', async (req, res) => {
     // ====================================================================
     let isValid = false;
 
+    // Validasi signature - coba kedua tipe (masuk dan pulang) untuk QR otomatis
     if (signature && signature.startsWith('legacy-')) {
       // Jika dikirim oleh perangkat aktif yang terdaftar di atas, kartu angka murni langsung dipercaya!
       isValid = true;
       console.log(`[LEGACY SCAN] Meloloskan kartu angka murni via Token Device: ${device_id} untuk ID: ${scan_id}`);
     } else {
-      // Jalur validasi ketat QR Code V5.0 bawaan Anda
+      // Jalur validasi ketat QR Code - coba validate dengan kedua tipe
       const signatureTimestamp = expiry || timestamp;
-      isValid = verifyQRSignature(scan_id, signatureTimestamp, tenant_id, type, signature);
+      // Coba validate sebagai masuk atau pulang
+      const isValidMasuk = verifyQRSignature(scan_id, signatureTimestamp, tenant_id, 'masuk', signature);
+      const isValidPulang = verifyQRSignature(scan_id, signatureTimestamp, tenant_id, 'pulang', signature);
+      isValid = isValidMasuk || isValidPulang;
     }
 
     if (!isValid) {
@@ -334,6 +334,118 @@ router.post('/scanner/attendance', async (req, res) => {
     const currentDay = new Date(`${year}-${month}-${day}`).toLocaleDateString('id-ID', { weekday: 'long' }).toLowerCase();
 
     // ====================================================================
+    // 🔥 [BARU] DETEKSI OTOMATIS TIPE ABSEN (masuk/pulang)
+    // ====================================================================
+    // Aturan:
+    // 1. Jika belum absen masuk hari ini DAN waktu aturan masuk berlaku → masuk
+    // 2. Jika sudah absen masuk hari ini DAN waktu aturan pulang berlaku → pulang
+    // 3. Jika belum absen masuk tapi waktu aturan pulang → ditolak (harus absen masuk dulu)
+    
+    // Cek apakah sudah absen masuk hari ini
+    let hasMasukToday = false;
+    try {
+      const masukCheck = await db.query(
+        "SELECT id FROM attendance_logs WHERE teacher_id = ? AND jenis = 'masuk' AND DATE(waktu_absen) = ?",
+        [teacher_id, scanDateStr]
+      );
+      hasMasukToday = masukCheck.length > 0;
+    } catch (err) {
+      // Fallback jika kolom waktu_absen belum ada
+      const masukCheck = await db.query(
+        "SELECT id FROM attendance_logs WHERE teacher_id = ? AND jenis = 'masuk' AND DATE(waktu_scan) = ?",
+        [teacher_id, scanDateStr]
+      );
+      hasMasukToday = masukCheck.length > 0;
+    }
+
+    // Ambil aturan absensi untuk tenant ini
+    const [tenantData] = await db.query('SELECT use_central_rules, tipe_unit FROM tenants WHERE tenant_id = ?', [tenant_id]);
+    const userTipeUnit = tenantData?.tipe_unit || null;
+    const useCentral = tenantData && tenantData.use_central_rules === 1;
+
+    // Query rules: tenant + central by tipe_unit
+    const ruleConditions = ['(tenant_id = ?)'];
+    const ruleParams = [tenant_id];
+    if (useCentral && userTipeUnit) {
+      ruleConditions.push('(tenant_id IS NULL AND tipe_unit = ?)');
+      ruleParams.push(userTipeUnit);
+    }
+
+    // Cek aturan masuk dan pulang
+    const rulesMasuk = await db.query(
+      `SELECT status_log, hari, jam_mulai, jam_selesai, tenant_id FROM attendance_rules WHERE ${ruleConditions.join(' OR ')} AND tipe = 'Datang' ORDER BY tenant_id IS NULL, jam_mulai ASC`,
+      [...ruleParams]
+    );
+
+    const rulesPulang = await db.query(
+      `SELECT status_log, hari, jam_mulai, jam_selesai, tenant_id FROM attendance_rules WHERE ${ruleConditions.join(' OR ')} AND tipe = 'Pulang' ORDER BY tenant_id IS NULL, jam_mulai ASC`,
+      [...ruleParams]
+    );
+
+    // Filter rules berdasarkan hari
+    const filterRulesByDay = (rules) => {
+      return rules.filter(rule => {
+        if (!rule.hari || rule.hari.trim() === '') return true;
+        const ruleDays = rule.hari.toLowerCase().split(',').map(d => d.trim());
+        return ruleDays.includes(currentDay);
+      });
+    };
+
+    const filteredRulesMasuk = filterRulesByDay(rulesMasuk);
+    const filteredRulesPulang = filterRulesByDay(rulesPulang);
+
+    // Cek apakah waktu sekarang berada dalam aturan masuk atau pulang
+    const isWithinMasukRules = filteredRulesMasuk.some(rule => 
+      scanTimeWITA >= rule.jam_mulai && scanTimeWITA <= rule.jam_selesai
+    );
+
+    const isWithinPulangRules = filteredRulesPulang.some(rule => 
+      scanTimeWITA >= rule.jam_mulai && scanTimeWITA <= rule.jam_selesai
+    );
+
+    // Tentukan tipe absen otomatis
+    let detectedType = null;
+    let rejectionReason = null;
+
+    if (!hasMasukToday) {
+      // Belum absen masuk hari ini
+      if (isWithinMasukRules) {
+        detectedType = 'masuk';
+      } else if (isWithinPulangRules) {
+        rejectionReason = 'Anda belum absen masuk hari ini. Silakan absen masuk terlebih dahulu.';
+      } else {
+        rejectionReason = 'Waktu absen tidak sesuai dengan aturan yang berlaku.';
+      }
+    } else {
+      // Sudah absen masuk hari ini
+      if (isWithinPulangRules) {
+        detectedType = 'pulang';
+      } else if (isWithinMasukRules) {
+        rejectionReason = 'Anda sudah absen masuk hari ini. Silakan absen pulang sesuai waktu yang berlaku.';
+      } else {
+        rejectionReason = 'Waktu absen tidak sesuai dengan aturan yang berlaku.';
+      }
+    }
+
+    // Jika ada type yang dikirim dari QR, gunakan itu untuk validasi tambahan
+    // Jika tidak ada type di QR, gunakan detectedType
+    let finalType = type || detectedType;
+
+    // Validasi type
+    if (!finalType || !['masuk', 'pulang'].includes(finalType)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: rejectionReason || 'Tipe absen tidak valid atau tidak sesuai aturan waktu.'
+      });
+    }
+
+    // Jika QR punya type tapi tidak sesuai detectedType, beri peringatan
+    if (type && detectedType && type !== detectedType) {
+      console.log(`[SCANNER] Type mismatch: QR type=${type}, detected=${detectedType}. Using detected type.`);
+      finalType = detectedType;
+    }
+
+    // ====================================================================
     // 🔥 [SOLUSI FINAL TIMEZONE]: Serahkan Pembandingan Tanggal ke MySQL
     // ====================================================================
     // Kita kirim string timestamp apa adanya ke MySQL, lalu minta MySQL
@@ -351,37 +463,33 @@ router.post('/scanner/attendance', async (req, res) => {
     try {
       duplicate = await db.query(
         "SELECT id FROM attendance_logs WHERE teacher_id = ? AND jenis = ? AND DATE(waktu_absen) = ?",
-        [teacher_id, type, scanDateStr]
+        [teacher_id, finalType, scanDateStr]
       );
     } catch (err) {
       duplicate = await db.query(
         "SELECT id FROM attendance_logs WHERE teacher_id = ? AND jenis = ? AND DATE(waktu_scan) = ?",
-        [teacher_id, type, scanDateStr]
+        [teacher_id, finalType, scanDateStr]
       );
     }
 
     if (duplicate.length > 0) {
-      return res.status(409).json({ success: false, message: `Guru sudah absen ${type.toUpperCase()} hari ini` });
+      return res.status(409).json({ success: false, message: `Guru sudah absen ${finalType.toUpperCase()} hari ini` });
     }
 
     let status = 'terlambat';
 
     try {
-      const [tenantData] = await db.query('SELECT use_central_rules, tipe_unit FROM tenants WHERE tenant_id = ?', [tenant_id]);
-      let userTipeUnit = tenantData?.tipe_unit || null;
-      const useCentral = tenantData && tenantData.use_central_rules === 1;
-
       // Query rules: tenant + central by tipe_unit
-      const ruleConditions = ['(tenant_id = ?)'];
-      const ruleParams = [tenant_id];
+      const ruleConditionsDup = ['(tenant_id = ?)'];
+      const ruleParamsDup = [tenant_id];
       if (useCentral && userTipeUnit) {
-        ruleConditions.push('(tenant_id IS NULL AND tipe_unit = ?)');
-        ruleParams.push(userTipeUnit);
+        ruleConditionsDup.push('(tenant_id IS NULL AND tipe_unit = ?)');
+        ruleParamsDup.push(userTipeUnit);
       }
 
       const allRules = await db.query(
-        `SELECT status_log, hari, jam_mulai, tenant_id FROM attendance_rules WHERE ${ruleConditions.join(' OR ')} AND tipe = ? AND ? BETWEEN jam_mulai AND jam_selesai ORDER BY tenant_id IS NULL, jam_mulai DESC`,
-        [...ruleParams, type === 'masuk' ? 'Datang' : 'Pulang', scanTimeWITA]
+        `SELECT status_log, hari, jam_mulai, tenant_id FROM attendance_rules WHERE ${ruleConditionsDup.join(' OR ')} AND tipe = ? AND ? BETWEEN jam_mulai AND jam_selesai ORDER BY tenant_id IS NULL, jam_mulai DESC`,
+        [...ruleParamsDup, finalType === 'masuk' ? 'Datang' : 'Pulang', scanTimeWITA]
       );
 
       const matchingRules = allRules.filter(rule => {
@@ -403,7 +511,7 @@ router.post('/scanner/attendance', async (req, res) => {
         `INSERT INTO attendance_logs
         (teacher_id, tenant_id, waktu_scan, waktu_absen, jenis, metode, status, dinas_luar, kegiatan_dinas, selfie_url, latitude, longitude)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL)`,
-        [teacher_id, tenant_id, localDateTime, timestamp, type, 'scanner', status, is_dinas_luar ? 1 : 0, is_dinas_luar ? 'Dinas luar' : null]
+        [teacher_id, tenant_id, localDateTime, timestamp, finalType, 'scanner', status, is_dinas_luar ? 1 : 0, is_dinas_luar ? 'Dinas luar' : null]
       );
     } catch (err) {
       // Fallback jika kolom waktu_absen belum ada
@@ -411,7 +519,7 @@ router.post('/scanner/attendance', async (req, res) => {
         `INSERT INTO attendance_logs
         (teacher_id, tenant_id, waktu_scan, jenis, metode, status, dinas_luar, kegiatan_dinas, selfie_url, latitude, longitude)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL)`,
-        [teacher_id, tenant_id, localDateTime, type, 'scanner', status, is_dinas_luar ? 1 : 0, is_dinas_luar ? 'Dinas luar' : null]
+        [teacher_id, tenant_id, localDateTime, finalType, 'scanner', status, is_dinas_luar ? 1 : 0, is_dinas_luar ? 'Dinas luar' : null]
       );
     }
 
@@ -420,7 +528,7 @@ router.post('/scanner/attendance', async (req, res) => {
       `INSERT INTO qr_attendance_logs 
       (scan_id, teacher_id, device_id, tenant_id, waktu_scan, jenis, signature, sync_status, offline_validated) 
       VALUES (?, ?, ?, ?, ?, ?, ?, 'synced', ?)`,
-      [scan_id, teacher_id, device_id, tenant_id, timestamp, type, signature, offline_validated || false]
+      [scan_id, teacher_id, device_id, tenant_id, timestamp, finalType, signature, offline_validated || false]
     );
 
     await db.query('UPDATE scanner_devices SET last_sync = NOW() WHERE device_id = ?', [device_id]);
@@ -456,7 +564,7 @@ Hai *${teacherNotif.nama}*,
 Laporan absensi scanner Anda berhasil direkam.
 
 *Detail:*
-• Jenis: Absen ${type.toUpperCase()}
+• Jenis: Absen ${finalType.toUpperCase()}
 • Instansi: ${tenant ? tenant.nama_sekolah : tenant_id}
 • Hari/Tgl: ${tanggalDisplay}
 • Jam Log: ${jamDisplay} (WITA)
@@ -483,12 +591,12 @@ Terima kasih.`;
       <p style="margin: 5px 0 0 0; color: rgba(255,255,255,0.9); font-size: 14px;">Notifikasi Absensi Scanner</p>
     </div>
     <div style="padding: 30px;">
-      <h2 style="margin: 0 0 20px 0; color: #333; font-size: 20px;">📱 Absensi ${type.toUpperCase()} via Scanner</h2>
+      <h2 style="margin: 0 0 20px 0; color: #333; font-size: 20px;">📱 Absensi ${finalType.toUpperCase()} via Scanner</h2>
       <p style="margin: 0 0 15px 0; color: #555; font-size: 16px; line-height: 1.6;">
         Assalamu'alaikum <strong>${teacherNotif.nama}</strong>,
       </p>
       <p style="margin: 0 0 20px 0; color: #555; font-size: 16px; line-height: 1.6;">
-        Presensi ${type} Anda via scanner telah berhasil direkam.
+        Presensi ${finalType} Anda via scanner telah berhasil direkam.
       </p>
       <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
         <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee; color: #666;">Instansi:</td><td style="padding: 8px 0; border-bottom: 1px solid #eee; font-weight: 600;">${tenant ? tenant.nama_sekolah : tenant_id}</td></tr>
@@ -502,14 +610,14 @@ Terima kasih.`;
 </html>`;
 
         if (typeof global.sendEmail === 'function') {
-          await global.sendEmail(teacherNotif.email, `Absensi ${type.toUpperCase()} Scanner - YPWI Lutim`, htmlMessage, '', [], 'scanner');
+          await global.sendEmail(teacherNotif.email, `Absensi ${finalType.toUpperCase()} Scanner - YPWI Lutim`, htmlMessage, '', [], 'scanner');
         }
       }
     } catch (waError) {
       console.error('Scanner WA Error:', waError.message);
     }
 
-    console.log(`[SCANNER] Attendance recorded: ${teacherRecord.nama} (${scan_id}) - ${type} at ${timestamp}`);
+    console.log(`[SCANNER] Attendance recorded: ${teacherRecord.nama} (${scan_id}) - ${finalType} at ${timestamp}`);
 
     const attendance_id = result.insertId;
 
@@ -521,7 +629,7 @@ Terima kasih.`;
         teacher_id,
         teacher_name: teacherRecord.nama,
         timestamp: scanTime.toISOString(),
-        type,
+        type: finalType,
         status,
         offline_validated: offline_validated || false
       }
