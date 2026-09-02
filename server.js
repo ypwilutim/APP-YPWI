@@ -428,28 +428,47 @@ function verifyTenantAccess(req, requestedTenantId) {
   return false;
 }
 
-// Helper: YPWILUTIM leadership (Ketua/Pimpinan/Kepala Sekolah) dapat melihat data yayasan
-// NOTE: req.user.assignments may be empty/undefined for guru users (see auth.js loader),
-// so we verify directly from the database by guru_id.
+// Helper: hanya Ketua di YPWILUTIM (atau role admin) yang dapat melihat data seluruh sekolah (yayasan).
+// req.user.assignments dapat kosong/undefined untuk guru (lihat auth.js loader),
+// jadi diverifikasi langsung dari database berdasarkan guru_id.
 async function isYayasanLeader(user) {
   if (!user) return false;
   if (user.role === 'admin') return true;
   if (user.role === 'guru' && user.guru_id) {
     try {
-      const terms = ['ketua', 'kepala', 'pimpinan', 'yayasan'];
       const rows = await db.query(
         'SELECT jabatan_di_unit FROM teacher_assignments WHERE teacher_id = ? AND tenant_id = ?',
         [user.guru_id, 'YPWILUTIM']
       );
-      return (rows || []).some(r => terms.some(t =>
-        (r.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '').includes(t)
-      ));
+      return (rows || []).some(r =>
+        (r.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '').includes('ketua')
+      );
     } catch (e) {
       console.error('isYayasanLeader DB error:', e.message);
       return false;
     }
   }
   return false;
+}
+
+// Resolve sekolah milik seorang guru pemimpin (Kepala Sekolah / Pimpinan / Ketua)
+// agar endpoint level-sekolah hanya menampilkan data sekolahnya sendiri.
+async function resolveLeaderTenant(user) {
+  if (!user || user.role !== 'guru' || !user.guru_id) return null;
+  const leadTerms = ['kepala', 'pimpinan', 'ketua'];
+  try {
+    const rows = await db.query(
+      'SELECT tenant_id, jabatan_di_unit FROM teacher_assignments WHERE teacher_id = ?',
+      [user.guru_id]
+    );
+    const matched = (rows || []).find(r =>
+      leadTerms.some(t => (r.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '').includes(t))
+    );
+    return matched ? matched.tenant_id : null;
+  } catch (e) {
+    console.error('resolveLeaderTenant DB error:', e.message);
+    return null;
+  }
 }
 
 // WhatsApp integration using Baileys (WhatsApp Web protocol) - replaces Whacenter
@@ -930,6 +949,29 @@ async function startServer() {
     await db.initializeDatabase();
     console.log('Database initialized, starting server');
 
+    // Auto-migrate students table columns
+    const db2 = require('./db');
+    const columns = [
+      { name: 'ransportasi', type: 'decimal(10,2) DEFAULT 0.00' },
+      { name: 'subsidi', type: 'decimal(10,2) DEFAULT 0.00' },
+      { name: 'privat', type: 'decimal(10,2) DEFAULT 0.00' },
+      { name: 'biaya_lain', type: 'decimal(10,2) DEFAULT 0.00' },
+      { name: 'biaya_lain_nama', type: 'varchar(255) DEFAULT NULL' },
+      { name: 'tanggal_masuk', type: 'date DEFAULT NULL' },
+      { name: 'tahun_masuk', type: 'varchar(10) DEFAULT NULL' },
+      { name: 'status', type: "varchar(20) DEFAULT 'aktif'" }
+    ];
+    for (const col of columns) {
+      try {
+        await db2.query(`ALTER TABLE students ADD COLUMN ${col.name} ${col.type}`);
+        console.log(`[MIGRATION] Added column: ${col.name}`);
+      } catch (e) {
+        if (e.code !== 'ER_DUP_FIELDNAME') {
+          console.log(`[MIGRATION] Column ${col.name} already exists or error: ${e.message}`);
+        }
+      }
+    }
+
     // Create upload directories if not exists
     const fs = require('fs');
     const path = require('path');
@@ -1268,16 +1310,10 @@ async function startServer() {
     try {
       let tenantId = req.query.tenant_id;
 
-      // Determine accessible tenant for non-admin
-      if (req.user.role === 'guru' && !tenantId) {
-        const assignments = req.user.assignments || [];
-        const relevantAssignments = assignments.filter(a =>
-          ['kepala_sekolah', 'pimpinan_pondok'].includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''))
-        );
-        if (relevantAssignments.length > 0) {
-          tenantId = relevantAssignments[0].tenant_id;
+        // Tentukan tenant yang dapat diakses untuk non-admin (sekolah milik pemimpin guru ini)
+        if (req.user.role === 'guru' && !tenantId) {
+          tenantId = await resolveLeaderTenant(req.user);
         }
-      }
 
       let query = `
           SELECT 
@@ -1371,16 +1407,10 @@ async function startServer() {
       let tenantId = req.query.tenant_id;
       const teacherId = req.query.teacher_id;
 
-      // Determine accessible tenant for non-admin
-      if (req.user.role === 'guru' && !tenantId) {
-        const assignments = req.user.assignments || [];
-        const relevantAssignments = assignments.filter(a =>
-          ['kepala_sekolah', 'pimpinan_pondok'].includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''))
-        );
-        if (relevantAssignments.length > 0) {
-          tenantId = relevantAssignments[0].tenant_id;
+        // Tentukan tenant yang dapat diakses untuk non-admin (sekolah milik pemimpin guru ini)
+        if (req.user.role === 'guru' && !tenantId) {
+          tenantId = await resolveLeaderTenant(req.user);
         }
-      }
 
       let query = `
           SELECT e.*, t.nama as teacher_name, u.username as evaluator_name
@@ -1468,18 +1498,14 @@ async function startServer() {
        const userRole = req.user.role;
        const isAdmin = await isYayasanLeader(req.user);
 
-       // Get user's assigned tenant if not admin
-       let tenantId = null;
-       if (!isAdmin) {
-         const assignments = await db.query(
-           'SELECT tenant_id FROM teacher_assignments WHERE user_id = ? AND jabatan_di_unit IN (?, ?) LIMIT 1',
-           [req.user.id, 'kepala_sekolah', 'pimpinan_pondok']
-         );
-         if (assignments.length === 0) {
-           return res.status(403).json({ success: false, message: 'Akses ditolak' });
-         }
-         tenantId = assignments[0].tenant_id;
-       }
+        // Get user's assigned tenant if not admin (hanya Ketua/admin yang dapat semua sekolah)
+        let tenantId = null;
+        if (!isAdmin) {
+          tenantId = await resolveLeaderTenant(req.user);
+          if (!tenantId) {
+            return res.status(403).json({ success: false, message: 'Akses ditolak. Tidak ditemukan unit yang Anda pimpin.' });
+          }
+        }
 
       // Get teachers based on role
       let teachers;

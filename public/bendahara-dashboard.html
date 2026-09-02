@@ -350,9 +350,9 @@
                   </button>
                 </div>
               </div>
-              <button onclick="generateBilling()"
+              <button onclick="showUpdateBillingModal()"
                 class="bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-800">
-                <i class="fas fa-plus-circle mr-1"></i>Generate Billing
+                <i class="fas fa-file-invoice-dollar mr-1"></i>Generate Billing
               </button>
               <button onclick="recalcBilling()"
                 class="bg-cyan-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-cyan-700">
@@ -1428,6 +1428,260 @@
       } catch (e) { showToast('Gagal: ' + e.message, 'error'); }
     }
 
+    // ===================== UPDATE BILLING =====================
+    let updateBillingData = { existing: [], missing: [] };
+
+    function showUpdateBillingModal() {
+      const tenantId = document.getElementById('paymentsTenantFilter').value;
+      const now = new Date();
+      const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      
+      // Populate tenant dropdown
+      const tenantSelect = document.getElementById('updateBillingTenantInput');
+      const paymentsSelect = document.getElementById('paymentsTenantFilter');
+      tenantSelect.innerHTML = '<option value="">Semua Sekolah</option>';
+      if (paymentsSelect && paymentsSelect.options) {
+        for (let i = 0; i < paymentsSelect.options.length; i++) {
+          const opt = paymentsSelect.options[i];
+          if (opt.value) {
+            tenantSelect.innerHTML += `<option value="${opt.value}" ${opt.value === tenantId ? 'selected' : ''}>${opt.text}</option>`;
+          }
+        }
+      }
+      
+      document.getElementById('updateBillingBulanInput').value = currentMonth;
+      document.getElementById('updateBillingModal').classList.remove('hidden');
+      loadUpdateBillingData();
+    }
+
+    function hideUpdateBillingModal() {
+      document.getElementById('updateBillingModal').classList.add('hidden');
+      updateBillingData = { existing: [], missing: [] };
+    }
+
+    async function loadUpdateBillingData() {
+      const tenantId = document.getElementById('updateBillingTenantInput').value;
+      const bulan = document.getElementById('updateBillingBulanInput').value;
+      
+      if (!bulan) { showToast('Pilih bulan', 'error'); return; }
+      
+      try {
+        let url = `/api/treasurer/bendahara/billing/month?bulan=${bulan}`;
+        if (tenantId) url += `&tenant_id=${tenantId}`;
+        
+        const res = await fetch(url, { headers: getAuthHeader() });
+        const data = await res.json();
+        
+        if (data.success) {
+          updateBillingData = data.data;
+          renderUpdateBillingTable();
+        } else {
+          showToast(data.message || 'Gagal memuat data', 'error');
+        }
+      } catch (e) {
+        showToast('Gagal: ' + e.message, 'error');
+      }
+    }
+
+    function renderUpdateBillingTable() {
+      const tbody = document.getElementById('updateBillingTableBody');
+      const existingCount = document.getElementById('updateBillingExistingCount');
+      const missingCount = document.getElementById('updateBillingMissingCount');
+
+      existingCount.textContent = updateBillingData.existing.length;
+      missingCount.textContent = updateBillingData.missing.length;
+
+      let html = '';
+
+      // Show existing billings (can be updated)
+      updateBillingData.existing.forEach(b => {
+        const spp = b.spp_bulanan;
+        const transport = b.ransportasi || 0;
+        const subsidi = b.subsidi || 0;
+        const total = spp + transport - subsidi;
+        html += `
+          <tr class="border-b hover:bg-gray-50">
+            <td class="px-2 py-2">
+              <input type="checkbox" class="update-billing-check" value="${b.billing_id}" data-student="${b.nama_siswa}">
+            </td>
+            <td class="px-2 py-2">
+              <div class="font-medium">${b.nama_siswa}</div>
+              <div class="text-xs text-gray-400">${b.catatan || ''}</div>
+            </td>
+            <td class="px-2 py-2">${b.nisn || '-'}</td>
+            <td class="px-2 py-2 text-right text-gray-700">
+              <span class="text-sm">Rp ${spp.toLocaleString('id-ID')}</span>
+              <input type="hidden" class="update-spp-input" value="${spp}" data-billing="${b.billing_id}">
+            </td>
+            <td class="px-2 py-2 text-right text-gray-700">
+              <span class="text-sm">Rp ${transport.toLocaleString('id-ID')}</span>
+              <input type="hidden" class="update-transport-input" value="${transport}" data-billing="${b.billing_id}">
+            </td>
+            <td class="px-2 py-2 text-right">
+              <input type="number" class="update-subsidi-input w-24 px-2 py-1 border rounded text-right text-sm" value="${subsidi}" data-billing="${b.billing_id}" placeholder="0">
+            </td>
+            <td class="px-2 py-2 text-right font-semibold">
+              <span class="total-display text-emerald-700" data-billing="${b.billing_id}">Rp ${Math.max(0, total).toLocaleString('id-ID')}</span>
+            </td>
+            <td class="px-2 py-2 text-center">
+              <input type="text" class="update-catatan-input w-24 px-1 py-1 border rounded text-xs" value="${b.catatan || ''}" data-billing="${b.billing_id}" placeholder="Keterangan">
+            </td>
+            <td class="px-2 py-2 text-center">
+              <span class="px-2 py-1 rounded text-xs ${b.status === 'lunas' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}">${b.status}</span>
+            </td>
+          </tr>
+        `;
+      });
+
+      // Show missing students (can be created)
+      updateBillingData.missing.forEach(s => {
+        const spp = s.iuran_bulanan || 0;
+        const transport = s.ransportasi || 0;
+        const subsidi = s.subsidi || 0;
+        const total = spp + transport - subsidi;
+        html += `
+          <tr class="border-b bg-blue-50">
+            <td class="px-2 py-2">
+              <input type="checkbox" class="create-billing-check" data-student-id="${s.student_id}" data-nama="${s.nama_siswa}">
+            </td>
+            <td class="px-2 py-2">${s.nama_siswa}</td>
+            <td class="px-2 py-2">${s.nisn || '-'}</td>
+            <td class="px-2 py-2 text-right text-gray-700">
+              <span class="text-sm">Rp ${spp.toLocaleString('id-ID')}</span>
+            </td>
+            <td class="px-2 py-2 text-right text-gray-700">
+              <span class="text-sm">Rp ${transport.toLocaleString('id-ID')}</span>
+            </td>
+            <td class="px-2 py-2 text-right text-gray-700">
+              <span class="text-sm text-gray-500">Rp ${subsidi.toLocaleString('id-ID')}</span>
+            </td>
+            <td class="px-2 py-2 text-right font-semibold">
+              <span class="total-display text-emerald-700" data-student="${s.student_id}">Rp ${Math.max(0, total).toLocaleString('id-ID')}</span>
+            </td>
+            <td class="px-2 py-2 text-center text-gray-400">Baru</td>
+            <td class="px-2 py-2 text-center">
+              <span class="px-2 py-1 rounded text-xs bg-blue-100 text-blue-800">Belum ada billing</span>
+            </td>
+          </tr>
+        `;
+      });
+
+      tbody.innerHTML = html || '<tr><td colspan="9" class="px-3 py-4 text-center text-gray-500">Tidak ada data</td></tr>';
+
+      // Add event listeners for auto-calculate total when subsidi changes (only for existing billings)
+      tbody.querySelectorAll('.update-subsidi-input').forEach(input => {
+        input.addEventListener('input', function() {
+          const billingId = this.dataset.billing;
+          const spp = parseFloat(document.querySelector(`.update-spp-input[data-billing="${billingId}"]`)?.value) || 0;
+          const transport = parseFloat(document.querySelector(`.update-transport-input[data-billing="${billingId}"]`)?.value) || 0;
+          const subsidi = parseFloat(this.value) || 0;
+          const total = spp + transport - subsidi;
+          const display = document.querySelector(`.total-display[data-billing="${billingId}"]`);
+          if (display) display.textContent = `Rp ${Math.max(0, total).toLocaleString('id-ID')}`;
+        });
+      });
+    }
+
+    async function updateIuranSiswa(studentId, btn) {
+      const input = btn.previousElementSibling;
+      const newIuran = parseFloat(input.value) || 0;
+      
+      if (newIuran < 0) {
+        showToast('Iuran tidak boleh negatif', 'error');
+        return;
+      }
+      
+      try {
+        const res = await fetch('/api/treasurer/bendahara/billing/update-iuran', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+          body: JSON.stringify({ student_id: studentId, iuran_bulanan: newIuran })
+        });
+        const d = await res.json();
+        if (d.success) {
+          showToast(d.message, 'success');
+          loadUpdateBillingData();
+        } else {
+          showToast(d.message || 'Gagal update iuran', 'error');
+        }
+      } catch (e) {
+        showToast('Gagal: ' + e.message, 'error');
+      }
+    }
+
+    async function saveUpdateBilling() {
+      const updates = [];
+      const creates = [];
+      const bulan = document.getElementById('updateBillingBulanInput').value;
+
+      // Collect updates for existing billings
+      document.querySelectorAll('.update-billing-check').forEach(check => {
+        const billingId = check.value;
+        const subsidiInput = document.querySelector(`.update-subsidi-input[data-billing="${billingId}"]`);
+        const subsidi = subsidiInput ? parseFloat(subsidiInput.value) || 0 : 0;
+        const catatanInput = document.querySelector(`.update-catatan-input[data-billing="${billingId}"]`);
+        const catatan = catatanInput ? catatanInput.value : '';
+
+        // Always include if has subsidi or catatan
+        updates.push({
+          billing_id: parseInt(billingId),
+          subsidi: subsidi,
+          catatan: catatan || null
+        });
+      });
+
+      // Collect creates for missing students
+      document.querySelectorAll('.create-billing-check:checked').forEach(check => {
+        const studentId = check.dataset.studentId;
+        const subsidiInput = document.querySelector(`.create-subsidi-input[data-student="${studentId}"]`);
+        const subsidi = subsidiInput ? parseFloat(subsidiInput.value) || 0 : 0;
+
+        creates.push({
+          student_id: parseInt(studentId),
+          bulan: bulan,
+          subsidi: subsidi
+        });
+      });
+
+      if (updates.length === 0 && creates.length === 0) {
+        showToast('Tidak ada perubahan', 'warning');
+        return;
+      }
+
+      try {
+        // Update existing billings (only subsidi and catatan)
+        if (updates.length > 0) {
+          const res = await fetch('/api/treasurer/bendahara/billing/update-batch', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+            body: JSON.stringify({ updates: updates })
+          });
+          const d = await res.json();
+          if (!d.success) throw new Error(d.message);
+        }
+
+        // Create new billings (SPP and transport from students table)
+        if (creates.length > 0) {
+          const res = await fetch('/api/treasurer/bendahara/billing/create-batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+            body: JSON.stringify({ bulan, students: creates })
+          });
+          const d = await res.json();
+          if (!d.success) throw new Error(d.message);
+        }
+
+        showToast(`Berhasil: ${updates.length} diupdate, ${creates.length} dibuat`, 'success');
+        loadUpdateBillingData(); // Refresh
+      } catch (e) {
+        showToast('Gagal: ' + e.message, 'error');
+      }
+    }
+
+    function toggleAllBillingChecks(source) {
+      document.querySelectorAll('.update-billing-check, .create-billing-check').forEach(cb => cb.checked = source.checked);
+    }
+
     // ===================== BSI VA MANUAL =====================
     let bsiStudentCache = [];
 
@@ -2224,6 +2478,71 @@ async function openBsiVaModal() {
       }
     }, 10000);
   </script>
+
+  <!-- Update Billing Modal -->
+  <div id="updateBillingModal" class="hidden fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl max-w-6xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+      <div class="flex justify-between items-center p-4 border-b sticky top-0 bg-white z-10">
+        <h4 class="font-semibold text-lg"><i class="fas fa-file-invoice-dollar mr-2"></i>Generate Billing Siswa</h4>
+        <button onclick="hideUpdateBillingModal()" class="text-gray-500 hover:text-gray-700 text-2xl leading-none">&times;</button>
+      </div>
+
+      <div class="p-4 border-b bg-gray-50">
+        <div class="flex flex-wrap items-end gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Bulan Billing</label>
+            <input type="month" id="updateBillingBulanInput" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Sekolah</label>
+            <select id="updateBillingTenantInput" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500">
+              <option value="">Semua Sekolah</option>
+            </select>
+          </div>
+          <button onclick="loadUpdateBillingData()" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
+            <i class="fas fa-search mr-1"></i>Cari
+          </button>
+        </div>
+      </div>
+
+      <div class="flex gap-4 p-4 border-b">
+        <div class="bg-green-50 px-3 py-2 rounded-lg">
+          <span class="text-sm text-green-700">Sudah ada billing: <strong id="updateBillingExistingCount">0</strong></span>
+        </div>
+        <div class="bg-blue-50 px-3 py-2 rounded-lg">
+          <span class="text-sm text-blue-700">Belum ada billing: <strong id="updateBillingMissingCount">0</strong></span>
+        </div>
+      </div>
+
+      <div class="overflow-auto flex-1">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 border-b sticky top-0">
+            <tr>
+              <th class="px-2 py-2 text-center"><input type="checkbox" onclick="toggleAllBillingChecks(this)"></th>
+              <th class="px-2 py-2 text-left">Nama Siswa</th>
+              <th class="px-2 py-2 text-left">NISN</th>
+              <th class="px-2 py-2 text-right">SPP</th>
+              <th class="px-2 py-2 text-right">Transportasi</th>
+              <th class="px-2 py-2 text-right">Subsidi</th>
+              <th class="px-2 py-2 text-right">Total</th>
+              <th class="px-2 py-2 text-center">Keterangan</th>
+              <th class="px-2 py-2 text-center">Status</th>
+            </tr>
+          </thead>
+          <tbody id="updateBillingTableBody">
+            <tr><td colspan="9" class="px-3 py-8 text-center text-gray-500">Pilih bulan dan klik Cari</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="p-4 border-t flex justify-end gap-2">
+        <button onclick="hideUpdateBillingModal()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400">Batal</button>
+        <button onclick="saveUpdateBilling()" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
+          <i class="fas fa-save mr-1"></i>Simpan Perubahan
+        </button>
+      </div>
+    </div>
+  </div>
 
   <!-- Student Billing Detail Modal -->
   <div id="studentBillingModal" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">

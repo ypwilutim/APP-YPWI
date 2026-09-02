@@ -108,15 +108,31 @@ async function ensureBillingTables() {
       tenant_id VARCHAR(20) DEFAULT NULL,
       student_id INT(11) NOT NULL,
       spp_bulanan DECIMAL(12,2) DEFAULT 0,
+      ransportasi DECIMAL(12,2) DEFAULT 0,
+      subsidi DECIMAL(12,2) DEFAULT 0,
       bulan VARCHAR(7) NOT NULL,
       transaksi DECIMAL(12,2) DEFAULT 0,
       keterangan_spp DECIMAL(12,2) DEFAULT 0,
       status ENUM('lunas','belum') DEFAULT 'belum',
+      catatan TEXT DEFAULT NULL,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       UNIQUE KEY uniq_student_bulan (student_id, bulan),
-      KEY idx_tenant (tenant_id)
+      KEY idx_tenant (tenant_id),
+      KEY idx_bulan (bulan)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
+
+  // Add missing columns if not exists (for existing tables)
+  try {
+    await db.query(`ALTER TABLE billing_payment ADD COLUMN IF NOT EXISTS ransportasi DECIMAL(12,2) DEFAULT 0 AFTER spp_bulanan`);
+    await db.query(`ALTER TABLE billing_payment ADD COLUMN IF NOT EXISTS subsidi DECIMAL(12,2) DEFAULT 0 AFTER ransportasi`);
+    await db.query(`ALTER TABLE billing_payment ADD COLUMN IF NOT EXISTS catatan TEXT DEFAULT NULL AFTER status`);
+    await db.query(`ALTER TABLE billing_payment ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at`);
+    await db.query(`ALTER TABLE billing_payment ADD INDEX IF NOT EXISTS idx_bulan (bulan)`);
+  } catch (e) {
+    // Columns might already exist
+  }
 
   await db.query(`
     CREATE TABLE IF NOT EXISTS saldo_siswa (
@@ -248,7 +264,7 @@ async function insertIncoming(rec) {
 async function generateBilling(tenantId, fallbackStart) {
   const end = currentMonth();
   const students = await db.query(
-    `SELECT id, tenant_id, iuran_bulanan, tanggal_masuk FROM students
+    `SELECT id, tenant_id, iuran_bulanan, ransportasi, tanggal_masuk FROM students
      WHERE tenant_id = ? AND (status = 'active' OR status = 'aktif' OR status IS NULL)`,
     [tenantId]
   );
@@ -258,7 +274,7 @@ async function generateBilling(tenantId, fallbackStart) {
     // Check for existing bills to determine the real start
     const [existingBills] = await db.query('SELECT MIN(bulan) as min_bulan FROM billing_payment WHERE student_id = ? LIMIT 1', [s.id]);
     const minBulan = existingBills?.min_bulan;
-    
+
     // Start from earliest existing bill, tanggal_masuk, or fallbackStart
     let start = minBulan;
     if (!start && s.tanggal_masuk && /^\d{4}-\d{2}$/.test(s.tanggal_masuk)) {
@@ -267,20 +283,21 @@ async function generateBilling(tenantId, fallbackStart) {
     if (!start) {
       start = fallbackStart || end;
     }
-    
+
     const months = monthList(start, end);
     const spp = parseFloat(s.iuran_bulanan) || 0;
+    const transport = parseFloat(s.ransportasi) || 0;
     for (const m of months) {
       const [existing] = await db.query('SELECT id, bulan FROM billing_payment WHERE student_id = ? AND bulan = ?', [s.id, m]);
       if (existing) {
         // Lock snapshot spp_bulanan for months already past
         if (m < end) { skipped++; continue; }
-        await db.query('UPDATE billing_payment SET spp_bulanan = ?, transaksi = 0, keterangan_spp = ?, status = "belum" WHERE id = ?', [spp, spp, existing.id]);
+        await db.query('UPDATE billing_payment SET spp_bulanan = ?, ransportasi = ?, transaksi = 0, keterangan_spp = ?, status = "belum" WHERE id = ?', [spp, transport, spp + transport, existing.id]);
         created++;
       } else {
         await db.query(
-          'INSERT INTO billing_payment (tenant_id, student_id, spp_bulanan, bulan, transaksi, keterangan_spp, status) VALUES (?, ?, ?, ?, 0, ?, "belum")',
-          [s.tenant_id, s.id, spp, m, spp]
+          'INSERT INTO billing_payment (tenant_id, student_id, spp_bulanan, ransportasi, bulan, transaksi, keterangan_spp, status) VALUES (?, ?, ?, ?, ?, 0, ?, "belum")',
+          [s.tenant_id, s.id, spp, transport, m, spp + transport]
         );
         created++;
       }
@@ -306,15 +323,18 @@ async function recalcStudent(studentId) {
   let totalKeterangan = 0;
   for (const b of bills) {
     const spp = parseFloat(b.spp_bulanan) || 0;
+    const transport = parseFloat(b.ransportasi) || 0;
+    const subsidi = parseFloat(b.subsidi) || 0;
+    const totalTagihan = spp + transport - subsidi;
     const trans = incMap[b.bulan] || 0;
     const available = trans + carry;
     let keterangan, status, newCarry;
-    if (available >= spp) {
+    if (available >= totalTagihan) {
       keterangan = 0;
       status = 'lunas';
-      newCarry = available - spp;
+      newCarry = available - totalTagihan;
     } else {
-      keterangan = spp - available;
+      keterangan = totalTagihan - available;
       status = 'belum';
       newCarry = 0;
     }

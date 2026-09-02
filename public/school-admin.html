@@ -603,11 +603,18 @@
               class="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 text-sm">
               <option value="">Semua Kelas</option>
             </select>
+            <select id="studentNisFilter" onchange="loadStudents()"
+              class="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 text-sm">
+              <option value="">Semua Status NIS</option>
+              <option value="no_nis">Belum Punya NIS</option>
+              <option value="has_nis">Sudah Punya NIS</option>
+            </select>
             <input type="text" id="studentSearch" placeholder="Cari nama/NIS/NISN..."
               class="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 flex-1"
               onkeyup="handleStudentSearch(event)">
             <button onclick="loadStudents()" class="px-4 py-2 btn-primary text-white rounded-md text-sm"><i
                 class="fas fa-search"></i></button>
+            <button onclick="generateNisBulk()" class="px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-md text-sm" title="Generate NIS untuk siswa terpilih yang belum punya NIS"><i class="fas fa-magic mr-1"></i>Generate NIS</button>
           </div>
 
           <div class="overflow-x-auto">
@@ -1397,7 +1404,7 @@ if (d.success) {
                const tb = document.getElementById('teachersTable');
                tb.innerHTML = items.length === 0 ? '<tr><td colspan="7" class="px-4 py-12 text-center text-gray-500">Belum ada data guru</td></tr>' : items.map(t => {
                  const sekolah = (t.assignments && t.assignments[0]) ? t.assignments[0].nama_sekolah : '-';
-                 return `<tr class="hover:bg-gray-50"><td class="px-4 py-3 text-sm text-gray-900 font-medium"><input type="checkbox" class="teacher-checkbox" value="${t.id}"></td><td class="px-4 py-3 text-sm text-gray-900 font-medium">${t.nama || '-'}</td><td class="px-4 py-3 text-sm text-gray-500">${t.nik || '-'}</td><td class="px-4 py-3 text-sm text-gray-500">${t.nip || '-'}</td><td class="px-4 py-3 text-sm text-gray-500">${t.status_kepegawaian || '-'}</td><td class="px-4 py-3 text-sm text-gray-500">${sekolah}</td><td class="px-4 py-3 text-sm space-x-1"><button onclick="editTeacher(${t.id})" class="inline-flex items-center p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md" title="Edit"><i class="fas fa-edit text-xs"></i></button><button onclick="deleteTeacher(${t.id})" class="inline-flex items-center p-1.5 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-md" title="Hapus"><i class="fas fa-trash text-xs"></i></button></td></tr>`;
+                  return `<tr class="hover:bg-gray-50"><td class="px-4 py-3 text-sm text-gray-900 font-medium"><input type="checkbox" class="teacher-checkbox" value="${t.id}"></td><td class="px-4 py-3 text-sm text-gray-900 font-medium">${t.nama || '-'}</td><td class="px-4 py-3 text-sm text-gray-500">${t.nik || '-'}</td><td class="px-4 py-3 text-sm text-gray-500">${t.nip || '-'}</td><td class="px-4 py-3 text-sm text-gray-500">${t.status_kepegawaian || '-'}</td><td class="px-4 py-3 text-sm text-gray-500">${sekolah}</td><td class="px-4 py-3 text-sm space-x-1"><button onclick="editTeacher(${t.id})" class="inline-flex items-center p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md" title="Edit"><i class="fas fa-edit text-xs"></i></button><button onclick="mutasiTeacher(${t.id})" class="inline-flex items-center p-1.5 text-orange-600 hover:text-orange-800 hover:bg-orange-50 rounded-md" title="Mutasi"><i class="fas fa-exchange-alt text-xs"></i></button></td></tr>`;
                }).join('');
                updatePaginationControls(d.pagination);
              }
@@ -1526,7 +1533,7 @@ if (d.success) {
 
         async function loadAssignments() {
           const tbody = document.getElementById('assignmentsTable');
-          tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-12 text-center text-gray-500"><i class="fas fa-spinner fa-spin text-xl mb-2"></i><p>Memuat data guru...</p></td></tr>';
+          tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-12 text-center text-gray-500"><i class="fas fa-spinner fa-spin text-xl mb-2"></i><p>Memuat data guru...</p></td></tr>';
 
           try {
             const r = await fetch(apiUrl('/admin/assignments'), { headers: { 'Authorization': `Bearer ${authToken}` } });
@@ -1535,27 +1542,63 @@ if (d.success) {
 
             if (d.success) {
               const teachers = d.data || [];
-              tbody.innerHTML = teachers.length === 0
-                ? '<tr><td colspan="5" class="px-4 py-12 text-center text-gray-500">Belum ada data guru</td></tr>'
-                : teachers.map(t => `
-                <tr class="hover:bg-gray-50">
-                  <td class="px-4 py-3 text-sm text-gray-900 font-medium">${t.nama || '-'}</td>
-                  <td class="px-4 py-3 text-sm text-gray-500">${t.nik || '-'} / ${t.nip || '-'}</td>
-                  <td class="px-4 py-3 text-sm text-gray-500">${t.jabatan_di_unit || 'Guru'}</td>
-                  <td class="px-4 py-3 text-sm text-gray-500">${t.wali_kelas || '-'}</td>
-                  <td class="px-4 py-3 text-sm space-x-1">
-                     <button onclick="editAssignment(${t.id})" class="inline-flex items-center p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md" title="Edit">
-                      <i class="fas fa-edit text-xs"></i>
-                    </button>
-                  </td>
-                </tr>
-              `).join('');
+              if (teachers.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-12 text-center text-gray-500">Belum ada data guru</td></tr>';
+                return;
+              }
+
+              tbody.innerHTML = teachers.map(t => {
+                const jabatanList = (t.assignments || []).map(a => {
+                  const kelasInfo = a.wali_kelas ? ` <span class="text-blue-600">(${a.wali_kelas})</span>` : '';
+                  const sekolahInfo = a.nama_sekolah ? ` <span class="text-gray-400 text-xs">[${a.nama_sekolah}]</span>` : '';
+                  return `<span class="inline-flex items-center bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs mr-1 mb-1">
+                    ${a.jabatan_di_unit || 'Guru'}${kelasInfo}${sekolahInfo}
+                    <button onclick="deleteAssignment(${t.id}, ${a.assignment_id})" class="ml-1.5 text-red-500 hover:text-red-700" title="Hapus jabatan"><i class="fas fa-times text-xs"></i></button>
+                  </span>`;
+                }).join('');
+
+                return `
+                  <tr class="hover:bg-gray-50">
+                    <td class="px-4 py-3 text-sm text-gray-900 font-medium">${t.nama || '-'}</td>
+                    <td class="px-4 py-3 text-sm text-gray-500">${t.nik || '-'} / ${t.nip || '-'}</td>
+                    <td class="px-4 py-3 text-sm">
+                      <div class="flex flex-wrap">${jabatanList || '<span class="text-gray-400">-</span>'}</div>
+                    </td>
+                    <td class="px-4 py-3 text-sm space-x-1">
+                      <button onclick="editAssignment(${t.id})" class="inline-flex items-center p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-md" title="Edit">
+                        <i class="fas fa-edit text-xs"></i>
+                      </button>
+                    </td>
+                  </tr>
+                `;
+              }).join('');
             } else {
-              tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-12 text-center text-red-500">Gagal memuat data</td></tr>';
+              tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-12 text-center text-red-500">Gagal memuat data</td></tr>';
             }
           } catch (e) {
             console.error('[ASSIGNMENTS]', e);
-            tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-12 text-center text-red-500">Error</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-12 text-center text-red-500">Error</td></tr>';
+          }
+        }
+
+        async function deleteAssignment(teacherId, assignmentId) {
+          if (!confirm('Hapus jabatan ini?')) return;
+          try {
+            const r = await fetch(apiUrl(`/admin/teachers/${teacherId}/assignment/${assignmentId}`), {
+              method: 'DELETE',
+              headers: { 'Authorization': `Bearer ${authToken}` }
+            });
+            if (checkAuth401403(r)) return;
+            const d = await r.json();
+            if (d.success) {
+              showToast('Jabatan berhasil dihapus', 'success');
+              loadAssignments();
+            } else {
+              showToast(d.message || 'Gagal menghapus', 'error');
+            }
+          } catch (e) {
+            console.error('[DELETE ASSIGNMENT]', e);
+            showToast('Terjadi kesalahan', 'error');
           }
         }
 
@@ -1564,145 +1607,193 @@ if (d.success) {
         }
 
          async function showAssignmentModal(editTeacherId) {
-          const modal = document.getElementById('assignmentModal');
-          const form = document.getElementById('assignmentForm');
-          const title = document.getElementById('assignmentModalTitle');
-          const teacherSelect = document.getElementById('assignmentTeacherSelect');
-          const teacherIdInput = document.getElementById('assignmentTeacherId');
-          const tenantSelect = document.getElementById('assignmentTenantId');
-          const positionSelect = document.getElementById('assignmentPosition');
-          const classSection = document.getElementById('assignmentClassSection');
-          const classSelect = document.getElementById('assignmentClassId');
+           const modal = document.getElementById('assignmentModal');
+           const form = document.getElementById('assignmentForm');
+           const title = document.getElementById('assignmentModalTitle');
+           const teacherSelect = document.getElementById('assignmentTeacherSelect');
+           const teacherIdInput = document.getElementById('assignmentTeacherId');
+           const jabatanList = document.getElementById('jabatanList');
 
-          form.reset();
-          teacherIdInput.value = '';
-          tenantSelect.innerHTML = '<option value="">Pilih Sekolah</option>';
-          classSelect.innerHTML = '<option value="">Pilih Kelas</option>';
-          classSection.classList.add('hidden');
+           form.reset();
+           teacherIdInput.value = '';
+           jabatanList.innerHTML = '';
 
-          // Load tenants for dropdown
-          try {
-            const r = await fetch(apiUrl('/admin/tenants'), { headers: { 'Authorization': `Bearer ${authToken}` } });
-            if (!r.ok) throw new Error('HTTP ' + r.status);
-            const d = await r.json();
-            if (d.success) {
-              tenantSelect.innerHTML = '<option value="">Pilih Sekolah</option>';
-              (d.data || []).forEach(t => {
-                const opt = document.createElement('option');
-                opt.value = t.tenant_id;
-                opt.textContent = t.nama_sekolah || t.tenant_id;
-                tenantSelect.appendChild(opt);
-              });
-            }
-          } catch (e) {
-            console.error('[LOAD TENANTS FOR ASSIGNMENT]', e);
-          }
+           // Load teachers for dropdown
+           teacherSelect.innerHTML = '<option value="">Memuat...</option>';
+           try {
+             const r = await fetch(apiUrl('/admin/teachers'), { headers: { 'Authorization': `Bearer ${authToken}` } });
+             if (!r.ok) throw new Error('HTTP ' + r.status);
+             const d = await r.json();
+             if (d.success) {
+               teacherSelect.innerHTML = '<option value="">Pilih Guru</option>';
+               (d.data || []).forEach(t => {
+                 const opt = document.createElement('option');
+                 opt.value = t.id;
+                 opt.textContent = t.nama || ('Guru #' + t.id);
+                 teacherSelect.appendChild(opt);
+               });
+             }
+           } catch (e) {
+             console.error('[LOAD TEACHERS FOR ASSIGNMENT]', e);
+             teacherSelect.innerHTML = '<option value="">Error memuat guru</option>';
+           }
 
-          // Load teachers for dropdown
-          teacherSelect.innerHTML = '<option value="">Memuat...</option>';
-          try {
-            const r = await fetch(apiUrl('/admin/teachers'), { headers: { 'Authorization': `Bearer ${authToken}` } });
-            if (!r.ok) throw new Error('HTTP ' + r.status);
-            const d = await r.json();
-            if (d.success) {
-              teacherSelect.innerHTML = '<option value="">Pilih Guru</option>';
-              (d.data || []).forEach(t => {
-                const opt = document.createElement('option');
-                opt.value = t.id;
-                opt.textContent = t.nama || ('Guru #' + t.id);
-                teacherSelect.appendChild(opt);
-              });
-            }
-          } catch (e) {
-            console.error('[LOAD TEACHERS FOR ASSIGNMENT]', e);
-            teacherSelect.innerHTML = '<option value="">Error memuat guru</option>';
-          }
+           if (editTeacherId) {
+             title.textContent = 'Edit Tugas Guru';
+             teacherSelect.disabled = true;
+             teacherIdInput.value = editTeacherId;
+             // Find teacher name and select it
+             const options = Array.from(teacherSelect.options);
+             const found = options.find(o => o.value == editTeacherId);
+             if (found) found.selected = true;
 
-          if (editTeacherId) {
-            title.textContent = 'Edit Tugas Guru';
-            teacherSelect.disabled = true;
-            teacherIdInput.value = editTeacherId;
-            // Find teacher name and select it
-            const options = Array.from(teacherSelect.options);
-            const found = options.find(o => o.value == editTeacherId);
-            if (found) found.selected = true;
-            // Load existing assignment data
-            try {
-              const r = await fetch(apiUrl('/admin/assignments'), { headers: { 'Authorization': `Bearer ${authToken}` } });
-              if (!r.ok) throw new Error('HTTP ' + r.status);
-              const d = await r.json();
-              if (d.success) {
-                const teacher = (d.data || []).find(t => t.id == editTeacherId);
-                if (teacher) {
-                  if (tenantSelect.querySelector(`option[value="${teacher.tenant_id}"]`)) {
-                    tenantSelect.value = teacher.tenant_id;
-                  }
-                  positionSelect.value = teacher.jabatan_di_unit || 'Guru';
-                  if (teacher.jabatan_di_unit === 'Wali Kelas') {
-                    await loadClassesForAssignment();
-                    if (teacher.wali_kelas) {
-                      const classOpts = Array.from(classSelect.options);
-                      const classFound = classOpts.find(o => o.textContent === teacher.wali_kelas);
-                      if (classFound) classFound.selected = true;
-                    }
-                  }
-                }
-              }
-            } catch (e) {
-              console.error('[LOAD ASSIGNMENT DATA]', e);
-            }
-          } else {
-            title.textContent = 'Tambah Tugas Guru';
-            teacherSelect.disabled = false;
-            positionSelect.value = 'Guru';
-          }
+             // Load existing assignments for this teacher
+             try {
+               const r = await fetch(apiUrl('/admin/assignments'), { headers: { 'Authorization': `Bearer ${authToken}` } });
+               if (!r.ok) throw new Error('HTTP ' + r.status);
+               const d = await r.json();
+               if (d.success) {
+                 const teacher = (d.data || []).find(t => t.id == editTeacherId);
+                 if (teacher && teacher.assignments && teacher.assignments.length > 0) {
+                   teacher.assignments.forEach(a => {
+                     addJabatanRow(a.tenant_id, a.jabatan_di_unit, a.class_id, a.wali_kelas);
+                   });
+                 } else {
+                   addJabatanRow();
+                 }
+               } else {
+                 addJabatanRow();
+               }
+             } catch (e) {
+               console.error('[LOAD ASSIGNMENT DATA]', e);
+               addJabatanRow();
+             }
+           } else {
+             title.textContent = 'Tambah Tugas Guru';
+             teacherSelect.disabled = false;
+             addJabatanRow();
+           }
 
-          // Show/hide class dropdown based on position
-          const showClass = positionSelect.value === 'Wali Kelas';
-          classSection.classList.toggle('hidden', !showClass);
-          if (showClass && classSelect.options.length <= 1) {
-            await loadClassesForAssignment();
-          }
+           modal.classList.add('show');
+         }
 
-          // Update class section visibility on position change
-          const positionOnChange = async function () {
-            const show = positionSelect.value === 'Wali Kelas';
-            classSection.classList.toggle('hidden', !show);
-            if (show && classSelect.options.length <= 1) {
-              await loadClassesForAssignment();
-            }
-          };
-          positionSelect.onchange = positionOnChange;
+         async function addJabatanRow(selectedTenant, selectedJabatan, selectedClassId, selectedWaliKelas) {
+           const jabatanList = document.getElementById('jabatanList');
+           const rowId = 'jabatan_row_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
 
-          modal.classList.add('show');
-        }
+           // Load tenants for dropdown
+           let tenantOptions = '<option value="">Pilih Sekolah</option>';
+           try {
+             const r = await fetch(apiUrl('/admin/tenants'), { headers: { 'Authorization': `Bearer ${authToken}` } });
+             if (r.ok) {
+               const d = await r.json();
+               if (d.success) {
+                 (d.data || []).forEach(t => {
+                   tenantOptions += `<option value="${t.tenant_id}">${t.nama_sekolah || t.tenant_id}</option>`;
+                 });
+               }
+             }
+           } catch (e) {
+             console.error('[LOAD TENANTS]', e);
+           }
 
-        async function loadClassesForAssignment() {
-          const select = document.getElementById('assignmentClassId');
-          const currentValue = select.value;
-          select.innerHTML = '<option value="">Memuat...</option>';
+           const row = document.createElement('div');
+           row.id = rowId;
+           row.className = 'jabatan-row border border-gray-200 rounded-lg p-3 bg-gray-50';
+           row.innerHTML = `
+             <div class="flex items-center space-x-2 mb-2">
+               <select class="jabatan-tenant flex-1 px-2 py-1.5 border border-gray-300 rounded text-sm" required>
+                 ${tenantOptions}
+               </select>
+               <select class="jabatan-position px-2 py-1.5 border border-gray-300 rounded text-sm" required>
+                 <option value="">Pilih Jabatan</option>
+                 <option value="Guru">Guru</option>
+                 <option value="Wali Kelas">Wali Kelas</option>
+                 <option value="TU">TU</option>
+                 <option value="Tata Usaha">Tata Usaha</option>
+                 <option value="Operator">Operator</option>
+                 <option value="Kepala Sekolah">Kepala Sekolah</option>
+                 <option value="Pimpinan Pondok">Pimpinan Pondok</option>
+                 <option value="Ketua">Ketua</option>
+               </select>
+               <button type="button" onclick="removeJabatanRow('${rowId}')" class="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded" title="Hapus">
+                 <i class="fas fa-trash text-xs"></i>
+               </button>
+             </div>
+             <div class="jabatan-class-section hidden">
+               <select class="jabatan-class w-full px-2 py-1.5 border border-gray-300 rounded text-sm">
+                 <option value="">Pilih Kelas (Wali Kelas)</option>
+               </select>
+             </div>
+           `;
 
-          try {
-            const r = await fetch(apiUrl('/admin/classes'), { headers: { 'Authorization': `Bearer ${authToken}` } });
-            if (!r.ok) return;
-            const d = await r.json();
+           jabatanList.appendChild(row);
 
-            if (d.success) {
-              const classes = d.data || [];
-              select.innerHTML = '<option value="">Pilih Kelas</option>';
-              classes.forEach(c => {
-                const opt = document.createElement('option');
-                opt.value = c.id;
-                opt.textContent = c.nama_kelas;
-                select.appendChild(opt);
-              });
-              if (currentValue) select.value = currentValue;
-            }
-          } catch (e) {
-            console.error('[CLASSES FOR ASSIGNMENT]', e);
-            select.innerHTML = '<option value="">Error memuat kelas</option>';
-          }
-        }
+           // Set values if editing
+           if (selectedTenant) {
+             row.querySelector('.jabatan-tenant').value = selectedTenant;
+           }
+           if (selectedJabatan) {
+             row.querySelector('.jabatan-position').value = selectedJabatan;
+             if (selectedJabatan === 'Wali Kelas') {
+               const classSection = row.querySelector('.jabatan-class-section');
+               classSection.classList.remove('hidden');
+               loadClassesForJabatanRow(row, selectedTenant, selectedClassId);
+             }
+           }
+
+           // Handle position change to show/hide class dropdown
+           row.querySelector('.jabatan-position').onchange = function () {
+             const classSection = row.querySelector('.jabatan-class-section');
+             const tenantVal = row.querySelector('.jabatan-tenant').value;
+             if (this.value === 'Wali Kelas') {
+               classSection.classList.remove('hidden');
+               loadClassesForJabatanRow(row, tenantVal, null);
+             } else {
+               classSection.classList.add('hidden');
+             }
+           };
+
+           // Handle tenant change to reload classes
+           row.querySelector('.jabatan-tenant').onchange = function () {
+             const positionVal = row.querySelector('.jabatan-position').value;
+             if (positionVal === 'Wali Kelas') {
+               loadClassesForJabatanRow(row, this.value, null);
+             }
+           };
+         }
+
+         function removeJabatanRow(rowId) {
+           const row = document.getElementById(rowId);
+           if (row) row.remove();
+         }
+
+         async function loadClassesForJabatanRow(row, tenantId, selectedClassId) {
+           const classSelect = row.querySelector('.jabatan-class');
+           if (!tenantId) {
+             classSelect.innerHTML = '<option value="">Pilih Kelas (Wali Kelas)</option>';
+             return;
+           }
+           classSelect.innerHTML = '<option value="">Memuat...</option>';
+           try {
+             const r = await fetch(apiUrl('/admin/classes?tenant_id=' + tenantId), { headers: { 'Authorization': `Bearer ${authToken}` } });
+             if (!r.ok) throw new Error('HTTP ' + r.status);
+             const d = await r.json();
+             if (d.success) {
+               classSelect.innerHTML = '<option value="">Pilih Kelas (Wali Kelas)</option>';
+               (d.data || []).forEach(c => {
+                 const opt = document.createElement('option');
+                 opt.value = c.id;
+                 opt.textContent = c.nama_kelas;
+                 classSelect.appendChild(opt);
+               });
+               if (selectedClassId) classSelect.value = selectedClassId;
+             }
+           } catch (e) {
+             console.error('[LOAD CLASSES FOR JABATAN]', e);
+             classSelect.innerHTML = '<option value="">Error memuat kelas</option>';
+           }
+         }
 
         function hideAssignmentModal() {
           document.getElementById('assignmentModal').classList.remove('show');
@@ -2049,7 +2140,9 @@ if (d.success) {
               </td>
               <td class="px-4 py-3 text-sm text-gray-900 font-medium">${s.nama_siswa || '-'} ${!s.nama_kelas || s.class_id === null ? '<span class="text-xs text-yellow-600 font-semibold">(Belum ada kelas)</span>' : ''}</td>
               <td class="px-4 py-3 text-sm text-gray-500">${s.nisn || '-'}</td>
-              <td class="px-4 py-3 text-sm text-gray-500">${s.nis || '-'}</td>
+              <td class="px-4 py-3 text-sm">
+                ${s.nis ? `<span class="text-gray-700 font-mono">${s.nis}</span>` : `<button onclick="generateNisForStudent(${s.id})" class="inline-flex items-center px-2 py-1 bg-amber-100 text-amber-700 rounded text-xs hover:bg-amber-200" title="Generate NIS"><i class="fas fa-magic mr-1"></i>Buat NIS</button>`}
+              </td>
                <td class="px-4 py-3 text-sm text-gray-500">${formatKelas(s.tingkatan, s.nama_kelas)}</td>
               <td class="px-4 py-3 text-sm text-gray-500">${s.nama_orang_tua || '-'}<br><small>${s.no_wa_ortu || ''}</small></td>
               <td class="px-4 py-3 text-sm text-gray-500">Rp ${(s.iuran_bulanan || 0).toLocaleString('id-ID')}</td>
@@ -2180,21 +2273,29 @@ if (d.success) {
         // Download template import siswa baru
         window.downloadStudentImportTemplate = async function () {
           try {
-            const url = apiUrl('/admin/students/import-template?tenant_id=' + tenantId);
+            if (!tenantId) {
+              Swal.fire('Error', 'Tenant ID tidak ditemukan', 'error');
+              return;
+            }
+            const url = apiUrl('/admin/students/import-template');
             const r = await fetch(url, { headers: { 'Authorization': `Bearer ${authToken}` } });
-            if (!r.ok) { Swal.fire('Gagal', 'Tidak dapat mengunduh template', 'error'); return; }
+            if (!r.ok) { 
+              const errData = await r.json().catch(() => ({}));
+              Swal.fire('Gagal', errData.message || 'Tidak dapat mengunduh template', 'error'); 
+              return; 
+            }
             const blob = await r.blob();
             const downloadUrl = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = downloadUrl;
-            a.download = 'template_import_siswa_baru.xlsx';
+            a.download = 'template_import_siswa.xlsx';
             document.body.appendChild(a);
             a.click();
             a.remove();
             window.URL.revokeObjectURL(downloadUrl);
           } catch (e) {
             console.error('[TEMPLATE]', e);
-            Swal.fire('Error', 'Terjadi kesalahan saat download template', 'error');
+            Swal.fire('Error', 'Terjadi kesalahan saat download template: ' + e.message, 'error');
           }
         };
 
@@ -2397,6 +2498,121 @@ if (d.success) {
             if (d.success) { loadStudents(currentStudentPage); showToast('Siswa dihapus', 'success'); }
             else showToast(d.message || 'Gagal', 'error');
           } catch (e) { console.error('[DEL STUDENT]', e); showToast('Terjadi kesalahan', 'error'); }
+        }
+
+        // Generate NIS untuk siswa yang belum punya
+        async function generateNisForStudent(studentId) {
+          if (!confirm('Generate NIS untuk siswa ini?')) return;
+          try {
+            // Cek data siswa terlebih dahulu
+            const checkRes = await fetch(apiUrl('/admin/students/' + studentId), {
+              headers: { 'Authorization': `Bearer ${authToken}` }
+            });
+            const checkData = await checkRes.json();
+            
+            if (!checkData.success || !checkData.data) {
+              showToast('Gagal memeriksa data siswa', 'error');
+              return;
+            }
+            
+            const student = checkData.data;
+            const errors = [];
+            
+            // Check both tanggal_masuk and tahun_masuk - at least one must have a value
+            const hasTanggalMasuk = student.tanggal_masuk && String(student.tanggal_masuk).trim() !== '';
+            const hasTahunMasuk = student.tahun_masuk && String(student.tahun_masuk).trim() !== '';
+            if (!hasTanggalMasuk && !hasTahunMasuk) errors.push('Tanggal Masuk/Tahun Masuk');
+            if (!student.tenant_id) errors.push('Sekolah (Tenant)');
+            if (!student.parent_id) errors.push('Data Orang Tua (Parent)');
+            if (!student.nama_siswa) errors.push('Nama Siswa');
+            
+            if (errors.length > 0) {
+              const edit = confirm('Data belum lengkap: ' + errors.join(', ') + '\n\nLengkapi data sekarang?');
+              if (edit) {
+                // Buka modal edit siswa
+                if (typeof showEditStudentModal === 'function') {
+                  showEditStudentModal(studentId);
+                } else {
+                  switchTab('students');
+                }
+              }
+              return;
+            }
+            
+            const r = await fetch(apiUrl('/admin/students/' + studentId + '/generate-nis'), {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${authToken}` }
+            });
+            if (checkAuth401403(r)) return;
+            const d = await r.json();
+            if (d.success) {
+              showToast('NIS berhasil dibuat: ' + d.data.nis, 'success');
+              loadStudents(currentStudentPage);
+            } else {
+              showToast(d.message || 'Gagal generate NIS', 'error');
+            }
+          } catch (e) { console.error('[GEN NIS]', e); showToast('Terjadi kesalahan', 'error'); }
+        }
+
+        // Generate NIS bulk untuk siswa terpilih yang belum punya NIS
+        async function generateNisBulk() {
+          const checked = Array.from(document.querySelectorAll('.student-checkbox:checked')).map(cb => parseInt(cb.value));
+          if (checked.length === 0) { showToast('Pilih minimal 1 siswa', 'error'); return; }
+          if (!confirm('Generate NIS untuk ' + checked.length + ' siswa terpilih?')) return;
+          let ok = 0, fail = 0, skipped = 0;
+          const skippedDetails = [];
+          for (const id of checked) {
+            try {
+              // Cek data siswa terlebih dahulu
+              const checkRes = await fetch(apiUrl('/admin/students/' + id), {
+                headers: { 'Authorization': `Bearer ${authToken}` }
+              });
+              const checkData = await checkRes.json();
+              
+              if (checkData.success && checkData.data) {
+                const student = checkData.data;
+                const errors = [];
+                // Check both tanggal_masuk and tahun_masuk - at least one must have a value
+                const hasTanggalMasuk = student.tanggal_masuk && String(student.tanggal_masuk).trim() !== '';
+                const hasTahunMasuk = student.tahun_masuk && String(student.tahun_masuk).trim() !== '';
+                if (!hasTanggalMasuk && !hasTahunMasuk) errors.push('Tanggal Masuk/Tahun Masuk');
+                if (!student.tenant_id || String(student.tenant_id).trim() === '') errors.push('Sekolah');
+                if (!student.parent_id) errors.push('Orang Tua');
+                if (!student.nama_siswa || String(student.nama_siswa).trim() === '') errors.push('Nama');
+                
+                if (errors.length > 0) {
+                  console.log('[GEN NIS BULK] Skip siswa ' + id + ': ' + errors.join(', '));
+                  skipped++;
+                  skippedDetails.push(`ID ${id}: ${errors.join(', ')}`);
+                  continue;
+                }
+              } else {
+                skipped++;
+                skippedDetails.push(`ID ${id}: Data tidak ditemukan`);
+                continue;
+              }
+              
+              const r = await fetch(apiUrl('/admin/students/' + id + '/generate-nis'), {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${authToken}` }
+              });
+              const d = await r.json();
+              if (d.success) ok++; else {
+                fail++;
+                skippedDetails.push(`ID ${id}: ${d.message || 'Gagal'}`);
+              }
+            } catch (e) { 
+              fail++; 
+              skippedDetails.push(`ID ${id}: Error - ${e.message}`);
+            }
+          }
+          let msg = `Generate NIS selesai: ${ok} berhasil, ${fail} gagal`;
+          if (skipped > 0) msg += `, ${skipped} dilewati (data belum lengkap)`;
+          showToast(msg, fail ? 'error' : 'success');
+          if (skippedDetails.length > 0) {
+            console.log('[GEN NIS BULK] Detail skipped:\n' + skippedDetails.join('\n'));
+          }
+          loadStudents(currentStudentPage);
         }
 
         // Student Mutasi Functions
@@ -2684,10 +2900,37 @@ if (d.success) {
         };
 
         window.generateNis = function () {
+          // Validate required fields
           const tanggalMasuk = document.getElementById('studentTanggalMasuk') ? document.getElementById('studentTanggalMasuk').value : '';
+          const tenantSelect = document.getElementById('studentTenantId');
+          const tenantIdValue = tenantSelect ? tenantSelect.value : '';
+          const namaOrtu = document.querySelector('input[name="nama_orang_tua"]') ? document.querySelector('input[name="nama_orang_tua"]').value.trim() : '';
+          const noWa = document.querySelector('input[name="no_wa"]') ? document.querySelector('input[name="no_wa"]').value.trim() : '';
+          const namaSiswa = document.querySelector('input[name="nama_siswa"]') ? document.querySelector('input[name="nama_siswa"]').value.trim() : '';
+
+          // Validation
+          const errors = [];
+          if (!namaSiswa) errors.push('Nama Siswa');
+          if (!tanggalMasuk) errors.push('Tanggal Masuk');
+          if (!tenantIdValue) errors.push('Sekolah (Tenant)');
+          if (!namaOrtu && !noWa) errors.push('Data Orang Tua (minimal nama atau no. WA)');
+
+          if (errors.length > 0) {
+            showToast('Lengkapi data berikut terlebih dahulu: ' + errors.join(', '), 'error');
+            return;
+          }
+
+          // Generate preview NIS (backend akan generate final setelah simpan)
           const year = tanggalMasuk ? new Date(tanggalMasuk).getFullYear() : new Date().getFullYear();
-          const preview = String(year).padStart(4, '0') + '00' + '0000000';
-          document.getElementById('studentNisInput').value = preview;
+          const yearPart = String(year).padStart(4, '0');
+
+          // Preview dengan format: YYYY + TT + PPP + SSSS
+          // Tenant ID numeric akan diambil backend saat simpan
+          const preview = yearPart + 'XX' + 'XXX' + 'XXXX';
+
+          document.getElementById('studentNisInput').value = '';
+          document.getElementById('studentNisInputPreview').value = preview + ' (final akan di-generate setelah simpan)';
+          showToast('Data lengkap! NIS akan di-generate otomatis setelah siswa disimpan.', 'success');
         };
 
         window.resetStudentSteps = function () {
@@ -2824,14 +3067,19 @@ if (d.success) {
           } catch (e) { console.error('[EDIT TEACHER]', e); }
         }
 
-        async function deleteTeacher(id) {
-          if (!confirm('Yakin hapus guru ini?')) return;
+        async function mutasiTeacher(id) {
+          var reason = prompt('Alasan mutasi guru ini?', 'Pindah sekolah');
+          if (reason === null) return;
           try {
-            const r = await fetch(apiUrl('/admin/teachers/' + id), { method: 'DELETE', headers: { 'Authorization': `Bearer ${authToken}` } });
+            var r = await fetch(apiUrl('/admin/mutasi/teachers/' + id + '/initiate'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+              body: JSON.stringify({ reason: reason })
+            });
             if (checkAuth401403(r)) return;
-            const d = await r.json();
-            if (d.success) { fetchTeachers(currentPage); showToast('Guru berhasil dihapus', 'success'); } else showToast(d.message || 'Gagal menghapus', 'error');
-          } catch (e) { console.error('[DELETE TEACHER]', e); showToast('Terjadi kesalahan', 'error'); }
+            var d = await r.json();
+            if (d.success) { fetchTeachers(currentPage); showToast('Guru berhasil dimutasi', 'success'); } else showToast(d.message || 'Gagal mutasi', 'error');
+          } catch (e) { console.error('[MUTASI TEACHER]', e); showToast('Terjadi kesalahan', 'error'); }
         }
 
         function hideTeacherModal() {
@@ -4227,13 +4475,9 @@ console.log('[ATTENDANCE] Fetching:', url);
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                   <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">NIS</label>
-                    <div class="flex">
-                      <input type="text" name="nis" id="studentNisInput"
-                        class="flex-1 px-3 py-2 border border-gray-300 rounded-l-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="Auto-generate (YYYY+tenant+parent+student, hanya angka)">
-                      <button type="button" onclick="generateNis()"
-                        class="px-3 py-1 bg-gray-100 text-gray-600 border border-gray-300 rounded-r-md hover:bg-gray-200 text-sm">Generate</button>
-                    </div>
+                    <input type="text" name="nis" id="studentNisInput"
+                      class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Auto-generate (YYYY+tenant+parent+student, hanya angka)">
                     <p class="text-xs text-gray-500 mt-1">NIS auto-generate dari tahun, tenant, parent, dan ID siswa</p>
                   </div>
                   <div>
@@ -4330,6 +4574,12 @@ console.log('[ATTENDANCE] Fetching:', url);
                     class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                 </div>
                 <div class="mb-4">
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Subsidi (Rp)</label>
+                  <input type="number" name="subsidi" value="0" min="0" step="1000"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                  <p class="text-xs text-gray-500 mt-1">Subsidi default yang akan digunakan setiap bulan</p>
+                </div>
+                <div class="mb-4">
                   <label class="block text-sm font-medium text-gray-700 mb-1">Privat (Rp)</label>
                   <input type="number" name="privat" value="0" min="0" step="1000"
                     class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
@@ -4344,6 +4594,26 @@ console.log('[ATTENDANCE] Fetching:', url);
                   <input type="text" name="biaya_lain_nama"
                     class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="Contoh: Seragam, Buku, Kegiatan">
+                </div>
+
+                <!-- Generate NIS Section -->
+                <div class="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <h4 class="text-sm font-semibold text-amber-800"><i class="fas fa-magic mr-1"></i>Generate NIS</h4>
+                      <p class="text-xs text-amber-600 mt-1">NIS akan di-generate otomatis berdasarkan tahun masuk, tenant, parent, dan ID siswa</p>
+                    </div>
+                    <button type="button" onclick="generateNis()"
+                      class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-md text-sm font-medium">
+                      <i class="fas fa-magic mr-1"></i>Generate NIS
+                    </button>
+                  </div>
+                  <div class="mt-3">
+                    <label class="block text-xs font-medium text-amber-700 mb-1">Preview NIS:</label>
+                    <input type="text" id="studentNisInputPreview"
+                      class="w-full px-3 py-2 border border-amber-300 bg-white rounded-md text-sm font-mono"
+                      readonly placeholder="Klik Generate untuk melihat preview">
+                  </div>
                 </div>
               </div>
 
@@ -4390,13 +4660,12 @@ console.log('[ATTENDANCE] Fetching:', url);
                   <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Nama Guru</th>
                   <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">NIK/NIP</th>
                   <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Jabatan</th>
-                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Kelas (Wali Kelas)</th>
                   <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Aksi</th>
                 </tr>
               </thead>
               <tbody id="assignmentsTable" class="divide-y divide-gray-100">
                 <tr>
-                  <td colspan="5" class="px-4 py-12 text-center text-gray-500"><i
+                  <td colspan="4" class="px-4 py-12 text-center text-gray-500"><i
                       class="fas fa-spinner fa-spin text-xl mb-2"></i>
                     <p>Memuat data guru...</p>
                   </td>
@@ -4408,7 +4677,7 @@ console.log('[ATTENDANCE] Fetching:', url);
 
         <!-- Assignment Modal -->
         <div id="assignmentModal" class="modal fixed inset-0 bg-black bg-opacity-50 z-50 justify-center items-center">
-          <div class="bg-white rounded-lg max-w-md w-full mx-4">
+          <div class="bg-white rounded-lg max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div class="p-6">
               <h3 class="text-lg font-semibold mb-4" id="assignmentModalTitle">Tambah Tugas Guru</h3>
               <form id="assignmentForm">
@@ -4421,35 +4690,20 @@ console.log('[ATTENDANCE] Fetching:', url);
                     <option value="">Pilih Guru</option>
                   </select>
                 </div>
+
                 <div class="mb-4">
-                  <label class="block text-sm font-medium text-gray-700 mb-1">Sekolah (Tenant)</label>
-                  <select id="assignmentTenantId"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    required>
-                    <option value="">Pilih Sekolah</option>
-                  </select>
+                  <div class="flex items-center justify-between mb-2">
+                    <label class="block text-sm font-medium text-gray-700">Jabatan</label>
+                    <button type="button" onclick="addJabatanRow()" class="text-xs text-blue-600 hover:text-blue-800 font-medium">
+                      <i class="fas fa-plus mr-1"></i>Tambah Jabatan
+                    </button>
+                  </div>
+                  <div id="jabatanList" class="space-y-2">
+                    <!-- Jabatan rows will be added here -->
+                  </div>
                 </div>
-                <div class="mb-4">
-                  <label class="block text-sm font-medium text-gray-700 mb-1">Jabatan</label>
-                  <select id="assignmentPosition"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    required>
-                    <option value="Guru">Guru</option>
-                    <option value="Wali Kelas">Wali Kelas</option>
-                    <option value="TU">TU</option>
-                    <option value="Tata Usaha">Tata Usaha</option>
-                    <option value="Operator">Operator</option>
-                    <option value="Kepala Sekolah">Kepala Sekolah</option>
-                  </select>
-                </div>
-                <div class="mb-4 hidden" id="assignmentClassSection">
-                  <label class="block text-sm font-medium text-gray-700 mb-1">Kelas Wali</label>
-                  <select id="assignmentClassId"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                    <option value="">Pilih Kelas</option>
-                  </select>
-                </div>
-                <div class="flex justify-end space-x-3">
+
+                <div class="flex justify-end space-x-3 mt-6">
                   <button type="button" onclick="hideAssignmentModal()"
                     class="px-4 py-2 text-gray-600 hover:text-gray-800">Batal</button>
                   <button type="submit"
@@ -4611,22 +4865,50 @@ console.log('[ATTENDANCE] Fetching:', url);
              assignmentForm.addEventListener('submit', async function (e) {
                e.preventDefault();
                var teacherId = document.getElementById('assignmentTeacherId').value || document.getElementById('assignmentTeacherSelect').value;
-               var tenantId = document.getElementById('assignmentTenantId').value;
-               var position = document.getElementById('assignmentPosition').value;
-               var classId = document.getElementById('assignmentClassId').value || null;
                if (!teacherId) {
                  showToast('Pilih guru terlebih dahulu', 'error');
                  return;
                }
+
+               // Collect all jabatan rows
+               var rows = document.querySelectorAll('#jabatanList .jabatan-row');
+               if (rows.length === 0) {
+                 showToast('Tambahkan minimal 1 jabatan', 'error');
+                 return;
+               }
+
+               var assignments = [];
+               var hasError = false;
+               rows.forEach(function (row) {
+                 if (hasError) return;
+                 var tenantVal = row.querySelector('.jabatan-tenant').value;
+                 var positionVal = row.querySelector('.jabatan-position').value;
+                 var classVal = row.querySelector('.jabatan-class').value || null;
+
+                 if (!tenantVal || !positionVal) {
+                   showToast('Lengkapi semua field jabatan', 'error');
+                   hasError = true;
+                   return;
+                 }
+
+                 assignments.push({
+                   tenant_id: tenantVal,
+                   jabatan_di_unit: positionVal,
+                   class_id: classVal
+                 });
+               });
+
+               if (hasError || assignments.length === 0) return;
+
                try {
-                 var r = await fetch(apiUrl('/admin/teachers/' + teacherId + '/assignment'), {
-                   method: 'PUT',
+                 var r = await fetch(apiUrl('/admin/teachers/' + teacherId + '/assignments/bulk'), {
+                   method: 'POST',
                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
-                   body: JSON.stringify({ tenant_id: tenantId, jabatan_di_unit: position, class_id: classId })
+                   body: JSON.stringify({ assignments: assignments })
                  });
                  if (checkAuth401403(r)) return;
                  var d = await r.json();
-                 if (d.success) { hideAssignmentModal(); loadAssignments(); showToast('Tugas guru diupdate', 'success'); }
+                 if (d.success) { hideAssignmentModal(); loadAssignments(); showToast('Tugas guru disimpan', 'success'); }
                  else showToast(d.message || 'Gagal', 'error');
                } catch (err) { console.error('[ASSIGNMENT FORM]', err); showToast('Terjadi kesalahan', 'error'); }
              });
@@ -4705,64 +4987,166 @@ console.log('[ATTENDANCE] Fetching:', url);
           </div>
           <div class="p-5 overflow-y-auto flex-1">
             <input type="hidden" id="editStudentId">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Sekolah (Tenant)</label>
-                <select id="editStudentTenant"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"></select>
+            
+            <!-- Step Indicator -->
+            <div class="flex mb-4">
+              <div id="editStep1Bar" class="flex-1 text-center py-2 bg-blue-600 text-white rounded-l-md text-sm cursor-pointer" onclick="showEditStep(1)">1. Data Pribadi</div>
+              <div id="editStep2Bar" class="flex-1 text-center py-2 bg-gray-300 text-gray-700 text-sm cursor-pointer" onclick="showEditStep(2)">2. Data Orang Tua</div>
+              <div id="editStep3Bar" class="flex-1 text-center py-2 bg-gray-300 text-gray-700 rounded-r-md text-sm cursor-pointer" onclick="showEditStep(3)">3. Data SPP & Biaya</div>
+            </div>
+
+            <!-- Step 1: Data Pribadi -->
+            <div id="editStep1Content">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Sekolah (Tenant)</label>
+                  <select id="editStudentTenant"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"></select>
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Kelas</label>
+                  <select id="editStudentClass"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"></select>
+                </div>
               </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Kelas</label>
-                <select id="editStudentClass"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"></select>
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Nama Siswa</label>
+              <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Nama Siswa <span class="text-red-500">*</span></label>
                 <input type="text" id="editStudentNama"
                   class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600">
               </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">NIS</label>
-                <input type="text" id="editStudentNis"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">NIS</label>
+                  <div class="flex">
+                    <input type="text" id="editStudentNis"
+                      class="flex-1 px-3 py-2 border border-gray-300 rounded-l-md text-sm focus:ring-2 focus:ring-blue-600"
+                      readonly placeholder="Klik Generate untuk membuat NIS">
+                    <button type="button" onclick="generateNisEdit()"
+                      class="px-3 py-2 bg-amber-500 text-white border border-amber-500 rounded-r-md hover:bg-amber-600 text-sm" title="Generate NIS"><i class="fas fa-magic"></i></button>
+                  </div>
+                  <p class="text-xs text-gray-500 mt-1">Klik tombol <i class="fas fa-magic text-amber-500"></i> untuk generate NIS</p>
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">NISN</label>
+                  <input type="text" id="editStudentNisn"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600">
+                </div>
               </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">NISN</label>
-                <input type="text" id="editStudentNisn"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Jenis Kelamin</label>
+                  <select id="editStudentJk"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600">
+                    <option value="">Pilih</option>
+                    <option value="L">Laki-laki</option>
+                    <option value="P">Perempuan</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Tanggal Masuk <span class="text-red-500">*</span></label>
+                  <input type="date" id="editStudentTanggalMasuk" onchange="autoSaveTanggalMasuk(this.value)"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600">
+                </div>
               </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Jenis Kelamin</label>
-                <select id="editStudentJk"
+              <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                <select id="editStudentStatus"
                   class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600">
-                  <option value="">--</option>
-                  <option value="L">Laki-laki</option>
-                  <option value="P">Perempuan</option>
+                  <option value="aktif">Aktif</option>
+                  <option value="alumni">Alumni</option>
+                  <option value="mutasi">Mutasi</option>
+                  <option value="keluar">Keluar</option>
                 </select>
               </div>
-              <div>
+            </div>
+
+            <!-- Step 2: Data Orang Tua -->
+            <div id="editStep2Content" class="hidden">
+              <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Nama Orang Tua/Wali</label>
+                <input type="text" id="editStudentParent"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600">
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">No. WhatsApp</label>
+                  <input type="text" id="editStudentWa"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600"
+                    placeholder="08xxx">
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">NIK Orang Tua</label>
+                  <input type="text" id="editStudentNik"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600"
+                    placeholder="Opsional">
+                </div>
+              </div>
+              <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Email Orang Tua</label>
+                <input type="email" id="editStudentEmail"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600"
+                  placeholder="Opsional">
+              </div>
+            </div>
+
+            <!-- Step 3: Data SPP & Biaya -->
+            <div id="editStep3Content" class="hidden">
+              <div class="mb-4">
                 <label class="block text-sm font-medium text-gray-700 mb-1">Iuran Bulanan (Rp)</label>
                 <input type="number" id="editStudentIuran"
                   class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600"
                   min="0" step="1000">
               </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Nama Orang Tua</label>
-                <input type="text" id="editStudentParent"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Ransportasi (Rp)</label>
+                  <input type="number" id="editStudentRansportasi"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600"
+                    min="0" step="1000" value="0">
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Subsidi (Rp)</label>
+                  <input type="number" id="editStudentSubsidi"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600"
+                    min="0" step="1000" value="0">
+                  <p class="text-xs text-gray-500 mt-1">Subsidi default per bulan</p>
+                </div>
               </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">No. WA Orang Tua</label>
-                <input type="text" id="editStudentWa"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600">
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Privat (Rp)</label>
+                  <input type="number" id="editStudentPrivat"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600"
+                    min="0" step="1000" value="0">
+                </div>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Biaya Lain (Rp)</label>
+                  <input type="number" id="editStudentBiayaLain"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600"
+                    min="0" step="1000" value="0">
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Nama Biaya Lain</label>
+                  <input type="text" id="editStudentBiayaLainNama"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600"
+                    placeholder="Contoh: Seragam, Buku, Kegiatan">
+                </div>
               </div>
             </div>
           </div>
-          <div class="p-4 border-t border-gray-100 flex justify-end space-x-2">
-            <button onclick="closeStudentEditModal()"
-              class="px-4 py-2 bg-gray-100 text-gray-700 rounded-md text-sm font-medium hover:bg-gray-200">Batal</button>
-            <button onclick="saveStudentEdit()"
-              class="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700">Simpan</button>
+          <div class="p-4 border-t border-gray-100 flex justify-between">
+            <div>
+              <button type="button" id="editPrevBtn" onclick="prevEditStep()" class="px-4 py-2 text-gray-600 hover:text-gray-800 hidden"><i class="fas fa-chevron-left mr-1"></i>Kembali</button>
+            </div>
+            <div class="flex space-x-2">
+              <button onclick="closeStudentEditModal()"
+                class="px-4 py-2 bg-gray-100 text-gray-700 rounded-md text-sm font-medium hover:bg-gray-200">Batal</button>
+              <button type="button" id="editNextBtn" onclick="nextEditStep()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-md text-sm font-medium hover:bg-gray-400">Lanjut</button>
+              <button onclick="saveStudentEdit()" id="editSaveBtn"
+                class="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 hidden">Simpan</button>
+            </div>
           </div>
         </div>
       </div>

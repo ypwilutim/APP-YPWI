@@ -292,6 +292,15 @@ function closeApprovalIzinModal() {
     if (m) m.style.display = 'none';
 }
 
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        const m = document.getElementById('approvalIzinModal');
+        if (m && m.style.display !== 'none') {
+            m.style.display = 'none';
+        }
+    }
+});
+
 let selectedApprovalIds = new Set();
 
 function updateApprovalBulkBar() {

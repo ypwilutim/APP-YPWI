@@ -1837,6 +1837,55 @@ router.post('/treasurer/bendahara/billing/generate', authenticateBendahara, asyn
   }
 });
 
+// POST /api/treasurer/bendahara/billing/generate-student - Generate billing for specific student
+router.post('/treasurer/bendahara/billing/generate-student', authenticateBendahara, async (req, res) => {
+  try {
+    await billing.ensureBillingTables();
+    const { student_id, bulan, spp_bulanan } = req.body;
+    
+    if (!student_id || !bulan) {
+      return res.status(400).json({ success: false, message: 'student_id dan bulan wajib' });
+    }
+
+    const [student] = await db.query('SELECT id, tenant_id, iuran_bulanan FROM students WHERE id = ?', [student_id]);
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Siswa tidak ditemukan' });
+    }
+
+    const spp = spp_bulanan !== undefined ? parseFloat(spp_bulanan) : parseFloat(student.iuran_bulanan) || 0;
+    const transport = parseFloat(student.ransportasi) || 0;
+
+    // Check if billing already exists
+    const [existing] = await db.query('SELECT id FROM billing_payment WHERE student_id = ? AND bulan = ?', [student_id, bulan]);
+
+    if (existing) {
+      // Update existing
+      await db.query('UPDATE billing_payment SET spp_bulanan = ?, ransportasi = ?, keterangan_spp = ?, status = "belum" WHERE id = ?', [spp, transport, spp + transport, existing.id]);
+      await billing.recalcStudent(student_id);
+      res.json({
+        success: true,
+        message: `Billing ${bulan} untuk ${student_id} diupdate`,
+        action: 'updated'
+      });
+    } else {
+      // Create new
+      await db.query(
+        'INSERT INTO billing_payment (tenant_id, student_id, spp_bulanan, ransportasi, bulan, transaksi, keterangan_spp, status) VALUES (?, ?, ?, ?, 0, ?, "belum")',
+        [student.tenant_id, student_id, spp, transport, bulan, spp + transport]
+      );
+      await billing.recalcStudent(student_id);
+      res.json({
+        success: true,
+        message: `Billing ${bulan} untuk ${student_id} dibuat`,
+        action: 'created'
+      });
+    }
+  } catch (error) {
+    console.error('Generate student billing error:', error);
+    res.status(500).json({ success: false, message: 'Gagal generate billing siswa' });
+  }
+});
+
 // POST /api/treasurer/bendahara/billing/recalc - Hitung ulang saldo semua siswa di tenant
 router.post('/treasurer/bendahara/billing/recalc', authenticateBendahara, async (req, res) => {
   try {
@@ -1884,8 +1933,380 @@ router.post('/treasurer/bendahara/billing/recalc', authenticateBendahara, async 
       });
     }
   } catch (error) {
-    console.error('Recalc billing error:', error);
-    res.status(500).json({ success: false, message: 'Gagal hitung ulang saldo' });
+    console.error('Student billing error:', error);
+    res.status(500).json({ success: false, message: 'Gagal mengambil data billing siswa' });
+  }
+});
+
+// GET /api/treasurer/bendahara/billing/month?tenant_id=XXX&bulan=2026-09 - Get billing for specific month
+router.get('/treasurer/bendahara/billing/month', authenticateBendahara, async (req, res) => {
+  try {
+    await billing.ensureBillingTables();
+    const { tenant_id, bulan } = req.query;
+    
+    if (!bulan || !/^\d{4}-\d{2}$/.test(bulan)) {
+      return res.status(400).json({ success: false, message: 'Format bulan tidak benar (YYYY-MM)' });
+    }
+
+    let query = `
+      SELECT 
+        bp.id as billing_id,
+        bp.student_id,
+        bp.bulan,
+        bp.spp_bulanan,
+        bp.subsidi,
+        bp.transaksi,
+        bp.keterangan_spp,
+        bp.status,
+        bp.catatan,
+        s.nama_siswa,
+        s.nisn,
+        s.iuran_bulanan,
+        s.ransportasi,
+        s.tenant_id,
+        s.tanggal_masuk,
+        COALESCE(ss.saldo, 0) as saldo
+      FROM billing_payment bp
+      JOIN students s ON bp.student_id = s.id
+      LEFT JOIN saldo_siswa ss ON s.id = ss.student_id
+      WHERE bp.bulan = ?
+        AND (s.status = 'active' OR s.status = 'aktif' OR s.status IS NULL)
+    `;
+    const params = [bulan];
+
+    if (tenant_id) {
+      query += ' AND s.tenant_id = ?';
+      params.push(tenant_id);
+    }
+
+    query += ' ORDER BY s.nama_siswa ASC';
+    const billings = await db.query(query, params);
+
+    // Get students who don't have billing for this month
+    let missingQuery = `
+      SELECT 
+        s.id as student_id,
+        s.nama_siswa,
+        s.nisn,
+        s.iuran_bulanan,
+        s.ransportasi,
+        s.subsidi,
+        s.tenant_id,
+        s.tanggal_masuk
+      FROM students s
+      LEFT JOIN billing_payment bp ON s.id = bp.student_id AND bp.bulan = ?
+      WHERE bp.id IS NULL
+        AND (s.status = 'active' OR s.status = 'aktif' OR s.status IS NULL)
+    `;
+    const missingParams = [bulan];
+
+    if (tenant_id) {
+      missingQuery += ' AND s.tenant_id = ?';
+      missingParams.push(tenant_id);
+    }
+
+    missingQuery += ' ORDER BY s.nama_siswa ASC';
+    const missingStudents = await db.query(missingQuery, missingParams);
+
+    res.json({
+      success: true,
+      data: {
+        bulan: bulan,
+        existing: billings.map(b => ({
+          billing_id: b.billing_id,
+          student_id: b.student_id,
+          nama_siswa: b.nama_siswa,
+          nisn: b.nisn,
+          spp_bulanan: parseFloat(b.spp_bulanan) || 0,
+          subsidi: parseFloat(b.subsidi) || 0,
+          transaksi: parseFloat(b.transaksi) || 0,
+          keterangan_spp: parseFloat(b.keterangan_spp) || 0,
+          status: b.status,
+          catatan: b.catatan,
+          iuran_bulanan: parseFloat(b.iuran_bulanan) || 0,
+          ransportasi: parseFloat(b.ransportasi) || 0,
+          tanggal_masuk: b.tanggal_masuk,
+          saldo: parseFloat(b.saldo) || 0
+        })),
+        missing: missingStudents.map(s => ({
+          student_id: s.student_id,
+          nama_siswa: s.nama_siswa,
+          nisn: s.nisn,
+          iuran_bulanan: parseFloat(s.iuran_bulanan) || 0,
+          ransportasi: parseFloat(s.ransportasi) || 0,
+          subsidi: parseFloat(s.subsidi) || 0,
+          tanggal_masuk: s.tanggal_masuk
+        }))
+      }
+    });
+  } catch (error) {
+    console.error('Get billing month error:', error);
+    res.status(500).json({ success: false, message: 'Gagal mengambil data billing bulan' });
+  }
+});
+
+// PUT /api/treasurer/bendahara/billing/update - Update billing (subsidi/potongan)
+router.put('/treasurer/bendahara/billing/update', authenticateBendahara, async (req, res) => {
+  try {
+    await billing.ensureBillingTables();
+    const { billing_id, spp_bulangan, subsidi, catatan } = req.body;
+
+    if (!billing_id) {
+      return res.status(400).json({ success: false, message: 'billing_id wajib' });
+    }
+
+    // Get current billing
+    const [current] = await db.query('SELECT * FROM billing_payment WHERE id = ?', [billing_id]);
+    if (!current) {
+      return res.status(404).json({ success: false, message: 'Billing tidak ditemukan' });
+    }
+
+    const newSpp = spp_bulangan !== undefined ? parseFloat(spp_bulangan) : parseFloat(current.spp_bulanan);
+    const subsidiAmount = subsidi ? parseFloat(subsidi) : 0;
+    const ransportasiAmount = ransportasi !== undefined ? parseFloat(ransportasi) : (parseFloat(current.ransportasi) || 0);
+    const finalSpp = Math.max(0, newSpp + ransportasiAmount - subsidiAmount);
+
+    // Update billing
+    await db.query(
+      `UPDATE billing_payment
+       SET spp_bulanan = ?, ransportasi = ?, subsidi = ?, keterangan_spp = ?, catatan = ?
+       WHERE id = ?`,
+      [newSpp, ransportasiAmount, subsidiAmount, finalSpp, catatan || null, billing_id]
+    );
+
+    // Recalc student balance
+    await billing.recalcStudent(current.student_id);
+
+    res.json({
+      success: true,
+      message: 'Billing berhasil diupdate',
+      data: {
+        billing_id: billing_id,
+        student_id: current.student_id,
+        bulan: current.bulan,
+        spp_bulanan: finalSpp,
+        subsidi: subsidiAmount
+      }
+    });
+  } catch (error) {
+    console.error('Update billing error:', error);
+    res.status(500).json({ success: false, message: 'Gagal update billing' });
+  }
+});
+
+// PUT /api/treasurer/bendahara/billing/update-iuran - Update iuran_bulanan siswa
+router.put('/treasurer/bendahara/billing/update-iuran', authenticateBendahara, async (req, res) => {
+  try {
+    const { student_id, iuran_bulanan } = req.body;
+
+    if (!student_id || iuran_bulanan === undefined) {
+      return res.status(400).json({ success: false, message: 'student_id dan iuran_bulanan wajib' });
+    }
+
+    const [student] = await db.query('SELECT id, nama_siswa, iuran_bulanan, ransportasi FROM students WHERE id = ?', [student_id]);
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Siswa tidak ditemukan' });
+    }
+
+    const oldIuran = parseFloat(student.iuran_bulanan) || 0;
+    const newIuran = parseFloat(iuran_bulanan) || 0;
+    const transport = parseFloat(student.ransportasi) || 0;
+
+    // Update iuran in students table
+    await db.query('UPDATE students SET iuran_bulanan = ? WHERE id = ?', [newIuran, student_id]);
+
+    // Update all future billings for this student
+    const now = new Date();
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    await db.query(
+      'UPDATE billing_payment SET spp_bulanan = ?, keterangan_spp = ? WHERE student_id = ? AND bulan >= ? AND status = "belum"',
+      [newIuran, newIuran + transport, student_id, currentMonth]
+    );
+
+    // Recalc student balance
+    await billing.recalcStudent(student_id);
+
+    res.json({
+      success: true,
+      message: `Iuran ${student.nama_siswa} diupdate dari Rp ${oldIuran.toLocaleString('id-ID')} ke Rp ${newIuran.toLocaleString('id-ID')}`,
+      data: {
+        student_id: student_id,
+        nama_siswa: student.nama_siswa,
+        iuran_lama: oldIuran,
+        iuran_baru: newIuran
+      }
+    });
+  } catch (error) {
+    console.error('Update iuran error:', error);
+    res.status(500).json({ success: false, message: 'Gagal update iuran' });
+  }
+});
+router.put('/treasurer/bendahara/billing/update-batch', authenticateBendahara, async (req, res) => {
+  try {
+    await billing.ensureBillingTables();
+    const { updates } = req.body;
+
+    if (!Array.isArray(updates) || updates.length === 0) {
+      return res.status(400).json({ success: false, message: 'Array updates wajib' });
+    }
+
+    let updated = 0;
+    const details = [];
+
+    for (const update of updates) {
+      try {
+        const { billing_id, subsidi, catatan } = update;
+
+        if (!billing_id) continue;
+
+        const [current] = await db.query('SELECT * FROM billing_payment WHERE id = ?', [billing_id]);
+        if (!current) continue;
+
+        // SPP and Transportasi stay the same - only update subsidi
+        const spp = parseFloat(current.spp_bulanan) || 0;
+        const transport = parseFloat(current.ransportasi) || 0;
+        const subsidiAmount = subsidi !== undefined ? parseFloat(subsidi) : 0;
+        const finalTotal = Math.max(0, spp + transport - subsidiAmount);
+
+        await db.query(
+          `UPDATE billing_payment
+           SET subsidi = ?, keterangan_spp = ?, catatan = ?
+           WHERE id = ?`,
+          [subsidiAmount, finalTotal, catatan || null, billing_id]
+        );
+
+        await billing.recalcStudent(current.student_id);
+        updated++;
+        details.push({
+          billing_id: billing_id,
+          student_id: current.student_id,
+          bulan: current.bulan,
+          spp_bulanan: spp,
+          ransportasi: transport,
+          subsidi: subsidiAmount,
+          keterangan_spp: finalTotal,
+          status: 'updated'
+        });
+      } catch (err) {
+        details.push({
+          billing_id: update.billing_id,
+          error: err.message
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `${updated} billing berhasil diupdate`,
+      updated: updated,
+      details: details
+    });
+  } catch (error) {
+    console.error('Update batch billing error:', error);
+    res.status(500).json({ success: false, message: 'Gagal update batch billing' });
+  }
+});
+
+// POST /api/treasurer/bendahara/billing/create-batch - Create multiple billings for students without billing
+router.post('/treasurer/bendahara/billing/create-batch', authenticateBendahara, async (req, res) => {
+  try {
+    await billing.ensureBillingTables();
+    const { bulan, students } = req.body;
+
+    if (!bulan || !Array.isArray(students) || students.length === 0) {
+      return res.status(400).json({ success: false, message: 'bulan dan array students wajib' });
+    }
+
+    let created = 0;
+    const details = [];
+
+    for (const s of students) {
+      try {
+        const { student_id, subsidi } = s;
+
+        if (!student_id) continue;
+
+        // Check if billing already exists
+        const [existing] = await db.query(
+          'SELECT id FROM billing_payment WHERE student_id = ? AND bulan = ?',
+          [student_id, bulan]
+        );
+
+        if (existing) {
+          details.push({
+            student_id: student_id,
+            bulan: bulan,
+            status: 'skipped',
+            message: 'Billing sudah ada'
+          });
+          continue;
+        }
+
+        // Get SPP, Transportasi, and Subsidi from students table
+        const [student] = await db.query(
+          'SELECT iuran_bulanan, ransportasi, subsidi FROM students WHERE id = ?',
+          [student_id]
+        );
+
+        if (!student) {
+          details.push({
+            student_id: student_id,
+            bulan: bulan,
+            status: 'error',
+            message: 'Siswa tidak ditemukan'
+          });
+          continue;
+        }
+
+        const spp = parseFloat(student.iuran_bulanan) || 0;
+        const transport = parseFloat(student.ransportasi) || 0;
+        const subsidiAmount = parseFloat(student.subsidi) || 0;
+        const keterangan = Math.max(0, spp + transport - subsidiAmount);
+
+        await db.query(
+          `INSERT INTO billing_payment (student_id, bulan, spp_bulanan, ransportasi, subsidi, keterangan_spp, status)
+           VALUES (?, ?, ?, ?, ?, ?, 'belum')`,
+          [student_id, bulan, spp, transport, subsidiAmount, keterangan]
+        );
+
+        await billing.recalcStudent(student_id);
+        created++;
+        details.push({
+          student_id: student_id,
+          bulan: bulan,
+          spp_bulanan: spp,
+          ransportasi: transport,
+          subsidi: subsidiAmount,
+          keterangan_spp: keterangan,
+          status: 'created'
+        });
+        details.push({
+          student_id: student_id,
+          bulan: bulan,
+          spp_bulanan: spp,
+          ransportasi: transport,
+          subsidi: subsidiAmount,
+          status: 'created'
+        });
+      } catch (err) {
+        details.push({
+          student_id: s.student_id,
+          bulan: bulan,
+          status: 'error',
+          error: err.message
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `${created} billing baru berhasil dibuat`,
+      created: created,
+      details: details
+    });
+  } catch (error) {
+    console.error('Create batch billing error:', error);
+    res.status(500).json({ success: false, message: 'Gagal buat batch billing' });
   }
 });
 

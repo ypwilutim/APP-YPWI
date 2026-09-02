@@ -620,6 +620,9 @@ async function fetchTeachers(page = 1) {
               </span>
             </td>
             <td class="px-6 py-4 text-sm space-x-2">
+              <button onclick="showMutasiTeachersModal(${t.id}, '${(t.nama || '-').replace(/'/g, "\\'")}', '${Array.isArray(t.assignments) ? t.assignments.map(a => a.nama_sekolah || a.tenant_id).join(', ') : (typeof t.assignments === 'string' ? t.assignments : '-')}', '${Array.isArray(t.assignments) ? t.assignments.map(a => a.tenant_id).join(',') : (typeof t.assignments === 'string' ? t.assignments.split(',')[0]?.split(':')[0] || '' : '')}')" class="inline-flex items-center p-1.5 text-purple-600 hover:text-purple-800 hover:bg-purple-50 rounded-md transition-colors duration-150" title="Mutasi">
+                <i class="fas fa-exchange-alt text-sm"></i>
+              </button>
               <button onclick="createUser(${t.id})" class="inline-flex items-center p-1.5 text-green-600 hover:text-green-800 hover:bg-green-50 rounded-md transition-colors duration-150" title="Buat User">
                 <i class="fas fa-user-plus text-sm"></i>
               </button>
@@ -2953,6 +2956,7 @@ let totalStudents = 0;
 let totalStudentPages = 0;
 let studentSortBy = 'nama_siswa';
 let studentSortDir = 'ASC';
+let studentGenderFilterValue = '';
 
 window.sortStudents = function (field) {
     if (studentSortBy === field) {
@@ -2971,8 +2975,9 @@ window.loadStudents = async function (page = 1) {
     const search = window.studentSearchValue || (searchInput ? searchInput.value.trim() : '');
     const classId = window.studentClassFilterValue || '';
     const tenantId = window.studentTenantFilterValue || window.tenantId || (JSON.parse(localStorage.getItem('user') || '{}'))?.tenant_id || (JSON.parse(localStorage.getItem('user') || '{}'))?.assignments?.[0]?.tenant_id || '';
+    const gender = window.studentGenderFilterValue || '';
 
-    tbody.innerHTML = '<tr><td colspan="7" class="px-6 py-12 text-center text-gray-500"><i class="fas fa-spinner fa-spin"></i> Memuat...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="px-6 py-12 text-center text-gray-500"><i class="fas fa-spinner fa-spin"></i> Memuat...</td></tr>';
 
     try {
         const params = new URLSearchParams({
@@ -2984,6 +2989,7 @@ window.loadStudents = async function (page = 1) {
         if (search) params.append('search', search);
         if (classId) params.append('class_id', classId);
         if (tenantId) params.append('tenant_id', tenantId);
+        if (gender) params.append('jenis_kelamin', gender);
 
         const response = await fetch('/api/admin/students?' + params.toString(), {
             headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') }
@@ -3001,6 +3007,7 @@ if (data.success) {
                 <td class="px-6 py-4">${s.nisn || '-'}</td>
                 <td class="px-6 py-4">${s.nis || '-'}</td>
                 <td class="px-6 py-4">${s.nama_kelas || '-'}</td>
+                <td class="px-6 py-4">${s.jenis_kelamin === 'L' ? 'Laki-laki' : s.jenis_kelamin === 'P' ? 'Perempuan' : '-'}</td>
                 <td class="px-6 py-4">${s.nama_orang_tua || '-'}<br><small>${s.no_wa_ortu || ''}</small></td>
                 <td class="px-6 py-4">Rp ${(s.iuran_bulanan || 0).toLocaleString('id-ID')}</td>
                 <td class="px-6 py-4">
@@ -3438,7 +3445,89 @@ window.refreshTenantLocations = refreshTenantLocations;
 
 // Stub functions untuk fitur yang belum diimplementasi sepenuhnya
 window.openWhatsAppMessenger = function () { };
-window.showMutasiTeachersModal = function () { };
+window.showMutasiTeachersModal = async function (id, nama, oldSchool, oldTenant) {
+    const modal = document.getElementById('teacherMutasiModal');
+    if (!modal) return;
+
+    document.getElementById('mutasiTeacherId').value = id || '';
+    document.getElementById('mutasiTeacherName').value = nama || '-';
+    document.getElementById('mutasiOldSchool').value = oldSchool || '-';
+    document.getElementById('mutasiReason').value = '';
+
+    const targetWrapper = document.getElementById('mutasiTargetWrapper');
+    const targetSel = document.getElementById('mutasiTarget');
+
+    const authHdr = () => ({ 'Authorization': 'Bearer ' + (window.authToken || localStorage.getItem('token') || '') });
+    const tenantsRes = await fetch('/api/admin/tenants?limit=500', { headers: authHdr() });
+    const tenantsData = await tenantsRes.json();
+    const tenants = tenantsData.success ? tenantsData.data : [];
+
+    const currentOldTenant = String(oldTenant || '').split(',')[0];
+    targetSel.innerHTML = '<option value="">Pilih Sekolah Tujuan</option>' +
+      tenants.filter(t => String(t.tenant_id) !== currentOldTenant).map(t => `<option value="${t.tenant_id}">${t.nama_sekolah}</option>`).join('') +
+      '<option value="other">Lainnya...</option>';
+
+    document.getElementById('mutasiOtherInput').classList.add('hidden');
+    document.getElementById('mutasiType').value = 'transfer';
+    targetWrapper.classList.remove('hidden');
+
+    modal.classList.add('show');
+  };
+
+  window.closeTeacherMutasiModal = function () {
+    const modal = document.getElementById('teacherMutasiModal');
+    if (modal) modal.classList.remove('show');
+  };
+
+  window.toggleTeacherMutasiType = function () {
+    const type = document.getElementById('mutasiType').value;
+    const targetWrapper = document.getElementById('mutasiTargetWrapper');
+    targetWrapper.classList.toggle('hidden', type !== 'transfer');
+  };
+
+  window.toggleTeacherMutasiOtherInput = function () {
+    const target = document.getElementById('mutasiTarget').value;
+    const otherInput = document.getElementById('mutasiOtherInput');
+    otherInput.classList.toggle('hidden', target !== 'other');
+  };
+
+  window.submitTeacherMutasi = async function () {
+    const teacherId = document.getElementById('mutasiTeacherId').value;
+    const mutasiType = document.getElementById('mutasiType').value;
+    const targetTenant = document.getElementById('mutasiTarget').value;
+    const otherSchoolName = document.getElementById('mutasiOtherSchoolName').value.trim();
+    const reason = document.getElementById('mutasiReason').value.trim();
+
+    if (mutasiType === 'transfer' && !targetTenant) {
+      alert('Pilih tujuan mutasi');
+      return;
+    }
+
+    if (!reason) {
+      alert('Alasan mutasi wajib diisi');
+      return;
+    }
+
+    try {
+      const authHdr = () => ({ 'Authorization': 'Bearer ' + (window.authToken || localStorage.getItem('token') || '') });
+      const res = await fetch('/api/admin/mutasi/teachers/' + teacherId + '/initiate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHdr() },
+        body: JSON.stringify({ reason: (mutasiType === 'keluar' ? 'Keluar/Resign: ' : '') + reason })
+      });
+      const data = await res.json();
+      closeTeacherMutasiModal();
+      fetchTeachers(1);
+      if (data.success) {
+        showToast(data.message || 'Mutasi berhasil diproses', 'success');
+      } else {
+        showToast(data.message || 'Gagal memproses mutasi', 'error');
+      }
+    } catch (e) {
+      console.error('[TEACHER MUTASI]', e);
+      showToast('Terjadi kesalahan', 'error');
+    }
+  };
 window.loadStudentPaymentSummary = function () { };
 window.loadEmploymentRules = function () { };
 window.createBackup = function () { };
@@ -3481,7 +3570,12 @@ window.saveStudentEdit = function () { alert('Fitur edit siswa belum tersedia');
     const cSel = document.getElementById('editStudentClass');
     try {
       const tr = await fetch('/api/admin/tenants?limit=500', { headers: studentAuthHdr() }).then(r => r.json());
-      if (tSel) tSel.innerHTML = (tr.data || []).map(t => `<option value="${t.tenant_id}" ${t.tenant_id === tenantId ? 'selected' : ''}>${t.nama_sekolah}</option>`).join('');
+      if (tSel) {
+        tSel.innerHTML = (tr.data || []).map(t => {
+          const selected = String(t.tenant_id) === String(tenantId);
+          return `<option value="${t.tenant_id}" ${selected ? 'selected' : ''}>${t.nama_sekolah}</option>`;
+        }).join('');
+      }
     } catch (e) { console.error(e); }
     try {
       const effectiveTenantId = tenantId || window.tenantId || (JSON.parse(localStorage.getItem('user') || '{}'))?.tenant_id || (JSON.parse(localStorage.getItem('user') || '{}'))?.assignments?.[0]?.tenant_id;
@@ -3513,13 +3607,24 @@ window.saveStudentEdit = function () { alert('Fitur edit siswa belum tersedia');
       document.getElementById('editStudentIuran').value = s.iuran_bulanan ?? 0;
       document.getElementById('editStudentParent').value = s.nama_orang_tua || '';
       document.getElementById('editStudentWa').value = s.no_wa_ortu || '';
+      document.getElementById('editStudentNik').value = s.nik_orang_tua || '';
+      document.getElementById('editStudentEmail').value = s.email_orang_tua || '';
+      document.getElementById('editStudentRansportasi').value = s.ransportasi ?? 0;
+      document.getElementById('editStudentSubsidi').value = s.subsidi ?? 0;
+      document.getElementById('editStudentPrivat').value = s.privat ?? 0;
+      document.getElementById('editStudentBiayaLain').value = s.biaya_lain ?? 0;
+      document.getElementById('editStudentBiayaLainNama').value = s.biaya_lain_nama || '';
+      document.getElementById('editStudentTanggalMasuk').value = s.tanggal_masuk || '';
+      document.getElementById('editStudentStatus').value = s.status || 'aktif';
       await populateStudentEditSelects(s.tenant_id, s.class_id);
+      showEditStep(1);
       document.getElementById('studentEditModal').classList.add('show');
     } catch (e) { console.error(e); alert('Error memuat siswa'); }
   };
 
   window.saveStudentEdit = async function () {
     const id = document.getElementById('editStudentId').value;
+    const tanggalMasuk = document.getElementById('editStudentTanggalMasuk').value;
     const payload = {
       tenant_id: document.getElementById('editStudentTenant').value,
       class_id: document.getElementById('editStudentClass').value || null,
@@ -3529,7 +3634,16 @@ window.saveStudentEdit = function () { alert('Fitur edit siswa belum tersedia');
       jenis_kelamin: document.getElementById('editStudentJk').value,
       iuran_bulanan: parseFloat(document.getElementById('editStudentIuran').value) || 0,
       nama_orang_tua: document.getElementById('editStudentParent').value,
-      no_wa: document.getElementById('editStudentWa').value
+      no_wa: document.getElementById('editStudentWa').value,
+      nik_orang_tua: document.getElementById('editStudentNik').value,
+      email_orang_tua: document.getElementById('editStudentEmail').value,
+      ransportasi: parseFloat(document.getElementById('editStudentRansportasi').value) || 0,
+      subsidi: parseFloat(document.getElementById('editStudentSubsidi').value) || 0,
+      privat: parseFloat(document.getElementById('editStudentPrivat').value) || 0,
+      biaya_lain: parseFloat(document.getElementById('editStudentBiayaLain').value) || 0,
+      biaya_lain_nama: document.getElementById('editStudentBiayaLainNama').value,
+      tanggal_masuk: tanggalMasuk,
+      status: document.getElementById('editStudentStatus').value
     };
     try {
       const res = await fetch('/api/admin/students/' + id, {
@@ -3548,6 +3662,120 @@ window.saveStudentEdit = function () { alert('Fitur edit siswa belum tersedia');
 
   window.closeStudentEditModal = function () {
     document.getElementById('studentEditModal')?.classList.remove('show');
+    showEditStep(1);
+  };
+
+  // Generate NIS for existing student (edit modal)
+  window.generateNisEdit = async function () {
+    const studentId = document.getElementById('editStudentId').value;
+    const nisField = document.getElementById('editStudentNis');
+    const currentNis = nisField.value;
+
+    if (currentNis) {
+      if (!confirm('Siswa sudah punya NIS: ' + currentNis + '. Generate ulang?')) return;
+    }
+
+    // Validate required fields
+    const tanggalMasuk = document.getElementById('editStudentTanggalMasuk').value;
+    const tenantSelect = document.getElementById('editStudentTenant');
+    const tenantId = tenantSelect ? tenantSelect.value : '';
+    const namaOrtu = document.getElementById('editStudentParent').value.trim();
+    const noWa = document.getElementById('editStudentWa').value.trim();
+    const namaSiswa = document.getElementById('editStudentNama').value.trim();
+
+    const errors = [];
+    if (!namaSiswa) errors.push('Nama Siswa');
+    if (!tanggalMasuk) errors.push('Tanggal Masuk');
+    if (!tenantId) errors.push('Sekolah (Tenant)');
+    if (!namaOrtu && !noWa) errors.push('Data Orang Tua (minimal nama atau no. WA)');
+
+    if (errors.length > 0) {
+      alert('Lengkapi data berikut terlebih dahulu:\n- ' + errors.join('\n- '));
+      return;
+    }
+
+    try {
+      console.log('[GEN NIS] tanggalMasuk from form:', tanggalMasuk);
+      const res = await fetch('/api/admin/students/' + studentId + '/generate-nis', {
+        method: 'POST',
+        headers: { ...studentAuthHdr(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tanggal_masuk: tanggalMasuk })
+      });
+      const d = await res.json();
+      console.log('[GEN NIS] Response:', d);
+      if (d.success) {
+        nisField.value = d.data.nis;
+        alert('NIS berhasil dibuat: ' + d.data.nis);
+      } else {
+        alert(d.message || 'Gagal generate NIS');
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Error generate NIS');
+    }
+  };
+
+  // Auto-save tanggal_masuk saat user memilih tanggal
+  window.autoSaveTanggalMasuk = async function (value) {
+    const studentId = document.getElementById('editStudentId').value;
+    if (!studentId || !value) return;
+
+    // Convert YYYY-MM-DD to MM-YYYY format for database
+    const parts = value.split('-');
+    if (parts.length >= 2) {
+      const tahun = parts[0];
+      const bulan = parts[1];
+      const tanggalMasakFormatted = `${bulan}-${tahun}`;
+
+      try {
+        const res = await fetch('/api/admin/students/' + studentId + '/update-tanggal-masuk', {
+          method: 'POST',
+          headers: { ...studentAuthHdr(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tanggal_masuk: tanggalMasakFormatted })
+        });
+        const d = await res.json();
+        if (d.success) {
+          console.log('[AUTO-SAVE] Tanggal masuk disimpan:', tanggalMasakFormatted);
+        } else {
+          console.error('[AUTO-SAVE] Gagal:', d.message);
+        }
+      } catch (e) {
+        console.error('[AUTO-SAVE] Error:', e);
+      }
+    }
+  };
+
+  // Edit student step navigation
+  let currentEditStep = 1;
+
+  window.showEditStep = function (step) {
+    currentEditStep = step;
+    for (let i = 1; i <= 3; i++) {
+      const bar = document.getElementById('editStep' + i + 'Bar');
+      const content = document.getElementById('editStep' + i + 'Content');
+      if (bar) {
+        if (i === step) {
+          bar.className = 'flex-1 text-center py-2 bg-blue-600 text-white text-sm cursor-pointer' + (i === 1 ? ' rounded-l-md' : '') + (i === 3 ? ' rounded-r-md' : '');
+        } else {
+          bar.className = 'flex-1 text-center py-2 bg-gray-300 text-gray-700 text-sm cursor-pointer' + (i === 1 ? ' rounded-l-md' : '') + (i === 3 ? ' rounded-r-md' : '');
+        }
+      }
+      if (content) content.classList.toggle('hidden', i !== step);
+    }
+    const prevBtn = document.getElementById('editPrevBtn');
+    const nextBtn = document.getElementById('editNextBtn');
+    const saveBtn = document.getElementById('editSaveBtn');
+    if (prevBtn) prevBtn.classList.toggle('hidden', step === 1);
+    if (nextBtn) nextBtn.classList.toggle('hidden', step === 3);
+    if (saveBtn) saveBtn.classList.toggle('hidden', step !== 3);
+  };
+
+  window.nextEditStep = function () {
+    if (currentEditStep < 3) showEditStep(currentEditStep + 1);
+  };
+
+  window.prevEditStep = function () {
+    if (currentEditStep > 1) showEditStep(currentEditStep - 1);
   };
 
   // Student Mutasi Functions

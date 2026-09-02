@@ -1122,7 +1122,7 @@ style="font-size: 0.95rem; font-weight: 700; color: #0f172a; margin: 0 0 0.75rem
   
 
   <!-- Approval Perizinan Modal -->
-  <div id="approvalIzinModal" class="modal-overlay" style="display: none;">
+  <div id="approvalIzinModal" class="modal-overlay" style="display: none;" onclick="if(event.target===this) closeApprovalIzinModal()">
     <div class="modal-container" style="max-width: 720px; max-height: 90vh; overflow-y: auto;">
       <div class="modal-header" style="background: linear-gradient(135deg, #7c3aed, #6d28d1); position: sticky; top: 0; z-index: 10;">
         <div style="display: flex; align-items: center; justify-content: space-between;">
@@ -1130,7 +1130,7 @@ style="font-size: 0.95rem; font-weight: 700; color: #0f172a; margin: 0 0 0.75rem
             <i class="fas fa-user-check" style="font-size: 1.25rem;"></i>
             <h3 style="margin: 0; font-size: 1.25rem;">Approval Perizinan</h3>
           </div>
-          <button onclick="closeApprovalIzinModal()" style="background: none; border: none; color: white; cursor: pointer;">
+          <button type="button" onclick="closeApprovalIzinModal()" aria-label="Tutup" style="background: rgba(255,255,255,0.15); border: none; color: white; cursor: pointer; width: 36px; height: 36px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 1.1rem; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">
             <i class="fas fa-times"></i>
           </button>
         </div>
@@ -1176,6 +1176,10 @@ style="font-size: 0.95rem; font-weight: 700; color: #0f172a; margin: 0 0 0.75rem
           <i class="fas fa-spinner spinner" style="font-size: 1.25rem; margin-bottom: 0.5rem; display: inline-block;"></i>
           <p style="margin: 0;">Memuat data perizinan...</p>
         </div>
+      </div>
+
+      <div style="padding: 0.75rem 1.25rem 1.25rem 1.25rem; display: flex; justify-content: flex-end; gap: 0.5rem; position: sticky; bottom: 0; background: #fff; border-top: 1px solid #e2e8f0;">
+        <button type="button" onclick="closeApprovalIzinModal()" style="padding: 0.5rem 1.25rem; border-radius: 0.5rem; border: 1px solid #cbd5e1; background: #fff; color: #0f172a; font-weight: 600; font-size: 0.85rem; cursor: pointer;">Tutup</button>
       </div>
     </div>
   </div>

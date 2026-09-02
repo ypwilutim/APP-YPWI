@@ -605,15 +605,19 @@
             }).then(() => { window.location.href = 'dashboard.html'; });
             return false;
           }
-          isKetuaYayasan = true;
-          canManage = false;
-          // Tentukan level: YPWILUTIM = yayasan-level (terbatas API), lainnya = sekolah-level
-          const yayasanAssignment = leaderAssignments.find(a => a.tenant_id === 'YPWILUTIM');
-          if (yayasanAssignment) {
+          // Hanya Ketua di YPWILUTIM yang lihat SEMUA data sekolah (level yayasan); selainnya (Kepala Sekolah/Pimpinan/bendahara/admin) hanya lihat sekolahnya sendiri.
+          const ketuaAssignment = assignments.find(a =>
+            a.tenant_id === 'YPWILUTIM' && (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '').includes('ketua')
+          );
+          if (ketuaAssignment) {
+            isKetuaYayasan = true;
+            canManage = true;
             leaderLevel = 'yayasan';
-            schoolTenant = yayasanAssignment.tenant_id;
-            schoolName = yayasanAssignment.nama_sekolah;
+            schoolTenant = 'YPWILUTIM';
+            schoolName = ketuaAssignment.nama_sekolah || 'YPWI Lutim';
           } else {
+            isKetuaYayasan = false;
+            canManage = false;
             leaderLevel = 'sekolah';
             const a = leaderAssignments[0];
             schoolTenant = a.tenant_id;

@@ -122,6 +122,11 @@
           <span>Rekap Absensi</span>
         </button>
         <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+          data-tab="updateBilling">
+          <i class="fas fa-edit"></i>
+          <span>Update Billing</span>
+        </button>
+        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
           data-tab="payment-gateway">
           <i class="fas fa-credit-card"></i>
           <span>Payment Gateway</span>
@@ -405,13 +410,57 @@
                     </tr>
                   </thead>
                   <tbody id="studentInvoicesTable" class="divide-y divide-gray-100"></tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-</div>
+                 </table>
+               </div>
+             </div>
+           </div>
+        </div>
        </div>
- 
+
+       <!-- Update Billing Tab -->
+       <div id="updateBillingTab" class="tab-content hidden">
+         <div class="bg-white rounded-xl shadow-sm border-2 border-blue-200 p-6 mb-4">
+           <h3 class="text-lg font-semibold mb-4">Update Billing Siswa</h3>
+           <div class="flex flex-wrap gap-2 mb-4">
+             <select id="updateBillingMonthSelect" class="px-3 py-2 border">
+               <option value="1">Januari</option><option value="2">Februari</option><option value="3">Maret</option><option value="4">April</option>
+               <option value="5">Mei</option><option value="6">Juni</option><option value="7">Juli</option><option value="8">Agustus</option>
+               <option value="9">September</option><option value="10">Oktober</option><option value="11">November</option><option value="12">Desember</option>
+             </select>
+             <select id="updateBillingYearSelect" class="px-3 py-2 border"></select>
+             <select id="updateBillingTenantSelect" class="px-3 py-2 border">
+               <option value="">Semua Sekolah</option>
+             </select>
+             <button onclick="loadUpdateBillingData()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm"><i class="fas fa-sync-alt mr-1"></i>Cari</button>
+             <button onclick="batchUpdateBilling()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm"><i class="fas fa-save mr-1"></i>Simpan Perubahan</button>
+             <button onclick="createMissingBillings()" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm"><i class="fas fa-plus mr-1"></i>Buat Billing Baru</button>
+           </div>
+           <div class="flex gap-4 mb-3 text-sm">
+             <span class="px-3 py-1 bg-gray-100 rounded-full">Sudah ada: <strong id="updateBillingExistingCount">0</strong></span>
+             <span class="px-3 py-1 bg-blue-100 rounded-full">Belum ada: <strong id="updateBillingMissingCount">0</strong></span>
+           </div>
+           <div class="overflow-auto flex-1">
+             <table class="w-full text-sm">
+               <thead class="bg-gray-50 border-b sticky top-0">
+                 <tr>
+                   <th class="px-3 py-2 text-center"><input type="checkbox" onclick="toggleAllBillingChecks(this)"></th>
+                   <th class="px-3 py-2 text-left">Nama Siswa</th>
+                   <th class="px-3 py-2 text-left">NISN</th>
+                   <th class="px-3 py-2 text-right">Iuran Siswa</th>
+                   <th class="px-3 py-2 text-right">SPP Bulan Ini</th>
+                   <th class="px-3 py-2 text-right">Subsidi</th>
+                   <th class="px-3 py-2 text-center">Keterangan</th>
+                   <th class="px-3 py-2 text-center">Status</th>
+                 </tr>
+               </thead>
+               <tbody id="updateBillingTableBody">
+                 <tr><td colspan="8" class="px-3 py-8 text-center text-gray-500">Pilih bulan dan klik Cari</td></tr>
+               </tbody>
+             </table>
+           </div>
+         </div>
+       </div>
+  
        <!-- Invoice Individual Tab -->
        <div id="invoice-individualTab" class="tab-content hidden">
          <div class="bg-white rounded-xl shadow-sm border-2 border-indigo-200 p-6 mb-4">
@@ -1257,6 +1306,8 @@ async function createIndividualConcessionInvoice() {
     <script>
       // ===================== BSI VA MANUAL =====================
       let bsiStudentCache = [];
+      let updateBillingData = { existing: [], missing: [] };
+      let updateBillingTabReady = false;
 
       // Isi dropdown sekolah di tab Payment Gateway
       async function loadBsiTenants() {
@@ -1511,6 +1562,249 @@ async function createIndividualConcessionInvoice() {
         return out;
       }
 
+      // ===================== UPDATE BILLING =====================
+      function initUpdateBillingTab() {
+        if (updateBillingTabReady) return;
+        updateBillingTabReady = true;
+        
+        // Populate year select
+        const yearSel = document.getElementById('updateBillingYearSelect');
+        const now = new Date();
+        yearSel.innerHTML = '';
+        for (let y = now.getFullYear() - 2; y <= now.getFullYear() + 1; y++) {
+          const opt = document.createElement('option');
+          opt.value = y;
+          opt.textContent = y;
+          if (y === now.getFullYear()) opt.selected = true;
+          yearSel.appendChild(opt);
+        }
+        
+        // Set current month
+        document.getElementById('updateBillingMonthSelect').value = now.getMonth() + 1;
+        
+        // Load tenants
+        loadUpdateBillingTenants();
+      }
+
+      async function loadUpdateBillingTenants() {
+        try {
+          const res = await fetch('/api/treasurer/public/tenants', { headers: getAuthHeader() });
+          const data = await res.json();
+          const sel = document.getElementById('updateBillingTenantSelect');
+          sel.innerHTML = '<option value="">Semua Sekolah</option>' +
+            (data.data || []).map(t => `<option value="${t.tenant_id}">${t.nama_sekolah}</option>`).join('');
+        } catch (e) {
+          console.error('loadUpdateBillingTenants', e);
+        }
+      }
+
+      async function loadUpdateBillingData() {
+        const monthSel = document.getElementById('updateBillingMonthSelect');
+        const yearSel = document.getElementById('updateBillingYearSelect');
+        const tenantSel = document.getElementById('updateBillingTenantSelect');
+        
+        const month = monthSel.value;
+        const year = yearSel.value;
+        const tenantId = tenantSel.value;
+        const bulan = year + '-' + String(month).padStart(2, '0');
+        
+        try {
+          const params = new URLSearchParams({ bulan });
+          if (tenantId) params.set('tenant_id', tenantId);
+          
+          const res = await fetch('/api/treasurer/bendahara/billing/month-data?' + params.toString(), {
+            headers: getAuthHeader()
+          });
+          const d = await res.json();
+          
+          if (d.success) {
+            updateBillingData = d.data;
+            renderUpdateBillingTable();
+          } else {
+            showToast(d.message || 'Gagal load data', 'error');
+          }
+        } catch (e) {
+          showToast('Gagal: ' + e.message, 'error');
+        }
+      }
+
+      function renderUpdateBillingTable() {
+        const tbody = document.getElementById('updateBillingTableBody');
+        const existingCount = document.getElementById('updateBillingExistingCount');
+        const missingCount = document.getElementById('updateBillingMissingCount');
+        
+        existingCount.textContent = updateBillingData.existing.length;
+        missingCount.textContent = updateBillingData.missing.length;
+        
+        let html = '';
+        
+        updateBillingData.existing.forEach(b => {
+          const sppFinal = b.spp_bulanan - (b.subsidi || 0);
+          html += `
+            <tr class="border-b hover:bg-gray-50">
+              <td class="px-3 py-2">
+                <input type="checkbox" class="update-billing-check" value="${b.billing_id}" data-student="${b.nama_siswa}" data-spp="${b.spp_bulanan}">
+              </td>
+              <td class="px-3 py-2">
+                <div class="font-medium">${b.nama_siswa}</div>
+                <div class="text-xs text-gray-400">${b.catatan || ''}</div>
+              </td>
+              <td class="px-3 py-2">${b.nisn || '-'}</td>
+              <td class="px-3 py-2 text-right">
+                <input type="number" class="update-iuran-input w-28 px-2 py-1 border rounded text-right text-sm" value="${b.iuran_bulanan}" data-student-id="${b.student_id}" data-billing="${b.billing_id}" title="Iuran bulanan siswa">
+                <button onclick="updateIuranSiswa(${b.student_id}, this)" class="ml-1 text-xs text-blue-600 hover:text-blue-800" title="Update iuran untuk bulan-bulan berikutnya">
+                  <i class="fas fa-save"></i>
+                </button>
+              </td>
+              <td class="px-3 py-2 text-right">
+                <input type="number" class="update-spp-input w-28 px-2 py-1 border rounded text-right text-sm" value="${sppFinal}" data-billing="${b.billing_id}" data-iuran="${b.iuran_bulanan}">
+              </td>
+              <td class="px-3 py-2 text-right">
+                <input type="number" class="update-subsidi-input w-28 px-2 py-1 border rounded text-right text-sm" value="${b.subsidi || 0}" data-billing="${b.billing_id}" placeholder="0">
+              </td>
+              <td class="px-3 py-2 text-center">
+                ${b.subsidi > 0 ? `<span class="text-green-600 text-xs"><i class="fas fa-check-circle"></i> Subsidi</span>` : '-'}
+              </td>
+              <td class="px-3 py-2 text-center">
+                <span class="px-2 py-1 rounded text-xs ${b.status === 'lunas' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}">${b.status}</span>
+              </td>
+            </tr>
+          `;
+        });
+        
+        updateBillingData.missing.forEach(s => {
+          html += `
+            <tr class="border-b bg-blue-50">
+              <td class="px-3 py-2">
+                <input type="checkbox" class="create-billing-check" data-student-id="${s.student_id}" data-nama="${s.nama_siswa}" data-iuran="${s.iuran_bulanan}">
+              </td>
+              <td class="px-3 py-2">${s.nama_siswa}</td>
+              <td class="px-3 py-2">${s.nisn || '-'}</td>
+              <td class="px-3 py-2 text-right">
+                <span class="text-sm font-medium">Rp ${s.iuran_bulanan.toLocaleString('id-ID')}</span>
+              </td>
+              <td class="px-3 py-2 text-right">
+                <input type="number" class="create-spp-input w-28 px-2 py-1 border rounded text-right text-sm" value="${s.iuran_bulanan}" data-student="${s.student_id}">
+              </td>
+              <td class="px-3 py-2 text-center text-gray-400">-</td>
+              <td class="px-3 py-2 text-center text-gray-400">Baru</td>
+              <td class="px-3 py-2 text-center">
+                <span class="px-2 py-1 rounded text-xs bg-blue-100 text-blue-800">Belum ada billing</span>
+              </td>
+            </tr>
+          `;
+        });
+        
+        tbody.innerHTML = html || '<tr><td colspan="8" class="px-3 py-4 text-center text-gray-500">Tidak ada data</td></tr>';
+      }
+
+      async function updateIuranSiswa(studentId, btn) {
+        const input = btn.previousElementSibling;
+        const newIuran = parseFloat(input.value) || 0;
+        
+        if (newIuran < 0) {
+          showToast('Iuran tidak boleh negatif', 'error');
+          return;
+        }
+        
+        try {
+          const res = await fetch('/api/treasurer/bendahara/billing/update-iuran', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+            body: JSON.stringify({ student_id: studentId, iuran_bulanan: newIuran })
+          });
+          const d = await res.json();
+          if (d.success) {
+            showToast(d.message, 'success');
+            loadUpdateBillingData();
+          } else {
+            showToast(d.message || 'Gagal update iuran', 'error');
+          }
+        } catch (e) {
+          showToast('Gagal: ' + e.message, 'error');
+        }
+      }
+
+      async function batchUpdateBilling() {
+        const checks = document.querySelectorAll('.update-billing-check:checked');
+        if (!checks.length) {
+          showToast('Pilih billing yang akan diupdate', 'error');
+          return;
+        }
+        
+        const updates = Array.from(checks).map(chk => {
+          const billingId = chk.value;
+          const row = chk.closest('tr');
+          const spp = row.querySelector('.update-spp-input');
+          const subsidi = row.querySelector('.update-subsidi-input');
+          return {
+            billing_id: parseInt(billingId),
+            spp_bulanan: parseFloat(spp.value) || 0,
+            subsidi: parseFloat(subsidi.value) || 0
+          };
+        });
+        
+        try {
+          const res = await fetch('/api/treasurer/bendahara/billing/update-batch', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+            body: JSON.stringify({ updates })
+          });
+          const d = await res.json();
+          if (d.success) {
+            showToast(d.message || 'Berhasil update ' + updates.length + ' billing', 'success');
+            loadUpdateBillingData();
+          } else {
+            showToast(d.message || 'Gagal update', 'error');
+          }
+        } catch (e) {
+          showToast('Gagal: ' + e.message, 'error');
+        }
+      }
+
+      async function createMissingBillings() {
+        const checks = document.querySelectorAll('.create-billing-check:checked');
+        if (!checks.length) {
+          showToast('Pilih siswa yang akan dibuat billingnya', 'error');
+          return;
+        }
+        
+        const students = Array.from(checks).map(chk => {
+          const row = chk.closest('tr');
+          const spp = row.querySelector('.create-spp-input');
+          return {
+            student_id: parseInt(chk.dataset.studentId),
+            spp_bulanan: parseFloat(spp.value) || 0
+          };
+        });
+        
+        const monthSel = document.getElementById('updateBillingMonthSelect');
+        const yearSel = document.getElementById('updateBillingYearSelect');
+        const bulan = yearSel.value + '-' + String(monthSel.value).padStart(2, '0');
+        
+        try {
+          const res = await fetch('/api/treasurer/bendahara/billing/create-batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+            body: JSON.stringify({ bulan, students })
+          });
+          const d = await res.json();
+          if (d.success) {
+            showToast(d.message || 'Berhasil buat ' + students.length + ' billing', 'success');
+            loadUpdateBillingData();
+          } else {
+            showToast(d.message || 'Gagal buat billing', 'error');
+          }
+        } catch (e) {
+          showToast('Gagal: ' + e.message, 'error');
+        }
+      }
+
+      function toggleAllBillingChecks(master) {
+        const isChecked = master.checked;
+        document.querySelectorAll('.update-billing-check, .create-billing-check').forEach(cb => cb.checked = isChecked);
+      }
+
       // Init tab
       (function () {
         const origInit = initDashboard;
@@ -1519,6 +1813,15 @@ async function createIndividualConcessionInvoice() {
           loadBsiTenants();
         };
       })();
+
+      // Handle tab switch for updateBilling
+      document.querySelectorAll('.nav-item').forEach(btn => {
+        btn.addEventListener('click', function() {
+          if (this.dataset.tab === 'updateBilling') {
+            initUpdateBillingTab();
+          }
+        });
+      });
     </script>
   </body>
 

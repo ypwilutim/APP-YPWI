@@ -16,6 +16,39 @@ const { extractKTPFromImage } = require('../utils/geminiOcr');
 const router = express.Router();
 const XLSX = require('xlsx');
 
+// Ensure students table has required columns (auto-migrate)
+async function ensureStudentColumns() {
+  const columns = [
+    { name: 'ransportasi', type: 'decimal(10,2) DEFAULT 0.00', after: 'iuran_bulanan' },
+    { name: 'subsidi', type: 'decimal(10,2) DEFAULT 0.00', after: 'ransportasi' },
+    { name: 'privat', type: 'decimal(10,2) DEFAULT 0.00', after: 'subsidi' },
+    { name: 'biaya_lain', type: 'decimal(10,2) DEFAULT 0.00', after: 'privat' },
+    { name: 'biaya_lain_nama', type: 'varchar(255) DEFAULT NULL', after: 'biaya_lain' },
+    { name: 'tanggal_masuk', type: 'date DEFAULT NULL', after: 'jenis_kelamin' },
+    { name: 'tahun_masuk', type: 'varchar(10) DEFAULT NULL', after: 'tanggal_masuk' },
+    { name: 'status', type: "varchar(20) DEFAULT 'aktif'", after: 'tahun_masuk' }
+  ];
+
+  for (const col of columns) {
+    try {
+      await db.query(`ALTER TABLE students ADD COLUMN ${col.name} ${col.type}`);
+    } catch (e) {
+      // Column already exists, ignore error
+      if (e.code !== 'ER_DUP_FIELDNAME') {
+        // Try to add after specific column if it exists
+        try {
+          await db.query(`ALTER TABLE students ADD COLUMN ${col.name} ${col.type} AFTER ${col.after}`);
+        } catch (e2) {
+          // Ignore if column already exists in any position
+          if (e2.code !== 'ER_DUP_FIELDNAME') {
+            console.error(`[ensureStudentColumns] Error adding ${col.name}:`, e2.message);
+          }
+        }
+      }
+    }
+  }
+}
+
 // ============================================================
 // MULTER CONFIG FOR TEACHER PHOTOS
 // ============================================================
@@ -1345,27 +1378,134 @@ router.post('/admin/attendance/qr-decode', authenticateOperator, async (req, res
 // ASSIGNMENT ROUTES - Pembagian Tugas Guru/Staf
 // ==========================================
 
-// GET /api/admin/assignments - List teachers with their assignments
+// GET /api/admin/assignments - List teachers with their assignments (grouped by teacher)
 router.get('/admin/assignments', authenticateOperator, async (req, res) => {
   try {
     const tenantId = req.query.tenant_id;
     const query = `
       SELECT t.id, t.nama, t.nik, t.nip, t.email, t.no_wa,
-             ta.jabatan_di_unit,
-             c.nama_kelas as wali_kelas
+             ta.id as assignment_id, ta.tenant_id, ta.jabatan_di_unit, ta.class_id,
+             c.nama_kelas as wali_kelas,
+             tn.nama_sekolah
       FROM teachers t
       JOIN teacher_assignments ta ON t.id = ta.teacher_id
       LEFT JOIN classes c ON ta.class_id = c.id
+      LEFT JOIN tenants tn ON ta.tenant_id = tn.tenant_id
       WHERE t.status_aktif = 1
       ${tenantId ? 'AND ta.tenant_id = ?' : ''}
-      ORDER BY t.nama ASC
+      ORDER BY t.nama ASC, ta.jabatan_di_unit ASC
     `;
     const params = tenantId ? [tenantId] : [];
-    const teachers = await db.query(query, params);
+    const rows = await db.query(query, params);
+
+    // Group by teacher
+    const teacherMap = {};
+    rows.forEach(row => {
+      if (!teacherMap[row.id]) {
+        teacherMap[row.id] = {
+          id: row.id,
+          nama: row.nama,
+          nik: row.nik,
+          nip: row.nip,
+          email: row.email,
+          no_wa: row.no_wa,
+          assignments: []
+        };
+      }
+      teacherMap[row.id].assignments.push({
+        assignment_id: row.assignment_id,
+        tenant_id: row.tenant_id,
+        nama_sekolah: row.nama_sekolah,
+        jabatan_di_unit: row.jabatan_di_unit,
+        class_id: row.class_id,
+        wali_kelas: row.wali_kelas
+      });
+    });
+
+    const teachers = Object.values(teacherMap);
     res.json({ success: true, data: teachers });
   } catch (error) {
     console.error('Admin assignments error:', error);
     res.status(500).json({ success: false, message: 'Error fetching assignments' });
+  }
+});
+
+// DELETE /api/admin/teachers/:id/assignment/:assignmentId - Delete a specific assignment
+router.delete('/admin/teachers/:id/assignment/:assignmentId', authenticateOperator, async (req, res) => {
+  try {
+    const { id, assignmentId } = req.params;
+
+    // Verify teacher exists
+    const [teacher] = await db.query('SELECT id, nama FROM teachers WHERE id = ? AND status_aktif = 1', [id]);
+    if (!teacher) {
+      return res.status(404).json({ success: false, message: 'Guru tidak ditemukan' });
+    }
+
+    // Delete the assignment
+    const result = await db.query('DELETE FROM teacher_assignments WHERE id = ? AND teacher_id = ?', [assignmentId, id]);
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: 'Assignment tidak ditemukan' });
+    }
+
+    res.json({ success: true, message: 'Jabatan berhasil dihapus' });
+  } catch (error) {
+    console.error('Delete assignment error:', error);
+    res.status(500).json({ success: false, message: 'Error deleting assignment' });
+  }
+});
+
+// POST /api/admin/teachers/:id/assignments/bulk - Save multiple assignments for a teacher
+router.post('/admin/teachers/:id/assignments/bulk', authenticateOperator, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { assignments } = req.body;
+
+    if (!assignments || !Array.isArray(assignments) || assignments.length === 0) {
+      return res.status(400).json({ success: false, message: 'Minimal 1 jabatan wajib diisi' });
+    }
+
+    // Verify teacher exists
+    const [teacher] = await db.query('SELECT id FROM teachers WHERE id = ? AND status_aktif = 1', [id]);
+    if (!teacher) {
+      return res.status(404).json({ success: false, message: 'Guru tidak ditemukan' });
+    }
+
+    // Delete existing assignments for this teacher
+    await db.query('DELETE FROM teacher_assignments WHERE teacher_id = ?', [id]);
+
+    // Insert new assignments
+    for (const a of assignments) {
+      const { tenant_id, jabatan_di_unit, class_id } = a;
+
+      if (!tenant_id || !jabatan_di_unit) {
+        continue;
+      }
+
+      // Verify tenant exists
+      const [tenant] = await db.query('SELECT tenant_id FROM tenants WHERE tenant_id = ?', [tenant_id]);
+      if (!tenant) {
+        continue;
+      }
+
+      // If class_id provided, verify it belongs to the selected tenant
+      let validClassId = class_id || null;
+      if (class_id) {
+        const [classCheck] = await db.query('SELECT id FROM classes WHERE id = ? AND tenant_id = ?', [class_id, tenant_id]);
+        if (!classCheck) {
+          validClassId = null;
+        }
+      }
+
+      await db.query(
+        'INSERT INTO teacher_assignments (teacher_id, tenant_id, jabatan_di_unit, class_id) VALUES (?, ?, ?, ?)',
+        [id, tenant_id, jabatan_di_unit, validClassId]
+      );
+    }
+
+    res.json({ success: true, message: `${assignments.length} jabatan berhasil disimpan` });
+  } catch (error) {
+    console.error('Bulk save assignments error:', error);
+    res.status(500).json({ success: false, message: 'Error saving assignments' });
   }
 });
 
@@ -2713,6 +2853,7 @@ router.get('/admin/students', authenticateOperator, async (req, res) => {
 
     const search = req.query.search;
     const classId = req.query.class_id;
+    const jenisKelamin = req.query.jenis_kelamin;
     if (search) {
       countQuery += ' AND (s.nama_siswa LIKE ? OR s.nisn LIKE ? OR s.nis LIKE ?)';
       countParams.push(`%${search}%`, `%${search}%`, `%${search}%`);
@@ -2720,6 +2861,10 @@ router.get('/admin/students', authenticateOperator, async (req, res) => {
     if (classId) {
       countQuery += ' AND s.class_id = ?';
       countParams.push(classId);
+    }
+    if (jenisKelamin) {
+      countQuery += ' AND s.jenis_kelamin = ?';
+      countParams.push(jenisKelamin);
     }
 
     const [totalResult] = await db.query(countQuery, countParams);
@@ -2751,6 +2896,11 @@ router.get('/admin/students', authenticateOperator, async (req, res) => {
       params.push(classId);
     }
 
+    if (jenisKelamin) {
+      query += ' AND s.jenis_kelamin = ?';
+      params.push(jenisKelamin);
+    }
+
     const sortBy = req.query.sortBy || 'nama_siswa';
     const sortDir = req.query.sortDir === 'DESC' ? 'DESC' : 'ASC';
     const allowedSortFields = {
@@ -2759,7 +2909,8 @@ router.get('/admin/students', authenticateOperator, async (req, res) => {
       'nis': 's.nis',
       'nama_kelas': 'c.nama_kelas',
       'nama_sekolah': 'tn.nama_sekolah',
-      'iuran_bulanan': 's.iuran_bulanan'
+      'iuran_bulanan': 's.iuran_bulanan',
+      'jenis_kelamin': 's.jenis_kelamin'
     };
     const sortField = allowedSortFields[sortBy] || 's.nama_siswa';
 
@@ -2845,7 +2996,9 @@ router.get('/admin/students/incomplete/export', authenticateOperator, async (req
     }
 
     const students = await db.query(`
-      SELECT s.id, s.nama_siswa, s.nisn, s.nis, s.jenis_kelamin, s.iuran_bulanan,
+      SELECT s.id, s.nama_siswa, s.nisn, s.jenis_kelamin, s.iuran_bulanan,
+             s.ransportasi, s.subsidi, s.privat, s.biaya_lain, s.biaya_lain_nama,
+             s.status, s.tanggal_masuk, s.class_id, s.tenant_id,
              c.nama_kelas, p.nama_orang_tua, p.no_wa as no_wa_ortu
       FROM students s
       LEFT JOIN classes c ON s.class_id = c.id
@@ -2858,23 +3011,50 @@ router.get('/admin/students/incomplete/export', authenticateOperator, async (req
           OR s.nisn IS NULL OR s.nisn = ''
           OR s.jenis_kelamin IS NULL OR s.jenis_kelamin = ''
           OR s.iuran_bulanan IS NULL
+          OR s.nama_siswa IS NULL OR s.nama_siswa = ''
+          OR s.class_id IS NULL
+          OR s.privat IS NULL
+          OR s.biaya_lain IS NULL
+          OR s.biaya_lain_nama IS NULL OR s.biaya_lain_nama = ''
+          OR s.status IS NULL OR s.status = ''
+          OR s.tanggal_masuk IS NULL OR s.tanggal_masuk = ''
         )
       ORDER BY c.nama_kelas ASC, s.nama_siswa ASC
     `, [tenantId]);
 
     const data = students.map(s => ({
       'ID Siswa': s.id,
-      'Nama Siswa': s.nama_siswa || '',
       'NISN': s.nisn || '',
-      'NIS': s.nis || '',
-      'Kelas': s.nama_kelas || '',
+      'Nama Siswa': s.nama_siswa || '',
+      'Nama Kelas': s.nama_kelas || '',
+      'Jenis Kelamin': s.jenis_kelamin || '',
       'Nama Orang Tua': s.nama_orang_tua || '',
       'No. WhatsApp': s.no_wa_ortu || '',
-      'Jenis Kelamin': s.jenis_kelamin || '',
-      'Iuran Bulanan': s.iuran_bulanan ?? ''
+      'Iuran Bulanan': s.iuran_bulanan ?? '',
+      'Transportasi': s.ransportasi ?? 0,
+      'Subsidi': s.subsidi ?? 0,
+      'Privat': s.privat ?? 0,
+      'Biaya Lain': s.biaya_lain ?? 0,
+      'Biaya Lain Nama': s.biaya_lain_nama || '',
+      'Status': s.status || 'aktif',
+      'Tanggal Masuk': s.tanggal_masuk || ''
     }));
 
-    const ws = XLSX.utils.json_to_sheet(data.length ? data : [{ 'ID Siswa': '', 'Nama Siswa': '', 'NISN': '', 'NIS': '', 'Kelas': '', 'Nama Orang Tua': '', 'No. WhatsApp': '', 'Jenis Kelamin': '', 'Iuran Bulanan': '' }]);
+    const ws = XLSX.utils.json_to_sheet(data.length ? data : [{
+      'ID Siswa': '', 'NISN': '', 'Nama Siswa': '', 'Nama Kelas': '',
+      'Jenis Kelamin': '', 'Nama Orang Tua': '', 'No. WhatsApp': '', 'Iuran Bulanan': '',
+      'Transportasi': '', 'Subsidi': '', 'Privat': '', 'Biaya Lain': '',
+      'Biaya Lain Nama': '', 'Status': 'aktif', 'Tanggal Masuk': ''
+    }]);
+
+    // Set WhatsApp column as text format to prevent scientific notation
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    for (let row = 1; row <= range.e.row; row++) {
+      const cellRef = XLSX.utils.encode_cell({ r: row, c: 6 }); // Column G = No. WhatsApp
+      if (ws[cellRef]) {
+        ws[cellRef].t = 's'; // Force string type
+      }
+    }
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Siswa Belum Lengkap');
     const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
@@ -2889,7 +3069,7 @@ router.get('/admin/students/incomplete/export', authenticateOperator, async (req
   }
 });
 
-// GET /api/admin/students/export - Export ALL students as Excel for bulk editing
+// GET /api/admin/students/export - Export ALL students as Excel (ALL COLUMNS for bulk editing)
 router.get('/admin/students/export', authenticateOperator, async (req, res) => {
   try {
     const tenantId = req.query.tenant_id;
@@ -2901,7 +3081,9 @@ router.get('/admin/students/export', authenticateOperator, async (req, res) => {
     }
 
     const students = await db.query(`
-      SELECT s.id, s.nama_siswa, s.nisn, s.nis, s.jenis_kelamin, s.iuran_bulanan,
+      SELECT s.id, s.nama_siswa, s.nisn, s.jenis_kelamin, s.iuran_bulanan,
+             s.ransportasi, s.subsidi, s.privat, s.biaya_lain, s.biaya_lain_nama,
+             s.status, s.tanggal_masuk, s.class_id, s.tenant_id,
              c.nama_kelas, p.nama_orang_tua, p.no_wa as no_wa_ortu
       FROM students s
       LEFT JOIN classes c ON s.class_id = c.id
@@ -2912,17 +3094,37 @@ router.get('/admin/students/export', authenticateOperator, async (req, res) => {
 
     const data = students.map(s => ({
       'ID Siswa': s.id,
-      'Nama Siswa': s.nama_siswa,
       'NISN': s.nisn || '',
-      'NIS': s.nis || '',
-      'Kelas': s.nama_kelas || '',
+      'Nama Siswa': s.nama_siswa,
+      'Nama Kelas': s.nama_kelas || '',
+      'Jenis Kelamin': s.jenis_kelamin || '',
       'Nama Orang Tua': s.nama_orang_tua || '',
       'No. WhatsApp': s.no_wa_ortu || '',
-      'Jenis Kelamin': s.jenis_kelamin || '',
-      'Iuran Bulanan': s.iuran_bulanan ?? ''
+      'Iuran Bulanan': s.iuran_bulanan ?? '',
+      'Transportasi': s.ransportasi ?? 0,
+      'Subsidi': s.subsidi ?? 0,
+      'Privat': s.privat ?? 0,
+      'Biaya Lain': s.biaya_lain ?? 0,
+      'Biaya Lain Nama': s.biaya_lain_nama || '',
+      'Status': s.status || 'aktif',
+      'Tanggal Masuk': s.tanggal_masuk || ''
     }));
 
-    const ws = XLSX.utils.json_to_sheet(data.length ? data : [{ 'ID Siswa': '', 'Nama Siswa': '', 'NISN': '', 'NIS': '', 'Kelas': '', 'Nama Orang Tua': '', 'No. WhatsApp': '', 'Jenis Kelamin': '', 'Iuran Bulanan': '' }]);
+    const ws = XLSX.utils.json_to_sheet(data.length ? data : [{
+      'ID Siswa': '', 'NISN': '', 'Nama Siswa': '', 'Nama Kelas': '',
+      'Jenis Kelamin': '', 'Nama Orang Tua': '', 'No. WhatsApp': '', 'Iuran Bulanan': '',
+      'Transportasi': '', 'Subsidi': '', 'Privat': '', 'Biaya Lain': '',
+      'Biaya Lain Nama': '', 'Status': 'aktif', 'Tanggal Masuk': ''
+    }]);
+
+    // Set WhatsApp column as text format to prevent scientific notation
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    for (let row = 1; row <= range.e.row; row++) {
+      const cellRef = XLSX.utils.encode_cell({ r: row, c: 6 }); // Column G = No. WhatsApp
+      if (ws[cellRef]) {
+        ws[cellRef].t = 's'; // Force string type
+      }
+    }
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Data Siswa');
     const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
@@ -2964,7 +3166,7 @@ router.post('/admin/students/incomplete/import', authenticateOperator, excelUplo
       const idVal = r['ID Siswa'];
       const id = parseInt(idVal);
       const namaSiswaRaw = String(r['Nama Siswa'] || '').trim();
-      const noWa = String(r['No. WhatsApp'] || '').trim();
+      const namaKelas = String(r['Nama Kelas'] || '').trim();
 
       let stu;
       if (id) {
@@ -2978,25 +3180,104 @@ router.post('/admin/students/incomplete/import', authenticateOperator, excelUplo
         continue;
       }
 
-      const namaOrangTua = String(r['Nama Orang Tua'] || '').trim() || null;
+      // Parse semua kolom
       const nisn = String(r['NISN'] || '').trim() || null;
-      const nis = String(r['NIS'] || '').trim() || null;
       const jk = String(r['Jenis Kelamin'] || '').trim() || null;
+      const namaOrangTua = String(r['Nama Orang Tua'] || '').trim() || null;
+      const noWaRaw = r['No. WhatsApp'];
+      let noWa = null;
+      if (noWaRaw !== undefined && noWaRaw !== null && noWaRaw !== '') {
+        // Handle scientific notation (e.g., 6.2824E+12) by converting to full number
+        if (typeof noWaRaw === 'number' && String(noWaRaw).toUpperCase().includes('E')) {
+          noWa = Math.round(noWaRaw).toString();
+        } else {
+          noWa = String(noWaRaw).trim();
+        }
+      }
       const iuranRaw = String(r['Iuran Bulanan'] || '').trim();
       const iuran = iuranRaw === '' ? null : parseFloat(iuranRaw);
+      const transportasiRaw = String(r['Transportasi'] || '').trim();
+      const transportasi = transportasiRaw === '' ? null : parseFloat(transportasiRaw);
+      const subsidiRaw = String(r['Subsidi'] || '').trim();
+      const subsidi = subsidiRaw === '' ? null : parseFloat(subsidiRaw);
+      const privatRaw = String(r['Privat'] || '').trim();
+      const privat = privatRaw === '' ? null : parseFloat(privatRaw);
+      const biayaLainRaw = String(r['Biaya Lain'] || '').trim();
+      const biayaLain = biayaLainRaw === '' ? null : parseFloat(biayaLainRaw);
+      const biayaLainNama = String(r['Biaya Lain Nama'] || '').trim() || null;
+      const status = String(r['Status'] || '').trim() || null;
+      const tanggalMasuk = String(r['Tanggal Masuk'] || '').trim() || null;
 
+      // Validasi wajib (semua wajib kecuali Transportasi, Subsidi, NISN)
+      if (!namaSiswaRaw) {
+        errors.push(`Baris ${rowNo}: Nama Siswa wajib diisi`);
+        continue;
+      }
+      if (!namaKelas) {
+        errors.push(`Baris ${rowNo}: Nama Kelas wajib diisi`);
+        continue;
+      }
+      if (!jk || !['L', 'P'].includes(jk.toUpperCase())) {
+        errors.push(`Baris ${rowNo}: Jenis Kelamin wajib diisi (L atau P)`);
+        continue;
+      }
+      if (!namaOrangTua) {
+        errors.push(`Baris ${rowNo}: Nama Orang Tua wajib diisi`);
+        continue;
+      }
+      if (!noWa) {
+        errors.push(`Baris ${rowNo}: No. WhatsApp wajib diisi`);
+        continue;
+      }
+      if (!iuranRaw || isNaN(iuran)) {
+        errors.push(`Baris ${rowNo}: Iuran Bulanan wajib diisi (nominal)`);
+        continue;
+      }
+      if (!status) {
+        errors.push(`Baris ${rowNo}: Status wajib diisi (aktif / alumni / mutasi / keluar)`);
+        continue;
+      }
+      if (!tanggalMasuk) {
+        errors.push(`Baris ${rowNo}: Tanggal Masuk wajib diisi (format: MM-YYYY)`);
+        continue;
+      }
+
+      // Cari class_id berdasarkan nama kelas
+      let classId = null;
+      const [classRow] = await db.query('SELECT id FROM classes WHERE nama_kelas = ? AND tenant_id = ?', [namaKelas, tenantId]);
+      if (classRow) classId = classRow.id;
+      else {
+        errors.push(`Baris ${rowNo}: Kelas "${namaKelas}" tidak ditemukan di tenant ini`);
+        continue;
+      }
+
+      // Update siswa
       await db.query(
-        'UPDATE students SET nisn = COALESCE(?, nisn), nis = COALESCE(?, nis), nama_siswa = COALESCE(?, nama_siswa), jenis_kelamin = COALESCE(?, jenis_kelamin), iuran_bulanan = COALESCE(?, iuran_bulanan) WHERE id = ?',
-        [nisn, nis, namaSiswaRaw || null, jk, iuran, stu.id]
+        `UPDATE students SET 
+          nisn = COALESCE(?, nisn),
+          nama_siswa = COALESCE(?, nama_siswa),
+          jenis_kelamin = COALESCE(?, jenis_kelamin),
+          class_id = COALESCE(?, class_id),
+          iuran_bulanan = COALESCE(?, iuran_bulanan),
+          ransportasi = COALESCE(?, ransportasi),
+          subsidi = COALESCE(?, subsidi),
+          privat = COALESCE(?, privat),
+          biaya_lain = COALESCE(?, biaya_lain),
+          biaya_lain_nama = COALESCE(?, biaya_lain_nama),
+          status = COALESCE(?, status),
+          tanggal_masuk = COALESCE(?, tanggal_masuk)
+        WHERE id = ?`,
+        [nisn, namaSiswaRaw, jk, classId, iuran, transportasi, subsidi, privat, biayaLain, biayaLainNama, status, tanggalMasuk, stu.id]
       );
 
+      // Update/create parent
       if (stu.parent_id) {
         await db.query(
           'UPDATE parents SET nama_orang_tua = COALESCE(?, nama_orang_tua), no_wa = COALESCE(?, no_wa) WHERE id = ?',
-          [namaOrangTua, noWa || null, stu.parent_id]
+          [namaOrangTua, noWa, stu.parent_id]
         );
-      } else {
-        const ins = await db.query('INSERT INTO parents (nama_orang_tua, no_wa) VALUES (?, ?)', [namaOrangTua, noWa || null]);
+      } else if (namaOrangTua || noWa) {
+        const ins = await db.query('INSERT INTO parents (nama_orang_tua, no_wa) VALUES (?, ?)', [namaOrangTua, noWa]);
         await db.query('UPDATE students SET parent_id = ? WHERE id = ?', [ins.insertId, stu.id]);
       }
       updated++;
@@ -3009,7 +3290,7 @@ res.json({ success: true, updated, errors, message: `${updated} siswa diperbarui
    }
 });
 
-// POST /api/admin/students/import - Import new students from Excel
+// POST /api/admin/students/import - Import new students from Excel (ALL COLUMNS)
 router.post('/admin/students/import', authenticateOperator, excelUpload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
@@ -3029,87 +3310,239 @@ router.post('/admin/students/import', authenticateOperator, excelUpload.single('
 
     const errors = [];
     let created = 0;
+    let updated = 0;
 
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
       const rowNo = i + 2;
-      const nis = String(r['NIS'] || '').trim();
+      
+      // Semua kolom dari tabel students
+      const idSiswa = r['ID Siswa'] ? parseInt(r['ID Siswa']) : null;
       const nisn = String(r['NISN'] || '').trim() || null;
       const namaSiswa = String(r['Nama Siswa'] || '').trim();
-      const jk = String(r['Jenis Kelamin'] || '').trim() || null;
-      const className = String(r['Nama Kelas'] || '').trim();
+      const jk = String(r['Jenis Kelamin'] || '').trim();
+      const namaKelas = String(r['Nama Kelas'] || '').trim();
+      const namaOrangTua = String(r['Nama Orang Tua'] || '').trim();
+      const noWaRaw = r['No. WhatsApp'];
+      let noWa = '';
+      if (noWaRaw !== undefined && noWaRaw !== null && noWaRaw !== '') {
+        // Handle scientific notation (e.g., 6.2824E+12) by converting to full number
+        if (typeof noWaRaw === 'number' && String(noWaRaw).toUpperCase().includes('E')) {
+          noWa = Math.round(noWaRaw).toString();
+        } else {
+          noWa = String(noWaRaw).trim();
+        }
+      }
       const iuranRaw = String(r['Iuran Bulanan'] || '').trim();
       const iuran = iuranRaw === '' ? 0 : parseFloat(iuranRaw);
-      const namaOrangTua = String(r['Nama Orang Tua'] || '').trim() || null;
-      const noWa = String(r['No. WhatsApp'] || '').trim() || null;
+      const transportasiRaw = String(r['Transportasi'] || '').trim();
+      const transportasi = transportasiRaw === '' ? 0 : parseFloat(transportasiRaw);
+      const subsidiRaw = String(r['Subsidi'] || '').trim();
+      const subsidi = subsidiRaw === '' ? 0 : parseFloat(subsidiRaw);
+      const privatRaw = String(r['Privat'] || '').trim();
+      const privat = privatRaw === '' ? 0 : parseFloat(privatRaw);
+      const biayaLainRaw = String(r['Biaya Lain'] || '').trim();
+      const biayaLain = biayaLainRaw === '' ? 0 : parseFloat(biayaLainRaw);
+      const biayaLainNama = String(r['Biaya Lain Nama'] || '').trim();
+      const status = String(r['Status'] || '').trim();
+      const tanggalMasuk = String(r['Tanggal Masuk'] || '').trim();
 
-      if (!nis || !namaSiswa) {
-        errors.push(`Baris ${rowNo}: NIS dan Nama Siswa wajib diisi`);
+      // Validasi wajib (semua wajib kecuali Transportasi, Subsidi, NISN)
+      if (!namaSiswa) {
+        errors.push(`Baris ${rowNo}: Nama Siswa wajib diisi`);
         continue;
       }
-
-      // Cek NIS sudah ada
-      const [existing] = await db.query('SELECT id FROM students WHERE nis = ?', [nis]);
-      if (existing) {
-        errors.push(`Baris ${rowNo}: NIS "${nis}" sudah digunakan`);
+      if (!namaKelas) {
+        errors.push(`Baris ${rowNo}: Nama Kelas wajib diisi`);
+        continue;
+      }
+      if (!jk || !['L', 'P'].includes(jk.toUpperCase())) {
+        errors.push(`Baris ${rowNo}: Jenis Kelamin wajib diisi (L atau P)`);
+        continue;
+      }
+      if (!namaOrangTua) {
+        errors.push(`Baris ${rowNo}: Nama Orang Tua wajib diisi`);
+        continue;
+      }
+      if (!noWa) {
+        errors.push(`Baris ${rowNo}: No. WhatsApp wajib diisi`);
+        continue;
+      }
+      if (!iuranRaw || isNaN(iuran)) {
+        errors.push(`Baris ${rowNo}: Iuran Bulanan wajib diisi (nominal)`);
+        continue;
+      }
+      if (!status) {
+        errors.push(`Baris ${rowNo}: Status wajib diisi (aktif / alumni / mutasi / keluar)`);
+        continue;
+      }
+      if (!tanggalMasuk) {
+        errors.push(`Baris ${rowNo}: Tanggal Masuk wajib diisi (format: MM-YYYY)`);
         continue;
       }
 
       // Cari class_id berdasarkan nama kelas
       let classId = null;
-      if (className) {
-        const [classRow] = await db.query('SELECT id FROM classes WHERE nama_kelas = ? AND tenant_id = ?', [className, tenantId]);
-        if (classRow) classId = classRow.id;
+      const [classRow] = await db.query('SELECT id FROM classes WHERE nama_kelas = ? AND tenant_id = ?', [namaKelas, tenantId]);
+      if (classRow) classId = classRow.id;
+      else {
+        errors.push(`Baris ${rowNo}: Kelas "${namaKelas}" tidak ditemukan di tenant ini`);
+        continue;
       }
 
-      // Buat parent jika ada data orang tua
+      // Buat/update parent jika ada data orang tua
       let parentId = null;
       if (namaOrangTua || noWa) {
         const ins = await db.query('INSERT INTO parents (nama_orang_tua, no_wa) VALUES (?, ?)', [namaOrangTua, noWa]);
         parentId = ins.insertId;
       }
 
-      // Insert siswa baru
-      await db.query(
-        'INSERT INTO students (tenant_id, nis, nisn, nama_siswa, jenis_kelamin, class_id, parent_id, iuran_bulanan) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-        [tenantId, nis, nisn, namaSiswa, jk, classId, parentId, iuran]
-      );
-      created++;
+      if (idSiswa) {
+        // Update siswa yang sudah ada
+        const [existing] = await db.query('SELECT id FROM students WHERE id = ? AND tenant_id = ?', [idSiswa, tenantId]);
+        if (!existing) {
+          errors.push(`Baris ${rowNo}: ID Siswa "${idSiswa}" tidak ditemukan`);
+          continue;
+        }
+        await db.query(
+          `UPDATE students SET 
+            nisn = COALESCE(?, nisn),
+            nama_siswa = COALESCE(?, nama_siswa),
+            jenis_kelamin = COALESCE(?, jenis_kelamin),
+            class_id = COALESCE(?, class_id),
+            parent_id = COALESCE(?, parent_id),
+            iuran_bulanan = COALESCE(?, iuran_bulanan),
+            ransportasi = COALESCE(?, ransportasi),
+            subsidi = COALESCE(?, subsidi),
+            privat = COALESCE(?, privat),
+            biaya_lain = COALESCE(?, biaya_lain),
+            biaya_lain_nama = COALESCE(?, biaya_lain_nama),
+            status = COALESCE(?, status),
+            tanggal_masuk = COALESCE(?, tanggal_masuk)
+          WHERE id = ?`,
+          [nisn, namaSiswa || null, jk, classId, parentId, iuran, transportasi, subsidi, privat, biayaLain, biayaLainNama, status, tanggalMasuk, idSiswa]
+        );
+        updated++;
+      } else {
+        // Insert siswa baru - NIS akan di-generate otomatis
+        const result = await db.query(
+          `INSERT INTO students (
+            tenant_id, nisn, nama_siswa, jenis_kelamin, class_id, parent_id, 
+            iuran_bulanan, ransportasi, subsidi, privat, biaya_lain, 
+            biaya_lain_nama, status, tanggal_masuk
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [tenantId, nisn, namaSiswa, jk, classId, parentId, iuran, transportasi, subsidi, privat, biayaLain, biayaLainNama, status, tanggalMasuk]
+        );
+
+        // Validate required data for NIS generation
+        const nisErrors = [];
+        // Check both tanggal_masuk and tahun_masuk - at least one must have a value
+        const hasTanggalMasuk = tanggalMasuk && String(tanggalMasuk).trim() !== '';
+        const hasTahunMasuk = tahunMasuk && String(tahunMasuk).trim() !== '';
+        if (!hasTanggalMasuk && !hasTahunMasuk) {
+          nisErrors.push('Tanggal Masuk / Tahun Masuk');
+        }
+        if (!tenantId) nisErrors.push('Sekolah (Tenant)');
+        if (!parentId) nisErrors.push('Data Orang Tua (Parent)');
+
+        if (nisErrors.length > 0) {
+          errors.push(`Baris ${rowNo}: NIS tidak bisa di-generate. Data belum lengkap: ${nisErrors.join(', ')}`);
+          continue;
+        }
+
+        // Auto-generate NIS
+        let tahun = null;
+        if (tanggalMasuk) {
+          const parts = tanggalMasuk.split('-');
+          if (parts.length === 2) {
+            tahun = parts[1].length === 4 ? parts[1] : null;
+          } else if (parts.length === 1 && parts[0].length === 4) {
+            tahun = parts[0];
+          }
+        }
+        if (!tahun) tahun = String(new Date().getFullYear());
+        tahun = String(tahun).padStart(4, '0');
+
+        let tenantNumericId = '0';
+        try {
+          const tenantRes = await db.query('SELECT id FROM tenants WHERE tenant_id = ? LIMIT 1', [tenantId]);
+          if (tenantRes.length > 0 && tenantRes[0].id) {
+            tenantNumericId = String(tenantRes[0].id);
+          }
+        } catch (e) {}
+
+        // Validate tenant has numeric ID
+        if (tenantNumericId === '0') {
+          errors.push(`Baris ${rowNo}: NIS tidak bisa di-generate. Tenant tidak memiliki ID numerik`);
+          continue;
+        }
+
+        const tenantPart = tenantNumericId.padStart(2, '0');
+        const parentPart = String(parentId).padStart(3, '0');
+        const studentPart = String(result.insertId).padStart(4, '0');
+
+        const nisValue = tahun + tenantPart + parentPart + studentPart;
+
+        const [existingNis] = await db.query('SELECT id FROM students WHERE id != ? AND nis = ?', [result.insertId, nisValue]);
+        if (existingNis) {
+          errors.push(`Baris ${rowNo}: NIS "${nisValue}" sudah digunakan (konflik generate)`);
+          continue;
+        }
+
+        await db.query('UPDATE students SET nis = ? WHERE id = ?', [nisValue, result.insertId]);
+        created++;
+      }
     }
 
-res.json({ success: true, created, errors, message: `${created} siswa berhasil ditambahkan` });
-   } catch (error) {
-     console.error('Import new students error:', error);
-     res.status(500).json({ success: false, message: 'Error import siswa baru: ' + error.message });
-   }
+    res.json({ success: true, created, updated, errors, message: `${created} siswa ditambahkan, ${updated} siswa diperbarui` });
+  } catch (error) {
+    console.error('Import students error:', error);
+    res.status(500).json({ success: false, message: 'Error import siswa: ' + error.message });
+  }
 });
 
-// GET /api/admin/students/import-template - Download template for new student import
+// GET /api/admin/students/import-template - Download template for student import (ALL COLUMNS)
 router.get('/admin/students/import-template', authenticateOperator, async (req, res) => {
   try {
+    console.log('[TEMPLATE] Downloading student import template, tenant:', req.query.tenant_id);
+    
     const tenantId = req.query.tenant_id;
 
-    // Ambil daftar kelas untuk dropdown
+    // Ambil daftar kelas untuk referensi
     const classes = tenantId ? await db.query(
       'SELECT id, nama_kelas FROM classes WHERE tenant_id = ? ORDER BY nama_kelas ASC',
       [tenantId]
     ) : [];
 
-    // Buat template kosong dengan header
+    // Buat template dengan semua kolom
     const data = [{
-      'NIS': '',
+      'ID Siswa': '',
       'NISN': '',
       'Nama Siswa': '',
       'Nama Kelas': '',
+      'Jenis Kelamin': '',
       'Nama Orang Tua': '',
       'No. WhatsApp': '',
-      'Jenis Kelamin': '',
-      'Iuran Bulanan': ''
+      'Iuran Bulanan': '',
+      'Transportasi': '',
+      'Subsidi': '',
+      'Privat': '',
+      'Biaya Lain': '',
+      'Biaya Lain Nama': '',
+      'Status': 'aktif',
+      'Tanggal Masuk': ''
     }];
 
     const ws = XLSX.utils.json_to_sheet(data);
+
+    // Set WhatsApp column as text format to prevent scientific notation
+    const waCellRef = XLSX.utils.encode_cell({ r: 1, c: 6 }); // Row 2 (data row), Column G = No. WhatsApp
+    if (ws[waCellRef]) {
+      ws[waCellRef].t = 's'; // Force string type
+    }
+
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Template Import Siswa');
+    XLSX.utils.book_append_sheet(wb, ws, 'Import Siswa');
 
     // Tambahkan sheet kelas sebagai referensi
     if (classes.length > 0) {
@@ -3118,14 +3551,38 @@ router.get('/admin/students/import-template', authenticateOperator, async (req, 
       XLSX.utils.book_append_sheet(wb, classWs, 'Referensi Kelas');
     }
 
-    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    // Tambahkan sheet keterangan
+    const keterangan = [
+      { 'Kolom': 'ID Siswa', 'Keterangan': 'Kosongkan untuk siswa baru, isi untuk update' },
+      { 'Kolom': 'NISN', 'Keterangan': 'Opsional' },
+      { 'Kolom': 'Nama Siswa', 'Keterangan': 'Wajib diisi' },
+      { 'Kolom': 'Nama Kelas', 'Keterangan': 'Wajib diisi (sesuai nama kelas di sistem)' },
+      { 'Kolom': 'Jenis Kelamin', 'Keterangan': 'Wajib diisi (L atau P)' },
+      { 'Kolom': 'Nama Orang Tua', 'Keterangan': 'Wajib diisi' },
+      { 'Kolom': 'No. WhatsApp', 'Keterangan': 'Wajib diisi' },
+      { 'Kolom': 'Iuran Bulanan', 'Keterangan': 'Wajib diisi (nominal)' },
+      { 'Kolom': 'Transportasi', 'Keterangan': 'Opsional (nominal, default 0)' },
+      { 'Kolom': 'Subsidi', 'Keterangan': 'Opsional (nominal, default 0)' },
+      { 'Kolom': 'Privat', 'Keterangan': 'Opsional (nominal, default 0)' },
+      { 'Kolom': 'Biaya Lain', 'Keterangan': 'Opsional (nominal, default 0)' },
+      { 'Kolom': 'Biaya Lain Nama', 'Keterangan': 'Opsional (keterangan biaya lain)' },
+      { 'Kolom': 'Status', 'Keterangan': 'Wajib diisi (aktif / alumni / mutasi / keluar)' },
+      { 'Kolom': 'Tanggal Masuk', 'Keterangan': 'Wajib diisi (format: MM-YYYY)' }
+    ];
+    const ketWs = XLSX.utils.json_to_sheet(keterangan);
+    XLSX.utils.book_append_sheet(wb, ketWs, 'Keterangan');
 
-    res.setHeader('Content-Disposition', 'attachment; filename="template_import_siswa_baru.xlsx"');
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    
+    console.log('[TEMPLATE] Template generated, size:', buf.length, 'bytes');
+
+    res.setHeader('Content-Disposition', 'attachment; filename="template_import_siswa.xlsx"');
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.send(buf);
+    res.setHeader('Content-Length', buf.length);
+    res.end(buf);
   } catch (error) {
-    console.error('Template download error:', error);
-    res.status(500).json({ success: false, message: 'Error download template' });
+    console.error('[TEMPLATE] Download error:', error);
+    res.status(500).json({ success: false, message: 'Error download template: ' + error.message });
   }
 });
 
@@ -3269,7 +3726,7 @@ router.get('/admin/students/:id', authenticateOperator, async (req, res) => {
   try {
     const { id } = req.params;
     const [student] = await db.query(
-      'SELECT s.*, c.nama_kelas, c.tingkatan, tn.nama_sekolah, p.id as parent_id_ref, p.nama_orang_tua, p.no_wa as no_wa_ortu FROM students s LEFT JOIN classes c ON s.class_id = c.id LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id LEFT JOIN parents p ON s.parent_id = p.id WHERE s.id = ?',
+      'SELECT s.*, c.nama_kelas, c.tingkatan, tn.nama_sekolah, p.id as parent_id_ref, p.nama_orang_tua, p.no_wa as no_wa_ortu, p.nik as nik_orang_tua, p.email as email_orang_tua FROM students s LEFT JOIN classes c ON s.class_id = c.id LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id LEFT JOIN parents p ON s.parent_id = p.id WHERE s.id = ?',
       [id]
     );
 
@@ -3308,9 +3765,10 @@ router.get('/admin/classes', authenticateOperator, async (req, res) => {
 // POST /api/admin/students - Create student
 router.post('/admin/students', authenticateOperator, async (req, res) => {
   try {
+    await ensureStudentColumns();
     const {
       tenant_id, nis, nisn, nama_siswa, jenis_kelamin, class_id, parent_id, iuran_bulanan,
-      ransportasi, privat, biaya_lain, biaya_lain_nama,
+      ransportasi, subsidi, privat, biaya_lain, biaya_lain_nama,
       tanggal_masuk, status,
       nama_orang_tua, no_wa, email_orang_tua, nik_orang_tua
     } = req.body;
@@ -3319,6 +3777,7 @@ router.post('/admin/students', authenticateOperator, async (req, res) => {
       tenant_id: tenant_id,
       nis, nisn, nama_siswa, jenis_kelamin, class_id,
       iuran_bulanan: parseFloat(iuran_bulanan) || 0, ransportasi: parseFloat(ransportasi) || 0,
+      subsidi: parseFloat(subsidi) || 0,
       privat: parseFloat(privat) || 0, biaya_lain: parseFloat(biaya_lain) || 0, biaya_lain_nama: biaya_lain_nama || null,
       tanggal_masuk: tanggal_masuk || null, status: status || 'aktif',
       nama_orang_tua, no_wa, email_orang_tua, nik_orang_tua
@@ -3340,6 +3799,7 @@ router.post('/admin/students', authenticateOperator, async (req, res) => {
     let studentVals = [fields.tenant_id, nisValue, fields.nisn || null, fields.nama_siswa, fields.jenis_kelamin || null, fields.class_id || null, resolvedParentId, fields.iuran_bulanan];
 
     try { await db.query('SELECT ransportasi FROM students LIMIT 1'); studentCols += ', ransportasi'; studentVals.push(fields.ransportasi); } catch (e) {}
+    try { await db.query('SELECT subsidi FROM students LIMIT 1'); studentCols += ', subsidi'; studentVals.push(fields.subsidi); } catch (e) {}
     try { await db.query('SELECT privat FROM students LIMIT 1'); studentCols += ', privat'; studentVals.push(fields.privat); } catch (e) {}
     try { await db.query('SELECT biaya_lain FROM students LIMIT 1'); studentCols += ', biaya_lain'; studentVals.push(fields.biaya_lain); } catch (e) {}
     try { await db.query('SELECT biaya_lain_nama FROM students LIMIT 1'); studentCols += ', biaya_lain_nama'; studentVals.push(fields.biaya_lain_nama); } catch (e) {}
@@ -3563,30 +4023,75 @@ router.put('/admin/students/bulk-promote', authenticateOperator, async (req, res
 // PUT /api/admin/students/:id - Update student (including parent data)
 router.put('/admin/students/:id', authenticateOperator, async (req, res) => {
   try {
+    await ensureStudentColumns();
     const { id } = req.params;
-    const { tenant_id, nis, nisn, nama_siswa, jenis_kelamin, class_id, parent_id, iuran_bulanan, nama_orang_tua, no_wa } = req.body;
+    const {
+      tenant_id, nis, nisn, nama_siswa, jenis_kelamin, class_id,
+      iuran_bulanan, nama_orang_tua, no_wa, nik_orang_tua, email_orang_tua,
+      ransportasi, subsidi, privat, biaya_lain, biaya_lain_nama,
+      tanggal_masuk, status
+    } = req.body;
 
-    if (!nis || !nama_siswa) {
-      return res.status(400).json({ success: false, message: 'NIS dan nama siswa wajib diisi' });
+    if (!nama_siswa) {
+      return res.status(400).json({ success: false, message: 'Nama siswa wajib diisi' });
     }
 
-    // Resolve parent: use provided parent_id, or update/create parent from nama_orang_tua/no_wa
-    let resolvedParentId = parent_id || null;
-    if (!resolvedParentId && (nama_orang_tua || no_wa)) {
-      const [existing] = await db.query('SELECT id FROM students WHERE id = ?', [id]);
-      if (existing && existing.parent_id) {
-        resolvedParentId = existing.parent_id;
-        await db.query('UPDATE parents SET nama_orang_tua = COALESCE(?, nama_orang_tua), no_wa = COALESCE(?, no_wa) WHERE id = ?',
-          [nama_orang_tua || null, no_wa || null, resolvedParentId]);
+    // Get current student data
+    const [current] = await db.query('SELECT * FROM students WHERE id = ?', [id]);
+    if (!current) {
+      return res.status(404).json({ success: false, message: 'Siswa tidak ditemukan' });
+    }
+
+    // Resolve parent: use existing parent_id, or update/create parent
+    let resolvedParentId = current.parent_id || null;
+    if (nama_orang_tua || no_wa || nik_orang_tua || email_orang_tua) {
+      if (resolvedParentId) {
+        // Update existing parent
+        await db.query(
+          'UPDATE parents SET nama_orang_tua = COALESCE(?, nama_orang_tua), no_wa = COALESCE(?, no_wa), nik = COALESCE(?, nik), email = COALESCE(?, email) WHERE id = ?',
+          [nama_orang_tua || null, no_wa || null, nik_orang_tua || null, email_orang_tua || null, resolvedParentId]
+        );
       } else {
-        const ins = await db.query('INSERT INTO parents (nama_orang_tua, no_wa) VALUES (?, ?)', [nama_orang_tua || null, no_wa || null]);
+        // Create new parent
+        const ins = await db.query(
+          'INSERT INTO parents (nama_orang_tua, no_wa, nik, email) VALUES (?, ?, ?, ?)',
+          [nama_orang_tua || null, no_wa || null, nik_orang_tua || null, email_orang_tua || null]
+        );
         resolvedParentId = ins.insertId;
       }
     }
 
+    // Build update query dynamically
+    const updates = [];
+    const values = [];
+
+    if (tenant_id !== undefined) { updates.push('tenant_id = ?'); values.push(tenant_id); }
+    if (nis !== undefined) { updates.push('nis = ?'); values.push(nis); }
+    if (nisn !== undefined) { updates.push('nisn = ?'); values.push(nisn || null); }
+    if (nama_siswa !== undefined) { updates.push('nama_siswa = ?'); values.push(nama_siswa); }
+    if (jenis_kelamin !== undefined) { updates.push('jenis_kelamin = ?'); values.push(jenis_kelamin); }
+    if (class_id !== undefined) { updates.push('class_id = ?'); values.push(class_id || null); }
+    if (iuran_bulanan !== undefined) { updates.push('iuran_bulanan = ?'); values.push(iuran_bulanan || 0); }
+    if (ransportasi !== undefined) { updates.push('ransportasi = ?'); values.push(ransportasi || 0); }
+    if (subsidi !== undefined) { updates.push('subsidi = ?'); values.push(subsidi || 0); }
+    if (privat !== undefined) { updates.push('privat = ?'); values.push(privat || 0); }
+    if (biaya_lain !== undefined) { updates.push('biaya_lain = ?'); values.push(biaya_lain || 0); }
+    if (biaya_lain_nama !== undefined) { updates.push('biaya_lain_nama = ?'); values.push(biaya_lain_nama || null); }
+    if (tanggal_masuk !== undefined) { updates.push('tanggal_masuk = ?'); values.push(tanggal_masuk || null); }
+    if (status !== undefined) { updates.push('status = ?'); values.push(status); }
+    if (resolvedParentId) {
+      updates.push('parent_id = ?');
+      values.push(resolvedParentId);
+    }
+
+    if (updates.length === 0) {
+      return res.json({ success: true, message: 'Tidak ada perubahan' });
+    }
+
+    values.push(id);
     const result = await db.query(
-      'UPDATE students SET nis = ?, nisn = ?, nama_siswa = ?, jenis_kelamin = ?, class_id = ?, parent_id = ?, iuran_bulanan = ? WHERE id = ?',
-      [nis, nisn || null, nama_siswa, jenis_kelamin, class_id || null, resolvedParentId, iuran_bulanan || 0, id]
+      'UPDATE students SET ' + updates.join(', ') + ' WHERE id = ?',
+      values
     );
 
     if (result.affectedRows === 0) {
@@ -3597,6 +4102,143 @@ router.put('/admin/students/:id', authenticateOperator, async (req, res) => {
   } catch (error) {
     console.error('Update student error:', error);
     res.status(500).json({ success: false, message: 'Error updating student' });
+  }
+});
+
+// POST /api/admin/students/:id/generate-nis - Generate NIS for student without NIS
+router.post('/admin/students/:id/generate-nis', authenticateOperator, async (req, res) => {
+  try {
+    await ensureStudentColumns();
+    const { id } = req.params;
+    const { tanggal_masuk: bodyTanggalMasuk } = req.body || {};
+
+    // Get student data
+    const [student] = await db.query(
+      'SELECT s.*, p.id as parent_id_ref FROM students s LEFT JOIN parents p ON s.parent_id = p.id WHERE s.id = ?',
+      [id]
+    );
+
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Siswa tidak ditemukan' });
+    }
+
+    // If student already has NIS, don't overwrite
+    if (student.nis) {
+      return res.status(400).json({ success: false, message: 'Siswa sudah punya NIS: ' + student.nis });
+    }
+
+    // Use tanggal_masuk from body (form) if provided, otherwise from database
+    const tanggalMasukValue = bodyTanggalMasuk || student.tanggal_masuk;
+    const tahunMasukValue = student.tahun_masuk;
+
+    // Validate required data for NIS generation
+    const errors = [];
+    // Check both tanggal_masuk and tahun_masuk - at least one must have a value
+    const hasTanggalMasuk = tanggalMasukValue && String(tanggalMasukValue).trim() !== '';
+    const hasTahunMasuk = tahunMasukValue && String(tahunMasukValue).trim() !== '';
+    if (!hasTanggalMasuk && !hasTahunMasuk) {
+      errors.push('Tanggal Masuk / Tahun Masuk');
+    }
+    if (!student.tenant_id || String(student.tenant_id).trim() === '') errors.push('Sekolah (Tenant)');
+    if (!student.parent_id && !student.parent_id_ref) errors.push('Data Orang Tua (Parent)');
+    if (!student.nama_siswa || String(student.nama_siswa).trim() === '') errors.push('Nama Siswa');
+
+    // Additional validation: parent_id must be actual ID (not 0 or null)
+    const actualParentId = student.parent_id_ref || student.parent_id;
+    if (actualParentId === 0 || actualParentId === null || actualParentId === undefined) {
+      errors.push('Data Orang Tua (Parent) - tidak boleh kosong');
+    }
+
+    if (errors.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Data belum lengkap. Lengkapi: ' + errors.join(', ')
+      });
+    }
+
+    // Determine year from tanggal_masuk
+    // Support formats: YYYY-MM-DD, YYYY-MM, DD/MM/YYYY, MM/YYYY, MM-YYYY
+    let tahun = null;
+    console.log('[GEN NIS] tanggalMasukValue:', tanggalMasukValue, 'type:', typeof tanggalMasukValue);
+    
+    if (tanggalMasukValue) {
+      const tanggalMasuk = String(tanggalMasukValue).trim();
+      console.log('[GEN NIS] tanggalMasuk string:', tanggalMasuk);
+      
+      // Try parsing YYYY-MM-DD or YYYY-MM format (from date input)
+      const matchYYYYMM = tanggalMasuk.match(/^(\d{4})-(\d{1,2})/);
+      if (matchYYYYMM) {
+        tahun = matchYYYYMM[1]; // Get the year part (YYYY)
+        console.log('[GEN NIS] Matched YYYY-MM format, year:', tahun);
+      } else {
+        // Try parsing DD/MM/YYYY or MM/YYYY format
+        const matchDDMMYYYY = tanggalMasuk.match(/(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+        if (matchDDMMYYYY) {
+          tahun = matchDDMMYYYY[3]; // Get the year part (YYYY)
+          console.log('[GEN NIS] Matched DD/MM/YYYY format, year:', tahun);
+        } else {
+          // Try parsing MM-YYYY format
+          const matchMMYYYY = tanggalMasuk.match(/(\d{1,2})[/-](\d{4})/);
+          if (matchMMYYYY) {
+            tahun = matchMMYYYY[2]; // Get the year part (YYYY)
+            console.log('[GEN NIS] Matched MM-YYYY format, year:', tahun);
+          } else {
+            // Try parsing as Date object
+            const dateValue = tanggalMasuk instanceof Date ? tanggalMasuk : new Date(tanggalMasuk);
+            if (!isNaN(dateValue.getTime())) {
+              tahun = String(dateValue.getFullYear());
+              console.log('[GEN NIS] Matched Date object, year:', tahun);
+            } else {
+              console.log('[GEN NIS] Date parsing failed for:', tanggalMasuk);
+            }
+          }
+        }
+      }
+    }
+    
+    if (!tahun) {
+      tahun = String(new Date().getFullYear());
+      console.log('[GEN NIS] Using current year:', tahun);
+    }
+    tahun = String(tahun).padStart(4, '0');
+
+    // Get tenant numeric ID
+    let tenantNumericId = '0';
+    try {
+      const tenantRes = await db.query('SELECT id FROM tenants WHERE tenant_id = ? LIMIT 1', [student.tenant_id]);
+      if (tenantRes.length > 0 && tenantRes[0].id) {
+        tenantNumericId = String(tenantRes[0].id);
+      }
+    } catch (e) {}
+    const tenantPart = tenantNumericId.padStart(2, '0');
+
+    // Get parent ID (use parent_id_ref or 0)
+    const parentId = student.parent_id_ref || student.parent_id || 0;
+    const parentPart = String(parentId).padStart(3, '0');
+
+    // Use student ID as the last part
+    const studentPart = String(id).padStart(4, '0');
+
+    // Compose NIS: YYYY + tenant(2) + parent(3) + student(4)
+    const nisValue = tahun + tenantPart + parentPart + studentPart;
+
+    // Check for uniqueness
+    const existing = await db.query('SELECT id FROM students WHERE id != ? AND nis = ?', [id, nisValue]);
+    if (existing.length > 0) {
+      // If collision, append a random suffix
+      const suffix = String(Math.floor(Math.random() * 100)).padStart(2, '0');
+      const altNis = tahun + tenantPart + parentPart + suffix;
+      await db.query('UPDATE students SET nis = ? WHERE id = ?', [altNis, id]);
+      return res.json({ success: true, message: 'NIS berhasil dibuat', data: { nis: altNis, student_id: id } });
+    }
+
+    // Update student with new NIS
+    await db.query('UPDATE students SET nis = ? WHERE id = ?', [nisValue, id]);
+
+    res.json({ success: true, message: 'NIS berhasil dibuat', data: { nis: nisValue, student_id: id } });
+  } catch (error) {
+    console.error('Generate NIS error:', error);
+    res.status(500).json({ success: false, message: 'Error generating NIS' });
   }
 });
 
@@ -3615,6 +4257,32 @@ router.delete('/admin/students/:id', authenticateOperator, async (req, res) => {
   } catch (error) {
     console.error('Delete student error:', error);
     res.status(500).json({ success: false, message: 'Error deleting student' });
+  }
+});
+
+// POST /api/admin/students/:id/update-tanggal-masuk - Auto-save tanggal masuk
+router.post('/admin/students/:id/update-tanggal-masuk', authenticateOperator, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { tanggal_masuk } = req.body;
+
+    if (!tanggal_masuk) {
+      return res.status(400).json({ success: false, message: 'tanggal_masuk wajib diisi' });
+    }
+
+    // Verify student exists
+    const [student] = await db.query('SELECT id FROM students WHERE id = ?', [id]);
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Siswa tidak ditemukan' });
+    }
+
+    // Update tanggal_masuk
+    await db.query('UPDATE students SET tanggal_masuk = ? WHERE id = ?', [tanggal_masuk, id]);
+
+    res.json({ success: true, message: 'Tanggal masuk berhasil disimpan' });
+  } catch (error) {
+    console.error('Update tanggal masuk error:', error);
+    res.status(500).json({ success: false, message: 'Error menyimpan tanggal masuk' });
   }
 });
 
@@ -3960,26 +4628,29 @@ router.post('/admin/mutasi/teachers/:id/initiate', authenticateOperator, async (
     const { id } = req.params;
     const { reason } = req.body;
 
-    // Check if mutasi_status column exists, if not update all assignments to remove tenant
+    let updated = false;
     try {
-      // With mutasi_status column - set to pending and null tenant_id
-      await db.query(
-        'UPDATE teacher_assignments SET tenant_id = NULL, mutasi_status = ?, mutasi_reason = ?, mutasi_date = NOW() WHERE teacher_id = ?',
+      const result = await db.query(
+        'UPDATE teacher_assignments SET mutasi_status = ?, mutasi_reason = ?, mutasi_date = NOW() WHERE teacher_id = ?',
         ['pending', reason || null, id]
       );
+      updated = result.affectedRows > 0;
     } catch (colError) {
-      // Without mutasi_status - just null the tenant_id
-      await db.query(
-        'UPDATE teacher_assignments SET tenant_id = NULL WHERE teacher_id = ?',
-        [id]
-      );
+      console.warn('Mutasi columns not found in teacher_assignments, fallback to status-based marking');
+    }
+
+    if (!updated) {
+      const [existing] = await db.query('SELECT id FROM teacher_assignments WHERE teacher_id = ? LIMIT 1', [id]);
+      if (!existing) {
+        return res.status(400).json({ success: false, message: 'Guru belum memiliki penempatan sekolah' });
+      }
     }
 
     const [teacher] = await db.query('SELECT nama FROM teachers WHERE id = ?', [id]);
     res.json({ success: true, message: `${teacher.nama} berhasil masuk daftar mutasi lintas sekolah` });
   } catch (error) {
     console.error('Initiate mutasi teacher error:', error);
-    res.status(500).json({ success: false, message: 'Error initiating mutasi' });
+    res.status(500).json({ success: false, message: 'Error initiating mutasi: ' + error.message });
   }
 });
 
