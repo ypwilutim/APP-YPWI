@@ -3510,18 +3510,36 @@ window.showMutasiTeachersModal = async function (id, nama, oldSchool, oldTenant)
 
     try {
       const authHdr = () => ({ 'Authorization': 'Bearer ' + (window.authToken || localStorage.getItem('token') || '') });
-      const res = await fetch('/api/admin/mutasi/teachers/' + teacherId + '/initiate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...authHdr() },
-        body: JSON.stringify({ reason: (mutasiType === 'keluar' ? 'Keluar/Resign: ' : '') + reason })
-      });
-      const data = await res.json();
-      closeTeacherMutasiModal();
-      fetchTeachers(1);
-      if (data.success) {
-        showToast(data.message || 'Mutasi berhasil diproses', 'success');
+
+      if (mutasiType === 'transfer' && targetTenant) {
+        const finalTenantId = targetTenant === 'other' ? otherSchoolName : targetTenant;
+        const res = await fetch('/api/admin/mutasi/teachers/' + teacherId + '/adopt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHdr() },
+          body: JSON.stringify({ tenant_id: finalTenantId, jabatan_di_unit: 'Guru' })
+        });
+        const data = await res.json();
+        closeTeacherMutasiModal();
+        fetchTeachers(1);
+        if (data.success) {
+          showToast(data.message || 'Guru berhasil dimutasi ke sekolah tujuan', 'success');
+        } else {
+          showToast(data.message || 'Gagal memindahkan guru', 'error');
+        }
       } else {
-        showToast(data.message || 'Gagal memproses mutasi', 'error');
+        const res = await fetch('/api/admin/mutasi/teachers/' + teacherId + '/initiate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHdr() },
+          body: JSON.stringify({ reason: (mutasiType === 'keluar' ? 'Keluar/Resign: ' : '') + reason })
+        });
+        const data = await res.json();
+        closeTeacherMutasiModal();
+        fetchTeachers(1);
+        if (data.success) {
+          showToast(data.message || 'Mutasi berhasil diproses', 'success');
+        } else {
+          showToast(data.message || 'Gagal memproses mutasi', 'error');
+        }
       }
     } catch (e) {
       console.error('[TEACHER MUTASI]', e);
