@@ -13,6 +13,23 @@ const { logToFile } = require('../middlewares/logger');
 const { fetchMetaTemplates } = require('../utils/whatsappTemplate');
 const { extractKTPFromImage } = require('../utils/geminiOcr');
 
+// Helper: Normalize WhatsApp number (082... → 6282...)
+function normalizeWhatsAppNumber(noWa) {
+  if (!noWa) return noWa;
+  let num = String(noWa).trim();
+  // Remove spaces, dashes, dots
+  num = num.replace(/[\s\-\.]/g, '');
+  // Convert 08... to 628...
+  if (num.startsWith('0')) {
+    num = '62' + num.substring(1);
+  }
+  // Convert +62 to 62
+  if (num.startsWith('+62')) {
+    num = '62' + num.substring(3);
+  }
+  return num;
+}
+
 const router = express.Router();
 const XLSX = require('xlsx');
 
@@ -3334,7 +3351,7 @@ router.get('/admin/students/incomplete/export', authenticateOperator, async (req
       'Nama Kelas': s.nama_kelas || '',
       'Jenis Kelamin': s.jenis_kelamin || '',
       'Nama Orang Tua': s.nama_orang_tua || '',
-      'No. WhatsApp': s.no_wa_ortu || '',
+      'No. WhatsApp': normalizeWhatsAppNumber(s.no_wa_ortu) || '',
       'Iuran Bulanan': s.iuran_bulanan ?? '',
       'Transportasi': s.ransportasi ?? 0,
       'Subsidi': s.subsidi ?? 0,
@@ -3404,7 +3421,7 @@ router.get('/admin/students/export', authenticateOperator, async (req, res) => {
       'Nama Kelas': s.nama_kelas || '',
       'Jenis Kelamin': s.jenis_kelamin || '',
       'Nama Orang Tua': s.nama_orang_tua || '',
-      'No. WhatsApp': s.no_wa_ortu || '',
+      'No. WhatsApp': normalizeWhatsAppNumber(s.no_wa_ortu) || '',
       'Iuran Bulanan': s.iuran_bulanan ?? '',
       'Transportasi': s.ransportasi ?? 0,
       'Subsidi': s.subsidi ?? 0,
@@ -3498,6 +3515,8 @@ router.post('/admin/students/incomplete/import', authenticateOperator, excelUplo
         } else {
           noWa = String(noWaRaw).trim();
         }
+        // Normalize: 082... → 6282...
+        noWa = normalizeWhatsAppNumber(noWa);
       }
       const iuranRaw = String(r['Iuran Bulanan'] || '').trim();
       const iuran = iuranRaw === '' ? null : parseFloat(iuranRaw);
@@ -3637,6 +3656,8 @@ router.post('/admin/students/import', authenticateOperator, excelUpload.single('
         } else {
           noWa = String(noWaRaw).trim();
         }
+        // Normalize: 082... → 6282...
+        noWa = normalizeWhatsAppNumber(noWa);
       }
       const iuranRaw = String(r['Iuran Bulanan'] || '').trim();
       const iuran = iuranRaw === '' ? 0 : parseFloat(iuranRaw);
@@ -4271,12 +4292,52 @@ router.put('/admin/students/bulk-promote', authenticateOperator, async (req, res
 
       try {
         const alumniClassId = await getOrCreateAlumniClass(tenantId);
+        
+        // Get school name for education history
+        const [school] = await db.query('SELECT nama_sekolah FROM tenants WHERE tenant_id = ?', [tenantId]);
+        const schoolName = school?.nama_sekolah || fromClass.nama_kelas;
+        
+        // Get students being graduated for education history
+        const graduatingStudents = await db.query(
+          'SELECT id, nama_siswa, tahun_masuk FROM students WHERE class_id = ?',
+          [fromId]
+        );
+        
+        // Record education history for each graduating student
+        for (const student of graduatingStudents) {
+          await db.query(
+            `INSERT INTO student_education_history (student_id, tenant_id, nama_sekolah, tahun_masuk, tahun_lulus, status, keterangan) 
+             VALUES (?, ?, ?, ?, ?, 'lulus', ?)`,
+            [student.id, tenantId, schoolName, student.tahun_masuk, new Date().getFullYear().toString(), `Lulus dari ${fromClass.nama_kelas}`]
+          );
+        }
+        
         await db.query(
           'UPDATE students SET class_id = ?, status_lulus = 1, tanggal_lulus = NOW() WHERE class_id = ?',
           [alumniClassId, fromId]
         );
       } catch (colError) {
         const alumniClassId = await getOrCreateAlumniClass(tenantId);
+        
+        // Get school name for education history
+        const [school] = await db.query('SELECT nama_sekolah FROM tenants WHERE tenant_id = ?', [tenantId]);
+        const schoolName = school?.nama_sekolah || fromClass.nama_kelas;
+        
+        // Get students being graduated for education history
+        const graduatingStudents = await db.query(
+          'SELECT id, nama_siswa, tahun_masuk FROM students WHERE class_id = ?',
+          [fromId]
+        );
+        
+        // Record education history for each graduating student
+        for (const student of graduatingStudents) {
+          await db.query(
+            `INSERT INTO student_education_history (student_id, tenant_id, nama_sekolah, tahun_masuk, tahun_lulus, status, keterangan) 
+             VALUES (?, ?, ?, ?, ?, 'lulus', ?)`,
+            [student.id, tenantId, schoolName, student.tahun_masuk, new Date().getFullYear().toString(), `Lulus dari ${fromClass.nama_kelas}`]
+          );
+        }
+        
         await db.query(
           'UPDATE students SET class_id = ?, status = ? WHERE class_id = ?',
           [alumniClassId, 'alumni', fromId]
