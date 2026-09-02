@@ -3629,14 +3629,22 @@ router.post('/admin/students/:id/mutasi', authenticateOperator, async (req, res)
 
     const oldTenantId = student.tenant_id;
     let newTenantId = target_tenant_id;
+    let isSpecialExit = false;
+    let statusText = 'dimutasi';
 
-    // If "Other" option selected with custom tenant name
+    // Handle special exit reasons: 'keluar' (leaving) and 'lulus' (graduating)
+    if (target_tenant_id === 'keluar' || target_tenant_id === 'lulus') {
+      isSpecialExit = true;
+      statusText = target_tenant_id === 'keluar' ? 'dikeluarkan' : 'lulus';
+      newTenantId = oldTenantId; // keep student in same tenant, just clear class
+    }
+
+    // Backward compat: "other" option with custom tenant name (admin-dashboard legacy)
     if (target_tenant_id === 'other' && target_tenant_name) {
       const [existingTenant] = await db.query('SELECT tenant_id FROM tenants WHERE tenant_id = ?', [target_tenant_name]);
       if (existingTenant) {
         newTenantId = existingTenant.tenant_id;
       } else {
-        // Create new tenant
         await db.query(
           'INSERT INTO tenants (tenant_id, nama_sekolah) VALUES (?, ?)',
           [target_tenant_name, target_tenant_name]
@@ -3645,7 +3653,7 @@ router.post('/admin/students/:id/mutasi', authenticateOperator, async (req, res)
       }
     }
 
-    if (!newTenantId) {
+    if (!isSpecialExit && !newTenantId) {
       return res.status(400).json({ success: false, message: 'Tujuan mutasi wajib diisi' });
     }
 
@@ -3655,21 +3663,36 @@ router.post('/admin/students/:id/mutasi', authenticateOperator, async (req, res)
       [id, oldTenantId, newTenantId, reason || null]
     );
 
-    // Update student: set to new tenant, clear class_id
-    // Try with mutasi_status column first, fallback without
+    // Update student: clear class_id, set mutasi_status
+    // For special exits (keluar/lulus), keep tenant_id unchanged
     try {
-      await db.query(
-        'UPDATE students SET tenant_id = ?, class_id = NULL, mutasi_status = ? WHERE id = ?',
-        [newTenantId, 'completed', id]
-      );
+      if (isSpecialExit) {
+        await db.query(
+          'UPDATE students SET class_id = NULL, mutasi_status = ? WHERE id = ?',
+          ['completed', id]
+        );
+      } else {
+        await db.query(
+          'UPDATE students SET tenant_id = ?, class_id = NULL, mutasi_status = ? WHERE id = ?',
+          [newTenantId, 'completed', id]
+        );
+      }
     } catch (colError) {
-      await db.query(
-        'UPDATE students SET tenant_id = ?, class_id = NULL WHERE id = ?',
-        [newTenantId, id]
-      );
+      if (isSpecialExit) {
+        await db.query(
+          'UPDATE students SET class_id = NULL WHERE id = ?',
+          [id]
+        );
+      } else {
+        await db.query(
+          'UPDATE students SET tenant_id = ?, class_id = NULL WHERE id = ?',
+          [newTenantId, id]
+        );
+      }
     }
 
-    res.json({ success: true, message: `${student.nama_siswa} berhasil dimutasi ke ${newTenantId}` });
+    const tujuanText = isSpecialExit ? statusText : newTenantId;
+    res.json({ success: true, message: `${student.nama_siswa} berhasil ${statusText}${isSpecialExit ? '' : ' ke ' + tujuanText}` });
   } catch (error) {
     console.error('Student mutasi error:', error);
     res.status(500).json({ success: false, message: 'Error mutasi siswa: ' + error.message });
