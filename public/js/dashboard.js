@@ -3144,13 +3144,47 @@ async function shareProblemQRViaWhatsApp() {
     }
 }
 
-// Download QR code file
+// Download QR code file - works on all devices (iOS, Android, desktop)
 function downloadQRCodeFile() {
     if (!currentProblemQRData) return;
 
+    const qrUrl = currentProblemQRData.qrUrl;
+    const fileName = `QR_Absen_${currentProblemQRData.teacherName.replace(/\s+/g, '_')}.png`;
+
+    // data: URL → convert to Blob (works on iOS Safari)
+    if (qrUrl && qrUrl.startsWith('data:')) {
+        try {
+            const arr = qrUrl.split(',');
+            const mime = (arr[0].match(/:(.*?);/) || ['', 'image/png'])[1];
+            const bstr = atob(arr[1]);
+            let n = bstr.length;
+            const u8arr = new Uint8Array(n);
+            while (n--) {
+                u8arr[n] = bstr.charCodeAt(n);
+            }
+            const blob = new Blob([u8arr], { type: mime });
+            const blobUrl = URL.createObjectURL(blob);
+
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.download = fileName;
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+            return;
+        } catch (e) {
+            console.error('Blob conversion failed, fallback to direct download:', e);
+        }
+    }
+
+    // Fallback: cross-origin or remote URL
     const link = document.createElement('a');
-    link.href = currentProblemQRData.qrUrl;
-    link.download = `QR_Absen_${currentProblemQRData.teacherName.replace(/\s+/g, '_')}.png`;
+    link.href = qrUrl;
+    link.download = fileName;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
     link.style.display = 'none';
     document.body.appendChild(link);
     link.click();
@@ -3203,6 +3237,19 @@ function downloadProblemQR() {
 
     // Download QR code
     downloadQRCodeFile();
+
+    // Show success feedback
+    const Toast = Swal.mixin({
+        toast: true,
+        position: 'top-end',
+        showConfirmButton: false,
+        timer: 2500,
+        timerProgressBar: true
+    });
+    Toast.fire({
+        icon: 'success',
+        title: 'QR Code sedang diunduh'
+    });
 
     // Setelah download selesai, tampilkan tombol WhatsApp dan sembunyikan tombol Download
     const downloadBtn = document.getElementById('btn-download-qr');

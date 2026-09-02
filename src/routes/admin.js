@@ -2842,7 +2842,7 @@ router.get('/admin/students', authenticateOperator, async (req, res) => {
       FROM students s
       LEFT JOIN classes c ON s.class_id = c.id
       LEFT JOIN parents p ON s.parent_id = p.id
-      WHERE 1=1
+      WHERE s.status != 'alumni'
     `;
     let countParams = [];
 
@@ -2877,7 +2877,7 @@ router.get('/admin/students', authenticateOperator, async (req, res) => {
         LEFT JOIN classes c ON s.class_id = c.id
         LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id
         LEFT JOIN parents p ON s.parent_id = p.id
-        WHERE 1=1
+        WHERE s.status != 'alumni'
      `;
     let params = [];
 
@@ -2935,6 +2935,310 @@ router.get('/admin/students', authenticateOperator, async (req, res) => {
   }
 });
 
+// ==========================================
+// ALUMNI ROUTES - Manajemen Alumni
+// ==========================================
+
+// GET /api/admin/alumni - List alumni for current tenant, grouped by graduation year
+router.get('/admin/alumni', authenticateOperator, async (req, res) => {
+  try {
+    let tenantId = req.query.tenant_id;
+    if (!tenantId) {
+      tenantId = req.user.tenant_id || (req.user.assignments?.[0]?.tenant_id);
+    }
+    if (!tenantId) {
+      return res.status(400).json({ success: false, message: 'tenant_id wajib diisi' });
+    }
+    if (req.user.role !== 'admin' && !verifyTenantAccess(req, tenantId)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak untuk tenant ini' });
+    }
+
+    const year = req.query.year; // Optional filter by graduation year
+
+    let query = `
+      SELECT s.id, s.nama_siswa, s.nisn, s.nis, s.jenis_kelamin, s.iuran_bulanan,
+             s.tenant_id, s.tanggal_masuk, s.tahun_masuk,
+             c.nama_kelas, c.tingkatan, tn.nama_sekolah,
+             p.nama_orang_tua, p.no_wa as no_wa_ortu
+      FROM students s
+      LEFT JOIN classes c ON s.class_id = c.id
+      LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id
+      LEFT JOIN parents p ON s.parent_id = p.id
+      WHERE s.tenant_id = ? AND s.status = 'alumni'
+    `;
+    let params = [tenantId];
+
+    if (year) {
+      query += ' AND (c.tingkatan = ? OR s.tahun_masuk = ? OR LEFT(s.tanggal_masuk, 4) = ?)';
+      params.push(year, year, year);
+    }
+
+    query += ' ORDER BY s.tahun_masuk DESC, s.nama_siswa ASC';
+
+    const alumni = await db.query(query, params);
+
+    // Get education history for each alumni
+    for (const a of alumni) {
+      const history = await db.query(
+        `SELECT id, nama_sekolah, tahun_masuk, tahun_lulus, status 
+         FROM student_education_history 
+         WHERE student_id = ? 
+         ORDER BY tahun_masuk ASC`,
+        [a.id]
+      );
+      a.education_history = history;
+    }
+
+    // Group by graduation year (use tahun_masuk or extract from tanggal_masuk)
+    const grouped = {};
+    alumni.forEach(a => {
+      const yearKey = a.tahun_masuk || (a.tanggal_masuk ? String(a.tanggal_masuk).substring(0, 4) : null) || 'Unknown';
+      if (!grouped[yearKey]) {
+        grouped[yearKey] = [];
+      }
+      grouped[yearKey].push(a);
+    });
+
+    res.json({
+      success: true,
+      data: alumni,
+      grouped: grouped,
+      years: Object.keys(grouped).sort((a, b) => b - a) // Descending years
+    });
+  } catch (error) {
+    console.error('Admin alumni error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching alumni' });
+  }
+});
+
+// GET /api/admin/alumni/pool - List alumni available for adoption (from other schools)
+router.get('/admin/alumni/pool', authenticateOperator, async (req, res) => {
+  try {
+    let tenantId = req.query.tenant_id;
+    if (!tenantId) {
+      tenantId = req.user.tenant_id || (req.user.assignments?.[0]?.tenant_id);
+    }
+    if (!tenantId) {
+      return res.status(400).json({ success: false, message: 'tenant_id wajib diisi' });
+    }
+
+    const year = req.query.year; // Optional filter by graduation year
+
+    let query = `
+      SELECT s.id, s.nama_siswa, s.nisn, s.nis, s.jenis_kelamin, s.iuran_bulanan,
+             s.tenant_id, s.tanggal_masuk, s.tahun_masuk,
+             c.nama_kelas, c.tingkatan, tn.nama_sekolah,
+             p.nama_orang_tua, p.no_wa as no_wa_ortu
+      FROM students s
+      LEFT JOIN classes c ON s.class_id = c.id
+      LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id
+      LEFT JOIN parents p ON s.parent_id = p.id
+      WHERE s.status = 'alumni' AND s.tenant_id != ?
+    `;
+    let params = [tenantId];
+
+    if (year) {
+      query += ' AND (c.tingkatan = ? OR s.tahun_masuk = ? OR LEFT(s.tanggal_masuk, 4) = ?)';
+      params.push(year, year, year);
+    }
+
+    query += ' ORDER BY tn.nama_sekolah ASC, s.tahun_masuk DESC, s.nama_siswa ASC';
+
+    const alumni = await db.query(query, params);
+
+    // Get education history for each alumni
+    for (const a of alumni) {
+      const history = await db.query(
+        `SELECT id, nama_sekolah, tahun_masuk, tahun_lulus, status 
+         FROM student_education_history 
+         WHERE student_id = ? 
+         ORDER BY tahun_masuk ASC`,
+        [a.id]
+      );
+      a.education_history = history;
+    }
+
+    // Group by school and year
+    const grouped = {};
+    alumni.forEach(a => {
+      const schoolKey = a.nama_sekolah || a.tenant_id;
+      const yearKey = a.tahun_masuk || (a.tanggal_masuk ? String(a.tanggal_masuk).substring(0, 4) : null) || 'Unknown';
+      const groupKey = `${schoolKey}|${yearKey}`;
+      if (!grouped[groupKey]) {
+        grouped[groupKey] = {
+          school: schoolKey,
+          year: yearKey,
+          alumni: []
+        };
+      }
+      grouped[groupKey].alumni.push(a);
+    });
+
+    res.json({
+      success: true,
+      data: alumni,
+      grouped: Object.values(grouped)
+    });
+  } catch (error) {
+    console.error('Admin alumni pool error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching alumni pool' });
+  }
+});
+
+// POST /api/admin/alumni/:id/adopt - Adopt an alumni from another school
+router.post('/admin/alumni/:id/adopt', authenticateOperator, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { class_id } = req.body;
+    let tenantId = req.body.tenant_id || req.user.tenant_id || (req.user.assignments?.[0]?.tenant_id);
+
+    if (!tenantId) {
+      return res.status(400).json({ success: false, message: 'tenant_id wajib diisi' });
+    }
+
+    // Get alumni data with previous school info
+    const [student] = await db.query(
+      `SELECT s.*, c.tingkatan, tn.nama_sekolah as nama_sekolah_asal 
+       FROM students s 
+       LEFT JOIN classes c ON s.class_id = c.id 
+       LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id
+       WHERE s.id = ? AND s.status = 'alumni'`,
+      [id]
+    );
+
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Alumni tidak ditemukan' });
+    }
+
+    if (student.tenant_id === tenantId) {
+      return res.status(400).json({ success: false, message: 'Alumni sudah berada di sekolah ini' });
+    }
+
+    // Verify class belongs to tenant if provided
+    if (class_id) {
+      const [classCheck] = await db.query('SELECT id FROM classes WHERE id = ? AND tenant_id = ?', [class_id, tenantId]);
+      if (!classCheck) {
+        return res.status(400).json({ success: false, message: 'Kelas tidak valid untuk sekolah ini' });
+      }
+    }
+
+    // Record education history for the previous school
+    await db.query(
+      `INSERT INTO student_education_history (student_id, tenant_id, nama_sekolah, tahun_masuk, tahun_lulus, status) 
+       VALUES (?, ?, ?, ?, ?, 'lulus')`,
+      [id, student.tenant_id, student.nama_sekolah_asal || 'Sekolah Asal', student.tahun_masuk, new Date().getFullYear().toString()]
+    );
+
+    // Adopt: move alumni to new school, set status to aktif
+    await db.query(
+      'UPDATE students SET tenant_id = ?, class_id = COALESCE(?, class_id), status = "aktif" WHERE id = ?',
+      [tenantId, class_id || null, id]
+    );
+
+    res.json({
+      success: true,
+      message: `${student.nama_siswa} berhasil diadopsi`,
+      data: { id, nama_siswa: student.nama_siswa }
+    });
+  } catch (error) {
+    console.error('Adopt alumni error:', error);
+    res.status(500).json({ success: false, message: 'Error adopting alumni' });
+  }
+});
+
+// GET /api/admin/students/:id/education-history - Get student's education history
+router.get('/admin/students/:id/education-history', authenticateOperator, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const history = await db.query(
+      `SELECT seh.*, tn.nama_sekolah 
+       FROM student_education_history seh
+       LEFT JOIN tenants tn ON seh.tenant_id = tn.tenant_id
+       WHERE seh.student_id = ? 
+       ORDER BY seh.tahun_masuk ASC, seh.created_at ASC`,
+      [id]
+    );
+
+    res.json({
+      success: true,
+      data: history
+    });
+  } catch (error) {
+    console.error('Education history error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching education history' });
+  }
+});
+
+// POST /api/admin/students/:id/education-history - Add education history record
+router.post('/admin/students/:id/education-history', authenticateOperator, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { tenant_id, nama_sekolah, tahun_masuk, tahun_lulus, status, keterangan } = req.body;
+
+    if (!nama_sekolah) {
+      return res.status(400).json({ success: false, message: 'Nama sekolah wajib diisi' });
+    }
+
+    await db.query(
+      `INSERT INTO student_education_history (student_id, tenant_id, nama_sekolah, tahun_masuk, tahun_lulus, status, keterangan) 
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [id, tenant_id || null, nama_sekolah, tahun_masuk || null, tahun_lulus || null, status || 'lulus', keterangan || null]
+    );
+
+    res.json({
+      success: true,
+      message: 'Riwayat pendidikan berhasil ditambahkan'
+    });
+  } catch (error) {
+    console.error('Add education history error:', error);
+    res.status(500).json({ success: false, message: 'Error adding education history' });
+  }
+});
+
+// PUT /api/admin/students/:id/education-history/:historyId - Update education history record
+router.put('/admin/students/:id/education-history/:historyId', authenticateOperator, async (req, res) => {
+  try {
+    const { id, historyId } = req.params;
+    const { tenant_id, nama_sekolah, tahun_masuk, tahun_lulus, status, keterangan } = req.body;
+
+    await db.query(
+      `UPDATE student_education_history 
+       SET tenant_id = ?, nama_sekolah = ?, tahun_masuk = ?, tahun_lulus = ?, status = ?, keterangan = ?
+       WHERE id = ? AND student_id = ?`,
+      [tenant_id || null, nama_sekolah, tahun_masuk || null, tahun_lulus || null, status || 'lulus', keterangan || null, historyId, id]
+    );
+
+    res.json({
+      success: true,
+      message: 'Riwayat pendidikan berhasil diupdate'
+    });
+  } catch (error) {
+    console.error('Update education history error:', error);
+    res.status(500).json({ success: false, message: 'Error updating education history' });
+  }
+});
+
+// DELETE /api/admin/students/:id/education-history/:historyId - Delete education history record
+router.delete('/admin/students/:id/education-history/:historyId', authenticateOperator, async (req, res) => {
+  try {
+    const { id, historyId } = req.params;
+
+    await db.query(
+      'DELETE FROM student_education_history WHERE id = ? AND student_id = ?',
+      [historyId, id]
+    );
+
+    res.json({
+      success: true,
+      message: 'Riwayat pendidikan berhasil dihapus'
+    });
+  } catch (error) {
+    console.error('Delete education history error:', error);
+    res.status(500).json({ success: false, message: 'Error deleting education history' });
+  }
+});
+
 // GET /api/admin/students/incomplete - Students with incomplete data (esp. parent data)
 router.get('/admin/students/incomplete', authenticateOperator, async (req, res) => {
   try {
@@ -2955,6 +3259,7 @@ router.get('/admin/students/incomplete', authenticateOperator, async (req, res) 
       LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id
       LEFT JOIN parents p ON s.parent_id = p.id
       WHERE s.tenant_id = ?
+        AND s.status != 'alumni'
         AND (
           s.parent_id IS NULL
           OR p.nama_orang_tua IS NULL OR p.nama_orang_tua = ''
@@ -3598,7 +3903,7 @@ router.get('/admin/students/all', authenticateOperator, async (req, res) => {
       LEFT JOIN classes c ON s.class_id = c.id
       LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id
       LEFT JOIN parents p ON s.parent_id = p.id
-      WHERE 1=1
+      WHERE s.status != 'alumni'
     `;
 
     if (req.query.tenant_id) {
@@ -3655,6 +3960,19 @@ router.post('/admin/students/:id/mutasi', authenticateOperator, async (req, res)
 
     if (!isSpecialExit && !newTenantId) {
       return res.status(400).json({ success: false, message: 'Tujuan mutasi wajib diisi' });
+    }
+
+    // Get old school name for education history
+    const [oldSchool] = await db.query('SELECT nama_sekolah FROM tenants WHERE tenant_id = ?', [oldTenantId]);
+
+    // Record education history for the old school
+    if (oldTenantId && oldSchool) {
+      const historyStatus = isSpecialExit ? (target_tenant_id === 'lulus' ? 'lulus' : 'keluar') : 'pindah';
+      await db.query(
+        `INSERT INTO student_education_history (student_id, tenant_id, nama_sekolah, tahun_masuk, tahun_lulus, status, keterangan) 
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [id, oldTenantId, oldSchool.nama_sekolah, student.tahun_masuk, new Date().getFullYear().toString(), historyStatus, reason || null]
+      );
     }
 
     // Record mutasi in mutasi_students table (for tracking)
@@ -4437,9 +4755,9 @@ router.get('/admin/student-payment-summary', authenticateOperator, async (req, r
         SUM(s.iuran_bulanan) as total_pemasukan
       FROM students s
       LEFT JOIN classes c ON s.class_id = c.id
-      WHERE 1=1
+      WHERE (s.status != 'alumni' OR s.tenant_id = ?)
     `;
-    let params = [];
+    let params = [tenantId];
 
     if (tenantId) {
       query += ' AND s.tenant_id = ?';
@@ -4627,14 +4945,32 @@ router.put('/admin/students/:id/transfer', authenticateOperator, async (req, res
     const { id } = req.params;
     const { tenant_id, class_id } = req.body;
 
+    // Get current student data before clearing tenant
+    const [student] = await db.query(
+      `SELECT s.tenant_id, s.nama_siswa, s.tahun_masuk, tn.nama_sekolah 
+       FROM students s 
+       LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id
+       WHERE s.id = ?`,
+      [id]
+    );
+
+    // Record education history before clearing tenant
+    if (student && student.tenant_id && student.nama_sekolah) {
+      await db.query(
+        `INSERT INTO student_education_history (student_id, tenant_id, nama_sekolah, tahun_masuk, tahun_lulus, status, keterangan) 
+         VALUES (?, ?, ?, ?, ?, 'pindah', ?)`,
+        [id, student.tenant_id, student.nama_sekolah, student.tahun_masuk, new Date().getFullYear().toString(), 'Transfer ke mutasi pool']
+      );
+    }
+
     // Set mutasi_status to pending, clear tenant for adoption pool
     await db.query(
       'UPDATE students SET mutasi_status = "pending" WHERE id = ?',
       [id]
     );
 
-    const [student] = await db.query('SELECT nama_siswa FROM students WHERE id = ?', [id]);
-    res.json({ success: true, message: `${student.nama_siswa} siap diadopsi sekolah lain` });
+    const [studentInfo] = await db.query('SELECT nama_siswa FROM students WHERE id = ?', [id]);
+    res.json({ success: true, message: `${studentInfo.nama_siswa} siap diadopsi sekolah lain` });
   } catch (error) {
     console.error('Transfer student error:', error);
     res.status(500).json({ success: false, message: 'Error transferring student' });
@@ -4645,21 +4981,35 @@ router.put('/admin/students/:id/transfer', authenticateOperator, async (req, res
 // CROSS-TENANT TRANSFER ROUTES
 // ============================================================
 
-// POST /api/admin/mutasi/teachers/:id/initiate - Send teacher to mutasi pool (cross-tenant transfer)
+// POST /api/admin/mutasi/teachers/:id/initiate - Send teacher to mutasi pool or keluar/resign
 router.post('/admin/mutasi/teachers/:id/initiate', authenticateOperator, async (req, res) => {
   try {
     const { id } = req.params;
     const { reason } = req.body;
 
+    const isKeluar = String(reason || '').startsWith('Keluar/Resign:');
+    const cleanReason = isKeluar ? String(reason || '').replace(/^Keluar\/Resign:\s*/, '') : reason;
+
     let updated = false;
     try {
-      const result = await db.query(
-        'UPDATE teacher_assignments SET mutasi_status = ?, mutasi_reason = ?, mutasi_date = NOW() WHERE teacher_id = ?',
-        ['pending', reason || null, id]
-      );
-      updated = result.affectedRows > 0;
+      if (isKeluar) {
+        const result = await db.query(
+          'UPDATE teacher_assignments SET tenant_id = NULL, mutasi_status = ?, mutasi_reason = ?, mutasi_date = NOW() WHERE teacher_id = ?',
+          ['keluar', cleanReason || null, id]
+        );
+        updated = result.affectedRows > 0;
+      } else {
+        const result = await db.query(
+          'UPDATE teacher_assignments SET mutasi_status = ?, mutasi_reason = ?, mutasi_date = NOW() WHERE teacher_id = ?',
+          ['pending', reason || null, id]
+        );
+        updated = result.affectedRows > 0;
+      }
     } catch (colError) {
       console.warn('Mutasi columns not found in teacher_assignments, fallback to status-based marking');
+      if (isKeluar) {
+        await db.query('UPDATE teacher_assignments SET tenant_id = NULL WHERE teacher_id = ?', [id]);
+      }
     }
 
     if (!updated) {
@@ -4670,7 +5020,7 @@ router.post('/admin/mutasi/teachers/:id/initiate', authenticateOperator, async (
     }
 
     const [teacher] = await db.query('SELECT nama FROM teachers WHERE id = ?', [id]);
-    res.json({ success: true, message: `${teacher.nama} berhasil masuk daftar mutasi lintas sekolah` });
+    res.json({ success: true, message: `${teacher.nama} berhasil keluar dari sekolah` });
   } catch (error) {
     console.error('Initiate mutasi teacher error:', error);
     res.status(500).json({ success: false, message: 'Error initiating mutasi: ' + error.message });
@@ -4682,6 +5032,28 @@ router.post('/admin/mutasi/students/:id/initiate', authenticateOperator, async (
   try {
     const { id } = req.params;
     const { reason } = req.body;
+
+    // Get current student data before clearing tenant
+    const [student] = await db.query(
+      `SELECT s.tenant_id, s.nama_siswa, s.tahun_masuk, tn.nama_sekolah 
+       FROM students s 
+       LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id
+       WHERE s.id = ?`,
+      [id]
+    );
+
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Siswa tidak ditemukan' });
+    }
+
+    // Record education history before clearing tenant
+    if (student.tenant_id && student.nama_sekolah) {
+      await db.query(
+        `INSERT INTO student_education_history (student_id, tenant_id, nama_sekolah, tahun_masuk, tahun_lulus, status, keterangan) 
+         VALUES (?, ?, ?, ?, ?, 'pindah', ?)`,
+        [id, student.tenant_id, student.nama_sekolah, student.tahun_masuk, new Date().getFullYear().toString(), reason || 'Mutasi ke sekolah lain']
+      );
+    }
 
     // Check if mutasi_status column exists
     try {
@@ -4696,7 +5068,6 @@ router.post('/admin/mutasi/students/:id/initiate', authenticateOperator, async (
       );
     }
 
-    const [student] = await db.query('SELECT nama_siswa FROM students WHERE id = ?', [id]);
     res.json({ success: true, message: `${student.nama_siswa} berhasil masuk daftar mutasi lintas sekolah` });
   } catch (error) {
     console.error('Initiate mutasi student error:', error);
@@ -4830,6 +5201,9 @@ router.post('/admin/mutasi/students/:id/adopt', authenticateOperator, async (req
       return res.status(400).json({ success: false, message: 'Tenant tidak ditemukan' });
     }
 
+    // Get new school name for education history
+    const [newSchool] = await db.query('SELECT nama_sekolah FROM tenants WHERE tenant_id = ?', [tenant_id]);
+
     try {
       await db.query(
         'UPDATE students SET tenant_id = ?, class_id = ?, mutasi_status = NULL WHERE id = ?',
@@ -4842,7 +5216,14 @@ router.post('/admin/mutasi/students/:id/adopt', authenticateOperator, async (req
       );
     }
 
-    const [student] = await db.query('SELECT nama_siswa FROM students WHERE id = ?', [id]);
+    // Record education history for the new school entry
+    const [student] = await db.query('SELECT nama_siswa, tahun_masuk FROM students WHERE id = ?', [id]);
+    await db.query(
+      `INSERT INTO student_education_history (student_id, tenant_id, nama_sekolah, tahun_masuk, status, keterangan) 
+       VALUES (?, ?, ?, ?, 'aktif', ?)`,
+      [id, tenant_id, newSchool?.nama_sekolah || 'Sekolah Baru', new Date().getFullYear().toString(), 'Diadopsi dari mutasi pool']
+    );
+
     res.json({ success: true, message: `${student.nama_siswa} berhasil diadopsi` });
   } catch (error) {
     console.error('Adopt student error:', error);
@@ -5533,13 +5914,13 @@ router.post('/admin/send-whatsapp-bill-bulk/:tenantId', authenticateOperator, as
     // Get tenant bank info
     const [tenant] = await db.query('SELECT bank_account_number, bank_account_name FROM tenants WHERE tenant_id = ?', [tenantId]);
     
-    // Get students with parent WA
+    // Get students with parent WA (include adopted alumni, exclude alumni from other schools)
     const students = await db.query(`
       SELECT s.id, s.nama_siswa, s.iuran_bulanan, p.no_wa as parent_wa
       FROM students s
       LEFT JOIN parents p ON s.parent_id = p.id
-      WHERE s.tenant_id = ? AND p.no_wa IS NOT NULL AND p.no_wa != ''
-    `, [tenantId]);
+      WHERE s.tenant_id = ? AND (s.status != 'alumni' OR s.tenant_id = ?) AND p.no_wa IS NOT NULL AND p.no_wa != ''
+    `, [tenantId, tenantId]);
     
     const { sendBillTemplate } = require('../utils/whatsappTemplate');
     let success = 0, failed = 0;
@@ -5585,13 +5966,13 @@ router.post('/admin/send-whatsapp-bill-bulk/:tenantId', authenticateOperator, as
     // Get tenant bank info
     const [tenant] = await db.query('SELECT bank_account_number, bank_account_name FROM tenants WHERE tenant_id = ?', [tenantId]);
     
-    // Get students with parent WA
+    // Get students with parent WA (include adopted alumni, exclude alumni from other schools)
     const students = await db.query(`
       SELECT s.id, s.nama_siswa, s.iuran_bulanan, p.no_wa as parent_wa
       FROM students s
       LEFT JOIN parents p ON s.parent_id = p.id
-      WHERE s.tenant_id = ? AND p.no_wa IS NOT NULL AND p.no_wa != ''
-    `, [tenantId]);
+      WHERE s.tenant_id = ? AND (s.status != 'alumni' OR s.tenant_id = ?) AND p.no_wa IS NOT NULL AND p.no_wa != ''
+    `, [tenantId, tenantId]);
     
     const { sendBillTemplate } = require('../utils/whatsappTemplate');
     let success = 0, failed = 0;
@@ -5672,12 +6053,18 @@ router.post('/admin/send-bill-template', authenticateOperator, async (req, res) 
       return res.status(400).json({ success: false, message: 'Siswa wajib dipilih' });
     }
 
+    // First get student's tenant_id
+    const [studentInfo] = await db.query('SELECT tenant_id FROM students WHERE id = ?', [student_id]);
+    if (!studentInfo) {
+      return res.status(404).json({ success: false, message: 'Siswa tidak ditemukan' });
+    }
+
     const [student] = await db.query(`
       SELECT s.nama_siswa, s.iuran_bulanan, p.no_wa as parent_wa, s.tenant_id
       FROM students s
       LEFT JOIN parents p ON s.parent_id = p.id
-      WHERE s.id = ?
-    `, [student_id]);
+      WHERE s.id = ? AND (s.status != 'alumni' OR s.tenant_id = ?)
+    `, [student_id, studentInfo.tenant_id]);
 
     if (!student || !student.parent_wa) {
       return res.status(404).json({ success: false, message: 'Siswa atau nomor WA orang tua tidak ditemukan' });
@@ -5726,8 +6113,9 @@ router.post('/admin/bulk-bill', authenticateOperator, async (req, res) => {
     
     if (tenant_ids && tenant_ids.length > 0) {
       const placeholders = tenant_ids.map(() => '?').join(',');
-      query += ` AND s.tenant_id IN (${placeholders})`;
-      params = [...params, ...tenant_ids];
+      // Include active students + adopted alumni (alumni whose tenant_id is in the selected list)
+      query += ` AND s.tenant_id IN (${placeholders}) AND (s.status != 'alumni' OR s.tenant_id IN (${placeholders}))`;
+      params = [...params, ...tenant_ids, ...tenant_ids];
     }
 
     const students = await db.query(query, params);

@@ -142,12 +142,12 @@ router.post('/notifications/whatsapp/bill-template/bulk', authenticateAdmin, asy
       SELECT s.id, s.nama_siswa, s.iuran_bulanan, p.no_wa as parent_wa
       FROM students s
       LEFT JOIN parents p ON s.parent_id = p.id
-      WHERE p.no_wa IS NOT NULL AND p.no_wa != ""
+      WHERE p.no_wa IS NOT NULL AND p.no_wa != "" AND (s.status != 'alumni' OR s.tenant_id = ?)
     `;
     let params = [];
     if (tenantId) {
       query += ' AND s.tenant_id = ?';
-      params.push(tenantId);
+      params.push(tenantId, tenantId);
     }
     
     const students = await db.query(query, params);

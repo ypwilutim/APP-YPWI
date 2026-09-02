@@ -1358,13 +1358,14 @@ style="font-size: 0.95rem; font-weight: 700; color: #0f172a; margin: 0 0 0.75rem
       <div id="problemQRContainer" style="display: flex; justify-content: center; align-items: center; padding: 1rem; background: #f8fafc; border-radius: 0.75rem; border: 1px solid #e2e8f0;">
         <div id="problemQRImage" style="max-width: 100%;"></div>
       </div>
-      <div style="margin-top: 1rem;">
-        <button id="btn-download-qr" onclick="downloadProblemQR()"
-          style="width: 100%; background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; padding: 0.625rem 1rem; border-radius: 0.5rem; font-size: 0.875rem; font-weight: 500; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem; transition: background 0.2s;">
+      <p style="margin: 0.75rem 0 0 0; font-size: 0.75rem; color: #94a3b8; text-align: center;"><i class="fas fa-hand-pointer"></i> Tips: di HP, tekan & tahan gambar QR untuk menyimpan</p>
+      <div style="margin-top: 0.75rem;">
+        <button id="btn-download-qr" onclick="downloadProblemQR()" type="button"
+          style="width: 100%; background: #2563eb; color: #fff; border: none; padding: 0.7rem 1rem; border-radius: 0.5rem; font-size: 0.9rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem; min-height: 44px; -webkit-tap-highlight-color: rgba(0,0,0,0.1); touch-action: manipulation;">
           <i class="fas fa-download"></i> Download QR Code
         </button>
-        <button id="btn-share-qr-whatsapp" onclick="shareProblemQRViaWhatsApp()"
-          style="width: 100%; background: #25D366; color: white; border: none; padding: 0.625rem 1rem; border-radius: 0.5rem; font-size: 0.875rem; font-weight: 500; cursor: pointer; display: none; align-items: center; justify-content: center; gap: 0.5rem; transition: background 0.2s; margin-top: 0.5rem;">
+        <button id="btn-share-qr-whatsapp" onclick="shareProblemQRViaWhatsApp()" type="button"
+          style="width: 100%; background: #25D366; color: white; border: none; padding: 0.7rem 1rem; border-radius: 0.5rem; font-size: 0.9rem; font-weight: 600; cursor: pointer; display: none; align-items: center; justify-content: center; gap: 0.5rem; min-height: 44px; margin-top: 0.5rem; -webkit-tap-highlight-color: rgba(0,0,0,0.1); touch-action: manipulation;">
           <i class="fab fa-whatsapp"></i> Bagikan ke WhatsApp
         </button>
       </div>
