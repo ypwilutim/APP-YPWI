@@ -130,6 +130,10 @@ async function ensureBillingTables() {
     await db.query(`ALTER TABLE billing_payment ADD COLUMN IF NOT EXISTS catatan TEXT DEFAULT NULL AFTER status`);
     await db.query(`ALTER TABLE billing_payment ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at`);
     await db.query(`ALTER TABLE billing_payment ADD INDEX IF NOT EXISTS idx_bulan (bulan)`);
+    await db.query(`ALTER TABLE billing_payment ADD COLUMN IF NOT EXISTS metode_pembayaran ENUM('tunai','transfer_pusat','gateway','belum_bayar') DEFAULT NULL AFTER status`);
+    await db.query(`ALTER TABLE billing_payment ADD COLUMN IF NOT EXISTS tanggal_bayar DATE DEFAULT NULL AFTER metode_pembayaran`);
+    await db.query(`ALTER TABLE billing_payment ADD COLUMN IF NOT EXISTS dibayar_oleh VARCHAR(100) DEFAULT NULL AFTER tanggal_bayar`);
+    await db.query(`ALTER TABLE billing_payment ADD COLUMN IF NOT EXISTS catatan_pelunasan TEXT DEFAULT NULL AFTER dibayar_oleh`);
   } catch (e) {
     // Columns might already exist
   }
@@ -145,9 +149,9 @@ async function ensureBillingTables() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
-  // Tambah kolom tanggal_masuk di students (bulan & tahun masuk, format YYYY-MM)
+  // Tambah kolom tahun_masuk di students (4 digit tahun, format YYYY)
   try {
-    await db.query(`ALTER TABLE students ADD COLUMN tanggal_masuk VARCHAR(7) DEFAULT NULL`);
+    await db.query(`ALTER TABLE students ADD COLUMN tahun_masuk VARCHAR(10) DEFAULT NULL`);
   } catch (e) {
     // 1060 = duplicate column -> aman diabaikan
     if (e.code !== 'ER_DUP_FIELDNAME' && !/duplicate column/i.test(e.message)) throw e;
@@ -260,11 +264,11 @@ async function insertIncoming(rec) {
   return { id: res.insertId, matchedStudentId, periode };
 }
 
-// Generate billing_payment untuk satu tenant, per siswa dari tanggal_masuk -> now
+// Generate billing_payment untuk satu tenant, per siswa dari tahun_masuk -> now
 async function generateBilling(tenantId, fallbackStart) {
   const end = currentMonth();
   const students = await db.query(
-    `SELECT id, tenant_id, iuran_bulanan, ransportasi, tanggal_masuk FROM students
+    `SELECT id, tenant_id, iuran_bulanan, ransportasi, tahun_masuk FROM students
      WHERE tenant_id = ? AND (status = 'active' OR status = 'aktif' OR status IS NULL)`,
     [tenantId]
   );
@@ -275,10 +279,10 @@ async function generateBilling(tenantId, fallbackStart) {
     const [existingBills] = await db.query('SELECT MIN(bulan) as min_bulan FROM billing_payment WHERE student_id = ? LIMIT 1', [s.id]);
     const minBulan = existingBills?.min_bulan;
 
-    // Start from earliest existing bill, tanggal_masuk, or fallbackStart
+    // Start from earliest existing bill, tahun_masuk (YYYY), or fallbackStart
     let start = minBulan;
-    if (!start && s.tanggal_masuk && /^\d{4}-\d{2}$/.test(s.tanggal_masuk)) {
-      start = s.tanggal_masuk;
+    if (!start && s.tahun_masuk && /^\d{4}$/.test(s.tahun_masuk)) {
+      start = s.tahun_masuk + '-01'; // Start from Januari tahun masuk
     }
     if (!start) {
       start = fallbackStart || end;

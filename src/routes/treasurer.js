@@ -490,6 +490,111 @@ router.post('/treasurer/public/send-all-spp-reminders', async (req, res) => {
   }
 });
 
+// POST /api/treasurer/public/send-selected-spp-reminders - Kirim pengingat ke siswa yang dipilih
+router.post('/treasurer/public/send-selected-spp-reminders', async (req, res) => {
+  try {
+    const { student_ids, template_type, bulan, tanggal_jatuh_tempo } = req.body;
+    if (!student_ids || !Array.isArray(student_ids) || student_ids.length === 0) {
+      return res.status(400).json({ success: false, message: 'student_ids wajib diisi' });
+    }
+
+    const resolvedTemplate = template_type === 'bsi_auto' ? 'tagihan_spp_bsi_tunggaka' : template_type;
+    const templateName = resolvedTemplate === 'tagihan_spp_bsi_tunggaka' ? 'tagihan_spp_bsi_tunggaka' : (resolvedTemplate === 'tagihan_spp_bsi' ? 'tagihan_spp_bsi' : (resolvedTemplate === 'tagihan_spp' ? 'tagihan_spp' : 'invoice_spp'));
+
+    const placeholders = student_ids.map(() => '?').join(',');
+     const [defaulters] = await db.query(
+      `SELECT s.id, s.nama_siswa, s.nisn, p.no_wa, s.va_number, s.parent_id, s.tenant_id, c.nama_kelas, c.tingkatan, tn.nama_sekolah, COALESCE(COALESCE(CASE WHEN s.kelas = 'PI' THEN s.arrears_pi WHEN s.kelas = 'XI' THEN s.arrears_xi ELSE 0 END, 0), 0) as total_arrears FROM students s JOIN tenants tn ON s.tenant_id = tn.tenant_id LEFT JOIN classes c ON s.class_id = c.id LEFT JOIN parents p ON s.parent_id = p.id WHERE s.id IN (${placeholders})`,
+      student_ids
+    );
+
+    if (!defaulters || defaulters.length === 0) {
+      return res.json({ success: true, message: 'Tidak ada siswa ditemukan', sent: 0, failed: 0 });
+    }
+
+    const now = new Date();
+    const bulanPengiriman = bulan || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const jatuhTempo = tanggal_jatuh_tempo || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-10`;
+
+    // Get treasurer phone from teacher assignment (use first student's tenant)
+    let teleponBendahara = '';
+    const firstTenantId = defaulters[0].tenant_id;
+    const [bendahara] = await db.query(
+      `SELECT t.no_wa FROM teacher_assignments ta JOIN teachers t ON ta.teacher_id = t.id WHERE ta.tenant_id = ? AND ta.jabatan_di_unit = 'bendahara' LIMIT 1`,
+      [firstTenantId]
+    );
+    if (bendahara && bendahara.no_wa) {
+      teleponBendahara = bendahara.no_wa;
+    }
+
+    let sent = 0, failed = 0;
+
+    for (const student of defaulters) {
+      if (!student.no_wa) { failed++; continue; }
+
+      const number = student.no_wa.replace(/[^0-9]/g, '');
+      const templateParams = {
+        nama_siswa: student.nama_siswa,
+        bulan: bulanPengiriman,
+        jumlah_tagihan: student.total_arrears ? `${Number(student.total_arrears).toLocaleString('id-ID')}` : '-',
+        tanggal_jatuh_tempo: jatuhTempo
+      };
+
+      if (templateName === 'invoice_spp') {
+        let invoiceUrl = null;
+        const [inv] = await db.query(
+          'SELECT external_id FROM xendit_invoices WHERE student_id = ? AND status = "PENDING" ORDER BY created_at DESC LIMIT 1',
+          [student.id]
+        );
+        if (inv?.external_id) {
+          invoiceUrl = `xendit-payment.html?external_id=${inv.external_id}`;
+        } else {
+          invoiceUrl = `xendit-payment.html?student_id=${student.id}`;
+        }
+        templateParams.invoice_url = invoiceUrl;
+        templateParams.nama_pembayaran = 'SPP';
+      } else if (templateName === 'tagihan_spp_bsi' || templateName === 'tagihan_spp_bsi_tunggaka') {
+        const vaRaw = (student.va_number || '').replace(/[^0-9]/g, '');
+        const kelas = student.nama_kelas || (student.tingkatan ? `Kelas ${student.tingkatan}` : '-');
+        const namaSekolah = student.nama_sekolah || '-';
+        let infoSekolah = namaSekolah;
+        if (teleponBendahara) {
+          const waBendahara = `+${teleponBendahara.replace(/[^0-9]/g, '')}`;
+          infoSekolah = `${namaSekolah} - ${waBendahara}`;
+        }
+        templateParams.nomor_rekening = vaRaw ? `BSI ${vaRaw}` : '-';
+        templateParams.nama_penerima = (student.nama_siswa || '').replace(/,/g, ' ');
+        templateParams.kelas = kelas;
+        templateParams.nama_siswa_2 = student.nama_siswa;
+        templateParams.info_sekolah = infoSekolah;
+        templateParams.nama_sekolah = namaSekolah;
+        templateParams.va_raw = vaRaw;
+      } else {
+        const vaRaw = (student.va_number || '').replace(/[^0-9]/g, '');
+        templateParams.nomor_rekening = vaRaw ? `BSI ${vaRaw}` : '-';
+        templateParams.nama_penerima = (student.nama_siswa || '').replace(/,/g, ' ');
+      }
+
+      try {
+        const result = await sendBillTemplate(number, templateParams, templateName);
+        sent++;
+      } catch (e) {
+        failed++;
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Terkirim: ${sent} | Gagal: ${failed} dari ${defaulters.length} siswa`,
+      sent,
+      failed,
+      total: defaulters.length
+    });
+  } catch (error) {
+    console.error('Send selected SPP reminders error:', error.message);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // POST /api/treasurer/public/create-concession-invoice - Create concession invoice (additional installment)
 router.post('/treasurer/public/create-concession-invoice', async (req, res) => {
   try {
@@ -1778,7 +1883,7 @@ router.get('/treasurer/bendahara/saldo', authenticateBendahara, async (req, res)
   }
 });
 
-// POST /api/treasurer/bendahara/billing/generate - Generate billing dari tanggal_masuk ke bulan ini
+// POST /api/treasurer/bendahara/billing/generate - Generate billing dari tahun_masuk ke bulan ini
 router.post('/treasurer/bendahara/billing/generate', authenticateBendahara, async (req, res) => {
   try {
     await billing.ensureBillingTables();
@@ -1938,11 +2043,11 @@ router.post('/treasurer/bendahara/billing/recalc', authenticateBendahara, async 
   }
 });
 
-// GET /api/treasurer/bendahara/billing/month?tenant_id=XXX&bulan=2026-09 - Get billing for specific month
+// GET /api/treasurer/bendahara/billing/month?tenant_id=XXX&bulan=2026-09&search=keyword - Get billing for specific month
 router.get('/treasurer/bendahara/billing/month', authenticateBendahara, async (req, res) => {
   try {
     await billing.ensureBillingTables();
-    const { tenant_id, bulan } = req.query;
+    const { tenant_id, bulan, search } = req.query;
     
     if (!bulan || !/^\d{4}-\d{2}$/.test(bulan)) {
       return res.status(400).json({ success: false, message: 'Format bulan tidak benar (YYYY-MM)' });
@@ -1959,16 +2064,23 @@ router.get('/treasurer/bendahara/billing/month', authenticateBendahara, async (r
         bp.keterangan_spp,
         bp.status,
         bp.catatan,
+        bp.metode_pembayaran,
+        bp.tanggal_bayar,
+        bp.dibayar_oleh,
+        bp.catatan_pelunasan,
         s.nama_siswa,
         s.nisn,
         s.iuran_bulanan,
         s.ransportasi,
         s.tenant_id,
-        s.tanggal_masuk,
+        s.tahun_masuk,
+        s.va_number,
+        tn.nama_sekolah,
         COALESCE(ss.saldo, 0) as saldo
       FROM billing_payment bp
       JOIN students s ON bp.student_id = s.id
       LEFT JOIN saldo_siswa ss ON s.id = ss.student_id
+      LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id
       WHERE bp.bulan = ?
         AND (s.status = 'active' OR s.status = 'aktif' OR s.status IS NULL)
     `;
@@ -1977,6 +2089,12 @@ router.get('/treasurer/bendahara/billing/month', authenticateBendahara, async (r
     if (tenant_id) {
       query += ' AND s.tenant_id = ?';
       params.push(tenant_id);
+    }
+
+    if (search) {
+      query += ' AND (s.nama_siswa LIKE ? OR s.nisn LIKE ? OR s.va_number LIKE ? OR tn.nama_sekolah LIKE ?)';
+      const like = `%${search}%`;
+      params.push(like, like, like, like);
     }
 
     query += ' ORDER BY s.nama_siswa ASC';
@@ -1992,9 +2110,12 @@ router.get('/treasurer/bendahara/billing/month', authenticateBendahara, async (r
         s.ransportasi,
         s.subsidi,
         s.tenant_id,
-        s.tanggal_masuk
+        s.tahun_masuk,
+        s.va_number,
+        tn.nama_sekolah
       FROM students s
       LEFT JOIN billing_payment bp ON s.id = bp.student_id AND bp.bulan = ?
+      LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id
       WHERE bp.id IS NULL
         AND (s.status = 'active' OR s.status = 'aktif' OR s.status IS NULL)
     `;
@@ -2003,6 +2124,12 @@ router.get('/treasurer/bendahara/billing/month', authenticateBendahara, async (r
     if (tenant_id) {
       missingQuery += ' AND s.tenant_id = ?';
       missingParams.push(tenant_id);
+    }
+
+    if (search) {
+      missingQuery += ' AND (s.nama_siswa LIKE ? OR s.nisn LIKE ? OR s.va_number LIKE ? OR tn.nama_sekolah LIKE ?)';
+      const like = `%${search}%`;
+      missingParams.push(like, like, like, like);
     }
 
     missingQuery += ' ORDER BY s.nama_siswa ASC';
@@ -2023,10 +2150,16 @@ router.get('/treasurer/bendahara/billing/month', authenticateBendahara, async (r
           keterangan_spp: parseFloat(b.keterangan_spp) || 0,
           status: b.status,
           catatan: b.catatan,
+          metode_pembayaran: b.metode_pembayaran,
+          tanggal_bayar: b.tanggal_bayar,
+          dibayar_oleh: b.dibayar_oleh,
+          catatan_pelunasan: b.catatan_pelunasan,
           iuran_bulanan: parseFloat(b.iuran_bulanan) || 0,
           ransportasi: parseFloat(b.ransportasi) || 0,
-          tanggal_masuk: b.tanggal_masuk,
-          saldo: parseFloat(b.saldo) || 0
+          tahun_masuk: b.tahun_masuk,
+          saldo: parseFloat(b.saldo) || 0,
+          va_number: b.va_number,
+          nama_sekolah: b.nama_sekolah
         })),
         missing: missingStudents.map(s => ({
           student_id: s.student_id,
@@ -2035,7 +2168,9 @@ router.get('/treasurer/bendahara/billing/month', authenticateBendahara, async (r
           iuran_bulanan: parseFloat(s.iuran_bulanan) || 0,
           ransportasi: parseFloat(s.ransportasi) || 0,
           subsidi: parseFloat(s.subsidi) || 0,
-          tanggal_masuk: s.tanggal_masuk
+          tahun_masuk: s.tahun_masuk,
+          va_number: s.va_number,
+          nama_sekolah: s.nama_sekolah
         }))
       }
     });
@@ -2307,6 +2442,196 @@ router.post('/treasurer/bendahara/billing/create-batch', authenticateBendahara, 
   } catch (error) {
     console.error('Create batch billing error:', error);
     res.status(500).json({ success: false, message: 'Gagal buat batch billing' });
+  }
+});
+
+// POST /api/treasurer/bendahara/billing/reset - Reset selected billings (delete only if not paid)
+router.post('/treasurer/bendahara/billing/reset', authenticateBendahara, async (req, res) => {
+  try {
+    const { billing_ids } = req.body;
+    if (!Array.isArray(billing_ids) || billing_ids.length === 0) {
+      return res.status(400).json({ success: false, message: 'billing_ids wajib diisi' });
+    }
+
+    const placeholders = billing_ids.map(() => '?').join(',');
+    const targetBillings = await db.query(
+      `SELECT id, student_id, bulan, status, spp_bulanan, keterangan_spp FROM billing_payment WHERE id IN (${placeholders})`,
+      billing_ids
+    );
+
+    if (!targetBillings || targetBillings.length === 0) {
+      return res.status(404).json({ success: false, message: 'Billing tidak ditemukan' });
+    }
+
+    let deleted = 0, skipped = 0;
+    const deletedIds = [];
+    const skippedDetails = [];
+
+    for (const b of targetBillings) {
+      if (b.status === 'lunas') {
+        skipped++;
+        skippedDetails.push({ billing_id: b.id, reason: 'sudah lunas' });
+        continue;
+      }
+      try {
+        await db.query('DELETE FROM billing_payment WHERE id = ?', [b.id]);
+        if (b.student_id) {
+          await billing.recalcStudent(b.student_id);
+        }
+        deleted++;
+        deletedIds.push(b.id);
+      } catch (err) {
+        skippedDetails.push({ billing_id: b.id, reason: err.message });
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Berhasil reset ${deleted} billing. ${skipped} dilewati (sudah lunas).`,
+      deleted,
+      skipped,
+      deleted_ids: deletedIds,
+      skipped_details: skippedDetails
+    });
+  } catch (error) {
+    console.error('Reset billing error:', error);
+    res.status(500).json({ success: false, message: 'Gagal reset billing' });
+  }
+});
+
+// POST /api/treasurer/bendahara/billing/reset-all - Reset all billings for a month (optionally filtered by tenant)
+router.post('/treasurer/bendahara/billing/reset-all', authenticateBendahara, async (req, res) => {
+  try {
+    const { tenant_id, bulan } = req.body;
+    if (!bulan || !/^\d{4}-\d{2}$/.test(bulan)) {
+      return res.status(400).json({ success: false, message: 'Format bulan tidak benar (YYYY-MM)' });
+    }
+
+    let query = `SELECT bp.id, bp.student_id, bp.status, s.tenant_id FROM billing_payment bp JOIN students s ON bp.student_id = s.id WHERE bp.bulan = ?`;
+    const params = [bulan];
+    if (tenant_id) {
+      query += ' AND s.tenant_id = ?';
+      params.push(tenant_id);
+    }
+    const targetBillings = await db.query(query, params);
+
+    if (!targetBillings || targetBillings.length === 0) {
+      return res.json({ success: true, message: 'Tidak ada billing untuk direset', deleted: 0, skipped: 0 });
+    }
+
+    let deleted = 0, skipped = 0;
+    const affectedStudents = new Set();
+
+    for (const b of targetBillings) {
+      if (b.status === 'lunas') {
+        skipped++;
+        continue;
+      }
+      try {
+        await db.query('DELETE FROM billing_payment WHERE id = ?', [b.id]);
+        if (b.student_id) affectedStudents.add(b.student_id);
+        deleted++;
+      } catch (err) {
+        skipped++;
+      }
+    }
+
+    for (const studentId of affectedStudents) {
+      try {
+        await billing.recalcStudent(studentId);
+      } catch (e) {
+        // continue
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Reset selesai: ${deleted} billing dihapus, ${skipped} dilewati (sudah lunas).`,
+      deleted,
+      skipped,
+      total: targetBillings.length
+    });
+  } catch (error) {
+    console.error('Reset all billing error:', error);
+    res.status(500).json({ success: false, message: 'Gagal reset semua billing' });
+  }
+});
+
+// POST /api/treasurer/bendahara/billing/lunasi - Tandai billing lunas (tunai/transfer ke rekening pusat)
+router.post('/treasurer/bendahara/billing/lunasi', authenticateBendahara, async (req, res) => {
+  try {
+    await billing.ensureBillingTables();
+    const { billing_ids, metode_pembayaran, tanggal_bayar, dibayar_oleh, catatan_pelunasan } = req.body;
+
+    if (!Array.isArray(billing_ids) || billing_ids.length === 0) {
+      return res.status(400).json({ success: false, message: 'billing_ids wajib diisi' });
+    }
+    if (!metode_pembayaran || !['tunai', 'transfer_pusat'].includes(metode_pembayaran)) {
+      return res.status(400).json({ success: false, message: 'metode_pembayaran harus tunai atau transfer_pusat' });
+    }
+    if (!tanggal_bayar) {
+      return res.status(400).json({ success: false, message: 'tanggal_bayar wajib diisi' });
+    }
+
+    const placeholders = billing_ids.map(() => '?').join(',');
+    const targetBillings = await db.query(
+      `SELECT id, student_id, status FROM billing_payment WHERE id IN (${placeholders})`,
+      billing_ids
+    );
+
+    if (!targetBillings || targetBillings.length === 0) {
+      return res.status(404).json({ success: false, message: 'Billing tidak ditemukan' });
+    }
+
+    let lunas = 0, dilewati = 0;
+    const affectedStudents = new Set();
+    const skippedDetails = [];
+
+    for (const b of targetBillings) {
+      if (b.status === 'lunas') {
+        dilewati++;
+        skippedDetails.push({ billing_id: b.id, reason: 'sudah lunas' });
+        continue;
+      }
+      try {
+        await db.query(
+          `UPDATE billing_payment 
+           SET status = 'lunas', 
+               metode_pembayaran = ?, 
+               tanggal_bayar = ?, 
+               dibayar_oleh = ?, 
+               catatan_pelunasan = ?,
+               transaksi = COALESCE(keterangan_spp, spp_bulanan + COALESCE(ransportasi, 0) - COALESCE(subsidi, 0))
+           WHERE id = ?`,
+          [metode_pembayaran, tanggal_bayar, dibayar_oleh || null, catatan_pelunasan || null, b.id]
+        );
+        if (b.student_id) affectedStudents.add(b.student_id);
+        lunas++;
+      } catch (err) {
+        dilewati++;
+        skippedDetails.push({ billing_id: b.id, reason: err.message });
+      }
+    }
+
+    // Recalculate saldo siswa
+    for (const studentId of affectedStudents) {
+      try {
+        await billing.recalcStudent(studentId);
+      } catch (e) {
+        // continue
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Berhasil melunaskan ${lunas} billing. ${dilewati} dilewati (sudah lunas).`,
+      lunas,
+      dilewati,
+      skipped_details: skippedDetails
+    });
+  } catch (error) {
+    console.error('Lunasi billing error:', error);
+    res.status(500).json({ success: false, message: 'Gagal melunaskan billing' });
   }
 });
 

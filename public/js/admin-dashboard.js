@@ -1526,29 +1526,52 @@ async function editTeacher(id) {
             const teacher = res.data;
             document.getElementById('teacherModalTitle').textContent = 'Edit Guru';
             const form = document.getElementById('teacherForm');
-            form.nama.value = teacher.nama;
+            if (!form) return;
 
-            // Populate tenant options
-            const tenantSelect = document.getElementById('teacherTenantSelect');
-            tenantSelect.innerHTML = '<option value="">Pilih Sekolah</option>';
-            const tenantRes = await fetch('/api/admin/tenants', {
-                headers: { 'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}` }
-            });
-            const tenantData = await tenantRes.json();
-            if (tenantData.success) {
-                tenantData.data.forEach(tenant => {
-                    const option = document.createElement('option');
-                    option.value = tenant.tenant_id;
-                    option.textContent = tenant.nama_sekolah;
-                    tenantSelect.appendChild(option);
-                });
-                // Set selected value from assignment
-                if (teacher.assignments && teacher.assignments.length > 0) {
-                    tenantSelect.value = teacher.assignments[0].tenant_id;
-                }
+            const set = (name, val) => {
+                const el = form.elements[name];
+                if (el) el.value = (val == null ? '' : val);
+            };
+            const set0 = (name, val) => {
+                const el = form.elements[name];
+                if (el) el.value = (val == null ? '0' : val);
+            };
+
+            set('nama', teacher.nama);
+            set('nik', teacher.nik);
+            set('nip', teacher.nip);
+            set('status_kepegawaian', teacher.status_kepegawaian);
+            set('email', teacher.email);
+            set('tempat_lahir', teacher.tempat_lahir);
+            set('tanggal_lahir', teacher.tanggal_lahir);
+            set('jenis_kelamin', teacher.jenis_kelamin);
+            set('alamat', teacher.alamat);
+            set('no_wa', teacher.no_wa);
+            set('status_perkawinan', teacher.status_perkawinan);
+            set0('jumlah_anak', teacher.jumlah_anak);
+            set('pendidikan_terakhir', teacher.pendidikan_terakhir);
+            set('tmt', teacher.tmt);
+            set0('gaji_pokok', teacher.gaji_pokok);
+            set0('tunj_kinerja', teacher.tunj_kinerja);
+            set0('tunj_kehadiran', teacher.tunj_kehadiran);
+            set('BANK', teacher.BANK);
+            set('nomor_rekening', teacher.nomor_rekening);
+
+            // Jabatan from first assignment
+            if (teacher.assignments && teacher.assignments.length > 0) {
+                set('jabatan_di_unit', teacher.assignments[0].jabatan_di_unit);
             }
 
-            document.getElementById('teacherModal').classList.add('show');
+            // Store tenant_id & id on form
+            form.dataset.editId = id;
+            form.dataset.tenantId = (teacher.assignments && teacher.assignments[0]?.tenant_id) || '';
+
+            // Show modal
+            const modalEl = document.getElementById('teacherModal') || document.getElementById('addTeacherModal');
+            if (modalEl) {
+                modalEl.classList.add('show');
+                modalEl.style.display = 'flex';
+            }
         }
     } catch (error) {
         console.error('Error fetching teacher detail:', error);
@@ -3632,7 +3655,13 @@ window.saveStudentEdit = function () { alert('Fitur edit siswa belum tersedia');
       document.getElementById('editStudentPrivat').value = s.privat ?? 0;
       document.getElementById('editStudentBiayaLain').value = s.biaya_lain ?? 0;
       document.getElementById('editStudentBiayaLainNama').value = s.biaya_lain_nama || '';
-      document.getElementById('editStudentTanggalMasuk').value = s.tanggal_masuk || '';
+      const tahunMasukField = document.getElementById('editStudentTahunMasuk');
+      if (tahunMasukField) {
+        // Populate from database (s.tahun_masuk) - primary source
+        if (s.tahun_masuk) {
+          tahunMasukField.value = s.tahun_masuk;
+        }
+      }
       document.getElementById('editStudentStatus').value = s.status || 'aktif';
       await populateStudentEditSelects(s.tenant_id, s.class_id);
       showEditStep(1);
@@ -3642,7 +3671,8 @@ window.saveStudentEdit = function () { alert('Fitur edit siswa belum tersedia');
 
   window.saveStudentEdit = async function () {
     const id = document.getElementById('editStudentId').value;
-    const tanggalMasuk = document.getElementById('editStudentTanggalMasuk').value;
+    const tahunMasukField = document.getElementById('editStudentTahunMasuk');
+    const tahunMasuk = tahunMasukField ? tahunMasukField.value.trim() : '';
     const payload = {
       tenant_id: document.getElementById('editStudentTenant').value,
       class_id: document.getElementById('editStudentClass').value || null,
@@ -3660,7 +3690,7 @@ window.saveStudentEdit = function () { alert('Fitur edit siswa belum tersedia');
       privat: parseFloat(document.getElementById('editStudentPrivat').value) || 0,
       biaya_lain: parseFloat(document.getElementById('editStudentBiayaLain').value) || 0,
       biaya_lain_nama: document.getElementById('editStudentBiayaLainNama').value,
-      tanggal_masuk: tanggalMasuk,
+      tahun_masuk: tahunMasuk,
       status: document.getElementById('editStudentStatus').value
     };
     try {
@@ -3694,7 +3724,8 @@ window.saveStudentEdit = function () { alert('Fitur edit siswa belum tersedia');
     }
 
     // Validate required fields
-    const tanggalMasuk = document.getElementById('editStudentTanggalMasuk').value;
+    const tahunMasukField = document.getElementById('editStudentTahunMasuk');
+    const tahunMasuk = tahunMasukField ? tahunMasukField.value.trim() : '';
     const tenantSelect = document.getElementById('editStudentTenant');
     const tenantId = tenantSelect ? tenantSelect.value : '';
     const namaOrtu = document.getElementById('editStudentParent').value.trim();
@@ -3703,7 +3734,7 @@ window.saveStudentEdit = function () { alert('Fitur edit siswa belum tersedia');
 
     const errors = [];
     if (!namaSiswa) errors.push('Nama Siswa');
-    if (!tanggalMasuk) errors.push('Tanggal Masuk');
+    if (!tahunMasuk) errors.push('Tahun Masuk');
     if (!tenantId) errors.push('Sekolah (Tenant)');
     if (!namaOrtu && !noWa) errors.push('Data Orang Tua (minimal nama atau no. WA)');
 
@@ -3713,11 +3744,11 @@ window.saveStudentEdit = function () { alert('Fitur edit siswa belum tersedia');
     }
 
     try {
-      console.log('[GEN NIS] tanggalMasuk from form:', tanggalMasuk);
+      console.log('[GEN NIS] tahunMasuk from form:', tahunMasuk);
       const res = await fetch('/api/admin/students/' + studentId + '/generate-nis', {
         method: 'POST',
         headers: { ...studentAuthHdr(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tanggal_masuk: tanggalMasuk })
+        body: JSON.stringify({ tahun_masuk: tahunMasuk })
       });
       const d = await res.json();
       console.log('[GEN NIS] Response:', d);
@@ -3733,35 +3764,7 @@ window.saveStudentEdit = function () { alert('Fitur edit siswa belum tersedia');
     }
   };
 
-  // Auto-save tanggal_masuk saat user memilih tanggal
-  window.autoSaveTanggalMasuk = async function (value) {
-    const studentId = document.getElementById('editStudentId').value;
-    if (!studentId || !value) return;
 
-    // Convert YYYY-MM-DD to MM-YYYY format for database
-    const parts = value.split('-');
-    if (parts.length >= 2) {
-      const tahun = parts[0];
-      const bulan = parts[1];
-      const tanggalMasakFormatted = `${bulan}-${tahun}`;
-
-      try {
-        const res = await fetch('/api/admin/students/' + studentId + '/update-tanggal-masuk', {
-          method: 'POST',
-          headers: { ...studentAuthHdr(), 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tanggal_masuk: tanggalMasakFormatted })
-        });
-        const d = await res.json();
-        if (d.success) {
-          console.log('[AUTO-SAVE] Tanggal masuk disimpan:', tanggalMasakFormatted);
-        } else {
-          console.error('[AUTO-SAVE] Gagal:', d.message);
-        }
-      } catch (e) {
-        console.error('[AUTO-SAVE] Error:', e);
-      }
-    }
-  };
 
   // Edit student step navigation
   let currentEditStep = 1;

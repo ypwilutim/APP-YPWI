@@ -236,6 +236,7 @@ const skGuruRoutes = require('./src/routes/sk-guru');
 const payrollRoutes = require('./src/routes/payroll');
 const wahaRoutes = require('./src/routes/waha');
 const waliKelasRoutes = require('./src/routes/wali-kelas');
+const whatsappWebhookRoutes = require('./src/routes/whatsapp-webhook');
 require('./src/notifications');
 
 // Start Baileys (WhatsApp Web) as the primary sender when WhatsApp is enabled
@@ -266,6 +267,7 @@ app.use('/api', require('./src/routes/midtrans'));
 app.use('/api', require('./src/routes/doku'));
 app.use('/api', require('./src/routes/public'));
 app.use('/api', require('./src/routes/whatsapp-inbound'));
+app.use('/api', whatsappWebhookRoutes);
 app.use('/api/cs', require('./src/routes/whatsapp'));
 
 const logFilePath = path.join(__dirname, 'logs', 'app.log');
@@ -1646,44 +1648,55 @@ async function startServer() {
              contactMap[c.wa_id] = c.profile?.name || c.verified_name || null;
            });
 
-           value.messages?.forEach(async (msg) => {
-             const from = msg.from;
-             const messageType = msg.type;
-             const textBody = messageType === 'text' ? msg.text?.body : `[${messageType}]`;
-             const profileName = contactMap[from] || msg.profile?.name || null;
+            value.messages?.forEach(async (msg) => {
+              const from = msg.from;
+              const messageType = msg.type;
+              const profileName = contactMap[from] || msg.profile?.name || null;
 
-             console.log(`[WA] Pesan Masuk | Dari: ${from} | Tipe: ${messageType} | Isi: ${textBody}`);
-
-             // Simpan ke database
-             try {
-               // Cari parent berdasarkan nomor WA
-               const parent = await db.query(
-                 'SELECT id FROM parents WHERE REPLACE(REPLACE(no_wa, "+", ""), " ", "") LIKE CONCAT("%", REPLACE(REPLACE(?, "+", ""), " ", ""), "%") OR REPLACE(REPLACE(no_wa, "+", ""), " ", "") = ?',
-                 [from, from]
-               );
-
-               const parentId = parent?.[0]?.id || null;
-
-                await db.query(
-                  `INSERT INTO whatsapp_messages 
-                   (from_phone, message, message_type, wa_message_id, profile_name, parent_id, status, direction) 
-                   VALUES (?, ?, ?, ?, ?, ?, 'received', 'incoming')`,
-                  [from, textBody || '', messageType, msg.id, profileName, parentId]
-                );
-             } catch (e) {
-               console.error('[WA] Gagal menyimpan pesan masuk:', e.message);
-             }
-
-             if (messageType === 'text') {
-               const normalized = String(textBody).trim().toUpperCase();
-
-              if (normalized === 'STOP') {
-                console.log(`[WA] Stop opt-out request: ${from}`);
-              } else if (normalized === 'YA' || /^OTP[- ]/.test(normalized)) {
-                console.log(`[WA] Balasan OTP dari ${from}: ${textBody}`);
+              // Handle media content (image, document, video, audio)
+              let textBody = '';
+              let mediaUrl = null;
+              if (messageType === 'text') {
+                textBody = msg.text?.body || '';
+              } else if (msg[messageType]?.link) {
+                mediaUrl = msg[messageType].link;
+                textBody = `[${messageType}]`;
+              } else {
+                textBody = `[${messageType}]`;
               }
-            }
-          });
+
+              console.log(`[WA] Pesan Masuk | Dari: ${from} | Tipe: ${messageType} | Isi: ${textBody}`);
+
+              // Simpan ke database
+              try {
+                // Cari parent berdasarkan nomor WA
+                const parent = await db.query(
+                  'SELECT id FROM parents WHERE REPLACE(REPLACE(no_wa, "+", ""), " ", "") LIKE CONCAT("%", REPLACE(REPLACE(?, "+", ""), " ", ""), "%") OR REPLACE(REPLACE(no_wa, "+", ""), " ", "") = ?',
+                  [from, from]
+                );
+
+                const parentId = parent?.[0]?.id || null;
+
+                 await db.query(
+                   `INSERT INTO whatsapp_messages 
+                    (from_phone, message, message_type, wa_message_id, profile_name, parent_id, status, direction, media_url) 
+                    VALUES (?, ?, ?, ?, ?, ?, 'received', 'incoming', ?)`,
+                   [from, textBody || '', messageType, msg.id, profileName, parentId, mediaUrl]
+                 );
+              } catch (e) {
+                console.error('[WA] Gagal menyimpan pesan masuk:', e.message);
+              }
+
+              if (messageType === 'text') {
+                const normalized = String(textBody).trim().toUpperCase();
+
+                if (normalized === 'STOP') {
+                  console.log(`[WA] Stop opt-out request: ${from}`);
+                } else if (normalized === 'YA' || /^OTP[- ]/.test(normalized)) {
+                  console.log(`[WA] Balasan OTP dari ${from}: ${textBody}`);
+                }
+              }
+            });
         }
 
         if (change.field === 'messaging_status') {

@@ -41,8 +41,7 @@ async function ensureStudentColumns() {
     { name: 'privat', type: 'decimal(10,2) DEFAULT 0.00', after: 'subsidi' },
     { name: 'biaya_lain', type: 'decimal(10,2) DEFAULT 0.00', after: 'privat' },
     { name: 'biaya_lain_nama', type: 'varchar(255) DEFAULT NULL', after: 'biaya_lain' },
-    { name: 'tanggal_masuk', type: 'date DEFAULT NULL', after: 'jenis_kelamin' },
-    { name: 'tahun_masuk', type: 'varchar(10) DEFAULT NULL', after: 'tanggal_masuk' },
+    { name: 'tahun_masuk', type: 'varchar(10) DEFAULT NULL', after: 'jenis_kelamin' },
     { name: 'status', type: "varchar(20) DEFAULT 'aktif'", after: 'tahun_masuk' }
   ];
 
@@ -1102,7 +1101,7 @@ router.post('/admin/teachers', authenticateOperator, async (req, res) => {
 // GET /api/admin/teachers/:id - Get teacher by ID with assignment
 router.get('/admin/teachers/:id', authenticateOperator, async (req, res) => {
   try {
-    const [teacher] = await db.query(
+    const rows = await db.query(
       `SELECT t.*, GROUP_CONCAT(DISTINCT tn.nama_sekolah) as sekolah_list
        FROM teachers t
        LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id
@@ -1111,9 +1110,10 @@ router.get('/admin/teachers/:id', authenticateOperator, async (req, res) => {
        GROUP BY t.id`,
       [req.params.id]
     );
-    if (!teacher) {
+    if (!rows || rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Guru tidak ditemukan' });
     }
+    const teacher = rows[0];
     const assignmentRows = await db.query('SELECT tenant_id, jabatan_di_unit FROM teacher_assignments WHERE teacher_id = ?', [req.params.id]);
     teacher.assignments = assignmentRows;
     res.json({ success: true, data: teacher });
@@ -1127,33 +1127,89 @@ router.get('/admin/teachers/:id', authenticateOperator, async (req, res) => {
 router.put('/admin/teachers/:id', authenticateOperator, async (req, res) => {
   try {
     const { id } = req.params;
-    const { nama, tenant_id, jabatan_di_unit, nik, nip, status_kepegawaian, email } = req.body;
+    const {
+      nama, tenant_id, jabatan_di_unit, nik, nip, status_kepegawaian, email,
+      tempat_lahir, tanggal_lahir, jenis_kelamin, alamat, no_wa,
+      status_perkawinan, jumlah_anak, pendidikan_terakhir, tmt,
+      link_foto, link_ktp, link_kk, link_ijazah,
+      gaji_pokok, tunj_kinerja, tunj_kehadiran,
+      BANK, nomor_rekening
+    } = req.body;
 
-    if (!nama || !tenant_id) {
-      return res.status(400).json({ success: false, message: 'Nama dan penempatan sekolah wajib diisi' });
+    if (!nama) {
+      return res.status(400).json({ success: false, message: 'Nama wajib diisi' });
     }
 
-    // Verify tenant exists
-    const [tenant] = await db.query('SELECT tenant_id FROM tenants WHERE tenant_id = ?', [tenant_id]);
-    if (!tenant) {
-      return res.status(400).json({ success: false, message: 'Tenant tidak ditemukan' });
+    // Verify tenant if provided
+    if (tenant_id) {
+      const [tenant] = await db.query('SELECT tenant_id FROM tenants WHERE tenant_id = ?', [tenant_id]);
+      if (!tenant) {
+        return res.status(400).json({ success: false, message: 'Tenant tidak ditemukan' });
+      }
     }
 
-    // Update teacher
-    await db.query('UPDATE teachers SET nama = ?, nik = ?, nip = ?, status_kepegawaian = ?, email = ? WHERE id = ?', [nama, nik || null, nip || null, status_kepegawaian || null, email || null, id]);
+    // Check if teacher exists
+    const [existing] = await db.query('SELECT id, tmt FROM teachers WHERE id = ?', [id]);
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Guru tidak ditemukan' });
+    }
 
-    // Update or create assignment
-    const existingAssignment = await db.query('SELECT id FROM teacher_assignments WHERE teacher_id = ?', [id]);
-    if (existingAssignment.length > 0) {
-      await db.query(
-        'UPDATE teacher_assignments SET tenant_id = ?, jabatan_di_unit = ? WHERE teacher_id = ?',
-        [tenant_id, jabatan_di_unit || 'Guru', id]
-      );
-    } else {
-      await db.query(
-        'INSERT INTO teacher_assignments (teacher_id, tenant_id, jabatan_di_unit) VALUES (?, ?, ?)',
-        [id, tenant_id, jabatan_di_unit || 'Guru']
-      );
+    // NIP validation: if TMT is 2+ years ago, NIP must be present
+    const effectiveTmt = tmt || (existing.tmt ? new Date(existing.tmt).toISOString().slice(0, 10) : null);
+    if (effectiveTmt && new Date(effectiveTmt) <= new Date(Date.now() - 2 * 365 * 24 * 60 * 60 * 1000)) {
+      if (!nip || nip === '' || nip === '-') {
+        return res.status(400).json({ success: false, message: 'NIP wajib diisi jika TMT sudah 2 tahun atau lebih' });
+      }
+    }
+
+    // Build dynamic update for teacher
+    const fields = [];
+    const values = [];
+    const setField = (col, val) => { fields.push(`${col} = ?`); values.push(val); };
+
+    setField('nama', nama);
+    if (nik !== undefined) setField('nik', nik || null);
+    if (nip !== undefined) setField('nip', nip || null);
+    if (status_kepegawaian !== undefined) setField('status_kepegawaian', status_kepegawaian || null);
+    if (email !== undefined) setField('email', email || null);
+    if (tempat_lahir !== undefined) setField('tempat_lahir', tempat_lahir || null);
+    if (tanggal_lahir !== undefined) setField('tanggal_lahir', tanggal_lahir || null);
+    if (jenis_kelamin !== undefined) setField('jenis_kelamin', jenis_kelamin || null);
+    if (alamat !== undefined) setField('alamat', alamat || null);
+    if (no_wa !== undefined) setField('no_wa', no_wa || null);
+    if (status_perkawinan !== undefined) setField('status_perkawinan', status_perkawinan || null);
+    if (jumlah_anak !== undefined) setField('jumlah_anak', jumlah_anak || 0);
+    if (pendidikan_terakhir !== undefined) setField('pendidikan_terakhir', pendidikan_terakhir || null);
+    if (tmt !== undefined) setField('tmt', tmt || null);
+    if (link_foto !== undefined) setField('link_foto', link_foto || null);
+    if (link_ktp !== undefined) setField('link_ktp', link_ktp || null);
+    if (link_kk !== undefined) setField('link_kk', link_kk || null);
+    if (link_ijazah !== undefined) setField('link_ijazah', link_ijazah || null);
+    if (gaji_pokok !== undefined) setField('gaji_pokok', gaji_pokok || 0);
+    if (tunj_kinerja !== undefined) setField('tunj_kinerja', tunj_kinerja || 0);
+    if (tunj_kehadiran !== undefined) setField('tunj_kehadiran', tunj_kehadiran || 0);
+    if (BANK !== undefined) setField('BANK', BANK || null);
+    if (nomor_rekening !== undefined) setField('nomor_rekening', nomor_rekening || null);
+
+    if (fields.length > 0) {
+      values.push(id);
+      await db.query(`UPDATE teachers SET ${fields.join(', ')} WHERE id = ?`, values);
+    }
+
+    // Update or create assignment (only if tenant_id & jabatan provided)
+    if (tenant_id) {
+      const existingAssignment = await db.query('SELECT id FROM teacher_assignments WHERE teacher_id = ?', [id]);
+      if (existingAssignment.length > 0) {
+        await db.query(
+          'UPDATE teacher_assignments SET tenant_id = ?, jabatan_di_unit = ? WHERE teacher_id = ?',
+          [tenant_id, jabatan_di_unit || 'Guru', id]
+        );
+      } else {
+        await db.query(
+          'INSERT INTO teacher_assignments (teacher_id, tenant_id, jabatan_di_unit) VALUES (?, ?, ?)',
+          [id, tenant_id, jabatan_di_unit || 'Guru']
+        );
+      }
     }
 
     res.json({ success: true, message: 'Data guru berhasil diupdate' });
@@ -2889,7 +2945,8 @@ router.get('/admin/students', authenticateOperator, async (req, res) => {
 
     let query = `
  SELECT s.id, s.nama_siswa, s.nisn, s.nis, s.jenis_kelamin, s.iuran_bulanan,
-        s.class_id, s.tenant_id, c.nama_kelas, c.tingkatan, tn.nama_sekolah, p.nama_orang_tua, p.no_wa as no_wa_ortu
+        s.class_id, s.tenant_id, s.tahun_masuk,
+        c.nama_kelas, c.tingkatan, tn.nama_sekolah, p.nama_orang_tua, p.no_wa as no_wa_ortu
         FROM students s
         LEFT JOIN classes c ON s.class_id = c.id
         LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id
@@ -2959,7 +3016,7 @@ router.get('/admin/students', authenticateOperator, async (req, res) => {
 // GET /api/admin/alumni - List alumni for current tenant, grouped by graduation year
 router.get('/admin/alumni', authenticateOperator, async (req, res) => {
   try {
-    let tenantId = req.query.tenant_id;
+    let tenantId = Array.isArray(req.query.tenant_id) ? req.query.tenant_id[0] : req.query.tenant_id;
     if (!tenantId) {
       tenantId = req.user.tenant_id || (req.user.assignments?.[0]?.tenant_id);
     }
@@ -2970,11 +3027,11 @@ router.get('/admin/alumni', authenticateOperator, async (req, res) => {
       return res.status(403).json({ success: false, message: 'Akses ditolak untuk tenant ini' });
     }
 
-    const year = req.query.year; // Optional filter by graduation year
+    const year = Array.isArray(req.query.year) ? req.query.year[0] : req.query.year; // Optional filter by graduation year
 
     let query = `
       SELECT s.id, s.nama_siswa, s.nisn, s.nis, s.jenis_kelamin, s.iuran_bulanan,
-             s.tenant_id, s.tanggal_masuk, s.tahun_masuk,
+             s.tenant_id, s.tahun_masuk,
              c.nama_kelas, c.tingkatan, tn.nama_sekolah,
              p.nama_orang_tua, p.no_wa as no_wa_ortu
       FROM students s
@@ -2986,8 +3043,8 @@ router.get('/admin/alumni', authenticateOperator, async (req, res) => {
     let params = [tenantId];
 
     if (year) {
-      query += ' AND (c.tingkatan = ? OR s.tahun_masuk = ? OR LEFT(s.tanggal_masuk, 4) = ?)';
-      params.push(year, year, year);
+      query += ' AND (c.tingkatan = ? OR s.tahun_masuk = ?)';
+      params.push(year, year);
     }
 
     query += ' ORDER BY s.tahun_masuk DESC, s.nama_siswa ASC';
@@ -2997,19 +3054,19 @@ router.get('/admin/alumni', authenticateOperator, async (req, res) => {
     // Get education history for each alumni
     for (const a of alumni) {
       const history = await db.query(
-        `SELECT id, nama_sekolah, tahun_masuk, tahun_lulus, status 
-         FROM student_education_history 
-         WHERE student_id = ? 
+        `SELECT id, nama_sekolah, tahun_masuk, tahun_lulus, status
+         FROM student_education_history
+         WHERE student_id = ?
          ORDER BY tahun_masuk ASC`,
         [a.id]
       );
       a.education_history = history;
     }
 
-    // Group by graduation year (use tahun_masuk or extract from tanggal_masuk)
+    // Group by graduation year
     const grouped = {};
     alumni.forEach(a => {
-      const yearKey = a.tahun_masuk || (a.tanggal_masuk ? String(a.tanggal_masuk).substring(0, 4) : null) || 'Unknown';
+      const yearKey = a.tahun_masuk || 'Unknown';
       if (!grouped[yearKey]) {
         grouped[yearKey] = [];
       }
@@ -3031,7 +3088,7 @@ router.get('/admin/alumni', authenticateOperator, async (req, res) => {
 // GET /api/admin/alumni/pool - List alumni available for adoption (from other schools)
 router.get('/admin/alumni/pool', authenticateOperator, async (req, res) => {
   try {
-    let tenantId = req.query.tenant_id;
+    let tenantId = Array.isArray(req.query.tenant_id) ? req.query.tenant_id[0] : req.query.tenant_id;
     if (!tenantId) {
       tenantId = req.user.tenant_id || (req.user.assignments?.[0]?.tenant_id);
     }
@@ -3039,11 +3096,11 @@ router.get('/admin/alumni/pool', authenticateOperator, async (req, res) => {
       return res.status(400).json({ success: false, message: 'tenant_id wajib diisi' });
     }
 
-    const year = req.query.year; // Optional filter by graduation year
+    const year = Array.isArray(req.query.year) ? req.query.year[0] : req.query.year; // Optional filter by graduation year
 
     let query = `
       SELECT s.id, s.nama_siswa, s.nisn, s.nis, s.jenis_kelamin, s.iuran_bulanan,
-             s.tenant_id, s.tanggal_masuk, s.tahun_masuk,
+             s.tenant_id, s.tahun_masuk,
              c.nama_kelas, c.tingkatan, tn.nama_sekolah,
              p.nama_orang_tua, p.no_wa as no_wa_ortu
       FROM students s
@@ -3055,8 +3112,8 @@ router.get('/admin/alumni/pool', authenticateOperator, async (req, res) => {
     let params = [tenantId];
 
     if (year) {
-      query += ' AND (c.tingkatan = ? OR s.tahun_masuk = ? OR LEFT(s.tanggal_masuk, 4) = ?)';
-      params.push(year, year, year);
+      query += ' AND (c.tingkatan = ? OR s.tahun_masuk = ?)';
+      params.push(year, year);
     }
 
     query += ' ORDER BY tn.nama_sekolah ASC, s.tahun_masuk DESC, s.nama_siswa ASC';
@@ -3066,9 +3123,9 @@ router.get('/admin/alumni/pool', authenticateOperator, async (req, res) => {
     // Get education history for each alumni
     for (const a of alumni) {
       const history = await db.query(
-        `SELECT id, nama_sekolah, tahun_masuk, tahun_lulus, status 
-         FROM student_education_history 
-         WHERE student_id = ? 
+        `SELECT id, nama_sekolah, tahun_masuk, tahun_lulus, status
+         FROM student_education_history
+         WHERE student_id = ?
          ORDER BY tahun_masuk ASC`,
         [a.id]
       );
@@ -3079,7 +3136,7 @@ router.get('/admin/alumni/pool', authenticateOperator, async (req, res) => {
     const grouped = {};
     alumni.forEach(a => {
       const schoolKey = a.nama_sekolah || a.tenant_id;
-      const yearKey = a.tahun_masuk || (a.tanggal_masuk ? String(a.tanggal_masuk).substring(0, 4) : null) || 'Unknown';
+      const yearKey = a.tahun_masuk || 'Unknown';
       const groupKey = `${schoolKey}|${yearKey}`;
       if (!grouped[groupKey]) {
         grouped[groupKey] = {
@@ -3268,7 +3325,7 @@ router.get('/admin/students/incomplete', authenticateOperator, async (req, res) 
     }
 
     const query = `
-      SELECT s.id, s.nama_siswa, s.nisn, s.nis, s.jenis_kelamin, s.iuran_bulanan,
+      SELECT s.id, s.nama_siswa, s.nisn, s.nis, s.jenis_kelamin, s.iuran_bulanan, s.tahun_masuk,
              c.nama_kelas, c.tingkatan, tn.nama_sekolah,
              p.id as parent_id, p.nama_orang_tua, p.no_wa as no_wa_ortu
       FROM students s
@@ -3320,7 +3377,7 @@ router.get('/admin/students/incomplete/export', authenticateOperator, async (req
     const students = await db.query(`
       SELECT s.id, s.nama_siswa, s.nisn, s.jenis_kelamin, s.iuran_bulanan,
              s.ransportasi, s.subsidi, s.privat, s.biaya_lain, s.biaya_lain_nama,
-             s.status, s.tanggal_masuk, s.class_id, s.tenant_id,
+             s.status, s.tahun_masuk, s.class_id, s.tenant_id,
              c.nama_kelas, p.nama_orang_tua, p.no_wa as no_wa_ortu
       FROM students s
       LEFT JOIN classes c ON s.class_id = c.id
@@ -3339,7 +3396,7 @@ router.get('/admin/students/incomplete/export', authenticateOperator, async (req
           OR s.biaya_lain IS NULL
           OR s.biaya_lain_nama IS NULL OR s.biaya_lain_nama = ''
           OR s.status IS NULL OR s.status = ''
-          OR s.tanggal_masuk IS NULL OR s.tanggal_masuk = ''
+          OR s.tahun_masuk IS NULL OR s.tahun_masuk = ''
         )
       ORDER BY c.nama_kelas ASC, s.nama_siswa ASC
     `, [tenantId]);
@@ -3359,14 +3416,14 @@ router.get('/admin/students/incomplete/export', authenticateOperator, async (req
       'Biaya Lain': s.biaya_lain ?? 0,
       'Biaya Lain Nama': s.biaya_lain_nama || '',
       'Status': s.status || 'aktif',
-      'Tanggal Masuk': s.tanggal_masuk || ''
+      'Tahun Masuk': s.tahun_masuk || ''
     }));
 
     const ws = XLSX.utils.json_to_sheet(data.length ? data : [{
       'ID Siswa': '', 'NISN': '', 'Nama Siswa': '', 'Nama Kelas': '',
       'Jenis Kelamin': '', 'Nama Orang Tua': '', 'No. WhatsApp': '', 'Iuran Bulanan': '',
       'Transportasi': '', 'Subsidi': '', 'Privat': '', 'Biaya Lain': '',
-      'Biaya Lain Nama': '', 'Status': 'aktif', 'Tanggal Masuk': ''
+      'Biaya Lain Nama': '', 'Status': 'aktif', 'Tahun Masuk': ''
     }]);
 
     // Set WhatsApp column as text format to prevent scientific notation
@@ -3405,7 +3462,7 @@ router.get('/admin/students/export', authenticateOperator, async (req, res) => {
     const students = await db.query(`
       SELECT s.id, s.nama_siswa, s.nisn, s.jenis_kelamin, s.iuran_bulanan,
              s.ransportasi, s.subsidi, s.privat, s.biaya_lain, s.biaya_lain_nama,
-             s.status, s.tanggal_masuk, s.class_id, s.tenant_id,
+             s.status, s.tahun_masuk, s.class_id, s.tenant_id,
              c.nama_kelas, p.nama_orang_tua, p.no_wa as no_wa_ortu
       FROM students s
       LEFT JOIN classes c ON s.class_id = c.id
@@ -3429,14 +3486,14 @@ router.get('/admin/students/export', authenticateOperator, async (req, res) => {
       'Biaya Lain': s.biaya_lain ?? 0,
       'Biaya Lain Nama': s.biaya_lain_nama || '',
       'Status': s.status || 'aktif',
-      'Tanggal Masuk': s.tanggal_masuk || ''
+      'Tahun Masuk': s.tahun_masuk || ''
     }));
 
     const ws = XLSX.utils.json_to_sheet(data.length ? data : [{
       'ID Siswa': '', 'NISN': '', 'Nama Siswa': '', 'Nama Kelas': '',
       'Jenis Kelamin': '', 'Nama Orang Tua': '', 'No. WhatsApp': '', 'Iuran Bulanan': '',
       'Transportasi': '', 'Subsidi': '', 'Privat': '', 'Biaya Lain': '',
-      'Biaya Lain Nama': '', 'Status': 'aktif', 'Tanggal Masuk': ''
+      'Biaya Lain Nama': '', 'Status': 'aktif', 'Tahun Masuk': ''
     }]);
 
     // Set WhatsApp column as text format to prevent scientific notation
@@ -3530,7 +3587,13 @@ router.post('/admin/students/incomplete/import', authenticateOperator, excelUplo
       const biayaLain = biayaLainRaw === '' ? null : parseFloat(biayaLainRaw);
       const biayaLainNama = String(r['Biaya Lain Nama'] || '').trim() || null;
       const status = String(r['Status'] || '').trim() || null;
-      const tanggalMasuk = String(r['Tanggal Masuk'] || '').trim() || null;
+      // Tahun Masuk: terima "Tahun Masuk" (baru) atau "Tanggal Masuk" (legacy)
+      const tahunMasukRaw = String(r['Tahun Masuk'] || r['Tanggal Masuk'] || '').trim();
+      let tahunMasuk = null;
+      const yearMatch = tahunMasukRaw.match(/\d{4}/);
+      if (yearMatch) {
+        tahunMasuk = yearMatch[0];
+      }
 
       // Validasi wajib (semua wajib kecuali Transportasi, Subsidi, NISN)
       if (!namaSiswaRaw) {
@@ -3561,8 +3624,18 @@ router.post('/admin/students/incomplete/import', authenticateOperator, excelUplo
         errors.push(`Baris ${rowNo}: Status wajib diisi (aktif / alumni / mutasi / keluar)`);
         continue;
       }
-      if (!tanggalMasuk) {
-        errors.push(`Baris ${rowNo}: Tanggal Masuk wajib diisi (format: MM-YYYY)`);
+      if (!tahunMasuk) {
+        errors.push(`Baris ${rowNo}: Tahun Masuk wajib diisi (format: 4 digit tahun, contoh: 2024)`);
+        continue;
+      }
+      // Validate tahun_masuk is 4 digit year (e.g., 2020-2099)
+      if (!/^\d{4}$/.test(tahunMasuk)) {
+        errors.push(`Baris ${rowNo}: Tahun Masuk harus 4 digit tahun (contoh: 2024), dapat: "${tahunMasuk}"`);
+        continue;
+      }
+      const tahunNum = parseInt(tahunMasuk);
+      if (tahunNum < 1900 || tahunNum > 2100) {
+        errors.push(`Baris ${rowNo}: Tahun Masuk tidak valid: ${tahunMasuk}`);
         continue;
       }
 
@@ -3577,7 +3650,7 @@ router.post('/admin/students/incomplete/import', authenticateOperator, excelUplo
 
       // Update siswa
       await db.query(
-        `UPDATE students SET 
+        `UPDATE students SET
           nisn = COALESCE(?, nisn),
           nama_siswa = COALESCE(?, nama_siswa),
           jenis_kelamin = COALESCE(?, jenis_kelamin),
@@ -3589,9 +3662,9 @@ router.post('/admin/students/incomplete/import', authenticateOperator, excelUplo
           biaya_lain = COALESCE(?, biaya_lain),
           biaya_lain_nama = COALESCE(?, biaya_lain_nama),
           status = COALESCE(?, status),
-          tanggal_masuk = COALESCE(?, tanggal_masuk)
+          tahun_masuk = COALESCE(?, tahun_masuk)
         WHERE id = ?`,
-        [nisn, namaSiswaRaw, jk, classId, iuran, transportasi, subsidi, privat, biayaLain, biayaLainNama, status, tanggalMasuk, stu.id]
+        [nisn, namaSiswaRaw, jk, classId, iuran, transportasi, subsidi, privat, biayaLain, biayaLainNama, status, tahunMasuk, stu.id]
       );
 
       // Update/create parent
@@ -3671,7 +3744,14 @@ router.post('/admin/students/import', authenticateOperator, excelUpload.single('
       const biayaLain = biayaLainRaw === '' ? 0 : parseFloat(biayaLainRaw);
       const biayaLainNama = String(r['Biaya Lain Nama'] || '').trim();
       const status = String(r['Status'] || '').trim();
-      const tanggalMasuk = String(r['Tanggal Masuk'] || '').trim();
+      // Tahun Masuk: terima "Tahun Masuk" (baru) atau "Tanggal Masuk" (legacy)
+      let tahunMasukRaw = String(r['Tahun Masuk'] || r['Tanggal Masuk'] || '').trim();
+      // Extract 4 digit tahun dari string apapun (2011, 2024-07, 15/07/2024, dst)
+      let tahunMasuk = '';
+      const yearMatch = tahunMasukRaw.match(/\d{4}/);
+      if (yearMatch) {
+        tahunMasuk = yearMatch[0];
+      }
 
       // Validasi wajib (semua wajib kecuali Transportasi, Subsidi, NISN)
       if (!namaSiswa) {
@@ -3702,8 +3782,18 @@ router.post('/admin/students/import', authenticateOperator, excelUpload.single('
         errors.push(`Baris ${rowNo}: Status wajib diisi (aktif / alumni / mutasi / keluar)`);
         continue;
       }
-      if (!tanggalMasuk) {
-        errors.push(`Baris ${rowNo}: Tanggal Masuk wajib diisi (format: MM-YYYY)`);
+      if (!tahunMasuk) {
+        errors.push(`Baris ${rowNo}: Tahun Masuk wajib diisi (format: 4 digit tahun, contoh: 2024)`);
+        continue;
+      }
+      // Validate tahun_masuk is 4 digit year (e.g., 2020-2099)
+      if (!/^\d{4}$/.test(tahunMasuk)) {
+        errors.push(`Baris ${rowNo}: Tahun Masuk harus 4 digit tahun (contoh: 2024), dapat: "${tahunMasuk}"`);
+        continue;
+      }
+      const tahunNum = parseInt(tahunMasuk);
+      if (tahunNum < 1900 || tahunNum > 2100) {
+        errors.push(`Baris ${rowNo}: Tahun Masuk tidak valid: ${tahunMasuk}`);
         continue;
       }
 
@@ -3744,29 +3834,27 @@ router.post('/admin/students/import', authenticateOperator, excelUpload.single('
             biaya_lain = COALESCE(?, biaya_lain),
             biaya_lain_nama = COALESCE(?, biaya_lain_nama),
             status = COALESCE(?, status),
-            tanggal_masuk = COALESCE(?, tanggal_masuk)
+            tahun_masuk = COALESCE(?, tahun_masuk)
           WHERE id = ?`,
-          [nisn, namaSiswa || null, jk, classId, parentId, iuran, transportasi, subsidi, privat, biayaLain, biayaLainNama, status, tanggalMasuk, idSiswa]
+          [nisn, namaSiswa || null, jk, classId, parentId, iuran, transportasi, subsidi, privat, biayaLain, biayaLainNama, status, tahunMasuk, idSiswa]
         );
         updated++;
       } else {
         // Insert siswa baru - NIS akan di-generate otomatis
         const result = await db.query(
           `INSERT INTO students (
-            tenant_id, nisn, nama_siswa, jenis_kelamin, class_id, parent_id, 
-            iuran_bulanan, ransportasi, subsidi, privat, biaya_lain, 
-            biaya_lain_nama, status, tanggal_masuk
+            tenant_id, nisn, nama_siswa, jenis_kelamin, class_id, parent_id,
+            iuran_bulanan, ransportasi, subsidi, privat, biaya_lain,
+            biaya_lain_nama, status, tahun_masuk
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [tenantId, nisn, namaSiswa, jk, classId, parentId, iuran, transportasi, subsidi, privat, biayaLain, biayaLainNama, status, tanggalMasuk]
+          [tenantId, nisn, namaSiswa, jk, classId, parentId, iuran, transportasi, subsidi, privat, biayaLain, biayaLainNama, status, tahunMasuk]
         );
 
         // Validate required data for NIS generation
         const nisErrors = [];
-        // Check both tanggal_masuk and tahun_masuk - at least one must have a value
-        const hasTanggalMasuk = tanggalMasuk && String(tanggalMasuk).trim() !== '';
         const hasTahunMasuk = tahunMasuk && String(tahunMasuk).trim() !== '';
-        if (!hasTanggalMasuk && !hasTahunMasuk) {
-          nisErrors.push('Tanggal Masuk / Tahun Masuk');
+        if (!hasTahunMasuk) {
+          nisErrors.push('Tahun Masuk');
         }
         if (!tenantId) nisErrors.push('Sekolah (Tenant)');
         if (!parentId) nisErrors.push('Data Orang Tua (Parent)');
@@ -3778,12 +3866,10 @@ router.post('/admin/students/import', authenticateOperator, excelUpload.single('
 
         // Auto-generate NIS
         let tahun = null;
-        if (tanggalMasuk) {
-          const parts = tanggalMasuk.split('-');
-          if (parts.length === 2) {
-            tahun = parts[1].length === 4 ? parts[1] : null;
-          } else if (parts.length === 1 && parts[0].length === 4) {
-            tahun = parts[0];
+        if (tahunMasuk) {
+          // tahunMasuk sudah berupa 4 digit dari extract regex
+          if (String(tahunMasuk).length === 4) {
+            tahun = String(tahunMasuk);
           }
         }
         if (!tahun) tahun = String(new Date().getFullYear());
@@ -3856,7 +3942,7 @@ router.get('/admin/students/import-template', authenticateOperator, async (req, 
       'Biaya Lain': '',
       'Biaya Lain Nama': '',
       'Status': 'aktif',
-      'Tanggal Masuk': ''
+      'Tahun Masuk': ''
     }];
 
     const ws = XLSX.utils.json_to_sheet(data);
@@ -3885,7 +3971,7 @@ router.get('/admin/students/import-template', authenticateOperator, async (req, 
       { 'Kolom': 'Nama Kelas', 'Keterangan': 'Wajib diisi (sesuai nama kelas di sistem)' },
       { 'Kolom': 'Jenis Kelamin', 'Keterangan': 'Wajib diisi (L atau P)' },
       { 'Kolom': 'Nama Orang Tua', 'Keterangan': 'Wajib diisi' },
-      { 'Kolom': 'No. WhatsApp', 'Keterangan': 'Wajib diisi' },
+      { 'Kolom': 'No. WhatsApp', 'Keterangan': 'Wajib diisi. Format: 08xxx atau 628xxx. Otomatis dinormalisasi ke 628xxx' },
       { 'Kolom': 'Iuran Bulanan', 'Keterangan': 'Wajib diisi (nominal)' },
       { 'Kolom': 'Transportasi', 'Keterangan': 'Opsional (nominal, default 0)' },
       { 'Kolom': 'Subsidi', 'Keterangan': 'Opsional (nominal, default 0)' },
@@ -3893,10 +3979,22 @@ router.get('/admin/students/import-template', authenticateOperator, async (req, 
       { 'Kolom': 'Biaya Lain', 'Keterangan': 'Opsional (nominal, default 0)' },
       { 'Kolom': 'Biaya Lain Nama', 'Keterangan': 'Opsional (keterangan biaya lain)' },
       { 'Kolom': 'Status', 'Keterangan': 'Wajib diisi (aktif / alumni / mutasi / keluar)' },
-      { 'Kolom': 'Tanggal Masuk', 'Keterangan': 'Wajib diisi (format: MM-YYYY)' }
+      { 'Kolom': 'Tahun Masuk', 'Keterangan': 'Wajib diisi (4 digit tahun, contoh: 2024). Untuk generate NIS otomatis.' }
     ];
     const ketWs = XLSX.utils.json_to_sheet(keterangan);
     XLSX.utils.book_append_sheet(wb, ketWs, 'Keterangan');
+
+    // Tambahkan sheet contoh format
+    const contohFormat = [
+      { 'Format': 'MM-YYYY', 'Contoh': '07-2024', 'Hasil': '2024-07 → Tahun: 2024' },
+      { 'Format': 'YYYY-MM', 'Contoh': '2024-07', 'Hasil': '2024-07 → Tahun: 2024' },
+      { 'Format': 'YYYY-MM-DD', 'Contoh': '2024-07-15', 'Hasil': '2024-07-15 → Tahun: 2024' },
+      { 'Format': 'DD/MM/YYYY', 'Contoh': '15/07/2024', 'Hasil': '15/07/2024 → Tahun: 2024' },
+      { 'Format': 'DD-MM-YYYY', 'Contoh': '15-07-2024', 'Hasil': '15-07-2024 → Tahun: 2024' },
+      { 'Format': 'YYYY', 'Contoh': '2024', 'Hasil': '2024 → Tahun: 2024' }
+    ];
+    const contohWs = XLSX.utils.json_to_sheet(contohFormat);
+    XLSX.utils.book_append_sheet(wb, contohWs, 'Contoh Format Tanggal');
 
     const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
     
@@ -3919,7 +4017,8 @@ router.get('/admin/students/all', authenticateOperator, async (req, res) => {
 
     let query = `
       SELECT s.id, s.nama_siswa, s.nisn, s.nis, s.jenis_kelamin, s.iuran_bulanan,
-             s.class_id, s.tenant_id, c.nama_kelas, c.tingkatan, tn.nama_sekolah, p.no_wa as no_wa_ortu
+             s.class_id, s.tenant_id, s.tahun_masuk,
+             c.nama_kelas, c.tingkatan, tn.nama_sekolah, p.no_wa as no_wa_ortu
       FROM students s
       LEFT JOIN classes c ON s.class_id = c.id
       LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id
@@ -4130,8 +4229,7 @@ router.post('/admin/students', authenticateOperator, async (req, res) => {
     await ensureStudentColumns();
     const {
       tenant_id, nis, nisn, nama_siswa, jenis_kelamin, class_id, parent_id, iuran_bulanan,
-      ransportasi, subsidi, privat, biaya_lain, biaya_lain_nama,
-      tanggal_masuk, status,
+      ransportasi, subsidi, privat, biaya_lain, biaya_lain_nama, status, tahun_masuk,
       nama_orang_tua, no_wa, email_orang_tua, nik_orang_tua
     } = req.body;
 
@@ -4141,7 +4239,7 @@ router.post('/admin/students', authenticateOperator, async (req, res) => {
       iuran_bulanan: parseFloat(iuran_bulanan) || 0, ransportasi: parseFloat(ransportasi) || 0,
       subsidi: parseFloat(subsidi) || 0,
       privat: parseFloat(privat) || 0, biaya_lain: parseFloat(biaya_lain) || 0, biaya_lain_nama: biaya_lain_nama || null,
-      tanggal_masuk: tanggal_masuk || null, status: status || 'aktif',
+      tahun_masuk: tahun_masuk || null, status: status || 'aktif',
       nama_orang_tua, no_wa, email_orang_tua, nik_orang_tua
     };
 
@@ -4165,8 +4263,7 @@ router.post('/admin/students', authenticateOperator, async (req, res) => {
     try { await db.query('SELECT privat FROM students LIMIT 1'); studentCols += ', privat'; studentVals.push(fields.privat); } catch (e) {}
     try { await db.query('SELECT biaya_lain FROM students LIMIT 1'); studentCols += ', biaya_lain'; studentVals.push(fields.biaya_lain); } catch (e) {}
     try { await db.query('SELECT biaya_lain_nama FROM students LIMIT 1'); studentCols += ', biaya_lain_nama'; studentVals.push(fields.biaya_lain_nama); } catch (e) {}
-    try { await db.query('SELECT tanggal_masuk FROM students LIMIT 1'); studentCols += ', tanggal_masuk'; studentVals.push(fields.tanggal_masuk); } catch (e) {}
-    try { await db.query('SELECT tahun_masuk FROM students LIMIT 1'); studentCols += ', tahun_masuk'; let derivedTahun = null; if (fields.tanggal_masuk) { derivedTahun = String(new Date(fields.tanggal_masuk).getFullYear()); } else if (fields.tahun_masuk) { derivedTahun = fields.tahun_masuk; } studentVals.push(derivedTahun); } catch (e) {}
+    try { await db.query('SELECT tahun_masuk FROM students LIMIT 1'); studentCols += ', tahun_masuk'; studentVals.push(fields.tahun_masuk); } catch (e) {}
     try { await db.query('SELECT status FROM students LIMIT 1'); studentCols += ', status'; studentVals.push(fields.status); } catch (e) {}
 
     studentCols = studentCols + ', created_at, updated_at';
@@ -4179,9 +4276,6 @@ router.post('/admin/students', authenticateOperator, async (req, res) => {
 
     if (!nisValue) {
       let tahun = fields.tahun_masuk || null;
-      if (!tahun && fields.tanggal_masuk) {
-        tahun = String(new Date(fields.tanggal_masuk).getFullYear());
-      }
       if (!tahun) {
         tahun = String(new Date().getFullYear());
       }
@@ -4430,8 +4524,7 @@ router.put('/admin/students/:id', authenticateOperator, async (req, res) => {
     const {
       tenant_id, nis, nisn, nama_siswa, jenis_kelamin, class_id,
       iuran_bulanan, nama_orang_tua, no_wa, nik_orang_tua, email_orang_tua,
-      ransportasi, subsidi, privat, biaya_lain, biaya_lain_nama,
-      tanggal_masuk, status
+      ransportasi, subsidi, privat, biaya_lain, biaya_lain_nama, status
     } = req.body;
 
     if (!nama_siswa) {
@@ -4479,7 +4572,7 @@ router.put('/admin/students/:id', authenticateOperator, async (req, res) => {
     if (privat !== undefined) { updates.push('privat = ?'); values.push(privat || 0); }
     if (biaya_lain !== undefined) { updates.push('biaya_lain = ?'); values.push(biaya_lain || 0); }
     if (biaya_lain_nama !== undefined) { updates.push('biaya_lain_nama = ?'); values.push(biaya_lain_nama || null); }
-    if (tanggal_masuk !== undefined) { updates.push('tanggal_masuk = ?'); values.push(tanggal_masuk || null); }
+    if (req.body.tahun_masuk !== undefined) { updates.push('tahun_masuk = ?'); values.push(req.body.tahun_masuk || null); }
     if (status !== undefined) { updates.push('status = ?'); values.push(status); }
     if (resolvedParentId) {
       updates.push('parent_id = ?');
@@ -4512,7 +4605,7 @@ router.post('/admin/students/:id/generate-nis', authenticateOperator, async (req
   try {
     await ensureStudentColumns();
     const { id } = req.params;
-    const { tanggal_masuk: bodyTanggalMasuk } = req.body || {};
+    const { tahun_masuk: bodyTahunMasuk } = req.body || {};
 
     // Get student data
     const [student] = await db.query(
@@ -4529,17 +4622,14 @@ router.post('/admin/students/:id/generate-nis', authenticateOperator, async (req
       return res.status(400).json({ success: false, message: 'Siswa sudah punya NIS: ' + student.nis });
     }
 
-    // Use tanggal_masuk from body (form) if provided, otherwise from database
-    const tanggalMasukValue = bodyTanggalMasuk || student.tanggal_masuk;
-    const tahunMasukValue = student.tahun_masuk;
+    // Use tahun_masuk from body (form) if provided, otherwise from database
+    const tahunMasukValue = bodyTahunMasuk || student.tahun_masuk;
 
     // Validate required data for NIS generation
     const errors = [];
-    // Check both tanggal_masuk and tahun_masuk - at least one must have a value
-    const hasTanggalMasuk = tanggalMasukValue && String(tanggalMasukValue).trim() !== '';
     const hasTahunMasuk = tahunMasukValue && String(tahunMasukValue).trim() !== '';
-    if (!hasTanggalMasuk && !hasTahunMasuk) {
-      errors.push('Tanggal Masuk / Tahun Masuk');
+    if (!hasTahunMasuk) {
+      errors.push('Tahun Masuk');
     }
     if (!student.tenant_id || String(student.tenant_id).trim() === '') errors.push('Sekolah (Tenant)');
     if (!student.parent_id && !student.parent_id_ref) errors.push('Data Orang Tua (Parent)');
@@ -4558,45 +4648,9 @@ router.post('/admin/students/:id/generate-nis', authenticateOperator, async (req
       });
     }
 
-    // Determine year from tanggal_masuk
-    // Support formats: YYYY-MM-DD, YYYY-MM, DD/MM/YYYY, MM/YYYY, MM-YYYY
-    let tahun = null;
-    console.log('[GEN NIS] tanggalMasukValue:', tanggalMasukValue, 'type:', typeof tanggalMasukValue);
-    
-    if (tanggalMasukValue) {
-      const tanggalMasuk = String(tanggalMasukValue).trim();
-      console.log('[GEN NIS] tanggalMasuk string:', tanggalMasuk);
-      
-      // Try parsing YYYY-MM-DD or YYYY-MM format (from date input)
-      const matchYYYYMM = tanggalMasuk.match(/^(\d{4})-(\d{1,2})/);
-      if (matchYYYYMM) {
-        tahun = matchYYYYMM[1]; // Get the year part (YYYY)
-        console.log('[GEN NIS] Matched YYYY-MM format, year:', tahun);
-      } else {
-        // Try parsing DD/MM/YYYY or MM/YYYY format
-        const matchDDMMYYYY = tanggalMasuk.match(/(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
-        if (matchDDMMYYYY) {
-          tahun = matchDDMMYYYY[3]; // Get the year part (YYYY)
-          console.log('[GEN NIS] Matched DD/MM/YYYY format, year:', tahun);
-        } else {
-          // Try parsing MM-YYYY format
-          const matchMMYYYY = tanggalMasuk.match(/(\d{1,2})[/-](\d{4})/);
-          if (matchMMYYYY) {
-            tahun = matchMMYYYY[2]; // Get the year part (YYYY)
-            console.log('[GEN NIS] Matched MM-YYYY format, year:', tahun);
-          } else {
-            // Try parsing as Date object
-            const dateValue = tanggalMasuk instanceof Date ? tanggalMasuk : new Date(tanggalMasuk);
-            if (!isNaN(dateValue.getTime())) {
-              tahun = String(dateValue.getFullYear());
-              console.log('[GEN NIS] Matched Date object, year:', tahun);
-            } else {
-              console.log('[GEN NIS] Date parsing failed for:', tanggalMasuk);
-            }
-          }
-        }
-      }
-    }
+    // Tahun langsung dari tahun_masuk (4 digit)
+    let tahun = String(tahunMasukValue).trim();
+    console.log('[GEN NIS] tahun:', tahun);
     
     if (!tahun) {
       tahun = String(new Date().getFullYear());
@@ -4662,31 +4716,8 @@ router.delete('/admin/students/:id', authenticateOperator, async (req, res) => {
   }
 });
 
-// POST /api/admin/students/:id/update-tanggal-masuk - Auto-save tanggal masuk
-router.post('/admin/students/:id/update-tanggal-masuk', authenticateOperator, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { tanggal_masuk } = req.body;
+// Endpoint update-tanggal-masuk dihapus - hanya gunakan tahun_masuk
 
-    if (!tanggal_masuk) {
-      return res.status(400).json({ success: false, message: 'tanggal_masuk wajib diisi' });
-    }
-
-    // Verify student exists
-    const [student] = await db.query('SELECT id FROM students WHERE id = ?', [id]);
-    if (!student) {
-      return res.status(404).json({ success: false, message: 'Siswa tidak ditemukan' });
-    }
-
-    // Update tanggal_masuk
-    await db.query('UPDATE students SET tanggal_masuk = ? WHERE id = ?', [tanggal_masuk, id]);
-
-    res.json({ success: true, message: 'Tanggal masuk berhasil disimpan' });
-  } catch (error) {
-    console.error('Update tanggal masuk error:', error);
-    res.status(500).json({ success: false, message: 'Error menyimpan tanggal masuk' });
-  }
-});
 
 // POST /api/admin/classes - Create class
 router.post('/admin/classes', authenticateOperator, async (req, res) => {
@@ -6698,3 +6729,4 @@ router.get('/public/lookup-nik', async (req, res) => {
 });
 
 module.exports = router;
+

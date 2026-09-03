@@ -7,18 +7,20 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
   <style>
-    @page { size: 8.5cm 5.5cm; margin: 0; }
+    @page { size: auto; margin: 10mm; }
     body { font-family: 'Inter', sans-serif; background: #f3f4f6; }
-    .id-card { 
-      width: 8.5cm; height: 5.5cm; background: white; border-radius: 8px; 
-      box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow: hidden; position: relative;
-      page-break-inside: avoid;
+    .id-card {
+      width: 5.5cm; height: 8.5cm; background: white; border-radius: 6px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.12); overflow: hidden; position: relative;
+      page-break-inside: avoid; border: 1px solid #e0e0e0;
     }
-    .id-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, #066e3a 0%, #0a8a4a 100%); }
-    .school-header { background: linear-gradient(135deg, #066e3a 0%, #0a8a4a 100%); color: white; text-align: center; padding: 6px 8px; font-size: 9px; font-weight: 600; }
-    .photo-frame { width: 55px; height: 70px; border: 2px solid #e5e7eb; border-radius: 4px; overflow: hidden; background: #f9fafb; }
-    @media print { body { background: white; padding: 0; margin: 0; } .no-print { display: none !important; } .id-card { box-shadow: none; page-break-inside: avoid; } }
-    .watermark { position: absolute; bottom: 10px; right: 10px; opacity: 0.05; font-size: 24px; transform: rotate(-15deg); pointer-events: none; }
+    .photo-frame { width: 42px; height: 54px; border: 2px solid #e5e7eb; border-radius: 3px; overflow: hidden; background: #f9fafb; }
+    .photo-frame-large { width: 60px; height: 78px; border: 2px solid #e5e7eb; border-radius: 4px; overflow: hidden; background: #f9fafb; }
+    @media print {
+      body { background: white; padding: 0; margin: 0; }
+      .no-print { display: none !important; }
+      .id-card { box-shadow: none; margin: 4mm; page-break-inside: avoid; }
+    }
   </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
@@ -27,8 +29,10 @@
       <div class="flex justify-between items-center mb-6 no-print">
         <h1 class="text-2xl font-bold text-gray-800"><i class="fas fa-id-card text-green-600 mr-2"></i>ID Card Guru</h1>
         <div class="flex space-x-2">
-          <button onclick="printCards()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"><i class="fas fa-print mr-2"></i>Cetak</button>
-          <button onclick="location.href='admin-dashboard.html'" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg"><i class="fas fa-arrow-left mr-2"></i>Kembali</button>
+          <button onclick="exportAllPdf()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"><i class="fas fa-file-pdf mr-2"></i>Export PDF Semua</button>
+          <button onclick="exportSelectedPdf()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg"><i class="fas fa-check-square mr-2"></i>Export PDF Terpilih</button>
+          <button onclick="printCards()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg"><i class="fas fa-print mr-2"></i>Cetak</button>
+          <button onclick="location.href='admin-dashboard.html'" class="bg-gray-600 hover:bg-gray-600 text-white px-4 py-2 rounded-lg"><i class="fas fa-arrow-left mr-2"></i>Kembali</button>
         </div>
       </div>
 
@@ -42,7 +46,7 @@
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Pencarian</label>
-            <input type="text" id="searchInput" placeholder="Cari nama..." class="w-full border-gray-300 rounded-lg px-3 py-2">
+            <input type="text" id="searchInput" placeholder="Cari nama / NIK / NIP..." class="w-full border-gray-300 rounded-lg px-3 py-2">
           </div>
           <div class="flex items-end">
             <button onclick="loadTeachers()" class="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg"><i class="fas fa-search mr-2"></i>Tampilkan</button>
@@ -63,16 +67,17 @@
     async function loadTeachers() {
       const tenantId = document.getElementById('tenantFilter').value;
       const search = document.getElementById('searchInput').value;
-      
+
       try {
-        const response = await fetch('/api/admin/teachers' + (tenantId ? '?tenant_id=' + tenantId : ''), {
+        const response = await fetch('/api/idcard/teachers' + (tenantId ? '?tenant_id=' + tenantId : ''), {
           headers: { 'Authorization': token ? 'Bearer ' + token : '' }
         });
         const result = await response.json();
-        
+
         if (result.success) {
-          teachersData = result.data.filter(t => 
-            !search || (t.nama && t.nama.toLowerCase().includes(search.toLowerCase()))
+          teachersData = result.data.filter(t =>
+            !search || (t.nama && t.nama.toLowerCase().includes(search.toLowerCase())) ||
+            (t.nik && t.nik.includes(search)) || (t.nip && t.nip.includes(search))
           );
           renderCards();
         } else {
@@ -100,48 +105,106 @@
       } catch (error) {}
     }
 
+    function fotoUrl(teacher) {
+      return teacher.link_foto || `https://ui-avatars.com/api/?name=${encodeURIComponent(teacher.nama || 'Guru')}&size=150&background=066e3a&color=fff`;
+    }
+
     function renderCards() {
       const container = document.getElementById('cardsContainer');
       container.innerHTML = '';
-      
+
       teachersData.forEach(teacher => {
-        // Get assignment info - data dari API admin/teachers format: assignments array
-        const assignment = teacher.assignments && teacher.assignments.length > 0 ? teacher.assignments[0] : {};
-        const namaSekolah = assignment.nama_sekolah || teacher.nama_sekolah || 'YPWI LUTIM';
-        const jabatan = assignment.jabatan_di_unit || teacher.jabatan_di_unit || 'Guru';
-        
+        const scanId = teacher.scan_id || teacher.id || '';
+        const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=56x56&data=${encodeURIComponent(scanId)}`;
+        const safeNama = (teacher.nama || 'Guru').replace(/'/g, '');
+
         const card = document.createElement('div');
         card.className = 'id-card';
         card.innerHTML = `
-          <div class="school-header">${namaSekolah}</div>
-          <div class="p-3 flex">
-            <div class="mr-3">
-              <div class="photo-frame">
-                <img src="${teacher.link_foto || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(teacher.nama) + '&size=55'}" 
-                     class="w-full h-full object-cover" onerror="this.src='https://ui-avatars.com/api/?name=Guru&size=55'">
-              </div>
-              <div class="text-center mt-1">
-                <img src="https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=${teacher.scan_id || teacher.id}" 
-                     class="w-12 h-12 mx-auto">
-              </div>
-            </div>
-            <div class="flex-1 text-xs">
-              <div class="font-bold text-sm text-gray-800 mb-1">${teacher.nama || 'Guru'}</div>
-              <div class="space-y-1 text-gray-600">
-                <div><span class="font-medium">ID:</span> ${teacher.scan_id || teacher.id}</div>
-                <div><span class="font-medium">NIK:</span> ${teacher.nik || '-'}</div>
-                <div><span class="font-medium">NIP:</span> ${teacher.nip || '-'}</div>
-                <div><span class="font-medium">Jabatan:</span> ${jabatan}</div>
-              </div>
+          <div class="text-center pt-1.5">
+            <img src="/assets/images/YPWI%20LOGO%20FULL%20COLOR.png" alt="Logo YPWI" class="mx-auto h-4 w-auto" onerror="this.style.display='none'">
+            <div class="text-[#066e3a] font-bold text-[10px] tracking-wider">YPWI LUTIM</div>
+          </div>
+          <div class="mt-2 flex justify-center">
+            <div class="photo-frame-large">
+              <img src="${fotoUrl(teacher)}" class="w-full h-full object-cover" onerror="this.src='https://ui-avatars.com/api/?name=Guru&size=150&background=066e3a&color=fff'">
             </div>
           </div>
-          <div class="watermark"><i class="fas fa-id-badge"></i></div>
+          <div class="font-bold text-center text-[11px] text-gray-800 mt-1.5 px-2">${teacher.nama || 'Guru'}</div>
+          <div class="text-[7px] text-gray-500 text-center mt-0.5">${scanId}</div>
+          <div class="text-[7px] text-[#044e24] font-semibold text-center mt-0.5 px-2">${teacher.jabatan_di_unit || 'Guru'}</div>
+          <div class="mt-2 flex justify-center">
+            <img src="${qrUrl}" class="w-14 h-14" alt="QR Scan">
+          </div>
+          <input type="checkbox" data-id="${teacher.id}" class="card-check absolute top-1 left-1 no-print w-3 h-3 rounded border-gray-400 text-indigo-600" title="Pilih kartu ini">
+          <button onclick="exportSinglePdf(${teacher.id}, '${safeNama}')" class="absolute top-1 right-1 no-print bg-blue-600 hover:bg-blue-700 text-white text-xs px-1.5 py-0.5 rounded" title="Unduh PDF kartu ini"><i class="fas fa-file-pdf"></i></button>
         `;
         container.appendChild(card);
       });
+
+      if (teachersData.length === 0) {
+        container.innerHTML = '<p class="text-gray-400 p-4 col-span-full">Tidak ada data guru.</p>';
+      }
+    }
+
+    async function exportAllPdf() {
+      const tenantId = document.getElementById('tenantFilter').value;
+      const url = '/api/idcard/teachers/pdf' + (tenantId ? '?tenant_id=' + tenantId : '');
+      try {
+        const response = await fetch(url, { headers: { 'Authorization': token ? 'Bearer ' + token : '' } });
+        const blob = await fetchToBlob(response);
+        const dl = document.createElement('a');
+        dl.href = URL.createObjectURL(blob);
+        dl.download = 'idcard-guru-bulk.pdf';
+        dl.click();
+      } catch (error) {
+        console.error(error);
+        alert('Gagal export PDF.');
+      }
+    }
+
+    async function exportSelectedPdf() {
+      const ids = [...document.querySelectorAll('.card-check:checked')].map((cb) => cb.dataset.id).join(',');
+      if (!ids) return alert('Pilih minimal satu kartu.');
+      try {
+        const response = await fetch('/api/idcard/teachers/pdf?ids=' + ids, { headers: { 'Authorization': token ? 'Bearer ' + token : '' } });
+        const blob = await fetchToBlob(response);
+        const dl = document.createElement('a');
+        dl.href = URL.createObjectURL(blob);
+        dl.download = 'idcard-guru-terpilih.pdf';
+        dl.click();
+      } catch (error) {
+        console.error(error);
+        alert('Gagal export PDF terpilih.');
+      }
+    }
+
+    async function fetchToBlob(response) {
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.message || ('Error ' + response.status));
+      }
+      return await response.blob();
+    }
+
+    async function exportSinglePdf(teacherId, nama) {
+      try {
+        const response = await fetch('/api/idcard/teachers/pdf?teacher_id=' + teacherId, {
+          headers: { 'Authorization': token ? 'Bearer ' + token : '' }
+        });
+        const blob = await response.blob();
+        const dl = document.createElement('a');
+        dl.href = URL.createObjectURL(blob);
+        dl.download = 'idcard-guru-' + (nama || teacherId) + '.pdf';
+        dl.click();
+      } catch (error) {
+        console.error(error);
+        alert('Gagal export PDF.');
+      }
     }
 
     function printCards() { window.print(); }
+
     document.addEventListener('DOMContentLoaded', () => { loadTenants(); loadTeachers(); });
   </script>
 </body>

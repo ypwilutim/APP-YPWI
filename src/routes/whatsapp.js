@@ -22,6 +22,27 @@ async function ensureTableColumns() {
   } catch (e) {
     // Migration might have already run
   }
+   // Ensure media columns exist
+  try {
+    await db.query(`ALTER TABLE whatsapp_messages ADD COLUMN IF NOT EXISTS media_url TEXT DEFAULT NULL`);
+  } catch (e) {
+    // Column might already exist
+  }
+  try {
+    await db.query(`ALTER TABLE whatsapp_messages ADD COLUMN IF NOT EXISTS media_filename VARCHAR(255) DEFAULT NULL`);
+  } catch (e) {
+    // Column might already exist
+  }
+  try {
+    await db.query(`ALTER TABLE whatsapp_messages ADD COLUMN IF NOT EXISTS contact_photo_url TEXT DEFAULT NULL`);
+  } catch (e) {
+    // Column might already exist
+  }
+  try {
+    await db.query(`ALTER TABLE whatsapp_messages ADD COLUMN IF NOT EXISTS wa_message_id VARCHAR(100) DEFAULT NULL`);
+  } catch (e) {
+    // Column might already exist
+  }
 }
 
 ensureTableColumns();
@@ -58,7 +79,7 @@ router.get('/whatsapp/conversation/:phone', async (req, res) => {
   try {
     const phone = req.params.phone;
     
-    const messages = await db.query(`SELECT id, from_phone as phone_number, message as message_content, message_type, profile_name as contact_name, status as message_status, wa_message_id, parent_id, reply_to_message_id, created_at, direction FROM whatsapp_messages WHERE from_phone = ? ORDER BY created_at ASC LIMIT 100`, [phone]);
+     const messages = await db.query(`SELECT id, from_phone as phone_number, message as message_content, message_type, profile_name as contact_name, status as message_status, wa_message_id, parent_id, reply_to_message_id, media_url, media_filename, created_at, direction FROM whatsapp_messages WHERE from_phone = ? ORDER BY created_at ASC LIMIT 100`, [phone]);
 
     const [contact] = await db.query(`SELECT from_phone as phone_number, profile_name as contact_name, parent_id, COUNT(*) as total_messages, MAX(created_at) as last_interaction FROM whatsapp_messages WHERE from_phone = ? GROUP BY from_phone, profile_name, parent_id`, [phone]);
 
@@ -246,6 +267,39 @@ router.get('/whatsapp/contacts', async (req, res) => {
   } catch (error) {
     console.error('[WA API] Get contacts error:', error);
     res.status(500).json({ success: false, message: 'Gagal mengambil kontak' });
+  }
+});
+
+// GET /api/cs/whatsapp/billing-messages - Get billing message history with details
+router.get('/whatsapp/billing-messages', async (req, res) => {
+  try {
+    const { limit = 50, offset = 0, status, date_from, date_to } = req.query;
+    
+     let query = `SELECT wm.id, wm.from_phone as phone_number, wm.message as message_content, wm.status as message_status, wm.message_type, wm.wa_message_id, wm.created_at, wm.parent_id, wm.direction, s.nama_siswa, s.nis, tn.nama_sekolah, bp.spp_bulanan as total_tagihan, bp.bulan, wm.created_at as tanggal_kirim FROM whatsapp_messages wm LEFT JOIN students s ON wm.parent_id = s.parent_id LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id LEFT JOIN billing_payment bp ON bp.student_id = s.id AND bp.tenant_id = s.tenant_id WHERE wm.direction = 'outgoing'`;
+    const params = [];
+
+    if (status) {
+       query += ' AND wm.status = ?';
+      params.push(status);
+    }
+    if (date_from) {
+      query += ' AND DATE(wm.created_at) >= ?';
+      params.push(date_from);
+    }
+    if (date_to) {
+      query += ' AND DATE(wm.created_at) <= ?';
+      params.push(date_to);
+    }
+
+    query += ' ORDER BY wm.created_at DESC LIMIT ? OFFSET ?';
+    params.push(parseInt(limit), parseInt(offset));
+
+    const messages = await db.query(query, params);
+
+    res.json({ success: true, data: messages });
+  } catch (error) {
+    console.error('[WA API] Get billing messages error:', error);
+    res.status(500).json({ success: false, message: 'Gagal mengambil riwayat pesan tagihan' });
   }
 });
 

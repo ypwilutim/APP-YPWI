@@ -134,6 +134,12 @@
           <i class="fas fa-headset"></i>
           <span>Customer Service</span>
         </button>
+        <button
+          class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+          data-tab="messageHistory">
+          <i class="fab fa-whatsapp"></i>
+          <span>Riwayat Pesan WA</span>
+        </button>
       </nav>
     </aside>
 
@@ -410,53 +416,60 @@
       </div>
 
       <!-- SPP Reminder Tab -->
-      <div id="sppReminderTab" class="tab-content hidden">
-        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-4">
-          <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
-            <h3 class="text-lg font-semibold text-gray-900">Pengingat SPP</h3>
-            <div class="flex flex-wrap items-end gap-2">
-              <div>
-                <label class="block text-xs font-medium text-gray-600 mb-1">Sekolah</label>
-                <select id="reminderTenantFilter"
-                  class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500">
-                  <option value="">Semua Sekolah</option>
-                </select>
+        <div id="sppReminderTab" class="tab-content hidden">
+          <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-4">
+            <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
+              <h3 class="text-lg font-semibold text-gray-900">Pengingat SPP</h3>
+              <div class="flex flex-wrap items-end gap-2">
+                <div>
+                  <label class="block text-xs font-medium text-gray-600 mb-1">Sekolah</label>
+                  <select id="reminderTenantFilter"
+                    class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500">
+                    <option value="">Semua Sekolah</option>
+                  </select>
+                </div>
+                <button onclick="loadPaymentDefaulters()"
+                  class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
+                  <i class="fas fa-sync-alt mr-2"></i>Refresh
+                </button>
+                <button onclick="sendAllReminders()"
+                  class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                  <i class="fab fa-whatsapp mr-2"></i>Kirim Semua
+                </button>
+                <button onclick="sendSelectedReminders()"
+                  class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 hidden" id="sendSelectedBtn">
+                  <i class="fab fa-whatsapp mr-2"></i>Kirim ke Terpilih (<span id="selectedReminderCount">0</span>)
+                </button>
               </div>
-              <button onclick="loadPaymentDefaulters()"
-                class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
-                <i class="fas fa-sync-alt mr-2"></i>Refresh
-              </button>
-              <button onclick="sendAllReminders()"
-                class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
-                <i class="fab fa-whatsapp mr-2"></i>Kirim Semua
-              </button>
+            </div>
+
+            <div class="overflow-x-auto">
+              <table class="w-full">
+                <thead class="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th class="px-4 py-3 text-left">
+                      <input type="checkbox" id="reminderSelectAll" onchange="toggleReminderSelectAll(this)">
+                    </th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Nama Siswa</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">NISN</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Sekolah</th>
+                    <th class="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Tunggakan</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">No. WA Orang Tua</th>
+                    <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="reminderTable" class="divide-y divide-gray-100">
+                  <tr>
+                    <td colspan="7" class="px-4 py-8 text-center text-gray-500">
+                      <i class="fas fa-spinner fa-spin text-xl mb-2"></i>
+                      <p>Memuat data...</p>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
-
-          <div class="overflow-x-auto">
-            <table class="w-full">
-              <thead class="bg-gray-50 border-b border-gray-100">
-                <tr>
-                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Nama Siswa</th>
-                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">NISN</th>
-                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Sekolah</th>
-                  <th class="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Tunggakan</th>
-                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">No. WA Orang Tua</th>
-                  <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Aksi</th>
-                </tr>
-              </thead>
-              <tbody id="reminderTable" class="divide-y divide-gray-100">
-                <tr>
-                  <td colspan="6" class="px-4 py-8 text-center text-gray-500">
-                    <i class="fas fa-spinner fa-spin text-xl mb-2"></i>
-                    <p>Memuat data...</p>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
         </div>
-      </div>
 
       <!-- Auto Billing Report Tab -->
       <div id="autoBillingTab" class="tab-content hidden">
@@ -677,15 +690,126 @@
                  <tr>
                    <td colspan="4" class="px-4 py-8 text-center text-gray-500">Memuat transaksi...</td>
                  </tr>
-               </tbody>
-             </table>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Customer Service Tab -->
+        <div id="customerServiceTab" class="tab-content hidden w-full">
+          <div class="bg-white rounded-xl shadow-sm border-2 border-blue-200 p-6 mb-4">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="text-lg font-semibold">Customer Service - WhatsApp</h3>
+              <div class="flex items-center gap-2">
+                <span class="text-sm text-gray-500">24h Window</span>
+                <span id="csUnreadBadge" class="px-2 py-1 bg-red-500 text-white text-xs rounded-full hidden">0</span>
+              </div>
+            </div>
+
+            <div class="flex flex-col md:flex-row gap-4 w-full">
+              <!-- Contacts List -->
+              <div class="bg-gray-50 rounded-lg p-4 w-full md:w-1/3 md:min-w-[280px]">
+                <div class="flex items-center justify-between mb-3">
+                  <h4 class="font-medium text-gray-700">Kontak</h4>
+                  <input type="text" id="csSearchContact" placeholder="Cari..." class="px-2 py-1 text-sm border rounded w-32" onkeyup="filterCSContacts()">
+                </div>
+                <div id="csContactsList" class="space-y-2 max-h-[500px] overflow-y-auto">
+                  <p class="text-sm text-gray-500 text-center py-4">Memuat kontak...</p>
+                </div>
+              </div>
+
+              <!-- Conversation -->
+              <div class="bg-white border rounded-lg p-4 w-full md:flex-1 md:min-w-0">
+                <div id="csConversationHeader" class="flex items-center justify-between pb-3 border-b mb-3">
+                  <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                      <i class="fas fa-user text-blue-600"></i>
+                    </div>
+                    <div>
+                      <p id="csSelectedContactName" class="font-medium">Pilih kontak</p>
+                      <p id="csSelectedContactPhone" class="text-sm text-gray-500">-</p>
+                    </div>
+                  </div>
+                  <div id="csConversationStatus" class="hidden">
+                    <span class="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Aktif</span>
+                  </div>
+                </div>
+
+                <div id="csMessagesList" class="space-y-3 max-h-[500px] overflow-y-auto mb-4">
+                  <p class="text-sm text-gray-500 text-center py-8">Pilih kontak untuk melihat percakapan</p>
+                </div>
+
+                <!-- Reply Box -->
+                <div id="csReplyBox" class="hidden border-t pt-3">
+                  <div class="flex items-end gap-2">
+                    <textarea id="csReplyMessage" rows="2" placeholder="Ketik balasan..." class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"></textarea>
+                    <button onclick="sendCSReply()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                      <i class="fas fa-paper-plane"></i>
+                    </button>
+                  </div>
+                  <div class="flex items-center justify-between mt-2">
+                    <input type="text" id="csNote" placeholder="Catatan (opsional)..." class="flex-1 px-2 py-1 text-sm border rounded mr-2">
+                    <button onclick="closeCSConversation()" class="px-3 py-1 text-sm bg-gray-300 text-gray-700 rounded hover:bg-gray-400">Tutup</button>
+                  </div>
+                 </div>
+               </div>
+             </div>
            </div>
          </div>
-       </div>
-     </main>
-   </div>
 
-  <!-- BSI VA Modal -->
+         <!-- Message History Tab -->
+         <div id="messageHistoryTab" class="tab-content hidden w-full">
+           <div class="bg-white rounded-xl shadow-sm border-2 border-blue-200 p-6 mb-4">
+             <div class="flex justify-between items-center mb-4">
+               <h3 class="text-lg font-semibold">Riwayat Pesan WhatsApp</h3>
+               <div class="flex items-center gap-2">
+                 <select id="messageStatusFilter" onchange="loadMessageHistory()" class="px-3 py-1 text-sm border border-gray-300 rounded-lg">
+                   <option value="">Semua Status</option>
+                   <option value="sent">Terkirim</option>
+                   <option value="delivered">Diterima</option>
+                   <option value="read">Dibaca</option>
+                   <option value="failed">Gagal</option>
+                 </select>
+               </div>
+             </div>
+
+             <div class="overflow-x-auto">
+               <table class="w-full text-sm">
+                 <thead class="bg-gray-50">
+                   <tr>
+                     <th class="px-4 py-2 text-left font-medium text-gray-700">Tanggal/Waktu</th>
+                     <th class="px-4 py-2 text-left font-medium text-gray-700">Nama Siswa</th>
+                     <th class="px-4 py-2 text-left font-medium text-gray-700">NIS</th>
+                     <th class="px-4 py-2 text-left font-medium text-gray-700">Sekolah</th>
+                     <th class="px-4 py-2 text-left font-medium text-gray-700">No. WhatsApp</th>
+                     <th class="px-4 py-2 text-left font-medium text-gray-700">Bulan</th>
+                     <th class="px-4 py-2 text-left font-medium text-gray-700">Total Tagihan</th>
+                     <th class="px-4 py-2 text-left font-medium text-gray-700">Status</th>
+                     <th class="px-4 py-2 text-left font-medium text-gray-700">Pesan</th>
+                   </tr>
+                 </thead>
+                 <tbody id="messageHistoryTableBody">
+                   <tr>
+                     <td colspan="9" class="px-4 py-8 text-center text-gray-500">Memuat...</td>
+                   </tr>
+                 </tbody>
+               </table>
+             </div>
+
+             <div class="mt-4 flex justify-between items-center">
+               <p class="text-sm text-gray-500" id="messageHistoryInfo"></p>
+               <div class="flex gap-2">
+                 <button onclick="loadMessageHistory(-1)" class="px-3 py-1 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300" id="prevPageBtn">Sebelumnya</button>
+                 <button onclick="loadMessageHistory(1)" class="px-3 py-1 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300" id="nextPageBtn">Berikutnya</button>
+               </div>
+             </div>
+           </div>
+         </div>
+       </main>
+     </div>
+
+     <!-- BSI VA Modal -->
   <div id="bsiVaModal" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
     <div class="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden">
       <div class="flex justify-between items-center p-4 border-b sticky top-0 bg-white z-10">
@@ -733,68 +857,8 @@
     </div>
   </div>
 
-  <!-- Customer Service Tab -->
-  <div id="customerServiceTab" class="tab-content hidden">
-    <div class="bg-white rounded-xl shadow-sm border-2 border-blue-200 p-6 mb-4">
-      <div class="flex justify-between items-center mb-4">
-        <h3 class="text-lg font-semibold">Customer Service - WhatsApp</h3>
-        <div class="flex items-center gap-2">
-          <span class="text-sm text-gray-500">24h Window</span>
-          <span id="csUnreadBadge" class="px-2 py-1 bg-red-500 text-white text-xs rounded-full hidden">0</span>
-        </div>
-      </div>
-
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <!-- Contacts List -->
-        <div class="bg-gray-50 rounded-lg p-4">
-          <div class="flex items-center justify-between mb-3">
-            <h4 class="font-medium text-gray-700">Kontak</h4>
-            <input type="text" id="csSearchContact" placeholder="Cari..." class="px-2 py-1 text-sm border rounded w-32" onkeyup="filterCSContacts()">
-          </div>
-          <div id="csContactsList" class="space-y-2 max-h-96 overflow-y-auto">
-            <p class="text-sm text-gray-500 text-center py-4">Memuat kontak...</p>
-          </div>
-        </div>
-
-        <!-- Conversation -->
-        <div class="bg-white border rounded-lg p-4 lg:col-span-2">
-          <div id="csConversationHeader" class="flex items-center justify-between pb-3 border-b mb-3">
-            <div class="flex items-center gap-3">
-              <div class="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                <i class="fas fa-user text-blue-600"></i>
-              </div>
-              <div>
-                <p id="csSelectedContactName" class="font-medium">Pilih kontak</p>
-                <p id="csSelectedContactPhone" class="text-sm text-gray-500">-</p>
-              </div>
-            </div>
-            <div id="csConversationStatus" class="hidden">
-              <span class="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Aktif</span>
-            </div>
-          </div>
-
-          <div id="csMessagesList" class="space-y-3 max-h-80 overflow-y-auto mb-4">
-            <p class="text-sm text-gray-500 text-center py-8">Pilih kontak untuk melihat percakapan</p>
-          </div>
-
-          <!-- Reply Box -->
-          <div id="csReplyBox" class="hidden border-t pt-3">
-            <div class="flex items-end gap-2">
-              <textarea id="csReplyMessage" rows="2" placeholder="Ketik balasan..." class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"></textarea>
-              <button onclick="sendCSReply()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                <i class="fas fa-paper-plane"></i>
-              </button>
-            </div>
-            <div class="flex items-center justify-between mt-2">
-              <input type="text" id="csNote" placeholder="Catatan (opsional)..." class="flex-1 px-2 py-1 text-sm border rounded mr-2">
-              <button onclick="closeCSConversation()" class="px-3 py-1 text-sm bg-gray-300 text-gray-700 rounded hover:bg-gray-400">Tutup</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div id="bsiProgressModal" class="hidden fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
+    <!-- BSI VA Modal -->
+    <div id="bsiProgressModal" class="hidden fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
     <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
       <h4 class="font-semibold text-lg mb-1">Membuat Virtual Account BSI</h4>
       <p id="bsiProgressText" class="text-sm text-gray-600 mb-4">0 / 0 siswa</p>
@@ -963,7 +1027,8 @@
             if (tabName === 'sppReminder') loadPaymentDefaulters();
             if (tabName === 'autoBilling') { loadAutoBillingSettings(); loadAutoBillingReport(); }
             if (tabName === 'customerService') { loadCSContacts(); }
-        });
+            if (tabName === 'messageHistory') { loadMessageHistory(); }
+          });
       });
     }
 
@@ -1177,7 +1242,8 @@
 
     function showToast(msg, type) {
       const t = document.createElement('div');
-      t.className = 'fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg max-w-sm text-sm ' + (type === 'success' ? 'bg-green-500 text-white' : type === 'error' ? 'bg-red-500 text-white' : 'bg-blue-500 text-white');
+      t.className = 'fixed top-4 right-4 z-[100] p-4 rounded-lg shadow-lg max-w-sm text-sm ' + (type === 'success' ? 'bg-green-500 text-white' : type === 'error' ? 'bg-red-500 text-white' : 'bg-blue-500 text-white');
+      t.style.zIndex = '9999';
       t.innerHTML = '<div class="flex items-center"><i class="fas ' + (type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-exclamation-circle' : 'fa-info-circle') + ' mr-2"></i><span>' + msg + '</span></div>';
       document.body.appendChild(t);
       setTimeout(() => t.remove(), 3000);
@@ -1435,7 +1501,7 @@
       const tenantId = document.getElementById('paymentsTenantFilter').value;
       const now = new Date();
       const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-      
+
       // Populate tenant dropdown
       const tenantSelect = document.getElementById('updateBillingTenantInput');
       const paymentsSelect = document.getElementById('paymentsTenantFilter');
@@ -1448,8 +1514,21 @@
           }
         }
       }
-      
+
       document.getElementById('updateBillingBulanInput').value = currentMonth;
+      const searchInput = document.getElementById('updateBillingSearchInput');
+      if (searchInput) {
+        searchInput.value = '';
+        searchInput.onkeyup = function(e) {
+          if (e.key === 'Enter') {
+            loadUpdateBillingData();
+          } else {
+            if (typeof renderUpdateBillingTable === 'function' && updateBillingData && updateBillingData.existing) {
+              renderUpdateBillingTable();
+            }
+          }
+        };
+      }
       document.getElementById('updateBillingModal').classList.remove('hidden');
       loadUpdateBillingData();
     }
@@ -1459,50 +1538,71 @@
       updateBillingData = { existing: [], missing: [] };
     }
 
-    async function loadUpdateBillingData() {
-      const tenantId = document.getElementById('updateBillingTenantInput').value;
-      const bulan = document.getElementById('updateBillingBulanInput').value;
-      
-      if (!bulan) { showToast('Pilih bulan', 'error'); return; }
-      
-      try {
-        let url = `/api/treasurer/bendahara/billing/month?bulan=${bulan}`;
-        if (tenantId) url += `&tenant_id=${tenantId}`;
-        
-        const res = await fetch(url, { headers: getAuthHeader() });
-        const data = await res.json();
-        
-        if (data.success) {
-          updateBillingData = data.data;
-          renderUpdateBillingTable();
-        } else {
-          showToast(data.message || 'Gagal memuat data', 'error');
-        }
-      } catch (e) {
-        showToast('Gagal: ' + e.message, 'error');
-      }
-    }
+     async function loadUpdateBillingData() {
+       const tenantId = document.getElementById('updateBillingTenantInput').value;
+       const bulan = document.getElementById('updateBillingBulanInput').value;
+       const search = (document.getElementById('updateBillingSearchInput')?.value || '').trim();
+
+       if (!bulan) { showToast('Pilih bulan', 'error'); return; }
+
+       try {
+         let url = `/api/treasurer/bendahara/billing/month?bulan=${bulan}`;
+         if (tenantId) url += `&tenant_id=${tenantId}`;
+         if (search) url += `&search=${encodeURIComponent(search)}`;
+
+         const res = await fetch(url, { headers: getAuthHeader() });
+         const data = await res.json();
+
+         if (data.success) {
+           updateBillingData = data.data;
+           renderUpdateBillingTable();
+         } else {
+           showToast(data.message || 'Gagal memuat data', 'error');
+         }
+       } catch (e) {
+         showToast('Gagal: ' + e.message, 'error');
+       }
+     }
 
     function renderUpdateBillingTable() {
       const tbody = document.getElementById('updateBillingTableBody');
       const existingCount = document.getElementById('updateBillingExistingCount');
       const missingCount = document.getElementById('updateBillingMissingCount');
 
-      existingCount.textContent = updateBillingData.existing.length;
-      missingCount.textContent = updateBillingData.missing.length;
+      const search = (document.getElementById('updateBillingSearchInput')?.value || '').trim().toLowerCase();
+      const filterFn = (item) => {
+        if (!search) return true;
+        return (item.nama_siswa || '').toLowerCase().includes(search)
+          || (item.nisn || '').toLowerCase().includes(search)
+          || (item.va_number || '').toLowerCase().includes(search)
+          || (item.nama_sekolah || '').toLowerCase().includes(search);
+      };
+
+      const filteredExisting = (updateBillingData.existing || []).filter(filterFn);
+      const filteredMissing = (updateBillingData.missing || []).filter(filterFn);
+
+      existingCount.textContent = filteredExisting.length + ' / ' + (updateBillingData.existing || []).length;
+      missingCount.textContent = filteredMissing.length + ' / ' + (updateBillingData.missing || []).length;
+
+      if (filteredExisting.length === 0 && filteredMissing.length === 0 && search) {
+        tbody.innerHTML = `<tr><td colspan="9" class="px-3 py-8 text-center text-gray-500">Tidak ada siswa yang cocok dengan pencarian "<strong>${search}</strong>"</td></tr>`;
+        return;
+      }
 
       let html = '';
 
-      // Show existing billings (can be updated)
-      updateBillingData.existing.forEach(b => {
+       // Show existing billings (can be updated)
+      filteredExisting.forEach(b => {
         const spp = b.spp_bulanan;
         const transport = b.ransportasi || 0;
         const subsidi = b.subsidi || 0;
         const total = spp + transport - subsidi;
+        const isLunas = b.status === 'lunas';
+        const metodeLabel = isLunas && b.metode_pembayaran ? ` (${b.metode_pembayaran === 'tunai' ? 'Tunai' : 'Transfer'}${b.tanggal_bayar ? ' ' + b.tanggal_bayar : ''})` : '';
         html += `
-          <tr class="border-b hover:bg-gray-50">
+          <tr class="border-b hover:bg-gray-50 ${isLunas ? 'bg-green-50' : ''}" data-lunas="${isLunas}">
             <td class="px-2 py-2">
-              <input type="checkbox" class="update-billing-check" value="${b.billing_id}" data-student="${b.nama_siswa}">
+              <input type="checkbox" class="update-billing-check" value="${b.billing_id}" data-student="${b.nama_siswa}" onchange="updateResetSelectedCount()" ${isLunas ? 'disabled' : ''}>
             </td>
             <td class="px-2 py-2">
               <div class="font-medium">${b.nama_siswa}</div>
@@ -1518,23 +1618,23 @@
               <input type="hidden" class="update-transport-input" value="${transport}" data-billing="${b.billing_id}">
             </td>
             <td class="px-2 py-2 text-right">
-              <input type="number" class="update-subsidi-input w-24 px-2 py-1 border rounded text-right text-sm" value="${subsidi}" data-billing="${b.billing_id}" placeholder="0">
+              <input type="number" class="update-subsidi-input w-24 px-2 py-1 border rounded text-right text-sm" value="${subsidi}" data-billing="${b.billing_id}" placeholder="0" ${isLunas ? 'disabled' : ''}>
             </td>
             <td class="px-2 py-2 text-right font-semibold">
               <span class="total-display text-emerald-700" data-billing="${b.billing_id}">Rp ${Math.max(0, total).toLocaleString('id-ID')}</span>
             </td>
             <td class="px-2 py-2 text-center">
-              <input type="text" class="update-catatan-input w-24 px-1 py-1 border rounded text-xs" value="${b.catatan || ''}" data-billing="${b.billing_id}" placeholder="Keterangan">
+              <input type="text" class="update-catatan-input w-24 px-1 py-1 border rounded text-xs" value="${b.catatan || ''}" data-billing="${b.billing_id}" placeholder="Keterangan" ${isLunas ? 'disabled' : ''}>
             </td>
             <td class="px-2 py-2 text-center">
-              <span class="px-2 py-1 rounded text-xs ${b.status === 'lunas' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}">${b.status}</span>
+              <span class="px-2 py-1 rounded text-xs ${isLunas ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}" title="${(b.catatan_pelunasan || '') + (b.dibayar_oleh ? ' - ' + b.dibayar_oleh : '')}">${b.status}${metodeLabel}</span>
             </td>
           </tr>
         `;
       });
 
       // Show missing students (can be created)
-      updateBillingData.missing.forEach(s => {
+      filteredMissing.forEach(s => {
         const spp = s.iuran_bulanan || 0;
         const transport = s.ransportasi || 0;
         const subsidi = s.subsidi || 0;
@@ -1680,6 +1780,166 @@
 
     function toggleAllBillingChecks(source) {
       document.querySelectorAll('.update-billing-check, .create-billing-check').forEach(cb => cb.checked = source.checked);
+      updateResetSelectedCount();
+    }
+
+    function updateResetSelectedCount() {
+      const checkboxes = document.querySelectorAll('.update-billing-check:checked');
+      const count = checkboxes.length;
+      const resetBtn = document.getElementById('resetSelectedBtn');
+      if (resetBtn) {
+        resetBtn.classList.toggle('hidden', count === 0);
+      }
+      const resetCountEl = document.getElementById('resetSelectedCount');
+      if (resetCountEl) resetCountEl.textContent = count;
+
+      // Lunaskan: hanya tampilkan jika ada billing yang BELUM lunas
+      const lunasCheckboxes = Array.from(checkboxes).filter(cb => {
+        const tr = cb.closest('tr');
+        if (!tr) return false;
+        return !tr.dataset.lunas || tr.dataset.lunas !== 'true';
+      });
+      const lunasBtn = document.getElementById('lunaskanSelectedBtn');
+      if (lunasBtn) {
+        lunasBtn.classList.toggle('hidden', lunasCheckboxes.length === 0);
+      }
+      const lunasCountEl = document.getElementById('lunaskanSelectedCount');
+      if (lunasCountEl) lunasCountEl.textContent = lunasCheckboxes.length;
+    }
+
+    async function resetSelectedBilling() {
+      const checkboxes = document.querySelectorAll('.update-billing-check:checked');
+      if (checkboxes.length === 0) {
+        showToast('Pilih billing yang ingin direset', 'warning');
+        return;
+      }
+      const billingIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
+
+      if (!confirm(`Yakin ingin mereset ${billingIds.length} billing yang dipilih?\n\nBilling yang sudah lunas TIDAK akan dihapus.\nBilling yang akan dihapus akan dipindahkan ke siswa "belum ada billing".`)) {
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/treasurer/bendahara/billing/reset', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+          body: JSON.stringify({ billing_ids: billingIds })
+        });
+        const d = await res.json();
+        if (d.success) {
+          showToast(d.message || 'Billing berhasil direset', 'success');
+          loadUpdateBillingData();
+        } else {
+          showToast(d.message || 'Gagal reset billing', 'error');
+        }
+      } catch (e) {
+        showToast('Gagal: ' + e.message, 'error');
+      }
+    }
+
+    function showResetAllConfirm() {
+      const bulan = document.getElementById('updateBillingBulanInput').value;
+      const tenantId = document.getElementById('updateBillingTenantInput').value;
+      if (!bulan) { showToast('Pilih bulan terlebih dahulu', 'error'); return; }
+
+      const msg = tenantId
+        ? `Yakin ingin mereset SEMUA billing untuk bulan ${bulan} di sekolah yang dipilih?\n\nBilling yang sudah lunas TIDAK akan dihapus.`
+        : `Yakin ingin mereset SEMUA billing untuk bulan ${bulan} di SEMUA sekolah?\n\nTindakan ini akan mempengaruhi banyak data!\nBilling yang sudah lunas TIDAK akan dihapus.`;
+
+      if (!confirm(msg)) return;
+      const extraMsg = tenantId ? '' : '\n\nKetik "RESET" untuk konfirmasi reset semua sekolah:';
+      const confirmText = tenantId ? null : prompt(extraMsg);
+      if (!tenantId && confirmText !== 'RESET') {
+        showToast('Konfirmasi dibatalkan', 'info');
+        return;
+      }
+
+      resetAllBilling(tenantId, bulan);
+    }
+
+    async function resetAllBilling(tenantId, bulan) {
+      try {
+        const res = await fetch('/api/treasurer/bendahara/billing/reset-all', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+          body: JSON.stringify({ tenant_id: tenantId || undefined, bulan })
+        });
+        const d = await res.json();
+        if (d.success) {
+          showToast(d.message || 'Semua billing berhasil direset', 'success');
+          loadUpdateBillingData();
+        } else {
+          showToast(d.message || 'Gagal reset billing', 'error');
+        }
+      } catch (e) {
+        showToast('Gagal: ' + e.message, 'error');
+      }
+    }
+
+    // ==================== LUNASKAN BILLING ====================
+    let lunasiSelectedIds = [];
+
+    function lunaskanSelectedBilling() {
+      const checkboxes = document.querySelectorAll('.update-billing-check:checked');
+      const candidates = Array.from(checkboxes).filter(cb => {
+        const tr = cb.closest('tr');
+        return tr && (!tr.dataset.lunas || tr.dataset.lunas !== 'true');
+      });
+      if (candidates.length === 0) {
+        showToast('Pilih billing yang belum lunas untuk ditandai lunas', 'warning');
+        return;
+      }
+      lunasiSelectedIds = candidates.map(cb => parseInt(cb.value));
+      document.getElementById('lunasiCountDisplay').textContent = lunasiSelectedIds.length;
+      const today = new Date().toISOString().slice(0, 10);
+      document.getElementById('lunasiTanggal').value = today;
+      document.getElementById('lunasiMetode').value = 'tunai';
+      document.getElementById('lunasiDibayarOleh').value = '';
+      document.getElementById('lunasiCatatan').value = '';
+      document.getElementById('lunasiBillingModal').classList.remove('hidden');
+    }
+
+    function closeLunasiModal() {
+      document.getElementById('lunasiBillingModal').classList.add('hidden');
+      lunasiSelectedIds = [];
+    }
+
+    async function submitLunasi() {
+      if (lunasiSelectedIds.length === 0) {
+        showToast('Tidak ada billing yang dipilih', 'warning');
+        return;
+      }
+      const metode = document.getElementById('lunasiMetode').value;
+      const tanggal = document.getElementById('lunasiTanggal').value;
+      const dibayarOleh = document.getElementById('lunasiDibayarOleh').value.trim();
+      const catatan = document.getElementById('lunasiCatatan').value.trim();
+
+      if (!metode) { showToast('Pilih metode pembayaran', 'error'); return; }
+      if (!tanggal) { showToast('Pilih tanggal pembayaran', 'error'); return; }
+
+      try {
+        const res = await fetch('/api/treasurer/bendahara/billing/lunasi', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+          body: JSON.stringify({
+            billing_ids: lunasiSelectedIds,
+            metode_pembayaran: metode,
+            tanggal_bayar: tanggal,
+            dibayar_oleh: dibayarOleh || null,
+            catatan_pelunasan: catatan || null
+          })
+        });
+        const d = await res.json();
+        if (d.success) {
+          showToast(d.message || 'Billing berhasil ditandai lunas', 'success');
+          closeLunasiModal();
+          loadUpdateBillingData();
+        } else {
+          showToast(d.message || 'Gagal melunaskan billing', 'error');
+        }
+      } catch (e) {
+        showToast('Gagal: ' + e.message, 'error');
+      }
     }
 
     // ===================== BSI VA MANUAL =====================
@@ -2005,37 +2265,42 @@ async function openBsiVaModal() {
       }
     }
 
-    async function loadPaymentDefaulters() {
-      const tenantId = document.getElementById('reminderTenantFilter')?.value || '';
-      const tbody = document.getElementById('reminderTable');
-      if (!tbody) return;
-      tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-gray-500"><i class="fas fa-spinner fa-spin"></i> Memuat data...</td></tr>';
+     async function loadPaymentDefaulters() {
+       const tenantId = document.getElementById('reminderTenantFilter')?.value || '';
+       const tbody = document.getElementById('reminderTable');
+       if (!tbody) return;
+       tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-500"><i class="fas fa-spinner fa-spin"></i> Memuat data...</td></tr>';
 
-      try {
-        const res = await fetch('/api/treasurer/public/payment-defaulters?tenant_id=' + (tenantId || ''), { headers: getAuthHeader() });
-        const data = await res.json();
-        if (data.success && data.data && data.data.length > 0) {
-          tbody.innerHTML = data.data.map(s => `
-            <tr class="border-b">
-              <td class="px-4 py-3">${s.nama_siswa || '-'}</td>
-              <td class="px-4 py-3">${s.nisn || '-'}</td>
-              <td class="px-4 py-3">${s.nama_sekolah || '-'}</td>
-              <td class="px-4 py-3 text-right">${s.total_arrears ? 'Rp ' + Number(s.total_arrears).toLocaleString('id-ID') : '-'}</td>
-              <td class="px-4 py-3">${s.no_wa || '-'}</td>
-              <td class="px-4 py-3 text-center">
-                ${s.no_wa ? `<button onclick="sendReminder('${s.no_wa}', '${s.nama_siswa}', ${s.total_arrears || 0}, ${s.id})" class="px-3 py-1 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700"><i class="fab fa-whatsapp mr-1"></i>Kirim WA</button>` : '<span class="text-gray-400">-</span>'}
-              </td>
-            </tr>
-          `).join('');
-        } else if (data.success && data.data && data.data.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-gray-500">Tidak ada siswa dengan tunggakan</td></tr>';
-        } else {
-          tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-red-500">Gagal memuat data</td></tr>';
-        }
-      } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-red-500">Error: ' + e.message + '</td></tr>';
-      }
+       try {
+         const res = await fetch('/api/treasurer/public/payment-defaulters?tenant_id=' + (tenantId || ''), { headers: getAuthHeader() });
+         const data = await res.json();
+         if (data.success && data.data && data.data.length > 0) {
+           tbody.innerHTML = data.data.map(s => `
+             <tr class="border-b reminder-row">
+               <td class="px-4 py-3">
+                 <input type="checkbox" class="reminder-checkbox" onchange="updateSelectedReminderCount()" value="${s.id}" ${!s.no_wa ? 'disabled' : ''}>
+               </td>
+               <td class="px-4 py-3">${s.nama_siswa || '-'}</td>
+               <td class="px-4 py-3">${s.nisn || '-'}</td>
+               <td class="px-4 py-3">${s.nama_sekolah || '-'}</td>
+               <td class="px-4 py-3 text-right">${s.total_arrears ? 'Rp ' + Number(s.total_arrears).toLocaleString('id-ID') : '-'}</td>
+               <td class="px-4 py-3">${s.no_wa || '-'}</td>
+               <td class="px-4 py-3 text-center">
+                 ${s.no_wa ? `<button onclick="sendReminder('${s.no_wa}', '${s.nama_siswa}', ${s.total_arrears || 0}, ${s.id})" class="px-3 py-1 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700"><i class="fab fa-whatsapp mr-1"></i>Kirim WA</button>` : '<span class="text-gray-400">Tidak ada WA</span>'}
+               </td>
+             </tr>
+           `).join('');
+         } else if (data.success && data.data && data.data.length === 0) {
+           tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">Tidak ada siswa dengan tunggakan</td></tr>';
+         } else {
+           tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-red-500">Gagal memuat data</td></tr>';
+         }
+       } catch (e) {
+         tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-red-500">Error: ' + e.message + '</td></tr>';
+       }
     }
+
+    let pendingWaSend = null;
 
     async function sendReminder(noWa, namaSiswa, totalArrears, studentId) {
       const btn = event.target.closest('button');
@@ -2056,11 +2321,51 @@ async function openBsiVaModal() {
       document.getElementById('waBulanInput').value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
       document.getElementById('waJatuhTempoInput').value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-10`;
       document.getElementById('waTemplateModal').classList.remove('hidden');
-    }
+     }
 
-    let pendingWaSend = null;
+     function toggleReminderSelectAll(checkbox) {
+       const checkboxes = document.querySelectorAll('.reminder-checkbox');
+       checkboxes.forEach(cb => {
+         cb.checked = checkbox.checked;
+       });
+       updateSelectedReminderCount();
+     }
 
-    function closeWaTemplateModal() {
+     function updateSelectedReminderCount() {
+       const checkboxes = document.querySelectorAll('.reminder-checkbox:checked');
+       const count = checkboxes.length;
+       const btn = document.getElementById('sendSelectedBtn');
+       if (btn) {
+         btn.classList.toggle('hidden', count === 0);
+       }
+       const countEl = document.getElementById('selectedReminderCount');
+       if (countEl) {
+         countEl.textContent = count;
+       }
+     }
+
+     async function sendSelectedReminders() {
+       const checkboxes = document.querySelectorAll('.reminder-checkbox:checked');
+       if (checkboxes.length === 0) {
+         showToast('Pilih setidaknya satu siswa', 'error');
+         return;
+       }
+
+       const selectedIds = Array.from(checkboxes).map(cb => cb.value);
+       pendingWaSend = {
+         type: 'selected',
+         selectedIds,
+         btn: null,
+         originalHtml: null
+       };
+
+       const now = new Date();
+       document.getElementById('waBulanInput').value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+       document.getElementById('waJatuhTempoInput').value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-10`;
+        document.getElementById('waTemplateModal').classList.remove('hidden');
+      }
+
+     function closeWaTemplateModal() {
       document.getElementById('waTemplateModal').classList.add('hidden');
       if (pendingWaSend?.btn) {
         pendingWaSend.btn.innerHTML = pendingWaSend.originalHtml || '<i class="fab fa-whatsapp mr-1"></i>Kirim WA';
@@ -2069,39 +2374,48 @@ async function openBsiVaModal() {
       pendingWaSend = null;
     }
 
-    async function sendWithTemplate(templateType) {
-      if (!pendingWaSend) { closeWaTemplateModal(); return; }
-      const { type, noWa, namaSiswa, totalArrears, studentId, tenantId, btn } = pendingWaSend;
-      const bulan = document.getElementById('waBulanInput').value;
-      const jatuhTempo = document.getElementById('waJatuhTempoInput').value;
-      closeWaTemplateModal();
-      try {
-        if (type === 'single') {
-          const number = (noWa || '').replace(/[^0-9]/g, '');
-          if (!number) { showToast('Nomor WA tidak tersedia', 'error'); return; }
-          const res = await fetch('/api/treasurer/public/send-spp-reminder', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
-            body: JSON.stringify({ no_wa: number, nama_siswa: namaSiswa, jumlah_tagihan: totalArrears || 0, student_id: studentId, template_type: templateType, bulan, tanggal_jatuh_tempo: jatuhTempo })
-          });
-          const data = await res.json();
-          if (data.success) { showToast('Pengingat SPP berhasil dikirim via WhatsApp', 'success'); }
-          else { showToast(data.message || 'Gagal mengirim pengingat', 'error'); }
-          if (btn) { btn.innerHTML = '<i class="fab fa-whatsapp mr-1"></i>Kirim WA'; btn.disabled = false; }
-        } else if (type === 'bulk') {
-          const res = await fetch('/api/treasurer/public/send-all-spp-reminders', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
-            body: JSON.stringify({ tenant_id: tenantId || undefined, template_type: templateType, bulan, tanggal_jatuh_tempo: jatuhTempo })
-          });
-          const data = await res.json();
-          if (data.success) { showToast(data.message || 'Pengingat berhasil dikirim', 'success'); loadPaymentDefaulters(); }
-          else { showToast(data.message || 'Gagal mengirim pengingat', 'error'); }
-          if (btn) { btn.innerHTML = '<i class="fab fa-whatsapp mr-2"></i>Kirim Semua'; btn.disabled = false; }
-        }
-      } catch (e) { showToast('Gagal mengirim pengingat', 'error'); }
-      pendingWaSend = null;
-    }
+     async function sendWithTemplate(templateType) {
+       if (!pendingWaSend) { closeWaTemplateModal(); return; }
+       const { type, noWa, namaSiswa, totalArrears, studentId, tenantId, btn, selectedIds } = pendingWaSend;
+       const bulan = document.getElementById('waBulanInput').value;
+       const jatuhTempo = document.getElementById('waJatuhTempoInput').value;
+       closeWaTemplateModal();
+       try {
+         if (type === 'single') {
+           const number = (noWa || '').replace(/[^0-9]/g, '');
+           if (!number) { showToast('Nomor WA tidak tersedia', 'error'); return; }
+           const res = await fetch('/api/treasurer/public/send-spp-reminder', {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+             body: JSON.stringify({ no_wa: number, nama_siswa: namaSiswa, jumlah_tagihan: totalArrears || 0, student_id: studentId, template_type: templateType, bulan, tanggal_jatuh_tempo: jatuhTempo })
+           });
+           const data = await res.json();
+           if (data.success) { showToast('Pengingat SPP berhasil dikirim via WhatsApp', 'success'); }
+           else { showToast(data.message || 'Gagal mengirim pengingat', 'error'); }
+           if (btn) { btn.innerHTML = '<i class="fab fa-whatsapp mr-1"></i>Kirim WA'; btn.disabled = false; }
+         } else if (type === 'bulk') {
+           const res = await fetch('/api/treasurer/public/send-all-spp-reminders', {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+             body: JSON.stringify({ tenant_id: tenantId || undefined, template_type: templateType, bulan, tanggal_jatuh_tempo: jatuhTempo })
+           });
+           const data = await res.json();
+           if (data.success) { showToast(data.message || 'Pengingat berhasil dikirim', 'success'); loadPaymentDefaulters(); }
+           else { showToast(data.message || 'Gagal mengirim pengingat', 'error'); }
+           if (btn) { btn.innerHTML = '<i class="fab fa-whatsapp mr-2"></i>Kirim Semua'; btn.disabled = false; }
+         } else if (type === 'selected') {
+           const res = await fetch('/api/treasurer/public/send-selected-spp-reminders', {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+             body: JSON.stringify({ student_ids: selectedIds, template_type: templateType, bulan, tanggal_jatuh_tempo: jatuhTempo })
+           });
+           const data = await res.json();
+           if (data.success) { showToast(data.message || 'Pengingat berhasil dikirim ke ' + selectedIds.length + ' siswa', 'success'); loadPaymentDefaulters(); }
+           else { showToast(data.message || 'Gagal mengirim pengingat', 'error'); }
+         }
+       } catch (e) { showToast('Gagal mengirim pengingat', 'error'); }
+       pendingWaSend = null;
+     }
 
     // ==================== AUTO BILLING FUNCTIONS ====================
 
@@ -2362,10 +2676,40 @@ async function openBsiVaModal() {
                 replyRef = '<p class="text-xs text-blue-200 mt-1"><i class="fas fa-reply"></i> Membalas pesan #' + msg.reply_to_message_id + '</p>';
               }
 
+              // Show media content (image/document)
+              let mediaContent = '';
+              if (msg.message_type === 'image' && msg.media_url) {
+                mediaContent = `<img src="${msg.media_url}" alt="Gambar" class="max-w-full max-h-32 rounded-lg mb-1">`;
+              } else if (msg.message_type === 'document' && msg.media_url) {
+                const fileName = msg.media_filename || 'Dokumen';
+                const fileExt = fileName.split('.').pop().toLowerCase();
+                const iconMap = {
+                  pdf: 'far fa-file-pdf',
+                  doc: 'far fa-file-word',
+                  docx: 'far fa-file-word',
+                  xls: 'far fa-file-excel',
+                  xlsx: 'far fa-file-excel',
+                  jpg: 'far fa-file-image',
+                  jpeg: 'far fa-file-image',
+                  png: 'far fa-file-image'
+                };
+                const icon = iconMap[fileExt] || 'far fa-file';
+                mediaContent = `<a href="${msg.media_url}" target="_blank" class="${isIncoming ? 'text-blue-600' : 'text-blue-200'} flex items-center gap-2 mb-1 hover:underline">
+                  <i class="${icon} text-xl"></i>
+                  <span>${fileName}</span>
+                </a>`;
+              } else if (msg.message_type === 'image' && !msg.media_url) {
+                mediaContent = '<p class="text-sm italic opacity-75">Gambar</p>';
+              } else if (msg.message_type === 'document' && !msg.media_url) {
+                mediaContent = '<p class="text-sm italic opacity-75">Dokumen</p>';
+              }
+
+              const content = mediaContent || msg.message_content;
+
               return `
                 <div class="flex ${isIncoming ? 'justify-start' : 'justify-end'}">
                   <div class="max-w-xs px-4 py-2 rounded-lg ${bubbleClass}">
-                    <p class="text-sm">${msg.message_content}</p>
+                    ${mediaContent ? mediaContent : `<p class="text-sm">${msg.message_content}</p>`}
                     <p class="text-xs ${isIncoming ? 'text-gray-500' : 'text-blue-200'} mt-1 text-right">${time} ${statusIcon}</p>
                     ${replyRef}
                   </div>
@@ -2377,7 +2721,7 @@ async function openBsiVaModal() {
             messagesList.scrollTop = messagesList.scrollHeight;
           }
         }
-      } catch (e) {
+       } catch (e) {
         console.error('Failed to load conversation:', e);
       }
     }
@@ -2476,8 +2820,85 @@ async function openBsiVaModal() {
       if (csSelectedPhone && !document.getElementById('customerServiceTab').classList.contains('hidden')) {
         openCSConversation(csSelectedPhone);
       }
-    }, 10000);
-  </script>
+     }, 10000);
+
+     let messageHistoryPage = 0;
+     const messageHistoryLimit = 50;
+
+     async function loadMessageHistory(direction = 0) {
+       if (direction !== 0) {
+         messageHistoryPage += direction;
+         if (messageHistoryPage < 0) messageHistoryPage = 0;
+       }
+       messageHistoryPage = Math.max(0, messageHistoryPage);
+
+       const offset = messageHistoryPage * messageHistoryLimit;
+       const statusFilter = document.getElementById('messageStatusFilter')?.value || '';
+         let url = `/api/cs/whatsapp/billing-messages?limit=${messageHistoryLimit}&offset=${offset}`;
+       if (statusFilter) url += `&status=${encodeURIComponent(statusFilter)}`;
+
+       try {
+         const res = await fetch(url, { headers: getAuthHeader() });
+         const data = await res.json();
+
+         const tbody = document.getElementById('messageHistoryTableBody');
+         if (data.success && data.data.length === 0) {
+           tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-8 text-center text-gray-500">Belum ada pesan yang dikirim</td></tr>';
+           document.getElementById('messageHistoryInfo').textContent = 'Tidak ada data';
+           document.getElementById('prevPageBtn').disabled = true;
+           document.getElementById('nextPageBtn').disabled = true;
+           return;
+         }
+
+         tbody.innerHTML = data.data.map(msg => {
+           const time = new Date(msg.created_at).toLocaleString('id-ID', {
+             day: '2-digit', month: 'short', year: 'numeric',
+             hour: '2-digit', minute: '2-digit'
+           });
+           const studentName = msg.nama_siswa || 'N/A';
+           const nis = msg.nis || '-';
+           const school = msg.nama_sekolah || '-';
+           const phone = msg.phone_number || '-';
+           const month = msg.bulan || '-';
+           const total = msg.total_tagihan ? `Rp ${Number(msg.total_tagihan).toLocaleString('id-ID')}` : '-';
+           const status = msg.message_status || 'unknown';
+           const statusClass = {
+             'sent': 'bg-blue-100 text-blue-800',
+             'delivered': 'bg-green-100 text-green-800',
+             'read': 'bg-purple-100 text-purple-800',
+             'failed': 'bg-red-100 text-red-800'
+           }[status] || 'bg-gray-100 text-gray-800';
+           const messagePreview = msg.message_content ? msg.message_content.substring(0, 50) + (msg.message_content.length > 50 ? '...' : '') : '-';
+
+           return `
+             <tr class="border-b">
+               <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-600">${time}</td>
+               <td class="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-800">${studentName}</td>
+               <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-600">${nis}</td>
+               <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-600">${school}</td>
+               <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-600">${phone}</td>
+               <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-600">${month}</td>
+               <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-600">${total}</td>
+               <td class="px-4 py-2 whitespace-nowrap">
+                 <span class="px-2 py-1 text-xs rounded-full ${statusClass}">${status}</span>
+               </td>
+               <td class="px-4 py-2 text-sm text-gray-600">${messagePreview}</td>
+             </tr>
+           `;
+         }).join('');
+
+         document.getElementById('messageHistoryInfo').textContent =
+           `Menampilkan ${offset + 1}-${offset + data.data.length} dari ${data.data.length} pesan`;
+
+         document.getElementById('prevPageBtn').disabled = messageHistoryPage === 0;
+         document.getElementById('nextPageBtn').disabled = data.data.length < messageHistoryLimit;
+       } catch (e) {
+         console.error('Failed to load message history:', e);
+         document.getElementById('messageHistoryTableBody').innerHTML =
+           '<tr><td colspan="9" class="px-4 py-8 text-center text-red-500">Gagal memuat riwayat pesan</td></tr>';
+       }
+     }
+   </script>
 
   <!-- Update Billing Modal -->
   <div id="updateBillingModal" class="hidden fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
@@ -2499,18 +2920,33 @@ async function openBsiVaModal() {
               <option value="">Semua Sekolah</option>
             </select>
           </div>
+          <div class="flex-1 min-w-[200px]">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Cari Siswa</label>
+            <input type="text" id="updateBillingSearchInput" placeholder="Nama, NISN, atau No. VA..." class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500" onkeyup="if(event.key==='Enter')loadUpdateBillingData()">
+          </div>
           <button onclick="loadUpdateBillingData()" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
             <i class="fas fa-search mr-1"></i>Cari
           </button>
         </div>
       </div>
 
-      <div class="flex gap-4 p-4 border-b">
+      <div class="flex gap-4 p-4 border-b items-center flex-wrap">
         <div class="bg-green-50 px-3 py-2 rounded-lg">
           <span class="text-sm text-green-700">Sudah ada billing: <strong id="updateBillingExistingCount">0</strong></span>
         </div>
         <div class="bg-blue-50 px-3 py-2 rounded-lg">
           <span class="text-sm text-blue-700">Belum ada billing: <strong id="updateBillingMissingCount">0</strong></span>
+        </div>
+        <div class="ml-auto flex gap-2">
+          <button onclick="lunaskanSelectedBilling()" class="px-3 py-2 bg-emerald-500 text-white text-sm rounded-lg hover:bg-emerald-600 hidden" id="lunaskanSelectedBtn" title="Tandai lunas (tunai/transfer)">
+            <i class="fas fa-check-circle mr-1"></i>Lunaskan (<span id="lunaskanSelectedCount">0</span>)
+          </button>
+          <button onclick="resetSelectedBilling()" class="px-3 py-2 bg-orange-500 text-white text-sm rounded-lg hover:bg-orange-600 hidden" id="resetSelectedBtn" title="Hapus billing yang dipilih dari siswa existing">
+            <i class="fas fa-undo mr-1"></i>Reset Pilihan (<span id="resetSelectedCount">0</span>)
+          </button>
+          <button onclick="showResetAllConfirm()" class="px-3 py-2 bg-red-500 text-white text-sm rounded-lg hover:bg-red-600" title="Hapus semua billing bulan ini untuk sekolah terpilih">
+            <i class="fas fa-trash-alt mr-1"></i>Reset Semua Bulan Ini
+          </button>
         </div>
       </div>
 
@@ -2539,6 +2975,51 @@ async function openBsiVaModal() {
         <button onclick="hideUpdateBillingModal()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400">Batal</button>
         <button onclick="saveUpdateBilling()" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
           <i class="fas fa-save mr-1"></i>Simpan Perubahan
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Lunasi Billing Modal -->
+  <div id="lunasiBillingModal" class="hidden fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+      <div class="flex justify-between items-center mb-4">
+        <h4 class="font-semibold text-lg"><i class="fas fa-check-circle text-emerald-600 mr-2"></i>Lunaskan Billing</h4>
+        <button onclick="closeLunasiModal()" class="text-gray-500 hover:text-gray-700 text-2xl leading-none">&times;</button>
+      </div>
+
+      <div class="bg-emerald-50 border border-emerald-200 rounded-lg p-3 mb-4 text-sm">
+        <p class="text-emerald-800">Akan melunaskan <strong id="lunasiCountDisplay">0</strong> billing.</p>
+        <p class="text-xs text-emerald-700 mt-1">Pilih metode pembayaran di bawah ini.</p>
+      </div>
+
+      <div class="mb-3">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Metode Pembayaran <span class="text-red-500">*</span></label>
+        <select id="lunasiMetode" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500">
+          <option value="tunai">Tunai</option>
+          <option value="transfer_pusat">Transfer ke Rekening Pusat</option>
+        </select>
+      </div>
+
+      <div class="mb-3">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Tanggal Pembayaran <span class="text-red-500">*</span></label>
+        <input type="date" id="lunasiTanggal" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500">
+      </div>
+
+      <div class="mb-3">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Dibayar Oleh (Opsional)</label>
+        <input type="text" id="lunasiDibayarOleh" placeholder="Contoh: Bpk. Ahmad (Ayah Siswa)" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500">
+      </div>
+
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Catatan (Opsional)</label>
+        <textarea id="lunasiCatatan" rows="2" placeholder="Keterangan tambahan..." class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"></textarea>
+      </div>
+
+      <div class="flex justify-end gap-2">
+        <button onclick="closeLunasiModal()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400">Batal</button>
+        <button onclick="submitLunasi()" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium">
+          <i class="fas fa-check mr-1"></i>Konfirmasi Lunas
         </button>
       </div>
     </div>
