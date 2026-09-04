@@ -2751,19 +2751,327 @@ router.post('/treasurer/bendahara/billing/lunasi', authenticateBendahara, async 
   }
 });
 
+// POST /api/treasurer/bendahara/billing/lunasi-bulk
+// Lunaskan banyak siswa untuk banyak bulan sekaligus (by tenant_id + bulan range + filter)
+// Body: { tenant_id?, bulan_from, bulan_to, student_ids?, all_students?, metode_pembayaran, tanggal_bayar, dibayar_oleh?, catatan_pelunasan? }
+router.post('/treasurer/bendahara/billing/lunasi-bulk', authenticateBendahara, async (req, res) => {
+  try {
+    await billing.ensureBillingTables();
+    const {
+      tenant_id,
+      bulan_from,
+      bulan_to,
+      student_ids,
+      all_students,
+      metode_pembayaran,
+      tanggal_bayar,
+      dibayar_oleh,
+      catatan_pelunasan
+    } = req.body;
+
+    // Validasi
+    if (!bulan_from || !/^\d{4}-\d{2}$/.test(bulan_from)) {
+      return res.status(400).json({ success: false, message: 'bulan_from wajib (YYYY-MM)' });
+    }
+    if (!bulan_to || !/^\d{4}-\d{2}$/.test(bulan_to)) {
+      return res.status(400).json({ success: false, message: 'bulan_to wajib (YYYY-MM)' });
+    }
+    if (bulan_from > bulan_to) {
+      return res.status(400).json({ success: false, message: 'bulan_from harus <= bulan_to' });
+    }
+    if (!metode_pembayaran || !['tunai', 'transfer_pusat'].includes(metode_pembayaran)) {
+      return res.status(400).json({ success: false, message: 'metode_pembayaran harus tunai atau transfer_pusat' });
+    }
+    if (!tanggal_bayar) {
+      return res.status(400).json({ success: false, message: 'tanggal_bayar wajib diisi' });
+    }
+    if (!all_students && (!Array.isArray(student_ids) || student_ids.length === 0)) {
+      return res.status(400).json({ success: false, message: 'student_ids wajib (atau set all_students=true)' });
+    }
+
+    // Generate list bulan dari from sampai to
+    const bulanList = [];
+    const [yearFrom, monthFrom] = bulan_from.split('-').map(Number);
+    const [yearTo, monthTo] = bulan_to.split('-').map(Number);
+    let y = yearFrom, m = monthFrom;
+    while (y < yearTo || (y === yearTo && m <= monthTo)) {
+      bulanList.push(`${y}-${String(m).padStart(2, '0')}`);
+      m++;
+      if (m > 12) { m = 1; y++; }
+    }
+
+    // Bangun query untuk ambil billing yang akan dilunasi
+    let billingQuery = `
+      SELECT bp.id, bp.student_id, bp.bulan, bp.status,
+        COALESCE(bp.spp_bulanan, 0) as spp,
+        COALESCE(bp.ransportasi, 0) as transport,
+        COALESCE(bp.subsidi, 0) as subsidi,
+        COALESCE(bp.biaya_admin_va, 0) as admin_va
+      FROM billing_payment bp
+      JOIN students s ON bp.student_id = s.id
+      WHERE bp.bulan IN (${bulanList.map(() => '?').join(',')})
+        AND (s.status = 'active' OR s.status = 'aktif' OR s.status IS NULL)
+        AND COALESCE(s.iuran_bulanan, 0) > 0
+    `;
+    const params = [...bulanList];
+
+    if (tenant_id) {
+      billingQuery += ' AND s.tenant_id = ?';
+      params.push(tenant_id);
+    }
+    if (!all_students) {
+      billingQuery += ` AND bp.student_id IN (${student_ids.map(() => '?').join(',')})`;
+      params.push(...student_ids);
+    }
+    billingQuery += ' ORDER BY bp.bulan ASC, bp.student_id ASC';
+
+    const targetBillings = await db.query(billingQuery, params);
+
+    if (!targetBillings || targetBillings.length === 0) {
+      return res.json({
+        success: true,
+        message: 'Tidak ada billing ditemukan untuk dilunasi',
+        lunas: 0,
+        dilewati: 0,
+        inserted_payments: 0,
+        total: 0,
+        details: []
+      });
+    }
+
+    let lunas = 0, dilewati = 0, insertedPayments = 0;
+    const details = [];
+    const affectedStudents = new Set();
+
+    for (const b of targetBillings) {
+      if (b.status === 'lunas') {
+        dilewati++;
+        details.push({ billing_id: b.id, student_id: b.student_id, bulan: b.bulan, status: 'skipped', reason: 'sudah lunas' });
+        continue;
+      }
+
+      try {
+        const spp = parseFloat(b.spp) || 0;
+        const transport = parseFloat(b.transport) || 0;
+        const subsidi = parseFloat(b.subsidi) || 0;
+        const adminVa = parseFloat(b.admin_va) || 0;
+        const totalBayar = spp + transport - subsidi + adminVa;
+
+        // Insert record ke incoming_payments
+        try {
+          const stuResult = await db.query('SELECT tenant_id FROM students WHERE id = ?', [b.student_id]);
+          const stu = Array.isArray(stuResult) ? stuResult[0] : stuResult;
+          const studentTenantId = stu?.tenant_id || null;
+
+          await db.query(
+            `INSERT INTO incoming_payments 
+             (matched_student_id, periode, total_amount, channel, status, remarks, created_at) 
+             VALUES (?, ?, ?, ?, 'Success', ?, NOW())`,
+            [
+              b.student_id,
+              b.bulan,
+              totalBayar,
+              metode_pembayaran === 'tunai' ? 'Tunai' : 'Transfer Bank',
+              `Bulk pelunasan manual - ${dibayar_oleh || 'bendahara'} ${catatan_pelunasan ? '(' + catatan_pelunasan + ')' : ''}`
+            ]
+          );
+          insertedPayments++;
+        } catch (e) {
+          console.warn('[LUNASI-BULK] Gagal insert incoming_payments:', e.message);
+        }
+
+        // Update billing_payment
+        await db.query(
+          `UPDATE billing_payment 
+           SET status = 'lunas', 
+               metode_pembayaran = ?, 
+               tanggal_bayar = ?, 
+               dibayar_oleh = ?, 
+               catatan_pelunasan = ?,
+               transaksi = ?,
+               keterangan_spp = 0
+           WHERE id = ?`,
+          [metode_pembayaran, tanggal_bayar, dibayar_oleh || null, catatan_pelunasan || null, totalBayar, b.id]
+        );
+
+        if (b.student_id) affectedStudents.add(b.student_id);
+        lunas++;
+        details.push({
+          billing_id: b.id,
+          student_id: b.student_id,
+          bulan: b.bulan,
+          total: totalBayar,
+          status: 'lunas'
+        });
+      } catch (err) {
+        dilewati++;
+        details.push({ billing_id: b.id, student_id: b.student_id, bulan: b.bulan, status: 'error', reason: err.message });
+      }
+    }
+
+    // Recalculate saldo untuk siswa yang affected
+    for (const studentId of affectedStudents) {
+      try {
+        await billing.recalcStudent(studentId);
+      } catch (e) {
+        console.warn('[LUNASI-BULK] Gagal recalc student:', studentId, e.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Berhasil melunaskan ${lunas} billing untuk ${affectedStudents.size} siswa (${bulanList.length} bulan). ${dilewati} dilewati (sudah lunas).`,
+      lunas,
+      dilewati,
+      inserted_payments: insertedPayments,
+      total: targetBillings.length,
+      siswa_affected: affectedStudents.size,
+      bulan_range: { from: bulan_from, to: bulan_to, count: bulanList.length },
+      details: details.slice(0, 50) // Limit details untuk response
+    });
+  } catch (error) {
+    console.error('Lunasi bulk billing error:', error);
+    res.status(500).json({ success: false, message: 'Gagal melunaskan billing massal' });
+  }
+});
+
+// POST /api/treasurer/bendahara/billing/preview-lunasi-bulk - Preview billing yang akan dilunasi (tanpa eksekusi)
+router.post('/treasurer/bendahara/billing/preview-lunasi-bulk', authenticateBendahara, async (req, res) => {
+  try {
+    const { tenant_id, bulan_from, bulan_to, student_ids, all_students } = req.body;
+
+    if (!bulan_from || !/^\d{4}-\d{2}$/.test(bulan_from)) {
+      return res.status(400).json({ success: false, message: 'bulan_from wajib (YYYY-MM)' });
+    }
+    if (!bulan_to || !/^\d{4}-\d{2}$/.test(bulan_to)) {
+      return res.status(400).json({ success: false, message: 'bulan_to wajib (YYYY-MM)' });
+    }
+    if (bulan_from > bulan_to) {
+      return res.status(400).json({ success: false, message: 'bulan_from harus <= bulan_to' });
+    }
+    if (!all_students && (!Array.isArray(student_ids) || student_ids.length === 0)) {
+      return res.status(400).json({ success: false, message: 'student_ids wajib (atau set all_students=true)' });
+    }
+
+    // Generate list bulan
+    const bulanList = [];
+    const [yearFrom, monthFrom] = bulan_from.split('-').map(Number);
+    const [yearTo, monthTo] = bulan_to.split('-').map(Number);
+    let y = yearFrom, m = monthFrom;
+    while (y < yearTo || (y === yearTo && m <= monthTo)) {
+      bulanList.push(`${y}-${String(m).padStart(2, '0')}`);
+      m++;
+      if (m > 12) { m = 1; y++; }
+    }
+
+    let query = `
+      SELECT bp.id, bp.student_id, bp.bulan, bp.status,
+        COALESCE(bp.spp_bulanan, 0) as spp,
+        COALESCE(bp.ransportasi, 0) as transport,
+        COALESCE(bp.subsidi, 0) as subsidi,
+        COALESCE(bp.biaya_admin_va, 0) as admin_va
+      FROM billing_payment bp
+      JOIN students s ON bp.student_id = s.id
+      WHERE bp.bulan IN (${bulanList.map(() => '?').join(',')})
+        AND (s.status = 'active' OR s.status = 'aktif' OR s.status IS NULL)
+        AND COALESCE(s.iuran_bulanan, 0) > 0
+    `;
+    const params = [...bulanList];
+    if (tenant_id) {
+      query += ' AND s.tenant_id = ?';
+      params.push(tenant_id);
+    }
+    if (!all_students) {
+      query += ` AND bp.student_id IN (${student_ids.map(() => '?').join(',')})`;
+      params.push(...student_ids);
+    }
+
+    const billings = await db.query(query, params);
+    const arr = Array.isArray(billings) ? billings : [];
+
+    const unpaid = arr.filter(b => b.status !== 'lunas');
+    const skipped = arr.filter(b => b.status === 'lunas');
+    const totalAmount = unpaid.reduce((sum, b) => {
+      return sum + (parseFloat(b.spp) || 0) + (parseFloat(b.transport) || 0) - (parseFloat(b.subsidi) || 0) + (parseFloat(b.admin_va) || 0);
+    }, 0);
+    const studentSet = new Set(unpaid.map(b => b.student_id));
+
+    let tenantName = null;
+    if (tenant_id) {
+      const tResult = await db.query('SELECT nama_sekolah FROM tenants WHERE tenant_id = ?', [tenant_id]);
+      const t = Array.isArray(tResult) ? tResult[0] : tResult;
+      tenantName = t?.nama_sekolah || null;
+    }
+
+    res.json({
+      success: true,
+      data: {
+        unpaid_count: unpaid.length,
+        skipped_count: skipped.length,
+        student_count: studentSet.size,
+        month_count: bulanList.length,
+        total_amount: totalAmount,
+        tenant: tenantName
+      }
+    });
+  } catch (error) {
+    console.error('Preview lunasi bulk error:', error);
+    res.status(500).json({ success: false, message: 'Gagal preview' });
+  }
+});
+
+// GET /api/treasurer/public/students-by-tenant - List siswa aktif by tenant (untuk bulk lunas selection)
+router.get('/treasurer/public/students-by-tenant', async (req, res) => {
+  try {
+    const { tenant_id } = req.query;
+    let query = `
+      SELECT s.id, s.nama_siswa, s.nisn, s.tenant_id
+      FROM students s
+      WHERE (s.status = 'active' OR s.status = 'aktif' OR s.status IS NULL)
+        AND COALESCE(s.iuran_bulanan, 0) > 0
+    `;
+    const params = [];
+    if (tenant_id) {
+      query += ' AND s.tenant_id = ?';
+      params.push(tenant_id);
+    }
+    query += ' ORDER BY s.nama_siswa ASC LIMIT 1000';
+    const rows = await db.query(query, params);
+    res.json({ success: true, data: Array.isArray(rows) ? rows : [] });
+  } catch (error) {
+    console.error('Students by tenant error:', error);
+    res.status(500).json({ success: false, message: 'Gagal mengambil siswa' });
+  }
+});
+
 // ===== BSI VA MANUAL ENDPOINTS =====
 
-// GET /api/treasurer/bendahara/student-billing/:student_id - Detail billing siswa
+// GET /api/treasurer/bendahara/student-billing/:student_id - Detail billing siswa (semua billing, baik lunas maupun belum)
 router.get('/treasurer/bendahara/student-billing/:student_id', authenticateBendahara, async (req, res) => {
   try {
     await billing.ensureBillingTables();
     const studentId = req.params.student_id;
-    const [student] = await db.query('SELECT s.id, s.nama_siswa, s.nisn, s.tenant_id, s.iuran_bulanan, tn.nama_sekolah FROM students s LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id WHERE s.id = ?', [studentId]);
+    const [student] = await db.query('SELECT s.id, s.nama_siswa, s.nisn, s.tenant_id, s.iuran_bulanan, s.subsidi, s.ransportasi, s.va_number, tn.nama_sekolah FROM students s LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id WHERE s.id = ?', [studentId]);
     if (!student) {
       return res.status(404).json({ success: false, message: 'Siswa tidak ditemukan' });
     }
-    const bills = await db.query('SELECT * FROM billing_payment WHERE student_id = ? ORDER BY bulan DESC', [studentId]);
+    // Ambil SEMUA billing (tidak filter status) - baik lunas maupun belum lunas
+    const bills = await db.query(
+      `SELECT id, bulan, spp_bulanan, ransportasi, subsidi, biaya_admin_va, transaksi, keterangan_spp, status,
+              metode_pembayaran, tanggal_bayar, dibayar_oleh, catatan_pelunasan, catatan, created_at, updated_at
+       FROM billing_payment WHERE student_id = ? ORDER BY bulan DESC`,
+      [studentId]
+    );
     const [saldoRow] = await db.query('SELECT saldo FROM saldo_siswa WHERE student_id = ?', [studentId]);
+
+    // Hitung ringkasan
+    const totalBilling = bills.length;
+    const lunasCount = bills.filter(b => b.status === 'lunas').length;
+    const belumLunasCount = bills.filter(b => b.status !== 'lunas').length;
+    const totalTagihan = bills.reduce((s, b) => s + (parseFloat(b.spp_bulanan) || 0) + (parseFloat(b.ransportasi) || 0) - (parseFloat(b.subsidi) || 0) + (parseFloat(b.biaya_admin_va) || 0), 0);
+    const totalTerbayar = bills.reduce((s, b) => s + (parseFloat(b.transaksi) || 0), 0);
+    const totalKeterangan = bills.reduce((s, b) => s + (parseFloat(b.keterangan_spp) || 0), 0);
+
     res.json({
       success: true,
       data: {
@@ -2773,15 +3081,38 @@ router.get('/treasurer/bendahara/student-billing/:student_id', authenticateBenda
           nisn: student.nisn,
           tenant_id: student.tenant_id,
           nama_sekolah: student.nama_sekolah,
-          iuran_bulanan: student.iuran_bulanan
+          iuran_bulanan: student.iuran_bulanan,
+          subsidi: student.subsidi,
+          ransportasi: student.ransportasi,
+          va_number: student.va_number
         },
         billing: bills.map(b => ({
+          id: b.id,
           bulan: b.bulan,
           spp_bulanan: parseFloat(b.spp_bulanan) || 0,
+          ransportasi: parseFloat(b.ransportasi) || 0,
+          subsidi: parseFloat(b.subsidi) || 0,
+          biaya_admin_va: parseFloat(b.biaya_admin_va) || 0,
           transaksi: parseFloat(b.transaksi) || 0,
           keterangan_spp: parseFloat(b.keterangan_spp) || 0,
-          status: b.status
+          status: b.status,
+          metode_pembayaran: b.metode_pembayaran,
+          tanggal_bayar: b.tanggal_bayar,
+          dibayar_oleh: b.dibayar_oleh,
+          catatan_pelunasan: b.catatan_pelunasan,
+          catatan: b.catatan,
+          created_at: b.created_at,
+          updated_at: b.updated_at,
+          total_tagihan: (parseFloat(b.spp_bulanan) || 0) + (parseFloat(b.ransportasi) || 0) - (parseFloat(b.subsidi) || 0) + (parseFloat(b.biaya_admin_va) || 0)
         })),
+        summary: {
+          total_billing: totalBilling,
+          lunas_count: lunasCount,
+          belum_lunas_count: belumLunasCount,
+          total_tagihan: totalTagihan,
+          total_terbayar: totalTerbayar,
+          total_keterangan: totalKeterangan
+        },
         saldo: parseFloat(saldoRow?.saldo) || 0
       }
     });

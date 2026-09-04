@@ -3262,3 +3262,502 @@ function downloadProblemQR() {
         whatsappBtn.style.display = 'flex';
     }
 }
+
+// ============================================================
+// PRAYER TIME NOTIFICATION SYSTEM
+// ============================================================
+// Data from Aladhan API using Kemenag (method 20)
+// Location: browser geolocation or fallback to Jakarta
+// Notification: browser notification + in-app modal + tone sound
+// Trigger: 5 minutes before and during prayer time
+// ============================================================
+
+const PRAYER_NAMES = {
+    Fajr: 'Subuh',
+    Sunrise: 'Terbit',
+    Dhuhr: 'Dzuhur',
+    Asr: 'Ashar',
+    Maghrib: 'Maghrib',
+    Isha: 'Isya'
+};
+
+const PRAYER_ORDER = ['Fajr', 'Sunrise', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
+
+let prayerTimesData = null;
+let prayerNotificationShown = {};
+let prayerCheckInterval = null;
+let currentPrayerLocationKey = null;
+
+let prayerWatchId = null;
+
+async function initPrayerTimes() {
+    try {
+        const position = await getUserLocation();
+        await loadPrayerTimesForLocation(position.coords.latitude, position.coords.longitude);
+        startPrayerCheck();
+        requestNotificationPermission();
+        
+        // Watch for location changes
+        if (navigator.geolocation && !prayerWatchId) {
+            prayerWatchId = navigator.geolocation.watchPosition(
+                async (newPosition) => {
+                    const newLat = newPosition.coords.latitude;
+                    const newLng = newPosition.coords.longitude;
+                    const oldLat = parseFloat(localStorage.getItem('prayerLat')) || 0;
+                    const oldLng = parseFloat(localStorage.getItem('prayerLng')) || 0;
+                    
+                    // If location changed by more than 0.01 degrees (~1km)
+                    if (Math.abs(newLat - oldLat) > 0.01 || Math.abs(newLng - oldLng) > 0.01) {
+                        console.log('Location changed, refreshing prayer times...');
+                        await loadPrayerTimesForLocation(newLat, newLng);
+                    }
+                },
+                (err) => console.log('Prayer location watch error:', err.message),
+                { enableHighAccuracy: false, timeout: 10000, maximumAge: 3600000 }
+            );
+        }
+    } catch (e) {
+        console.log('Prayer times init with fallback:', e.message);
+        await loadPrayerTimesForLocation(-6.2088, 106.8456);
+        startPrayerCheck();
+        requestNotificationPermission();
+    }
+}
+
+function getUserLocation() {
+    return new Promise((resolve, reject) => {
+        if (!navigator.geolocation) {
+            reject(new Error('Geolocation not supported'));
+            return;
+        }
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: false,
+            timeout: 10000,
+            maximumAge: 3600000
+        });
+    });
+}
+
+function getLocationKey(lat, lng) {
+    return `prayer_${lat.toFixed(2)}_${lng.toFixed(2)}`;
+}
+
+async function loadPrayerTimesForLocation(lat, lng) {
+    const locationKey = getLocationKey(lat, lng);
+    const now = new Date();
+    const month = now.getMonth() + 1;
+    const year = now.getFullYear();
+    
+    // Check if location changed
+    const storedLocationKey = localStorage.getItem('prayerLocationKey');
+    const storedTimestamp = localStorage.getItem('prayerLocationTimestamp');
+    
+    if (storedLocationKey === locationKey && storedTimestamp) {
+        const cacheAge = Date.now() - parseInt(storedTimestamp, 10);
+        // Cache valid for 1 hour
+        if (cacheAge < 3600000) {
+            console.log('Using cached prayer times for location:', locationKey);
+            loadCachedPrayerTimes(now);
+            return;
+        }
+    }
+    
+    // Location changed or cache expired - fetch fresh data
+    console.log('Fetching fresh prayer times for location:', locationKey);
+    await fetchMonthlyPrayerTimes(lat, lng, month, year, locationKey);
+}
+
+async function fetchMonthlyPrayerTimes(lat, lng, month, year, locationKey) {
+    const currentNow = new Date();
+    try {
+        const response = await fetch(
+            `https://api.aladhan.com/v1/calendar/${month}/${year}?latitude=${lat}&longitude=${lng}&method=20`
+        );
+        const data = await response.json();
+        
+        if (data.code === 200 && data.data && Array.isArray(data.data)) {
+            // Store monthly data in localStorage
+            const monthlyData = {
+                locationKey: locationKey,
+                month: month,
+                year: year,
+                fetchedAt: Date.now(),
+                data: data.data
+            };
+            
+            localStorage.setItem('prayerTimesMonthly', JSON.stringify(monthlyData));
+            localStorage.setItem('prayerLocationKey', locationKey);
+            localStorage.setItem('prayerLocationTimestamp', Date.now().toString());
+            localStorage.setItem('prayerLat', lat.toString());
+            localStorage.setItem('prayerLng', lng.toString());
+            
+            // Load today's data
+            const today = String(currentNow.getDate()).padStart(2, '0');
+            const todayData = data.data.find(d => d.date.gregorian.day === today);
+            
+            if (todayData) {
+                prayerTimesData = {
+                    date: todayData.date,
+                    timings: todayData.timings,
+                    hijri: todayData.date.hijri
+                };
+            }
+        }
+    } catch (e) {
+        console.error('Failed to fetch prayer times:', e);
+        // Try to load from cache as fallback
+        loadCachedPrayerTimes(currentNow);
+    }
+}
+
+function loadCachedPrayerTimes(now) {
+    try {
+        const cached = localStorage.getItem('prayerTimesMonthly');
+        if (!cached) {
+            fetchPrayerTimes(-6.2088, 106.8456);
+            return;
+        }
+        
+        const monthlyData = JSON.parse(cached);
+        const today = String(now.getDate()).padStart(2, '0');
+        const todayData = monthlyData.data.find(d => d.date.gregorian.day === today);
+        
+        if (todayData) {
+            prayerTimesData = {
+                date: todayData.date,
+                timings: todayData.timings,
+                hijri: todayData.date.hijri
+            };
+        }
+    } catch (e) {
+        console.error('Failed to load cached prayer times:', e);
+    }
+}
+
+async function fetchPrayerTimes(lat, lng) {
+    // Legacy single-day fetch - kept for compatibility
+    const locationKey = getLocationKey(lat, lng);
+    const storedLocationKey = localStorage.getItem('prayerLocationKey');
+    
+    if (storedLocationKey !== locationKey) {
+        // Location changed - fetch monthly data instead
+        const now = new Date();
+        await fetchMonthlyPrayerTimes(lat, lng, now.getMonth() + 1, now.getFullYear(), locationKey);
+        return;
+    }
+    
+    try {
+        const now = new Date();
+        const date = `${now.getDate()}-${now.getMonth() + 1}-${now.getFullYear()}`;
+        
+        const response = await fetch(
+            `https://api.aladhan.com/v1/timings/${date}?latitude=${lat}&longitude=${lng}&method=20`
+        );
+        const data = await response.json();
+        
+        if (data.code === 200 && data.data && data.data.timings) {
+            prayerTimesData = {
+                date: data.data.date,
+                timings: data.data.timings,
+                hijri: data.data.date.hijri
+            };
+        }
+    } catch (e) {
+        console.error('Failed to fetch prayer times:', e);
+    }
+}
+
+function startPrayerCheck() {
+    if (prayerCheckInterval) clearInterval(prayerCheckInterval);
+    checkPrayerTimes();
+    updatePrayerCard();
+    prayerCheckInterval = setInterval(() => {
+        checkPrayerTimes();
+        updatePrayerCard();
+    }, 30000);
+    
+    // Update countdown every minute
+    setInterval(updatePrayerCard, 60000);
+    
+    // Refresh data at midnight for new day
+    const now = new Date();
+    const msUntilMidnight = (24 - now.getHours()) * 3600000 - now.getMinutes() * 60000 - now.getSeconds() * 1000;
+    setTimeout(() => {
+        refreshPrayerTimesForNewDay();
+    }, msUntilMidnight);
+}
+
+async function refreshPrayerTimesForNewDay() {
+    const lat = parseFloat(localStorage.getItem('prayerLat')) || -6.2088;
+    const lng = parseFloat(localStorage.getItem('prayerLng')) || 106.8456;
+    const now = new Date();
+    const month = now.getMonth() + 1;
+    const year = now.getFullYear();
+    const locationKey = getLocationKey(lat, lng);
+    
+    // Reset notification flags for new day
+    prayerNotificationShown = {};
+    
+    // Try to load from cached monthly data first
+    loadCachedPrayerTimes(now);
+    
+    // If today not in cache, fetch fresh
+    const cached = localStorage.getItem('prayerTimesMonthly');
+    if (cached) {
+        try {
+            const monthlyData = JSON.parse(cached);
+            const today = String(now.getDate()).padStart(2, '0');
+            const todayData = monthlyData.data.find(d => d.date.gregorian.day === today);
+            if (!todayData) {
+                await fetchMonthlyPrayerTimes(lat, lng, month, year, locationKey);
+            }
+        } catch (e) {
+            await fetchMonthlyPrayerTimes(lat, lng, month, year, locationKey);
+        }
+    } else {
+        await fetchMonthlyPrayerTimes(lat, lng, month, year, locationKey);
+    }
+}
+
+function checkPrayerTimes() {
+    if (!prayerTimesData) return;
+
+    const now = new Date();
+    const currentTime = now.getHours() * 60 + now.getMinutes();
+    const timings = prayerTimesData.timings;
+
+    PRAYER_ORDER.forEach(prayer => {
+        const [hours, minutes] = timings[prayer].split(':').map(Number);
+        const prayerTime = hours * 60 + minutes;
+        const prayerId = `${prayerTimesData.date.gregorian.date}-${prayer}`;
+        
+        // Show notification 5 min before and during prayer time (30 min window)
+        const isWithinWindow = currentTime >= prayerTime - 5 && currentTime < prayerTime + 30;
+        
+        if (isWithinWindow && !prayerNotificationShown[prayerId]) {
+            prayerNotificationShown[prayerId] = true;
+            showPrayerNotification(prayer, timings[prayer]);
+        }
+        
+        // Reset notification flag at midnight
+        if (currentTime < 5) {
+            prayerNotificationShown[prayerId] = false;
+        }
+    });
+}
+
+function showPrayerNotification(prayer, time) {
+    const title = `Waktu ${PRAYER_NAMES[prayer]}`;
+    const body = `Sudah masuk waktu ${PRAYER_NAMES[prayer]} (${time})`;
+    
+    // Browser notification
+    if (Notification.permission === 'granted') {
+        try {
+            new Notification(title, { body, icon: '/favicon.ico', tag: prayer });
+        } catch (e) {}
+    } else if (Notification.permission !== 'denied') {
+        Notification.requestPermission().then(perm => {
+            if (perm === 'granted') {
+                try {
+                    new Notification(title, { body, icon: '/favicon.ico', tag: prayer });
+                } catch (e) {}
+            }
+        });
+    }
+    
+    // In-app modal
+    showPrayerModal(prayer, time);
+    
+    // Sound
+    playAdzanTone();
+}
+
+function showPrayerModal(prayer, time) {
+    const modal = document.getElementById('prayerTimeModal');
+    if (!modal) return;
+    
+    const icons = {
+        Fajr: '🌙',
+        Sunrise: '🌅',
+        Dhuhr: '☀️',
+        Asr: '🌤️',
+        Maghrib: '🌇',
+        Isha: '🌌'
+    };
+    
+    document.getElementById('prayerIcon').textContent = icons[prayer] || '🕌';
+    document.getElementById('prayerName').textContent = PRAYER_NAMES[prayer] || prayer;
+    document.getElementById('prayerTime').textContent = time;
+    document.getElementById('prayerDate').textContent = prayerTimesData?.hijri?.date 
+        ? `${prayerTimesData.hijri.day} ${prayerTimesData.hijri.month.en} ${prayerTimesData.hijri.year} H` 
+        : '';
+    
+    modal.style.display = 'flex';
+    
+    // Auto close after 5 minutes
+    setTimeout(() => {
+        modal.style.display = 'none';
+    }, 300000);
+}
+
+// Update mini prayer card in dashboard
+function updatePrayerCard() {
+    const cardName = document.getElementById('prayerCardName');
+    const cardCountdown = document.getElementById('prayerCardCountdown');
+    if (!cardName || !cardCountdown) return;
+    
+    if (!prayerTimesData || !prayerTimesData.timings) {
+        cardName.textContent = 'Tidak tersedia';
+        cardCountdown.textContent = '--:--';
+        return;
+    }
+    
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const timings = prayerTimesData.timings;
+    
+    // Find next prayer
+    let nextPrayer = null;
+    let nextPrayerMinutes = Infinity;
+    
+    for (const prayer of PRAYER_ORDER) {
+        const [h, m] = timings[prayer].split(':').map(Number);
+        const prayerMinutes = h * 60 + m;
+        
+        if (prayerMinutes > currentMinutes && prayerMinutes < nextPrayerMinutes) {
+            nextPrayer = prayer;
+            nextPrayerMinutes = prayerMinutes;
+        }
+    }
+    
+    // If no prayer found today, show Fajr for tomorrow
+    if (!nextPrayer) {
+        nextPrayer = 'Fajr';
+        const [h, m] = timings['Fajr'].split(':').map(Number);
+        nextPrayerMinutes = (24 * 60) + (h * 60 + m);
+    }
+    
+    const diffMinutes = nextPrayerMinutes - currentMinutes;
+    const hoursLeft = Math.floor(diffMinutes / 60);
+    const minsLeft = diffMinutes % 60;
+    
+    cardName.textContent = PRAYER_NAMES[nextPrayer] || nextPrayer;
+    
+    if (hoursLeft > 0) {
+        cardCountdown.textContent = `${hoursLeft}j ${minsLeft}m`;
+    } else {
+        cardCountdown.textContent = `${minsLeft} menit`;
+    }
+    
+    // Pulse animation when <= 5 minutes
+    const card = document.getElementById('prayerTimeCard');
+    if (card && diffMinutes <= 5) {
+        card.style.animation = 'prayerPulse 1s infinite';
+    } else if (card) {
+        card.style.animation = 'none';
+    }
+}
+
+function playAdzanTone() {
+    try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const now = audioCtx.currentTime;
+        
+        // Simple adzan-like tone pattern
+        const notes = [
+            { freq: 660, start: 0, duration: 0.4 },
+            { freq: 660, start: 0.5, duration: 0.4 },
+            { freq: 660, start: 1.0, duration: 0.8 },
+            { freq: 523, start: 1.9, duration: 0.4 },
+            { freq: 660, start: 2.4, duration: 0.8 },
+            { freq: 784, start: 3.3, duration: 0.6 },
+            { freq: 660, start: 4.0, duration: 0.8 },
+            { freq: 523, start: 4.9, duration: 0.4 },
+            { freq: 587, start: 5.4, duration: 0.4 },
+            { freq: 659, start: 5.9, duration: 1.2 }
+        ];
+        
+        notes.forEach(note => {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.frequency.value = note.freq;
+            osc.type = 'sine';
+            gain.gain.setValueAtTime(0.15, now + note.start);
+            gain.gain.exponentialRampToValueAtTime(0.01, now + note.start + note.duration);
+            osc.start(now + note.start);
+            osc.stop(now + note.start + note.duration);
+        });
+        
+        setTimeout(() => {
+            audioCtx.close().catch(() => {});
+        }, 8000);
+    } catch (e) {
+        console.error('Audio play failed:', e);
+    }
+}
+
+function closePrayerModal() {
+    const modal = document.getElementById('prayerTimeModal');
+    if (modal) modal.style.display = 'none';
+}
+
+async function refreshPrayerLocation() {
+    try {
+        const position = await getUserLocation();
+        await loadPrayerTimesForLocation(position.coords.latitude, position.coords.longitude);
+        
+        // Show success feedback
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                icon: 'success',
+                title: 'Lokasi diperbarui',
+                text: 'Jadwal shalat telah diperbarui sesuai lokasi baru',
+                timer: 2000,
+                showConfirmButton: false,
+                position: 'top-end',
+                toast: true
+            });
+        }
+    } catch (e) {
+        console.error('Failed to refresh location:', e);
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                icon: 'error',
+                title: 'Gagal',
+                text: 'Tidak dapat memperbarui lokasi',
+                position: 'top-end',
+                toast: true,
+                timer: 2000
+            });
+        }
+    }
+}
+
+function requestNotificationPermission() {
+    if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission().catch(() => {});
+    }
+}
+
+// Initialize prayer times when dashboard loads
+if (typeof window !== 'undefined') {
+    window.addEventListener('load', () => {
+        setTimeout(initPrayerTimes, 3000);
+    });
+}
+
+// Inject prayer pulse animation
+(function injectPrayerAnimation() {
+    if (document.getElementById('prayer-animation-style')) return;
+    const style = document.createElement('style');
+    style.id = 'prayer-animation-style';
+    style.textContent = `
+        @keyframes prayerPulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 8px 20px -4px rgba(5,150,105,0.35); }
+            50% { transform: scale(1.03); box-shadow: 0 12px 28px -4px rgba(5,150,105,0.55); }
+        }
+    `;
+    document.head.appendChild(style);
+})();

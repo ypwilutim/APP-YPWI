@@ -706,7 +706,20 @@
       </div>
 
       <!-- AREA KANAN: RINGKASAN & RIWAYAT DATA (Lebar di PC) -->
-      <div class="col-right-stats" style="display: flex; flex-direction: column; gap: 1.5rem;">
+      <div class="col-right-stats" style="display: flex; flex-direction: column; gap: 1rem;">
+
+        <!-- Prayer Time Mini Card -->
+        <div id="prayerTimeCard" class="card" onclick="openPrayerModal()" style="background: linear-gradient(135deg, #059669 0%, #047857 100%); border-radius: 1rem; padding: 0.85rem 1rem; color: #fff; cursor: pointer; box-shadow: 0 8px 20px -4px rgba(5, 150, 105, 0.35); border: 1px solid rgba(255,255,255,0.15); display: flex; align-items: center; gap: 0.75rem; transition: transform 0.2s, box-shadow 0.2s;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 12px 24px -4px rgba(5,150,105,0.45)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 8px 20px -4px rgba(5,150,105,0.35)'">
+          <div style="width: 40px; height: 40px; background: rgba(255,255,255,0.15); border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; backdrop-filter: blur(4px);">
+            <i class="fas fa-mosque" style="font-size: 1.1rem;"></i>
+          </div>
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-size: 0.7rem; opacity: 0.85; font-weight: 500; letter-spacing: 0.02em;">SHALAT BERIKUT</div>
+            <div id="prayerCardName" style="font-size: 0.9rem; font-weight: 700; margin-top: 0.15rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Memuat...</div>
+            <div id="prayerCardCountdown" style="font-size: 0.75rem; opacity: 0.9; font-weight: 600; font-variant-numeric: tabular-nums;">--:--</div>
+          </div>
+          <div style="font-size: 0.65rem; opacity: 0.75; flex-shrink: 0;">TAP</div>
+        </div>
 
         <!-- Grid Ringkasan Kecil -->
         <div class="summary-widgets-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem;">
@@ -1370,6 +1383,31 @@ style="font-size: 0.95rem; font-weight: 700; color: #0f172a; margin: 0 0 0.75rem
         </button>
       </div>
       <p style="margin: 0.75rem 0 0 0; font-size: 0.75rem; color: #94a3b8; text-align: center;">QR ini berisi data identitas Anda. Hanya admin yang bisa memprosesnya.</p>
+    </div>
+  </div>
+
+  <!-- Prayer Time Notification Modal -->
+  <div id="prayerTimeModal" class="modal-overlay" style="display: none;" onclick="if(event.target===this) closePrayerModal()">
+    <div class="modal-container" style="max-width: 420px; width: 100%; background: #ffffff; border-radius: 1rem; padding: 1.5rem; box-sizing: border-box; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); max-height: 90vh; overflow-y: auto;">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <i class="fas fa-mosque" style="font-size: 1.25rem; color: #059669;"></i>
+          <h3 style="margin: 0; font-size: 1.1rem; font-weight: 700; color: #0f172a;">Waktu Shalat</h3>
+        </div>
+        <button type="button" onclick="closePrayerModal()" style="background: none; border: none; color: #64748b; cursor: pointer; font-size: 1.25rem; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 50%;" onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='none'">&times;</button>
+      </div>
+      <div id="prayerTimeContent" style="text-align: center; padding: 1rem 0;">
+        <div id="prayerIcon" style="font-size: 3rem; margin-bottom: 0.5rem;"></div>
+        <h2 id="prayerName" style="margin: 0 0 0.25rem 0; font-size: 1.5rem; font-weight: 700; color: #059669;"></h2>
+        <p id="prayerTime" style="margin: 0 0 0.5rem 0; font-size: 2rem; font-weight: 800; color: #0f172a; font-variant-numeric: tabular-nums;"></p>
+        <p id="prayerDate" style="margin: 0; font-size: 0.85rem; color: #64748b;"></p>
+      </div>
+      <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem;">
+        <button type="button" onclick="refreshPrayerLocation()" style="padding: 0.5rem 1rem; border-radius: 0.5rem; border: 1px solid #cbd5e1; background: #fff; color: #059669; font-weight: 600; font-size: 0.85rem; cursor: pointer; min-height: 40px; display: inline-flex; align-items: center; gap: 0.4rem;">
+          <i class="fas fa-sync-alt"></i> Refresh Lokasi
+        </button>
+        <button type="button" onclick="closePrayerModal()" style="padding: 0.5rem 1.5rem; border-radius: 0.5rem; border: 1px solid #cbd5e1; background: #fff; color: #0f172a; font-weight: 600; font-size: 0.85rem; cursor: pointer; min-height: 40px;">Tutup</button>
+      </div>
     </div>
   </div>
 

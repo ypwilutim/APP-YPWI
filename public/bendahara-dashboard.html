@@ -1465,38 +1465,96 @@
         const content = document.getElementById('studentBillingContent');
         const s = data.data.student;
         const billing = data.data.billing;
+        const summary = data.data.summary;
         const saldo = data.data.saldo;
 
         content.innerHTML = `
           <div class="mb-4">
             <h4 class="font-bold text-lg">${s.nama_siswa}</h4>
             <p class="text-sm text-gray-600">NISN: ${s.nisn || '-'} | ${s.nama_sekolah}</p>
-            <p class="text-sm text-gray-600">Iuran/Bln: ${fmtRp(s.iuran_bulanan)}</p>
+            <p class="text-sm text-gray-600">Iuran/Bln: ${fmtRp(s.iuran_bulanan)} | VA: ${s.va_number || '-'}</p>
           </div>
+
+          <!-- Ringkasan -->
+          <div class="grid grid-cols-3 gap-3 mb-4">
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
+              <p class="text-xs text-blue-700">Total Billing</p>
+              <p class="text-lg font-bold text-blue-900">${summary.total_billing}</p>
+            </div>
+            <div class="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-center">
+              <p class="text-xs text-emerald-700">Lunas</p>
+              <p class="text-lg font-bold text-emerald-900">${summary.lunas_count}</p>
+            </div>
+            <div class="bg-orange-50 border border-orange-200 rounded-lg p-3 text-center">
+              <p class="text-xs text-orange-700">Belum Lunas</p>
+              <p class="text-lg font-bold text-orange-900">${summary.belum_lunas_count}</p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-3 gap-3 mb-4 text-center text-sm">
+            <div class="bg-gray-50 rounded-lg p-2">
+              <p class="text-xs text-gray-500">Total Tagihan</p>
+              <p class="font-semibold text-gray-800">${fmtRp(summary.total_tagihan)}</p>
+            </div>
+            <div class="bg-gray-50 rounded-lg p-2">
+              <p class="text-xs text-gray-500">Terbayar</p>
+              <p class="font-semibold text-emerald-600">${fmtRp(summary.total_terbayar)}</p>
+            </div>
+            <div class="bg-gray-50 rounded-lg p-2">
+              <p class="text-xs text-gray-500">Sisa Tunggakan</p>
+              <p class="font-semibold text-orange-600">${fmtRp(summary.total_keterangan)}</p>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2 mb-2">
+            <input type="text" id="studentBillingFilter" placeholder="Filter bulan (YYYY-MM)..." onkeyup="filterStudentBillingRows()" class="flex-1 px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500">
+            <select id="studentBillingStatusFilter" onchange="filterStudentBillingRows()" class="px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500">
+              <option value="">Semua Status</option>
+              <option value="lunas">Lunas</option>
+              <option value="belum">Belum Lunas</option>
+            </select>
+          </div>
+
           <div class="overflow-x-auto max-h-96">
             <table class="w-full text-sm">
-              <thead class="bg-gray-50 border-b">
+              <thead class="bg-gray-50 border-b sticky top-0">
                 <tr>
                   <th class="px-3 py-2 text-left">Bulan</th>
-                  <th class="px-3 py-2 text-right">Iuran</th>
+                  <th class="px-3 py-2 text-right">SPP</th>
+                  <th class="px-3 py-2 text-right">Trans</th>
+                  <th class="px-3 py-2 text-right">Subsidi</th>
+                  <th class="px-3 py-2 text-right">Admin VA</th>
+                  <th class="px-3 py-2 text-right">Total</th>
                   <th class="px-3 py-2 text-right">Bayar</th>
-                  <th class="px-3 py-2 text-right">Keterangan</th>
+                  <th class="px-3 py-2 text-right">Sisa</th>
                   <th class="px-3 py-2 text-center">Status</th>
                 </tr>
               </thead>
-              <tbody>
-                ${billing.map(b => `
-                  <tr class="border-b">
+              <tbody id="studentBillingRows">
+                ${billing.map(b => {
+                  const statusClass = b.status === 'lunas' ? 'bg-emerald-100 text-emerald-800' : 'bg-orange-100 text-orange-800';
+                  const statusText = b.status === 'lunas' ? 'Lunas' : 'Belum';
+                  return `
+                  <tr class="border-b hover:bg-gray-50 billing-row" data-bulan="${b.bulan}" data-status="${b.status}">
                     <td class="px-3 py-2">${b.bulan}</td>
                     <td class="px-3 py-2 text-right">${fmtRp(b.spp_bulanan)}</td>
-                    <td class="px-3 py-2 text-right">${fmtRp(b.transaksi)}</td>
-                    <td class="px-3 py-2 text-right ${b.keterangan_spp > 0 ? 'text-orange-600' : 'text-emerald-600'}">${b.keterangan_spp > 0 ? '-' + fmtRp(b.keterangan_spp) : 'Lunas'}</td>
-                    <td class="px-3 py-2 text-center"><span class="text-xs px-2 py-1 rounded ${b.status === 'lunas' ? 'bg-emerald-100 text-emerald-800' : 'bg-orange-100 text-orange-800'}">${b.status}</span></td>
+                    <td class="px-3 py-2 text-right">${fmtRp(b.ransportasi)}</td>
+                    <td class="px-3 py-2 text-right text-emerald-600">${b.subsidi > 0 ? '-' + fmtRp(b.subsidi) : '-'}</td>
+                    <td class="px-3 py-2 text-right">${fmtRp(b.biaya_admin_va)}</td>
+                    <td class="px-3 py-2 text-right font-semibold">${fmtRp(b.total_tagihan)}</td>
+                    <td class="px-3 py-2 text-right text-emerald-600">${fmtRp(b.transaksi)}</td>
+                    <td class="px-3 py-2 text-right ${b.keterangan_spp > 0 ? 'text-orange-600 font-semibold' : 'text-gray-400'}">${b.keterangan_spp > 0 ? fmtRp(b.keterangan_spp) : '-'}</td>
+                    <td class="px-3 py-2 text-center">
+                      <span class="text-xs px-2 py-1 rounded ${statusClass}" title="${b.metode_pembayaran ? b.metode_pembayaran + (b.tanggal_bayar ? ' - ' + b.tanggal_bayar : '') : ''}">${statusText}</span>
+                    </td>
                   </tr>
-                `).join('')}
+                  `;
+                }).join('')}
               </tbody>
             </table>
           </div>
+          <div id="studentBillingEmpty" class="hidden py-6 text-center text-gray-500 text-sm">Tidak ada data sesuai filter</div>
+
           <div class="mt-4 pt-3 border-t">
             <div class="flex justify-between items-center">
               <span class="font-medium">Saldo Akhir:</span>
@@ -1509,6 +1567,27 @@
       } catch (e) {
         showToast('Error: ' + e.message, 'error');
       }
+    }
+
+    function filterStudentBillingRows() {
+      const search = (document.getElementById('studentBillingFilter')?.value || '').toLowerCase();
+      const statusFilter = document.getElementById('studentBillingStatusFilter')?.value || '';
+      const rows = document.querySelectorAll('.billing-row');
+      let visible = 0;
+      rows.forEach(row => {
+        const bulan = row.dataset.bulan || '';
+        const status = row.dataset.status || '';
+        const matchSearch = !search || bulan.toLowerCase().includes(search);
+        const matchStatus = !statusFilter || status === statusFilter;
+        if (matchSearch && matchStatus) {
+          row.classList.remove('hidden');
+          visible++;
+        } else {
+          row.classList.add('hidden');
+        }
+      });
+      const emptyEl = document.getElementById('studentBillingEmpty');
+      if (emptyEl) emptyEl.classList.toggle('hidden', visible > 0);
     }
 
     function closeStudentBilling() {
@@ -1809,33 +1888,47 @@
         return;
       }
 
+      const totalSteps = (updates.length > 0 ? 1 : 0) + (creates.length > 0 ? 1 : 0);
+      showProgress('Menyimpan billing...');
+      let step = 0;
+      let errorMsg = null;
+
       try {
         // Update existing billings (only subsidi and catatan)
         if (updates.length > 0) {
+          step++;
+          updateProgress(step, totalSteps, `Mengupdate ${updates.length} billing...`);
           const res = await fetch('/api/treasurer/bendahara/billing/update-batch', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
             body: JSON.stringify({ updates: updates })
           });
           const d = await res.json();
-          if (!d.success) throw new Error(d.message);
+          if (!d.success) { errorMsg = d.message; throw new Error(d.message); }
+          logProgress(`✓ ${updates.length} billing diupdate`);
         }
 
         // Create new billings (SPP and transport from students table)
         if (creates.length > 0) {
+          step++;
+          updateProgress(step, totalSteps, `Membuat ${creates.length} billing baru...`);
           const res = await fetch('/api/treasurer/bendahara/billing/create-batch', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
             body: JSON.stringify({ bulan, students: creates })
           });
           const d = await res.json();
-          if (!d.success) throw new Error(d.message);
+          if (!d.success) { errorMsg = d.message; throw new Error(d.message); }
+          logProgress(`✓ ${creates.length} billing dibuat`);
         }
 
+        updateProgress(totalSteps, totalSteps, 'Selesai');
+        finishProgress(`Berhasil: ${updates.length} diupdate, ${creates.length} dibuat`);
         showToast(`Berhasil: ${updates.length} diupdate, ${creates.length} dibuat`, 'success');
         loadUpdateBillingData(); // Refresh
       } catch (e) {
-        showToast('Gagal: ' + e.message, 'error');
+        errorProgress(errorMsg || e.message);
+        showToast('Gagal: ' + (errorMsg || e.message), 'error');
       }
     }
 
@@ -1999,6 +2092,314 @@
           showToast(d.message || 'Gagal melunaskan billing', 'error');
         }
       } catch (e) {
+        showToast('Gagal: ' + e.message, 'error');
+      }
+    }
+
+    // ==================== PROGRESS MODAL (REUSABLE) ====================
+    let progressCancelled = false;
+
+    function showProgress(title) {
+      progressCancelled = false;
+      document.getElementById('progressTitle').textContent = title;
+      document.getElementById('progressBar').style.width = '0%';
+      document.getElementById('progressPercent').textContent = '0%';
+      document.getElementById('progressLabel').textContent = '0 / 0';
+      document.getElementById('progressStatus').textContent = 'Mohon tunggu...';
+      document.getElementById('progressDoneWrap').classList.add('hidden');
+      document.getElementById('progressErrorWrap').classList.add('hidden');
+      document.getElementById('progressLogWrap').classList.add('hidden');
+      document.getElementById('progressLog').innerHTML = '';
+      document.getElementById('progressCloseBtn').classList.add('hidden');
+      document.getElementById('progressCancelBtn').classList.add('hidden');
+      document.getElementById('progressModal').classList.remove('hidden');
+    }
+
+    function updateProgress(current, total, statusText) {
+      const percent = total > 0 ? Math.round((current / total) * 100) : 0;
+      document.getElementById('progressBar').style.width = percent + '%';
+      document.getElementById('progressPercent').textContent = percent + '%';
+      document.getElementById('progressLabel').textContent = `${current} / ${total}`;
+      if (statusText) {
+        document.getElementById('progressStatus').textContent = statusText;
+      }
+    }
+
+    function logProgress(text, isError) {
+      const log = document.getElementById('progressLog');
+      const wrap = document.getElementById('progressLogWrap');
+      wrap.classList.remove('hidden');
+      const line = document.createElement('div');
+      line.className = isError ? 'text-red-600' : 'text-gray-700';
+      line.textContent = text;
+      log.appendChild(line);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function finishProgress(doneText) {
+      document.getElementById('progressBar').style.width = '100%';
+      document.getElementById('progressPercent').textContent = '100%';
+      document.getElementById('progressStatus').textContent = 'Selesai!';
+      if (doneText) {
+        document.getElementById('progressDoneText').textContent = doneText;
+      }
+      document.getElementById('progressDoneWrap').classList.remove('hidden');
+      document.getElementById('progressCloseBtn').classList.remove('hidden');
+    }
+
+    function errorProgress(errText) {
+      if (errText) {
+        document.getElementById('progressErrorText').textContent = errText;
+      }
+      document.getElementById('progressErrorWrap').classList.remove('hidden');
+      document.getElementById('progressCloseBtn').classList.remove('hidden');
+    }
+
+    function closeProgress() {
+      document.getElementById('progressModal').classList.add('hidden');
+    }
+
+    function cancelProgress() {
+      progressCancelled = true;
+      document.getElementById('progressStatus').textContent = 'Membatalkan...';
+    }
+
+    // ==================== BULK LUNASI (BANYAK SISWA & BULAN) ====================
+    let lunasiBulkStudents = [];
+
+    function showLunasiBulkModal() {
+      const today = new Date().toISOString().slice(0, 10);
+      const now = new Date();
+      const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+      // Populate tenant dropdown
+      const tenantSel = document.getElementById('lunasiBulkTenant');
+      const paymentsSel = document.getElementById('paymentsTenantFilter');
+      if (tenantSel && paymentsSel && paymentsSel.options) {
+        tenantSel.innerHTML = '<option value="">Semua Sekolah</option>';
+        for (let i = 0; i < paymentsSel.options.length; i++) {
+          const opt = paymentsSel.options[i];
+          if (opt.value) {
+            tenantSel.innerHTML += `<option value="${opt.value}">${opt.text}</option>`;
+          }
+        }
+      }
+
+      document.getElementById('lunasiBulkFrom').value = currentMonth;
+      document.getElementById('lunasiBulkTo').value = currentMonth;
+      document.getElementById('lunasiBulkTanggal').value = today;
+      document.getElementById('lunasiBulkMetode').value = 'tunai';
+      document.getElementById('lunasiBulkDibayarOleh').value = '';
+      document.getElementById('lunasiBulkCatatan').value = '';
+      document.querySelector('input[name="lunasiBulkTarget"][value="all"]').checked = true;
+      toggleLunasiBulkTarget();
+      document.getElementById('lunasiBulkPreview').classList.add('hidden');
+      document.getElementById('lunasiBulkModal').classList.remove('hidden');
+
+      // Load students list
+      loadLunasiBulkStudents();
+    }
+
+    function closeLunasiBulkModal() {
+      document.getElementById('lunasiBulkModal').classList.add('hidden');
+    }
+
+    function toggleLunasiBulkTarget() {
+      const target = document.querySelector('input[name="lunasiBulkTarget"]:checked')?.value;
+      const wrap = document.getElementById('lunasiBulkStudentListWrap');
+      if (target === 'specific') {
+        wrap.classList.remove('hidden');
+      } else {
+        wrap.classList.add('hidden');
+      }
+      // Reset preview
+      document.getElementById('lunasiBulkPreview').classList.add('hidden');
+    }
+
+    async function loadLunasiBulkStudents() {
+      const tenantId = document.getElementById('lunasiBulkTenant')?.value || '';
+      const listEl = document.getElementById('lunasiBulkStudentList');
+      if (!listEl) return;
+      listEl.innerHTML = '<p class="text-sm text-gray-500 text-center py-2">Memuat siswa...</p>';
+
+      try {
+        const res = await fetch('/api/treasurer/public/students-by-tenant?tenant_id=' + (tenantId || ''), { headers: getAuthHeader() });
+        const data = await res.json();
+        if (data.success && data.data && data.data.length > 0) {
+          lunasiBulkStudents = data.data;
+          renderLunasiBulkStudents();
+        } else {
+          listEl.innerHTML = '<p class="text-sm text-gray-500 text-center py-2">Tidak ada siswa</p>';
+        }
+      } catch (e) {
+        listEl.innerHTML = '<p class="text-sm text-red-500 text-center py-2">Gagal memuat siswa</p>';
+      }
+    }
+
+    function renderLunasiBulkStudents() {
+      const listEl = document.getElementById('lunasiBulkStudentList');
+      if (!listEl) return;
+      if (lunasiBulkStudents.length === 0) {
+        listEl.innerHTML = '<p class="text-sm text-gray-500 text-center py-2">Tidak ada siswa</p>';
+        return;
+      }
+      listEl.innerHTML = lunasiBulkStudents.map(s => `
+        <label class="flex items-center gap-2 p-1 hover:bg-white rounded cursor-pointer">
+          <input type="checkbox" class="lunasi-bulk-student-check" value="${s.id}" onchange="updateLunasiBulkSelectedCount()">
+          <span class="text-sm">${s.nama_siswa || '-'} <span class="text-gray-400 text-xs">${s.nisn || ''}</span></span>
+        </label>
+      `).join('');
+    }
+
+    function filterLunasiBulkStudents() {
+      const search = (document.getElementById('lunasiBulkStudentSearch')?.value || '').toLowerCase();
+      const listEl = document.getElementById('lunasiBulkStudentList');
+      if (!listEl) return;
+      const filtered = lunasiBulkStudents.filter(s =>
+        (s.nama_siswa || '').toLowerCase().includes(search) ||
+        (s.nisn || '').toLowerCase().includes(search)
+      );
+      if (filtered.length === 0) {
+        listEl.innerHTML = '<p class="text-sm text-gray-500 text-center py-2">Tidak ada hasil</p>';
+        return;
+      }
+      listEl.innerHTML = filtered.map(s => `
+        <label class="flex items-center gap-2 p-1 hover:bg-white rounded cursor-pointer">
+          <input type="checkbox" class="lunasi-bulk-student-check" value="${s.id}" onchange="updateLunasiBulkSelectedCount()">
+          <span class="text-sm">${s.nama_siswa || '-'} <span class="text-gray-400 text-xs">${s.nisn || ''}</span></span>
+        </label>
+      `).join('');
+    }
+
+    function updateLunasiBulkSelectedCount() {
+      const count = document.querySelectorAll('.lunasi-bulk-student-check:checked').length;
+      const el = document.getElementById('lunasiBulkSelectedCount');
+      if (el) el.textContent = count;
+    }
+
+    async function previewLunasiBulk() {
+      const tenantId = document.getElementById('lunasiBulkTenant')?.value || '';
+      const bulanFrom = document.getElementById('lunasiBulkFrom')?.value;
+      const bulanTo = document.getElementById('lunasiBulkTo')?.value;
+      const target = document.querySelector('input[name="lunasiBulkTarget"]:checked')?.value;
+
+      if (!bulanFrom || !bulanTo) { showToast('Pilih rentang bulan', 'error'); return; }
+      if (bulanFrom > bulanTo) { showToast('bulan_from harus <= bulan_to', 'error'); return; }
+
+      let studentIds = [];
+      if (target === 'specific') {
+        studentIds = Array.from(document.querySelectorAll('.lunasi-bulk-student-check:checked')).map(cb => parseInt(cb.value));
+        if (studentIds.length === 0) { showToast('Pilih siswa terlebih dahulu', 'error'); return; }
+      }
+
+      try {
+        const res = await fetch('/api/treasurer/bendahara/billing/preview-lunasi-bulk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+          body: JSON.stringify({
+            tenant_id: tenantId || undefined,
+            bulan_from: bulanFrom,
+            bulan_to: bulanTo,
+            student_ids: studentIds,
+            all_students: target === 'all'
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          const previewText = `Akan melunasi <strong>${data.data.unpaid_count}</strong> billing dari <strong>${data.data.student_count}</strong> siswa untuk <strong>${data.data.month_count}</strong> bulan${data.data.tenant ? ' di <strong>' + data.data.tenant + '</strong>' : ''}. Total: <strong>Rp ${data.data.total_amount.toLocaleString('id-ID')}</strong>.${data.data.skipped_count > 0 ? '<br><span class="text-yellow-700">' + data.data.skipped_count + ' billing sudah lunas (akan dilewati).</span>' : ''}`;
+          document.getElementById('lunasiBulkPreviewText').innerHTML = previewText;
+          document.getElementById('lunasiBulkPreview').classList.remove('hidden');
+        } else {
+          showToast(data.message || 'Gagal preview', 'error');
+        }
+      } catch (e) {
+        showToast('Gagal: ' + e.message, 'error');
+      }
+    }
+
+    async function submitLunasiBulk() {
+      const tenantId = document.getElementById('lunasiBulkTenant')?.value || '';
+      const bulanFrom = document.getElementById('lunasiBulkFrom')?.value;
+      const bulanTo = document.getElementById('lunasiBulkTo')?.value;
+      const target = document.querySelector('input[name="lunasiBulkTarget"]:checked')?.value;
+      const metode = document.getElementById('lunasiBulkMetode')?.value;
+      const tanggal = document.getElementById('lunasiBulkTanggal')?.value;
+      const dibayarOleh = document.getElementById('lunasiBulkDibayarOleh')?.value.trim();
+      const catatan = document.getElementById('lunasiBulkCatatan')?.value.trim();
+
+      if (!bulanFrom || !bulanTo) { showToast('Pilih rentang bulan', 'error'); return; }
+      if (bulanFrom > bulanTo) { showToast('bulan_from harus <= bulan_to', 'error'); return; }
+      if (!metode) { showToast('Pilih metode pembayaran', 'error'); return; }
+      if (!tanggal) { showToast('Pilih tanggal pembayaran', 'error'); return; }
+
+      let studentIds = [];
+      if (target === 'specific') {
+        studentIds = Array.from(document.querySelectorAll('.lunasi-bulk-student-check:checked')).map(cb => parseInt(cb.value));
+        if (studentIds.length === 0) { showToast('Pilih siswa terlebih dahulu', 'error'); return; }
+      }
+
+      // Generate list bulan
+      const [yFrom, mFrom] = bulanFrom.split('-').map(Number);
+      const [yTo, mTo] = bulanTo.split('-').map(Number);
+      const bulanList = [];
+      let y = yFrom, m = mFrom;
+      while (y < yTo || (y === yTo && m <= mTo)) {
+        bulanList.push(`${y}-${String(m).padStart(2, '0')}`);
+        m++;
+        if (m > 12) { m = 1; y++; }
+      }
+
+      const targetLabel = target === 'all' ? 'SEMUA siswa aktif' : studentIds.length + ' siswa';
+      if (!confirm(`Yakin ingin melunasi billing untuk ${targetLabel} dari ${bulanFrom} sampai ${bulanTo} (${bulanList.length} bulan)?`)) return;
+
+      closeLunasiBulkModal();
+      showProgress('Melunaskan billing...');
+      updateProgress(0, bulanList.length, `Mulai proses ${bulanList.length} bulan...`);
+
+      let totalLunas = 0, totalDilewati = 0;
+
+      try {
+        // Chunk per bulan untuk progress real-time
+        for (let i = 0; i < bulanList.length; i++) {
+          if (progressCancelled) {
+            logProgress('✗ Dibatalkan oleh user', true);
+            break;
+          }
+
+          const bulan = bulanList[i];
+          updateProgress(i, bulanList.length, `Memproses bulan ${bulan}...`);
+
+          const res = await fetch('/api/treasurer/bendahara/billing/lunasi-bulk', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+            body: JSON.stringify({
+              tenant_id: tenantId || undefined,
+              bulan_from: bulan,
+              bulan_to: bulan,
+              student_ids: studentIds,
+              all_students: target === 'all',
+              metode_pembayaran: metode,
+              tanggal_bayar: tanggal,
+              dibayar_oleh: dibayarOleh || null,
+              catatan_pelunasan: catatan || null
+            })
+          });
+          const data = await res.json();
+          if (data.success) {
+            totalLunas += data.lunas || 0;
+            totalDilewati += data.dilewati || 0;
+            logProgress(`✓ ${bulan}: ${data.lunas} lunas, ${data.dilewati} dilewati`);
+          } else {
+            logProgress(`✗ ${bulan}: ${data.message || 'Gagal'}`, true);
+          }
+        }
+
+        updateProgress(bulanList.length, bulanList.length, 'Selesai');
+        finishProgress(`Berhasil melunaskan ${totalLunas} billing (${totalDilewati} dilewati)`);
+        showToast(`Berhasil melunaskan ${totalLunas} billing`, 'success');
+        loadUpdateBillingData();
+      } catch (e) {
+        errorProgress(e.message);
         showToast('Gagal: ' + e.message, 'error');
       }
     }
@@ -2445,36 +2846,87 @@ async function openBsiVaModal() {
         if (type === 'single') {
           const number = (noWa || '').replace(/[^0-9]/g, '');
           if (!number) { showToast('Nomor WA tidak tersedia', 'error'); return; }
+          showProgress('Mengirim pengingat SPP...');
+          updateProgress(0, 1, `Mengirim ke ${namaSiswa}...`);
           const res = await fetch('/api/treasurer/public/send-spp-reminder', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
             body: JSON.stringify({ no_wa: number, nama_siswa: namaSiswa, jumlah_tagihan: totalArrears || 0, student_id: studentId, tenant_id: tenantId || null, template_type: templateType, bulan, tanggal_jatuh_tempo: jatuhTempo })
           });
           const data = await res.json();
-          if (data.success) { showToast('Pengingat SPP berhasil dikirim via WhatsApp', 'success'); }
-          else { showToast(data.message || 'Gagal mengirim pengingat', 'error'); }
+          if (data.success) {
+            updateProgress(1, 1, 'Selesai');
+            finishProgress('Pengingat berhasil dikirim');
+            showToast('Pengingat SPP berhasil dikirim via WhatsApp', 'success');
+          } else {
+            errorProgress(data.message || 'Gagal mengirim');
+            showToast(data.message || 'Gagal mengirim pengingat', 'error');
+          }
           if (btn) { btn.innerHTML = '<i class="fab fa-whatsapp mr-1"></i>Kirim WA'; btn.disabled = false; }
         } else if (type === 'bulk') {
+          showProgress('Mengirim pengingat SPP massal...');
+          updateProgress(0, 1, 'Mengambil daftar siswa...');
+          // Ambil daftar siswa untuk diketahui total
+          let defsRes = await fetch('/api/treasurer/public/payment-defaulters?tenant_id=' + (tenantId || ''), { headers: getAuthHeader() });
+          let defsData = await defsRes.json();
+          const defs = (defsData.success && defsData.data) ? defsData.data : [];
+          const total = defs.length;
+          updateProgress(0, total, `Mengirim ke ${total} siswa...`);
+
           const res = await fetch('/api/treasurer/public/send-all-spp-reminders', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
             body: JSON.stringify({ tenant_id: tenantId || undefined, template_type: templateType, bulan, tanggal_jatuh_tempo: jatuhTempo })
           });
           const data = await res.json();
-          if (data.success) { showToast(data.message || 'Pengingat berhasil dikirim', 'success'); loadPaymentDefaulters(); }
-          else { showToast(data.message || 'Gagal mengirim pengingat', 'error'); }
+          if (data.success) {
+            updateProgress(total, total, 'Selesai');
+            finishProgress(data.message || 'Pengingat berhasil dikirim');
+            showToast(data.message || 'Pengingat berhasil dikirim', 'success');
+            loadPaymentDefaulters();
+          } else {
+            errorProgress(data.message || 'Gagal mengirim');
+            showToast(data.message || 'Gagal mengirim pengingat', 'error');
+          }
           if (btn) { btn.innerHTML = '<i class="fab fa-whatsapp mr-2"></i>Kirim Semua'; btn.disabled = false; }
         } else if (type === 'selected') {
-          const res = await fetch('/api/treasurer/public/send-selected-spp-reminders', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
-            body: JSON.stringify({ student_ids: selectedIds, template_type: templateType, bulan, tanggal_jatuh_tempo: jatuhTempo })
-          });
-          const data = await res.json();
-          if (data.success) { showToast(data.message || 'Pengingat berhasil dikirim ke ' + selectedIds.length + ' siswa', 'success'); loadPaymentDefaulters(); }
-          else { showToast(data.message || 'Gagal mengirim pengingat', 'error'); }
+          const total = selectedIds.length;
+          showProgress('Mengirim pengingat SPP terpilih...');
+          updateProgress(0, total, `Mengirim ke ${total} siswa...`);
+
+          // Kirim per siswa untuk progress real-time
+          let sent = 0, failed = 0;
+          for (let i = 0; i < selectedIds.length; i++) {
+            if (progressCancelled) { logProgress('✗ Dibatalkan', true); break; }
+            updateProgress(i, total, `Mengirim ${i + 1} / ${total}...`);
+            // Kirim satu per satu (request kecil-kecil, lebih lambat tapi ada progress)
+            // Untuk performance, kita bisa batch per 5 siswa, tapi untuk simplicity kita kirim per siswa
+            const res = await fetch('/api/treasurer/public/send-spp-reminder', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+              body: JSON.stringify({ student_id: selectedIds[i], template_type: templateType, bulan, tanggal_jatuh_tempo: jatuhTempo })
+            });
+            const data = await res.json();
+            if (data.success && !data.skipped) {
+              sent++;
+              logProgress(`✓ Siswa #${selectedIds[i]} berhasil`);
+            } else if (data.skipped) {
+              logProgress(`⊘ Siswa #${selectedIds[i]} dilewati: ${data.message || ''}`);
+            } else {
+              failed++;
+              logProgress(`✗ Siswa #${selectedIds[i]}: ${data.message || 'Gagal'}`, true);
+            }
+          }
+          updateProgress(total, total, 'Selesai');
+          finishProgress(`Berhasil: ${sent} terkirim, ${failed} gagal`);
+          showToast(`Berhasil kirim ${sent} pengingat`, 'success');
+          loadPaymentDefaulters();
         }
-      } catch (e) { showToast('Gagal mengirim pengingat', 'error'); console.error('sendWithTemplate error:', e); }
+      } catch (e) {
+        errorProgress(e.message);
+        showToast('Gagal mengirim pengingat', 'error');
+        console.error('sendWithTemplate error:', e);
+      }
       pendingWaSend = null;
     }
 
@@ -3052,7 +3504,10 @@ async function openBsiVaModal() {
         <div class="bg-blue-50 px-3 py-2 rounded-lg">
           <span class="text-sm text-blue-700">Belum ada billing: <strong id="updateBillingMissingCount">0</strong></span>
         </div>
-        <div class="ml-auto flex gap-2">
+        <div class="ml-auto flex gap-2 flex-wrap">
+          <button onclick="showLunasiBulkModal()" class="px-3 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700" title="Lunaskan banyak siswa untuk banyak bulan sekaligus">
+            <i class="fas fa-check-double mr-1"></i>Lunaskan Massal
+          </button>
           <button onclick="lunaskanSelectedBilling()" class="px-3 py-2 bg-emerald-500 text-white text-sm rounded-lg hover:bg-emerald-600 hidden" id="lunaskanSelectedBtn" title="Tandai lunas (tunai/transfer)">
             <i class="fas fa-check-circle mr-1"></i>Lunaskan (<span id="lunaskanSelectedCount">0</span>)
           </button>
@@ -3142,6 +3597,155 @@ async function openBsiVaModal() {
   </div>
 
   <!-- Student Billing Detail Modal -->
+  <!-- Reusable Progress Modal (untuk operasi bulk: lunas, reset, generate, dll) -->
+  <div id="progressModal" class="hidden fixed inset-0 z-[80] bg-black/60 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h4 class="font-semibold text-lg flex items-center gap-2">
+          <i class="fas fa-spinner fa-spin text-blue-600"></i>
+          <span id="progressTitle">Memproses...</span>
+        </h4>
+      </div>
+
+      <!-- Progress bar -->
+      <div class="mb-3">
+        <div class="flex justify-between text-sm text-gray-600 mb-1">
+          <span id="progressLabel">0 / 0</span>
+          <span id="progressPercent">0%</span>
+        </div>
+        <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+          <div id="progressBar" class="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-300" style="width: 0%"></div>
+        </div>
+      </div>
+
+      <!-- Status text -->
+      <p id="progressStatus" class="text-sm text-gray-600 mb-2">Mohon tunggu...</p>
+
+      <!-- Detail log (scrollable) -->
+      <div id="progressLogWrap" class="hidden mt-3">
+        <p class="text-xs font-semibold text-gray-700 mb-1">Detail:</p>
+        <div id="progressLog" class="bg-gray-50 border rounded-lg p-2 max-h-32 overflow-y-auto text-xs font-mono space-y-0.5"></div>
+      </div>
+
+      <!-- Done state -->
+      <div id="progressDoneWrap" class="hidden mt-4 p-3 bg-emerald-50 border border-emerald-200 rounded-lg">
+        <p class="text-sm text-emerald-800 font-medium flex items-center gap-2">
+          <i class="fas fa-check-circle"></i>
+          <span id="progressDoneText">Selesai!</span>
+        </p>
+      </div>
+
+      <!-- Error state -->
+      <div id="progressErrorWrap" class="hidden mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+        <p class="text-sm text-red-800 font-medium flex items-center gap-2">
+          <i class="fas fa-exclamation-circle"></i>
+          <span id="progressErrorText">Terjadi kesalahan.</span>
+        </p>
+      </div>
+
+      <div class="flex justify-end gap-2 mt-4">
+        <button onclick="cancelProgress()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 hidden" id="progressCancelBtn">Batal</button>
+        <button onclick="closeProgress()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 hidden" id="progressCloseBtn">Tutup</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bulk Lunasi Billing Modal -->
+  <div id="lunasiBulkModal" class="hidden fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+      <div class="flex justify-between items-center p-4 border-b sticky top-0 bg-white z-10">
+        <h4 class="font-semibold text-lg"><i class="fas fa-check-double text-emerald-600 mr-2"></i>Lunaskan Banyak Siswa & Bulan</h4>
+        <button onclick="closeLunasiBulkModal()" class="text-gray-500 hover:text-gray-700 text-2xl leading-none">&times;</button>
+      </div>
+
+      <div class="p-4 overflow-auto flex-1">
+        <div class="bg-emerald-50 border border-emerald-200 rounded-lg p-3 mb-4 text-sm text-emerald-800">
+          <i class="fas fa-info-circle mr-1"></i>
+          Fitur ini akan melunasi billing untuk banyak siswa sekaligus dalam rentang bulan tertentu. Hanya billing berstatus <strong>belum</strong> yang akan diproses.
+        </div>
+
+        <div class="mb-3">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Sekolah</label>
+          <select id="lunasiBulkTenant" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500">
+            <option value="">Semua Sekolah</option>
+          </select>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 mb-3">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Dari Bulan <span class="text-red-500">*</span></label>
+            <input type="month" id="lunasiBulkFrom" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Sampai Bulan <span class="text-red-500">*</span></label>
+            <input type="month" id="lunasiBulkTo" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500">
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Target Siswa <span class="text-red-500">*</span></label>
+          <div class="space-y-2">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="lunasiBulkTarget" value="all" checked onchange="toggleLunasiBulkTarget()">
+              <span>Semua siswa aktif (filter sekolah)</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="radio" name="lunasiBulkTarget" value="specific" onchange="toggleLunasiBulkTarget()">
+              <span>Siswa tertentu saja</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="mb-3 hidden" id="lunasiBulkStudentListWrap">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Cari & Pilih Siswa</label>
+          <input type="text" id="lunasiBulkStudentSearch" placeholder="Cari nama/NISN..." onkeyup="filterLunasiBulkStudents()" class="w-full px-3 py-2 border border-gray-300 rounded-lg mb-2 focus:ring-2 focus:ring-emerald-500">
+          <div id="lunasiBulkStudentList" class="border rounded-lg max-h-40 overflow-y-auto p-2 space-y-1 bg-gray-50">
+            <p class="text-sm text-gray-500 text-center py-2">Memuat siswa...</p>
+          </div>
+          <p class="text-xs text-gray-500 mt-1">Dipilih: <strong id="lunasiBulkSelectedCount">0</strong> siswa</p>
+        </div>
+
+        <div class="mb-3">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Metode Pembayaran <span class="text-red-500">*</span></label>
+          <select id="lunasiBulkMetode" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500">
+            <option value="tunai">Tunai</option>
+            <option value="transfer_pusat">Transfer ke Rekening Pusat</option>
+          </select>
+        </div>
+
+        <div class="mb-3">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Tanggal Pembayaran <span class="text-red-500">*</span></label>
+          <input type="date" id="lunasiBulkTanggal" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500">
+        </div>
+
+        <div class="mb-3">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Dibayar Oleh (Opsional)</label>
+          <input type="text" id="lunasiBulkDibayarOleh" placeholder="Contoh: Bpk. Ahmad (Ayah)" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500">
+        </div>
+
+        <div class="mb-3">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Catatan (Opsional)</label>
+          <textarea id="lunasiBulkCatatan" rows="2" placeholder="Keterangan pelunasan..." class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"></textarea>
+        </div>
+
+        <div id="lunasiBulkPreview" class="hidden bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3 text-sm text-blue-800">
+          <i class="fas fa-info-circle mr-1"></i>
+          <span id="lunasiBulkPreviewText">-</span>
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-2 p-4 border-t bg-gray-50">
+        <button onclick="closeLunasiBulkModal()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400">Batal</button>
+        <button onclick="previewLunasiBulk()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+          <i class="fas fa-eye mr-1"></i>Preview
+        </button>
+        <button onclick="submitLunasiBulk()" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium">
+          <i class="fas fa-check-double mr-1"></i>Lunaskan
+        </button>
+      </div>
+    </div>
+  </div>
+
   <div id="studentBillingModal" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
     <div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden">
       <div class="flex justify-between items-center p-4 border-b sticky top-0 bg-white z-10">
