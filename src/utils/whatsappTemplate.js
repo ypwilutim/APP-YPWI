@@ -83,7 +83,7 @@ async function saveOutgoingMessage(phoneNumber, messageContent, messageType = 't
     // Insert outgoing message
     await db.query(
       `INSERT INTO whatsapp_messages (from_phone, message, message_type, wa_message_id, status, direction) VALUES (?, ?, ?, ?, 'sent', 'outgoing')`,
-      [phoneNumber, messageContent, messageType, waMessageId]
+      [phoneNumber || '', messageContent || '', messageType || 'text', waMessageId || null]
     );
 
     console.log(`[WA DB] Saved outgoing message to ${phoneNumber}`);
@@ -151,7 +151,7 @@ async function sendBillTemplate(phoneNumber, params, templateName = 'tagihan_spp
   const url = `${WHATSAPP_BASE_URL}/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
 
   const isInvoiceSpp = templateName === 'invoice_spp';
-  const isTagihanBsi = templateName === 'tagihan_spp_bsi' || templateName === 'tagihan_spp_bsi_tunggakan';
+  const isTagihanBsi = templateName === 'tagihan_spp_bsi';
   let urlParam = '';
   if (isInvoiceSpp && params.invoice_url) {
     try { urlParam = new URL(params.invoice_url).pathname + new URL(params.invoice_url).search; } catch (e) { urlParam = params.invoice_url; }
@@ -188,7 +188,9 @@ async function sendBillTemplate(phoneNumber, params, templateName = 'tagihan_spp
       { type: 'text', text: params.jumlah_tagihan || '0' },
       { type: 'text', text: params.tanggal_jatuh_tempo || '-' },
       { type: 'text', text: params.invoice_url || params.nomor_rekening || '-' },
-      { type: 'text', text: params.nama_pembayaran || params.nama_penerima || '-' }
+      { type: 'text', text: params.nama_pembayaran || params.nama_penerima || '-' },
+      { type: 'text', text: params.kelas || '-' },
+      { type: 'text', text: params.info_sekolah || '-' }
     ];
   }
 
@@ -222,12 +224,14 @@ async function sendBillTemplate(phoneNumber, params, templateName = 'tagihan_spp
     components.push({
       type: 'button',
       sub_type: 'copy_code',
-      index: 0,
+      index: '0',
       parameters: [{
         type: 'coupon_code',
         coupon_code: params.va_raw
       }]
     });
+  } else if (isTagihanBsi) {
+    throw new Error('Siswa belum memiliki VA BSI. Harap generate VA terlebih dahulu sebelum mengirim pengingat.');
   }
 
   const payload = {
@@ -244,6 +248,7 @@ async function sendBillTemplate(phoneNumber, params, templateName = 'tagihan_spp
   };
 
   try {
+    console.log('[WA TEMPLATE] Sending:', JSON.stringify(payload, null, 2));
     const response = await axios.post(url, payload, {
       headers: {
         'Authorization': `Bearer ${WHATSAPP_GRAPH_API_TOKEN}`,
@@ -251,21 +256,26 @@ async function sendBillTemplate(phoneNumber, params, templateName = 'tagihan_spp
       },
       timeout: 15000
     });
+    console.log('[WA TEMPLATE] Response:', JSON.stringify(response.data, null, 2));
 
     const messageId = response.data?.messages?.[0]?.id;
 
     // Save to database for CS dashboard
     const messagePreview = params.nama_siswa ? `[${templateName}] ${params.nama_siswa} - ${params.bulan || ''}` : `[Template: ${templateName}]`;
-    await saveOutgoingMessage(formattedPhone, messagePreview, 'template', messageId, templateName);
+    await saveOutgoingMessage(formattedPhone, messagePreview, 'template', messageId || null, templateName);
 
     return {
       success: true,
-      messageId: messageId,
+      messageId: messageId || null,
       data: response.data
     };
   } catch (error) {
-    const errorMessage = error.response?.data?.error?.message || error.message;
-    const errorCode = error.response?.data?.error?.code;
+    const errorData = error.response?.data;
+    const errorMessage = errorData?.error?.message || error.message;
+    const errorCode = errorData?.error?.code;
+    const errorDetails = errorData?.error?.error_data?.details || errorData?.error?.details;
+    console.error('[WA TEMPLATE] Error response:', JSON.stringify(errorData, null, 2));
+    console.error('[WA TEMPLATE] Error details:', JSON.stringify(errorDetails, null, 2));
     throw new Error(`Gagal mengirim template: ${errorMessage} (code: ${errorCode || 'unknown'})`);
   }
 }

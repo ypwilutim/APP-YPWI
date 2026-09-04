@@ -260,6 +260,7 @@ app.use('/api', require('./src/routes/paktaIntegritas'));
 app.use('/api', wahaRoutes);
 app.use('/api', waliKelasRoutes);
 app.use('/api', require('./src/routes/treasurer'));
+app.use('/api', require('./src/routes/paymentSettings'));
 app.use('/api', require('./src/routes/bsi-import'));
 app.use('/api', require('./src/routes/xendit'));
 app.use('/api', require('./src/routes/payments'));

@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pembayaran SPP - YPWI Lutim</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+  <style>
+    .step-active { background: linear-gradient(135deg, #066e3a 0%, #0a8a4a 100%); }
+    .copy-highlight { background: #f0fdf4; }
+    .pulse { animation: pulse 1.5s ease-in-out infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .6; } }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <div class="max-w-2xl mx-auto p-4 pb-10">
+    <!-- Header -->
+    <header class="bg-white rounded-b-3xl shadow-sm pb-4 mb-4">
+      <div class="flex items-center justify-between px-4 pt-3">
+        <div class="flex items-center gap-2">
+          <img src="/assets/images/YPWI LOGO FULL COLOR.png" alt="Logo YPWI" class="h-6 w-auto">
+          <div class="text-[#066e3a] font-bold text-lg">YPWI LUTIM</div>
+        </div>
+        <a href="dashboard.html" class="text-gray-500 hover:text-gray-700"><i class="fas fa-home-lg"></i></a>
+      </div>
+      <h1 class="mt-3 text-center text-lg font-bold text-gray-800">Pembayaran SPP &amp; Kewajiban Bulanan</h1>
+      <p class="text-center text-xs text-gray-500">Ikuti langkah-langkah di bawah untuk menyelesaikan pembayaran</p>
+    </header>
+
+    <!-- Loading / Error -->
+    <div id="loadingState" class="text-center py-8 text-gray-500">
+      <i class="fas fa-spinner fa-spin mr-2"></i>Memuat data siswa...
+    </div>
+    <div id="errorState" class="hidden text-center py-8 text-red-600">
+      <i class="fas fa-exclamation-circle text-3xl mb-3"></i>
+      <p id="errorMessage" class="mb-4">Tidak dapat memuat data</p>
+      <a href="dashboard.html" class="inline-block px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400">Kembali ke Beranda</a>
+    </div>
+
+    <!-- Student Card -->
+    <div id="studentCard" class="hidden bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+      <div class="step-active text-white p-4">
+        <div class="flex items-center gap-3">
+          <div class="w-14 h-14 bg-white/20 rounded-full flex items-center justify-center overflow-hidden">
+            <img id="studentPhoto" src="" alt="Foto" class="w-12 h-12 rounded-full object-cover">
+          </div>
+          <div>
+            <div class="text-xs opacity-90">Nama Siswa</div>
+            <div id="studentName" class="font-bold text-lg"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="p-4 space-y-3">
+        <div class="grid grid-cols-2 gap-3 text-sm">
+          <div><span class="text-gray-500">NISN</span><div id="studentNisn" class="font-medium"></div></div>
+          <div><span class="text-gray-500">NIS</span><div id="studentNis" class="font-medium"></div></div>
+          <div><span class="text-gray-500">Sekolah</span><div id="schoolName" class="font-medium"></div></div>
+          <div><span class="text-gray-500">Kelas</span><div id="studentClass" class="font-medium">-</div></div>
+        </div>
+
+        <!-- Tagihan -->
+        <div class="bg-gray-50 rounded-xl p-3">
+           <div class="flex items-center justify-between">
+            <div>
+              <div class="text-xs text-gray-500">Tagihan Berjalan</div>
+              <div class="text-xs text-gray-400 mt-0.5" id="billingPeriod">SPP Bulanan</div>
+            </div>
+            <div class="text-right">
+              <div class="text-xs text-gray-500" id="amountLabel">Jumlah</div>
+              <div id="amount" class="text-xl font-bold text-[#066e3a]"></div>
+            </div>
+          </div>
+          <div id="statusBadge" class="mt-2 inline-block text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Belum Dibayar</div>
+          <div id="arrearsRow" class="hidden pt-2 border-t border-gray-100 mt-2">
+            <div class="text-xs font-semibold text-gray-600 mb-1.5">Daftar Tagihan</div>
+            <div id="tagihanList" class="divide-y divide-gray-100"></div>
+          </div>
+        </div>
+
+          <!-- Nomor VA -->
+        <div class="border border-emerald-100 rounded-xl p-3 copy-highlight">
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="text-xs text-gray-500">Nomor Rekening BSI (VA)</div>
+              <div id="vaNumber" class="font-mono font-bold text-[#066e3a] mt-1"></div>
+            </div>
+            <button id="copyVaBtn" onclick="copyVa()" class="px-3 py-1.5 bg-[#066e3a] text-white text-xs rounded-lg hover:bg-[#055e2d] flex items-center gap-1">
+              <i class="far fa-copy"></i> Salin
+            </button>
+          </div>
+          <div class="text-xs text-gray-400 mt-1">Nomor ini berlaku sebagai nomor rekening BSI. Dapat ditransfer dari Mobile Banking BSI <b>atau bank lain</b> melalui menu <b>Transfer ke Rekening</b> (bukan menu Virtual Account).</div>
+        </div>
+
+        <!-- Kontak / Bantuan -->
+        <div class="flex items-center justify-between text-sm">
+          <span class="text-gray-500">Bantuan</span>
+          <div id="parentWa" class="font-medium text-[#066e3a]">-</div>
+        </div>
+      </div>
+
+      <!-- Tutorial -->
+      <div class="border-t border-gray-100 p-4">
+        <h3 class="text-sm font-semibold text-gray-800 mb-3">Cara Membayar</h3>
+
+        <!-- Method 1: BSI -->
+        <div class="mb-4">
+          <div class="flex items-center gap-2 mb-2">
+            <i class="fas fa-university text-[#066e3a]"></i>
+            <span class="text-sm font-semibold text-gray-800">1. BSI (BSI Mobile / Byond / ATM BSI)</span>
+          </div>
+          <ol class="space-y-2 text-xs text-gray-600 list-decimal list-inside">
+            <li>Buka aplikasi <b>BSI Mobile / Byond</b> atau gunakan <b>ATM BSI</b>.</li>
+            <li>Pilih menu <b>Transfer → Transfer ke Rekening BSI</b> (bukan menu Virtual Account).</li>
+            <li>Masukkan nomor VA ini sebagai <b>nomor rekening</b> tujuan: <b id="vaNumberShort1" class="font-mono text-[#066e3a]"></b>.</li>
+            <li>Masukkan nominal: <b id="amountShort" class="font-mono text-[#066e3a]"></b>.</li>
+            <li>Selesai &amp; simpan bukti (struk/bukti transfer).</li>
+          </ol>
+        </div>
+
+        <!-- Method 2: Bank lain -->
+        <div class="mb-4">
+          <div class="flex items-center gap-2 mb-2">
+            <i class="fas fa-mobile-alt text-purple-600"></i>
+            <span class="text-sm font-semibold text-gray-800">2. BANK LAIN (Mobile Banking / ATM bank lain)</span>
+          </div>
+          <ol class="space-y-2 text-xs text-gray-600 list-decimal list-inside">
+            <li>Buka mobile banking / ATM bank lain (Mandiri, BRI, BNI, BCA, dsb.).</li>
+            <li>Pilih <b>Transfer Antar Bank</b> → tujuan rekening <b>BSI</b>.</li>
+            <li>Masukkan nomor VA ini sebagai <b>nomor rekening tujuan BSI</b>: <b id="vaNumberShort2" class="font-mono text-[#066e3a]"></b>.</li>
+            <li>Masukkan nominal: <b id="amountShort2" class="font-mono text-[#066e3a]"></b>.</li>
+            <li>Selesai &amp; simpan bukti transfer.</li>
+          </ol>
+        </div>
+
+        <p class="text-[11px] text-gray-400 mb-3">Setelah transfer, konfirmasi pembayaran via WhatsApp.</p>
+        <button onclick="openConfirmWa()" class="w-full px-4 py-3 bg-[#066e3a] text-white rounded-xl font-medium hover:bg-[#055e2d] flex items-center justify-center gap-2">
+          <i class="fab fa-whatsapp"></i> Konfirmasi Pembayaran
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Gateway Modal -->
+  <div id="gatewayModal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-2">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-sm">
+      <div class="p-4 border-b flex justify-between items-center">
+        <h3 class="font-semibold text-gray-800">Pilih Metode Pembayaran</h3>
+        <button onclick="closeGateways()" class="text-gray-400 hover:text-gray-700"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="p-3 space-y-2 text-sm">
+        <a id="gwBsi" href="#" class="flex items-center gap-2 p-2 rounded-lg border hover:bg-gray-50"><i class="fas fa-university text-green-600"></i> <span>Transfer ke Rekening BSI (VA)</span></a>
+        <a id="gwDoku" href="#" class="flex items-center gap-2 p-2 rounded-lg border hover:bg-gray-50"><i class="fas fa-credit-card text-blue-600"></i> <span>DOKU Payment Gateway</span></a>
+        <a id="gwXendit" href="#" class="flex items-center gap-2 p-2 rounded-lg border hover:bg-gray-50"><i class="fas fa-wallet text-purple-600"></i> <span>Xendit VA/QR</span></a>
+        <a id="gwWa" href="#" class="flex items-center gap-2 p-2 rounded-lg border hover:bg-gray-50"><i class="fas fa-whatsapp text-green-500"></i> <span>Konfirmasi via WhatsApp</span></a>
+      </div>
+    </div>
+  </div>
+
+  <div id="copyToast" class="fixed bottom-6 inset-x-0 mx-auto w-auto min-w-[160px] hidden bg-gray-800 text-white text-xs px-3 py-1.5 rounded-lg shadow-lg">
+    No. VA tersalin!
+  </div>
+
+  <script>
+    const token = localStorage.getItem('token');
+    const params = new URLSearchParams(window.location.search);
+    const vaParam = (params.get('va') || '').replace(/\s/g, '');
+
+    (async () => {
+      if (!vaParam || vaParam.length < 6) {
+        document.getElementById('errorMessage').textContent = 'Parameter VA tidak ditemukan (gunakan ?va=<nomor_va>)';
+        showError(true);
+        return;
+      }
+      try {
+        const res = await fetch(`/api/treasurer/public/check-bsi-payment?va_number=${encodeURIComponent(vaParam)}`, {
+          headers: { 'Authorization': token ? 'Bearer ' + token : '' }
+        });
+        const json = await res.json();
+        if (!json.success) throw new Error(json.message || 'Gagal ambil data');
+        const s = json.data;
+        if (!s) throw new Error('Siswa tidak ditemukan untuk VA ini');
+        renderStudent(s);
+      } catch (e) {
+        document.getElementById('errorMessage').textContent = e.message;
+        showError(true);
+      }
+    })();
+
+    function showError(v) {
+      document.getElementById('loadingState').classList.toggle('hidden', v);
+      document.getElementById('errorState').classList.toggle('hidden', !v);
+      document.getElementById('studentCard').classList.toggle('hidden', v);
+    }
+
+    function fmt(n) { return 'Rp ' + Number(n || 0).toLocaleString('id-ID'); }
+    function formatKelas(tingkatan, nama_kelas) {
+      const t = (tingkatan != null && tingkatan !== '') ? String(tingkatan) : '';
+      const n = (nama_kelas != null && nama_kelas !== '') ? String(nama_kelas) : '';
+      if (!t && !n) return '-';
+      if (!n) return t;
+      return n.length <= 1 ? `${t}${n}` : `${t} ${n}`;
+    }
+    function formatBulan(bulan) {
+      const m = (bulan || '').match(/^(\d{4})-(\d{2})$/);
+      if (!m) return bulan || '-';
+      const bl = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+      return `${bl[parseInt(m[2],10)-1] || '-'} ${m[1]}`;
+    }
+
+    function renderStudent(s) {
+      window.__student = s;
+      document.getElementById('loadingState').classList.add('hidden');
+      document.getElementById('studentCard').classList.remove('hidden');
+
+      const va = (s.va_number || '').trim();
+      document.getElementById('studentName').textContent = s.nama_siswa || '-';
+      document.getElementById('studentNisn').textContent = s.nisn || '-';
+      document.getElementById('studentNis').textContent = s.nis || '-';
+      document.getElementById('schoolName').textContent = s.nama_sekolah || '-';
+      document.getElementById('studentClass').textContent = formatKelas(s.tingkatan, s.nama_kelas);
+      document.getElementById('billingPeriod').textContent = s.bulan_berjalan ? ('SPP Bulanan (' + formatBulan(s.bulan_berjalan) + ')') : 'SPP Bulanan';
+      document.getElementById('studentPhoto').src = `https://ui-avatars.com/api/?name=${encodeURIComponent(s.nama_siswa || 'Siswa')}&size=96&background=066e3a&color=fff`;
+
+      const iuran = parseFloat(s.iuran_bulanan) || 0;
+      const totalTagihan = s.total_tagihan != null ? parseFloat(s.total_tagihan) : iuran;
+      document.getElementById('amount').textContent = fmt(totalTagihan);
+      document.getElementById('amountShort').textContent = fmt(totalTagihan);
+      document.getElementById('amountShort2').textContent = fmt(totalTagihan);
+
+      // Daftar semua tagihan (semua billing, dengan keterangan bulan)
+      const list = document.getElementById('tagihanList');
+      const bills = Array.isArray(s.tagihan) ? s.tagihan : [];
+      const arrearsRow = document.getElementById('arrearsRow');
+      if (bills.length > 0) {
+        let html = '';
+        bills.forEach(b => {
+          const bln = parseFloat(b.keterangan_spp) || 0;
+          const gross = (parseFloat(b.spp_bulanan) || 0) + (parseFloat(b.ransportasi) || 0) - (parseFloat(b.subsidi) || 0);
+          html += `<div class="py-1.5 border-b border-gray-100 last:border-0">
+            <div class="flex items-center justify-between">
+              <span class="text-xs text-gray-600">${formatBulan(b.bulan)}</span>
+              <span class="text-xs font-medium text-red-600">Rp ${(bln || gross).toLocaleString('id-ID')}</span>
+            </div>
+            <div class="text-[10px] text-gray-400">${bln > 0 ? 'Tunggakan: Rp ' + Number(bln).toLocaleString('id-ID') : 'Belum lunas'}</div>
+          </div>`;
+        });
+        list.innerHTML = html;
+        arrearsRow.classList.remove('hidden');
+        document.getElementById('amountLabel').textContent = 'Total Tagihan';
+      } else {
+        list.innerHTML = '';
+        arrearsRow.classList.add('hidden');
+        document.getElementById('amountLabel').textContent = iuran > 0 ? 'Total Tagihan' : 'Jumlah';
+      }
+
+      if (Number(totalTagihan) <= 0) {
+        document.getElementById('statusBadge').className = 'mt-2 inline-block text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700';
+        document.getElementById('statusBadge').textContent = 'Lunas';
+      }
+      document.getElementById('vaNumber').textContent = va || '-';
+      document.getElementById('vaNumberShort1').textContent = va || '-';
+      document.getElementById('vaNumberShort2').textContent = va || '-';
+      document.getElementById('parentWa').textContent = 'Bantuan: 0823-9685-9771';
+
+      const tenant = s.tenant_id || '';
+      document.getElementById('gwBsi').onclick = () => window.location.href = 'https://ib.bsi.co.id' + (va ? '?q=' + encodeURIComponent(va) : '');
+      document.getElementById('gwDoku').onclick = () => window.location.href = '/pay.html?tenant=' + encodeURIComponent(tenant) + '&student=' + s.id;
+      document.getElementById('gwXendit').onclick = () => window.location.href = '/xendit-payment.html?tenant=' + encodeURIComponent(tenant) + '&student=' + s.id;
+      document.getElementById('gwWa').href = buildWaUrl(s);
+    }
+
+    function buildWaMessage(s) {
+      const va = (document.getElementById('vaNumber').textContent || '').trim();
+      const total = document.getElementById('amount').textContent || '-';
+      const kelas = document.getElementById('studentClass').textContent || '-';
+      const nisn = s.nisn || '-';
+      const nis = s.nis || '-';
+      const lines = [
+        '*KONFIRMASI PEMBAYARAN SPP*',
+        '',
+        `*Nama Siswa:* ${s.nama_siswa || '-'}`,
+        `*NISN / NIS:* ${nisn} / ${nis}`,
+        `*Kelas:* ${kelas}`,
+        `*Sekolah:* ${s.nama_sekolah || '-'}`,
+        `*Total Tagihan:* ${total}`,
+        `*Nomor VA (rekening BSI):* ${va || '-'}`,
+        '',
+        'Saya sudah melakukan transfer. Saya kirimkan bukti (foto struk) di pesan berikutnya.'
+      ];
+      return lines.join('\n');
+    }
+    function buildWaUrl(s) {
+      const wa = '6282396859771';
+      return 'https://wa.me/' + wa + '?text=' + encodeURIComponent(buildWaMessage(s));
+    }
+    function openConfirmWa() {
+      const s = window.__student || {};
+      window.open(buildWaUrl(s), '_blank');
+    }
+
+    function copyVa() {      const va = (document.getElementById('vaNumber').textContent || '').trim();
+      if (!va) return;
+      navigator.clipboard.writeText(va).then(() => {
+        const t = document.getElementById('copyToast');
+        t.classList.remove('hidden');
+        setTimeout(() => t.classList.add('hidden'), 1500);
+      });
+    }
+
+    function openGateways() { document.getElementById('gatewayModal').classList.remove('hidden'); }
+    function closeGateways() { document.getElementById('gatewayModal').classList.add('hidden'); }
+  </script>
+</body>
+</html>

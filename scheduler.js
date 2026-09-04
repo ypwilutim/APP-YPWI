@@ -265,7 +265,7 @@ async function runAutoBillReminder() {
           info_sekolah: infoSekolah,
           nama_sekolah: namaSekolah,
           va_raw: vaRaw
-        }, 'tagihan_spp_bsi_tunggakan');
+        }, 'tagihan_spp_bsi');
 
         await db.query(
           `INSERT INTO auto_billing_reports (tenant_id, periode, student_id, nama_siswa, no_wa, saldo, status, message_id)

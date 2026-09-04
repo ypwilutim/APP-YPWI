@@ -3000,7 +3000,7 @@ window.loadStudents = async function (page = 1) {
     const tenantId = window.studentTenantFilterValue || window.tenantId || (JSON.parse(localStorage.getItem('user') || '{}'))?.tenant_id || (JSON.parse(localStorage.getItem('user') || '{}'))?.assignments?.[0]?.tenant_id || '';
     const gender = window.studentGenderFilterValue || '';
 
-    tbody.innerHTML = '<tr><td colspan="8" class="px-6 py-12 text-center text-gray-500"><i class="fas fa-spinner fa-spin"></i> Memuat...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" class="px-6 py-12 text-center text-gray-500"><i class="fas fa-spinner fa-spin"></i> Memuat...</td></tr>';
 
     try {
         const params = new URLSearchParams({
@@ -3031,6 +3031,7 @@ if (data.success) {
                 <td class="px-6 py-4">${s.nis || '-'}</td>
                 <td class="px-6 py-4">${s.nama_kelas || '-'}</td>
                 <td class="px-6 py-4">${s.jenis_kelamin === 'L' ? 'Laki-laki' : s.jenis_kelamin === 'P' ? 'Perempuan' : '-'}</td>
+                <td class="px-6 py-4">${s.tahun_masuk || '-'}</td>
                 <td class="px-6 py-4">${s.nama_orang_tua || '-'}<br><small>${s.no_wa_ortu || ''}</small></td>
                 <td class="px-6 py-4">Rp ${(s.iuran_bulanan || 0).toLocaleString('id-ID')}</td>
                 <td class="px-6 py-4">
@@ -3042,20 +3043,53 @@ if (data.success) {
                   </button>
                 </td>
               </tr>
-            `).join('') || '<tr><td colspan="8" class="px-6 py-12 text-center text-gray-500">Tidak ada data siswa</td></tr>';
+            `).join('') || '<tr><td colspan="10" class="px-6 py-12 text-center text-gray-500">Tidak ada data siswa</td></tr>';
 
 renderStudentPagination();
         } else {
-            tbody.innerHTML = '<tr><td colspan="8" class="px-6 py-12 text-center text-red-500">Gagal memuat data</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="10" class="px-6 py-12 text-center text-red-500">Gagal memuat data</td></tr>';
         }
     } catch (error) {
-        tbody.innerHTML = '<tr><td colspan="8" class="px-6 py-12 text-center text-red-500">Error: ' + error.message + '</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" class="px-6 py-12 text-center text-red-500">Error: ' + error.message + '</td></tr>';
     }
 };
 
 
 window.loadStudentClasses = async function () {
-    // Classes are loaded in the filter modal, this function kept for compatibility
+    // Populate school filter from user assignments
+    const filter = document.getElementById('studentSchoolFilter');
+    if (!filter) return;
+    try {
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        const assignments = user.assignments || [];
+        const seen = new Set();
+        const options = ['<option value="">Semua Sekolah (Akses Anda)</option>'];
+        // Always include current tenant
+        const current = window.tenantId;
+        if (current && !seen.has(current)) {
+            const cs = assignments.find(a => a.tenant_id === current);
+            options.push(`<option value="${current}" selected>${cs ? cs.nama_sekolah : current}</option>`);
+            seen.add(current);
+        }
+        assignments.forEach(a => {
+            if (!seen.has(a.tenant_id)) {
+                options.push(`<option value="${a.tenant_id}">${a.nama_sekolah || a.tenant_id}</option>`);
+                seen.add(a.tenant_id);
+            }
+        });
+        filter.innerHTML = options.join('');
+        window.studentTenantFilterValue = current || '';
+    } catch (e) { console.error('[STUDENT SCHOOL FILTER]', e); }
+};
+
+window.onStudentSchoolFilterChange = function () {
+    const v = document.getElementById('studentSchoolFilter').value;
+    window.studentTenantFilterValue = v;
+    // When changing school, also reset class filter
+    const cSel = document.getElementById('studentClassFilter');
+    if (cSel) cSel.value = '';
+    window.studentClassFilterValue = '';
+    loadStudents(1);
 };
 
 window.changeStudentPage = function (newPage) {
@@ -3326,26 +3360,36 @@ window.showAddStudentModal = function () {
 window.showStudentFilterModal = function () {
     const currentTenantFilter = window.studentTenantFilterValue || '';
     const currentClassFilter = window.studentClassFilterValue || '';
+    const currentGenderFilter = window.studentGenderFilterValue || '';
 
     Swal.fire({
         title: 'Filter Siswa',
         html: `
        <div class="text-left space-y-3">
-         <div>
-           <label class="block text-sm font-medium text-gray-700 mb-1">Sekolah</label>
-           <select id="filterTenant" class="swal2-input w-full">
-             <option value="">Semua Sekolah</option>
-           </select>
-         </div>
-         <div>
-           <label class="block text-sm font-medium text-gray-700 mb-1">Kelas</label>
-           <select id="filterClass" class="swal2-input w-full">
-             <option value="">Semua Kelas</option>
-           </select>
-         </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Sekolah</label>
+            <select id="filterTenant" class="swal2-input w-full">
+              <option value="">Semua Sekolah</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Kelas</label>
+            <select id="filterClass" class="swal2-input w-full">
+              <option value="">Semua Kelas</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Jenis Kelamin</label>
+            <select id="filterGender" class="swal2-input w-full">
+              <option value="">Semua</option>
+              <option value="L">Laki-laki</option>
+              <option value="P">Perempuan</option>
+            </select>
+          </div>
        </div>
-     `,
+      `,
         didOpen: async () => {
+            document.getElementById('filterGender').value = currentGenderFilter;
             const tenantRes = await fetch('/api/admin/tenants', {
                 headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') }
             });
@@ -3380,6 +3424,7 @@ window.showStudentFilterModal = function () {
         if (result.isConfirmed) {
             window.studentTenantFilterValue = document.getElementById('filterTenant').value;
             window.studentClassFilterValue = document.getElementById('filterClass').value;
+            window.studentGenderFilterValue = document.getElementById('filterGender').value;
             loadStudents();
         }
     });

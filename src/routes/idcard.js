@@ -264,61 +264,81 @@ function drawCard(doc, ox, oy, teacher, qrBuf, photoBuf, single) {
   const logo = loadLogo();
 
   doc.save();
-  doc.roundedRect(ox, oy + 0.5, cw - 1, ch - 1, 5).linewidth(0.5).stroke('#d1d5db');
 
-  let curY = oy + 6;
+  doc.roundedRect(ox, oy, cw, ch, 6).lineWidth(0.6).stroke('#cbd5e1');
+  doc.roundedRect(ox, oy, cw, 18, 6).fill(GREEN);
+
+  let curY = oy + 5;
 
   if (logo) {
-    const logoW = 34;
+    const logoW = 32;
     const logoX = ox + (cw - logoW) / 2;
     try {
-      doc.image(logo, logoX, curY, { width: logoW, height: 14, fit: [logoW, 14] });
+      doc.image(logo, logoX, curY, { width: logoW, height: 12, fit: [logoW, 12] });
     } catch (e) {
-      doc.rect(logoX, curY, logoW, 14).fill('#e5e7eb');
+      doc.rect(logoX, curY, logoW, 12).fill('#e5e7eb');
     }
-    curY += 18;
+    curY += 14;
   }
 
-  doc.fillColor(GREEN).font('Helvetica-Bold').fontSize(12)
+  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(10.5)
     .text('YPWI LUTIM', ox + pad, curY, { width: cw - 2 * pad, align: 'center' });
-  curY += 14;
+  curY += 13;
 
   const photoW = 50;
   const photoH = 66;
   const photoX = ox + (cw - photoW) / 2;
   const photoY = curY;
+  doc.save();
+  doc.roundedRect(photoX, photoY, photoW, photoH, 4).clip();
   if (photoBuf) {
     doc.image(photoBuf, photoX, photoY, { width: photoW, height: photoH, fit: [photoW, photoH] });
   } else {
     doc.rect(photoX, photoY, photoW, photoH).fill('#e5e7eb');
     doc.fillColor('#9ca3af').font('Helvetica').fontSize(6).text('FOTO', photoX, photoY + photoH / 2 - 3, { width: photoW, align: 'center' });
   }
-  curY = photoY + photoH + 10;
+  doc.restore();
+  doc.roundedRect(photoX, photoY, photoW, photoH, 4).lineWidth(1).stroke('#4ade80');
+  curY = photoY + photoH + 14;
 
-  doc.fillColor('#111827').font('Helvetica-Bold').fontSize(13)
+  doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(13)
     .text(teacher.nama || 'Guru', ox + pad, curY, { width: cw - 2 * pad, align: 'center' });
-  curY += 15;
+  curY += 16;
 
   doc.fillColor('#4b5563').font('Helvetica').fontSize(8)
     .text(teacher.scan_id || teacher.id || '', ox + pad, curY, { width: cw - 2 * pad, align: 'center' });
   curY += 12;
 
   const jabatan = teacher.jabatan_di_unit || '-';
+  const badgeW = cw - 2 * pad;
+  const badgeH = doc.heightOfString(jabatan, { width: badgeW - 6, font: 'Helvetica-Bold', fontSize: 8 });
+  const badgePad = 4;
+  const badgeTotalH = Math.max(badgeH + badgePad * 2, 14);
+  const badgeY = curY;
+  doc.roundedRect(ox + pad, badgeY, badgeW, badgeTotalH, badgeTotalH / 2)
+    .fill(GREEN).fillOpacity(0.1).stroke(GREEN).lineWidth(0.5);
+  doc.save();
+  doc.roundedRect(ox + pad, badgeY, badgeW, badgeTotalH, badgeTotalH / 2).clip();
   doc.fillColor(GREEN_DARK).font('Helvetica-Bold').fontSize(8)
-    .text(jabatan, ox + pad, curY, { width: cw - 2 * pad, align: 'center' });
-  curY += doc.heightOfString(jabatan, { width: cw - 2 * pad, font: 'Helvetica-Bold', fontSize: 8 }) + 8;
+    .text(jabatan, ox + pad + badgePad, badgeY + (badgeTotalH - badgeH) / 2, { width: badgeW - badgePad * 2 });
+  doc.restore();
+  curY = badgeY + badgeTotalH + 6;
 
-  doc.moveTo(ox + pad, oy + ch - 70).lineTo(ox + cw - pad, oy + ch - 70).stroke('#e5e7eb');
+  doc.moveTo(ox + pad, oy + ch - 72).lineTo(ox + cw - pad, oy + ch - 72).stroke('#e5e7eb');
 
-  const qrSize = 54;
+  const qrSize = 50;
+  const boxPad = 6;
   const qrX = ox + (cw - qrSize) / 2;
-  const qrY = oy + ch - pad - qrSize;
+  const qrY = oy + ch - pad - qrSize - 14;
+  doc.roundedRect(qrX - boxPad, qrY - boxPad, qrSize + boxPad * 2, qrSize + boxPad * 2, 4)
+    .fill('#ffffff').stroke('#e5e7eb').lineWidth(0.6);
   if (qrBuf) {
     doc.image(qrBuf, qrX, qrY, { width: qrSize, height: qrSize });
   } else {
     doc.rect(qrX, qrY, qrSize, qrSize).fill('#f3f4f6');
   }
-  doc.fillColor('#6b7280').font('Helvetica').fontSize(6).text('Scan ID', qrX, qrY + qrSize + 2, { width: qrSize, align: 'center' });
+  doc.fillColor('#475569').font('Helvetica').fontSize(6)
+    .text(`Scan ID: ${teacher.scan_id || teacher.id || ''}`, ox + pad, qrY + qrSize + 4, { width: cw - 2 * pad, align: 'center' });
 
   doc.fillColor('#9ca3af').font('Helvetica-Oblique').fontSize(6)
     .text('YAYASAN PENDIDIKAN WIYATA LUTIM', ox + pad, oy + ch - 6);

@@ -609,7 +609,11 @@
           </div>
 
           <!-- Search -->
-          <div class="mb-4 flex space-x-2">
+          <div class="mb-4 flex flex-wrap gap-2">
+            <select id="studentSchoolFilter" onchange="onStudentSchoolFilterChange()"
+              class="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 text-sm">
+              <option value="">Semua Sekolah (Akses Anda)</option>
+            </select>
             <select id="studentClassFilter" onchange="loadStudents()"
               class="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 text-sm">
               <option value="">Semua Kelas</option>
@@ -639,6 +643,7 @@
                   <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">NISN</th>
                   <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">NIS</th>
                   <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Kelas</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Jenis Kelamin</th>
                   <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Tahun Masuk</th>
                   <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Orang Tua</th>
                   <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Iuran/Bulan</th>
@@ -647,7 +652,7 @@
               </thead>
               <tbody id="studentsTable" class="divide-y divide-gray-100">
                 <tr>
-                  <td colspan="9" class="px-4 py-12 text-center text-gray-500"><i
+                  <td colspan="10" class="px-4 py-12 text-center text-gray-500"><i
                       class="fas fa-spinner fa-spin text-xl mb-2"></i>
                     <p>Memuat data...</p>
                   </td>

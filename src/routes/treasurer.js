@@ -256,11 +256,11 @@ router.post('/treasurer/public/send-spp-reminder', async (req, res) => {
       if (saldoVal >= 0) {
         return res.json({ success: false, message: 'Siswa tidak memiliki tunggakan', skipped: true });
       }
-      resolvedTemplate = 'tagihan_spp_bsi_tunggakan';
+      resolvedTemplate = 'tagihan_spp_bsi';
     } else if (template_type === 'bsi_auto') {
       resolvedTemplate = 'tagihan_spp_bsi';
     }
-    const templateName = resolvedTemplate === 'tagihan_spp_bsi_tunggakan' ? 'tagihan_spp_bsi_tunggakan' : (resolvedTemplate === 'tagihan_spp_bsi' ? 'tagihan_spp_bsi' : (resolvedTemplate === 'tagihan_spp' ? 'tagihan_spp' : 'invoice_spp'));
+    const templateName = resolvedTemplate === 'tagihan_spp_bsi' ? 'tagihan_spp_bsi' : (resolvedTemplate === 'tagihan_spp' ? 'tagihan_spp' : 'invoice_spp');
 
     if (!no_wa) {
       return res.status(400).json({ success: false, message: 'Nomor WA tidak tersedia' });
@@ -293,7 +293,8 @@ router.post('/treasurer/public/send-spp-reminder', async (req, res) => {
       }
       params.invoice_url = invoiceUrl || `xendit-payment.html?student_id=${student_id || ''}`;
       params.nama_pembayaran = 'SPP';
-    } else if (templateName === 'tagihan_spp_bsi' || templateName === 'tagihan_spp_bsi_tunggakan') {
+    } else if (templateName === 'tagihan_spp_bsi') {
+      let tenantIdForBendahara = tenant_id;
       let vaRaw = '';
       let vaNumber = '-';
       let vaName = '-';
@@ -301,14 +302,15 @@ router.post('/treasurer/public/send-spp-reminder', async (req, res) => {
       let infoSekolah = '-';
       let namaSekolah = '-';
       if (student_id) {
-        const [stu] = await db.query(
-          `SELECT s.va_number, s.nama_siswa, s.class_id, c.nama_kelas, c.tingkatan, tn.nama_sekolah
+        const stuResult = await db.query(
+          `SELECT s.va_number, s.nama_siswa, s.class_id, s.tenant_id, c.nama_kelas, c.tingkatan, tn.nama_sekolah
            FROM students s
            LEFT JOIN classes c ON s.class_id = c.id
            LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id
            WHERE s.id = ? LIMIT 1`,
           [student_id]
         );
+        const stu = Array.isArray(stuResult) ? stuResult[0] : stuResult;
         if (stu) {
           vaRaw = (stu.va_number || '').replace(/[^0-9]/g, '');
           vaNumber = vaRaw ? `BSI ${vaRaw}` : '-';
@@ -316,19 +318,26 @@ router.post('/treasurer/public/send-spp-reminder', async (req, res) => {
           kelas = stu.nama_kelas || (stu.tingkatan ? `Kelas ${stu.tingkatan}` : '-');
           namaSekolah = stu.nama_sekolah || '-';
           infoSekolah = namaSekolah;
+          // Use student's tenant_id if not provided
+          if (!tenantIdForBendahara && stu.tenant_id) {
+            tenantIdForBendahara = stu.tenant_id;
+          }
         }
         // Get treasurer phone from teacher assignment
-        const [bendahara] = await db.query(
-          `SELECT t.no_wa FROM teacher_assignments ta
-           JOIN teachers t ON ta.teacher_id = t.id
-           WHERE ta.tenant_id = ? AND ta.jabatan_di_unit = 'bendahara'
-           LIMIT 1`,
-          [tenant_id]
-        );
-        if (bendahara && bendahara.no_wa) {
-          // Add + prefix for WhatsApp click-to-chat link
-          const waBendahara = `+${bendahara.no_wa.replace(/[^0-9]/g, '')}`;
-          infoSekolah = `${namaSekolah} - ${waBendahara}`;
+        if (tenantIdForBendahara) {
+          const bendaharaResult = await db.query(
+            `SELECT t.no_wa FROM teacher_assignments ta
+             JOIN teachers t ON ta.teacher_id = t.id
+             WHERE ta.tenant_id = ? AND ta.jabatan_di_unit = 'bendahara'
+             LIMIT 1`,
+            [tenantIdForBendahara ?? null]
+          );
+          const bendahara = Array.isArray(bendaharaResult) ? bendaharaResult[0] : bendaharaResult;
+          if (bendahara && bendahara.no_wa) {
+            // Add + prefix for WhatsApp click-to-chat link
+            const waBendahara = `+${bendahara.no_wa.replace(/[^0-9]/g, '')}`;
+            infoSekolah = `${namaSekolah} - ${waBendahara}`;
+          }
         }
       }
       params.nomor_rekening = vaNumber;
@@ -338,6 +347,11 @@ router.post('/treasurer/public/send-spp-reminder', async (req, res) => {
       params.info_sekolah = infoSekolah;
       params.nama_sekolah = namaSekolah;
       params.va_raw = vaRaw;
+
+      // Validasi: jika tidak ada VA, tidak bisa kirim template BSI
+      if (!vaRaw) {
+        return res.status(400).json({ success: false, message: 'Siswa belum memiliki VA BSI. Generate VA terlebih dahulu.' });
+      }
     } else {
       let vaNumber = '-';
       let vaName = '-';
@@ -370,8 +384,8 @@ router.post('/treasurer/public/send-spp-reminder', async (req, res) => {
 router.post('/treasurer/public/send-all-spp-reminders', async (req, res) => {
   try {
     const { tenant_id, template_type } = req.body;
-    const resolvedTemplate = template_type === 'bsi_auto' ? 'tagihan_spp_bsi_tunggakan' : template_type;
-    const templateName = resolvedTemplate === 'tagihan_spp_bsi_tunggakan' ? 'tagihan_spp_bsi_tunggakan' : (resolvedTemplate === 'tagihan_spp_bsi' ? 'tagihan_spp_bsi' : (resolvedTemplate === 'tagihan_spp' ? 'tagihan_spp' : 'invoice_spp'));
+    const resolvedTemplate = template_type === 'bsi_auto' ? 'tagihan_spp_bsi' : template_type;
+    const templateName = resolvedTemplate === 'tagihan_spp_bsi' ? 'tagihan_spp_bsi' : (resolvedTemplate === 'tagihan_spp' ? 'tagihan_spp' : 'invoice_spp');
     let tenantId = tenant_id || null;
 
     let defaulterQuery = `
@@ -444,7 +458,7 @@ router.post('/treasurer/public/send-all-spp-reminders', async (req, res) => {
         }
         templateParams.invoice_url = invoiceUrl;
         templateParams.nama_pembayaran = 'SPP';
-      } else if (templateName === 'tagihan_spp_bsi' || templateName === 'tagihan_spp_bsi_tunggakan') {
+      } else if (templateName === 'tagihan_spp_bsi') {
         const vaRaw = (student.va_number || '').replace(/[^0-9]/g, '');
         const kelas = student.nama_kelas || (student.tingkatan ? `Kelas ${student.tingkatan}` : '-');
         const namaSekolah = student.nama_sekolah || '-';
@@ -498,8 +512,8 @@ router.post('/treasurer/public/send-selected-spp-reminders', async (req, res) =>
       return res.status(400).json({ success: false, message: 'student_ids wajib diisi' });
     }
 
-    const resolvedTemplate = template_type === 'bsi_auto' ? 'tagihan_spp_bsi_tunggaka' : template_type;
-    const templateName = resolvedTemplate === 'tagihan_spp_bsi_tunggaka' ? 'tagihan_spp_bsi_tunggaka' : (resolvedTemplate === 'tagihan_spp_bsi' ? 'tagihan_spp_bsi' : (resolvedTemplate === 'tagihan_spp' ? 'tagihan_spp' : 'invoice_spp'));
+    const resolvedTemplate = template_type === 'bsi_auto' ? 'tagihan_spp_bsi' : template_type;
+    const templateName = resolvedTemplate === 'tagihan_spp_bsi' ? 'tagihan_spp_bsi' : (resolvedTemplate === 'tagihan_spp' ? 'tagihan_spp' : 'invoice_spp');
 
     const placeholders = student_ids.map(() => '?').join(',');
      const [defaulters] = await db.query(
@@ -552,7 +566,7 @@ router.post('/treasurer/public/send-selected-spp-reminders', async (req, res) =>
         }
         templateParams.invoice_url = invoiceUrl;
         templateParams.nama_pembayaran = 'SPP';
-      } else if (templateName === 'tagihan_spp_bsi' || templateName === 'tagihan_spp_bsi_tunggaka') {
+      } else if (templateName === 'tagihan_spp_bsi') {
         const vaRaw = (student.va_number || '').replace(/[^0-9]/g, '');
         const kelas = student.nama_kelas || (student.tingkatan ? `Kelas ${student.tingkatan}` : '-');
         const namaSekolah = student.nama_sekolah || '-';
@@ -835,12 +849,45 @@ router.get('/treasurer/public/check-bsi-payment', async (req, res) => {
     const vaWithoutPrefix = va_number.replace(bsiPrefix, '');
 
     const query = `
-      SELECT s.id, s.nama_siswa, s.nisn, s.iuran_bulanan, s.tenant_id, tn.nama_sekolah, s.va_number, s.nis
+      SELECT s.id, s.nama_siswa, s.nisn, s.iuran_bulanan, s.tenant_id, tn.nama_sekolah, s.va_number, s.nis,
+             c.nama_kelas, c.tingkatan, COALESCE(ss.saldo, 0) as arrears_billing
       FROM students s
       JOIN tenants tn ON s.tenant_id = tn.tenant_id
+      LEFT JOIN classes c ON s.class_id = c.id
+      LEFT JOIN saldo_siswa ss ON ss.student_id = s.id
       WHERE s.va_number = ? OR s.nis = ?
     `;
     const [student] = await db.query(query, [va_number, vaWithoutPrefix]);
+
+    if (student) {
+      const now = new Date();
+      const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const bills = await db.query(
+        `SELECT bulan, spp_bulanan, ransportasi, subsidi, keterangan_spp, transaksi, status, metode_pembayaran, tanggal_bayar
+         FROM billing_payment
+         WHERE student_id = ? AND status = 'belum' AND keterangan_spp > 0
+         ORDER BY bulan ASC`,
+        [student.id]
+      );
+      const tunggunganFromBills = (bills || []).reduce((a, b) => a + (parseFloat(b.keterangan_spp) || 0), 0);
+      const arrearsDb = parseFloat(student.arrears_billing) || 0;
+      const tunggungan = tunggunganFromBills > 0 ? tunggunganFromBills : (arrearsDb < 0 ? Math.abs(arrearsDb) : 0);
+      // Cek apakah bulan berjalan sudah tercantum (lunas/belum) di billing_payment
+      const [currentRow] = await db.query(
+        `SELECT status, keterangan_spp FROM billing_payment WHERE student_id = ? AND bulan = ? LIMIT 1`,
+        [student.id, currentMonth]
+      );
+      let addCurrent = 0;
+      if (tunggunganFromBills > 0) {
+        // Billing detail ada: jika tidak ada row bulan berjalan, asumsikan SPP bulan ini masih terutang.
+        addCurrent = currentRow ? 0 : (parseFloat(student.iuran_bulanan) || 0);
+      }
+      // bila pakai fallback saldo (tidak ada row belum sama sekali), saldo sudah termasuk bulan berjalan -> tidak tambah iuran lagi.
+      student.tagihan = bills || [];
+      student.tunggungan = tunggungan;
+      student.bulan_berjalan = currentMonth;
+      student.total_tagihan = tunggungan + addCurrent;
+    }
 
     res.json({
       success: true,
@@ -1952,20 +1999,37 @@ router.post('/treasurer/bendahara/billing/generate-student', authenticateBendaha
       return res.status(400).json({ success: false, message: 'student_id dan bulan wajib' });
     }
 
-    const [student] = await db.query('SELECT id, tenant_id, iuran_bulanan FROM students WHERE id = ?', [student_id]);
+    const [student] = await db.query('SELECT id, tenant_id, iuran_bulanan, va_number, subsidi FROM students WHERE id = ?', [student_id]);
     if (!student) {
       return res.status(404).json({ success: false, message: 'Siswa tidak ditemukan' });
     }
 
     const spp = spp_bulanan !== undefined ? parseFloat(spp_bulanan) : parseFloat(student.iuran_bulanan) || 0;
     const transport = parseFloat(student.ransportasi) || 0;
+    const subsidiAmount = parseFloat(student.subsidi) || 0;
+
+    // Get biaya admin VA dari global payment_admin_settings (berlaku untuk semua)
+    let biayaAdminVa = 0;
+    if (student.va_number) {
+      const psResult = await db.query(
+        'SELECT biaya_admin_va FROM payment_admin_settings WHERE subject_type = ? AND subject_id = ?',
+        ['global', 0]
+      );
+      const ps = Array.isArray(psResult) ? psResult[0] : psResult;
+      if (ps) {
+        biayaAdminVa = parseFloat(ps.biaya_admin_va) || 0;
+      }
+    }
 
     // Check if billing already exists
     const [existing] = await db.query('SELECT id FROM billing_payment WHERE student_id = ? AND bulan = ?', [student_id, bulan]);
 
     if (existing) {
       // Update existing
-      await db.query('UPDATE billing_payment SET spp_bulanan = ?, ransportasi = ?, keterangan_spp = ?, status = "belum" WHERE id = ?', [spp, transport, spp + transport, existing.id]);
+      await db.query(
+        'UPDATE billing_payment SET spp_bulanan = ?, ransportasi = ?, subsidi = ?, biaya_admin_va = ?, keterangan_spp = ?, status = "belum" WHERE id = ?',
+        [spp, transport, subsidiAmount, biayaAdminVa, spp + transport - subsidiAmount, existing.id]
+      );
       await billing.recalcStudent(student_id);
       res.json({
         success: true,
@@ -1975,8 +2039,8 @@ router.post('/treasurer/bendahara/billing/generate-student', authenticateBendaha
     } else {
       // Create new
       await db.query(
-        'INSERT INTO billing_payment (tenant_id, student_id, spp_bulanan, ransportasi, bulan, transaksi, keterangan_spp, status) VALUES (?, ?, ?, ?, 0, ?, "belum")',
-        [student.tenant_id, student_id, spp, transport, bulan, spp + transport]
+        'INSERT INTO billing_payment (tenant_id, student_id, spp_bulanan, ransportasi, subsidi, biaya_admin_va, bulan, transaksi, keterangan_spp, status) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, "belum")',
+        [student.tenant_id, student_id, spp, transport, subsidiAmount, biayaAdminVa, bulan, spp + transport - subsidiAmount]
       );
       await billing.recalcStudent(student_id);
       res.json({
@@ -2379,7 +2443,7 @@ router.post('/treasurer/bendahara/billing/create-batch', authenticateBendahara, 
 
         // Get SPP, Transportasi, and Subsidi from students table
         const [student] = await db.query(
-          'SELECT iuran_bulanan, ransportasi, subsidi FROM students WHERE id = ?',
+          'SELECT iuran_bulanan, ransportasi, subsidi, va_number FROM students WHERE id = ?',
           [student_id]
         );
 
@@ -2396,12 +2460,26 @@ router.post('/treasurer/bendahara/billing/create-batch', authenticateBendahara, 
         const spp = parseFloat(student.iuran_bulanan) || 0;
         const transport = parseFloat(student.ransportasi) || 0;
         const subsidiAmount = parseFloat(student.subsidi) || 0;
+
+        // Get biaya admin VA dari global payment_admin_settings (berlaku untuk semua)
+        let biayaAdminVa = 0;
+        if (student.va_number) {
+          const psResult = await db.query(
+            'SELECT biaya_admin_va FROM payment_admin_settings WHERE subject_type = ? AND subject_id = ?',
+            ['global', 0]
+          );
+          const ps = Array.isArray(psResult) ? psResult[0] : psResult;
+          if (ps) {
+            biayaAdminVa = parseFloat(ps.biaya_admin_va) || 0;
+          }
+        }
+
         const keterangan = Math.max(0, spp + transport - subsidiAmount);
 
         await db.query(
-          `INSERT INTO billing_payment (student_id, bulan, spp_bulanan, ransportasi, subsidi, keterangan_spp, status)
-           VALUES (?, ?, ?, ?, ?, ?, 'belum')`,
-          [student_id, bulan, spp, transport, subsidiAmount, keterangan]
+          `INSERT INTO billing_payment (student_id, bulan, spp_bulanan, ransportasi, subsidi, biaya_admin_va, keterangan_spp, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 'belum')`,
+          [student_id, bulan, spp, transport, subsidiAmount, biayaAdminVa, keterangan]
         );
 
         await billing.recalcStudent(student_id);
@@ -2412,6 +2490,7 @@ router.post('/treasurer/bendahara/billing/create-batch', authenticateBendahara, 
           spp_bulanan: spp,
           ransportasi: transport,
           subsidi: subsidiAmount,
+          biaya_admin_va: biayaAdminVa,
           keterangan_spp: keterangan,
           status: 'created'
         });
@@ -2594,6 +2673,42 @@ router.post('/treasurer/bendahara/billing/lunasi', authenticateBendahara, async 
         continue;
       }
       try {
+        // Ambil data billing lengkap untuk hitung total
+        const detailResult = await db.query(
+          `SELECT student_id, tenant_id, bulan, COALESCE(spp_bulanan, 0) as spp, 
+           COALESCE(ransportasi, 0) as transport, COALESCE(subsidi, 0) as subsidi, 
+           COALESCE(biaya_admin_va, 0) as admin_va
+           FROM billing_payment WHERE id = ?`,
+          [b.id]
+        );
+        const detail = Array.isArray(detailResult) ? detailResult[0] : detailResult;
+
+        const totalBayar = detail
+          ? (parseFloat(detail.spp) + parseFloat(detail.transport) - parseFloat(detail.subsidi) + parseFloat(detail.admin_va))
+          : 0;
+
+        // Insert record ke incoming_payments supaya recalcStudent bisa mendeteksi pembayaran
+        if (detail && detail.student_id) {
+          try {
+            await db.query(
+              `INSERT INTO incoming_payments 
+               (matched_student_id, periode, total_amount, channel, status, remarks, created_at) 
+               VALUES (?, ?, ?, ?, 'Success', ?, NOW())`,
+              [
+                detail.student_id,
+                detail.bulan,
+                totalBayar,
+                metode_pembayaran === 'tunai' ? 'Tunai' : 'Transfer Bank',
+                `Pelunasan manual via bendahara - ${dibayar_oleh || '-'} ${catatan_pelunasan ? '(' + catatan_pelunasan + ')' : ''}`
+              ]
+            );
+          } catch (e) {
+            // Tabel incoming_payments mungkin tidak ada, lanjut tanpa error
+            console.warn('[LUNASI] Gagal insert incoming_payments:', e.message);
+          }
+        }
+
+        // Set transaksi = total tagihan supaya konsisten
         await db.query(
           `UPDATE billing_payment 
            SET status = 'lunas', 
@@ -2601,9 +2716,10 @@ router.post('/treasurer/bendahara/billing/lunasi', authenticateBendahara, async 
                tanggal_bayar = ?, 
                dibayar_oleh = ?, 
                catatan_pelunasan = ?,
-               transaksi = COALESCE(keterangan_spp, spp_bulanan + COALESCE(ransportasi, 0) - COALESCE(subsidi, 0))
+               transaksi = ?,
+               keterangan_spp = 0
            WHERE id = ?`,
-          [metode_pembayaran, tanggal_bayar, dibayar_oleh || null, catatan_pelunasan || null, b.id]
+          [metode_pembayaran, tanggal_bayar, dibayar_oleh || null, catatan_pelunasan || null, totalBayar, b.id]
         );
         if (b.student_id) affectedStudents.add(b.student_id);
         lunas++;
@@ -2738,6 +2854,16 @@ router.post('/treasurer/bsi/create-single', authenticateBendahara, async (req, r
       return res.status(404).json({ success: false, message: 'Siswa tidak ditemukan' });
     }
 
+    // Validasi: siswa dengan iuran_bulanan = 0 tidak perlu dibuat VA
+    const iuranBulanan = parseFloat(student.iuran_bulanan) || 0;
+    if (iuranBulanan <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Siswa ${student.nama_siswa} memiliki SPP = 0. VA tidak dibuat untuk siswa yang tidak memiliki tagihan SPP.`,
+        skipped: true
+      });
+    }
+
     const vaPrefix = (process.env.BSI_VA_PREFIX || '832231').replace(/[^0-9]/g, '');
     let vaNumber = student.va_number ? String(student.va_number).replace(/[^0-9]/g, '') : '';
 
@@ -2796,18 +2922,19 @@ router.post('/treasurer/bsi/create-all', authenticateBendahara, async (req, res)
       FROM students s
       JOIN tenants tn ON s.tenant_id = tn.tenant_id
       WHERE (s.status = 'active' OR s.status = 'aktif' OR s.status IS NULL)
+        AND COALESCE(s.iuran_bulanan, 0) > 0
     `;
-    
+
     if (only_without_va) {
       query += ' AND (s.va_number IS NULL OR s.va_number = "")';
     }
-    
+
     query += ' ORDER BY tn.nama_sekolah, s.nama_siswa';
-    
+
     const students = await db.query(query);
-    
+
     if (!students || students.length === 0) {
-      return res.json({ success: true, message: 'Tidak ada siswa yang perlu dibuat VA', created: 0, skipped: 0 });
+      return res.json({ success: true, message: 'Tidak ada siswa yang perlu dibuat VA (cek SPP > 0)', created: 0, skipped: 0 });
     }
     
     let created = 0;
@@ -2934,7 +3061,7 @@ router.get('/treasurer/bsi/generate-csv', authenticateBendahara, async (req, res
       const rawVa = (s.va_number || `${vaPrefix}${String(s.id).padStart(10, '0')}`).replace(/[^0-9]/g, '');
       const va = rawVa.padStart(16, '0').slice(-16); // Pastikan 16 digit tanpa spasi
       const amount = parseFloat(s.iuran_bulanan) || 0;
-      const limitDebit = amount + 2000;
+      const limitAmount = amount + 2000;
       const kycName = (s.nama_orang_tua || s.nama_siswa).replace(/,/g, ' ');
       const vaName = (s.nama_siswa || '').replace(/,/g, ' ');
       const autoRenewal = 'Monthly';
@@ -2949,13 +3076,13 @@ router.get('/treasurer/bsi/generate-csv', authenticateBendahara, async (req, res
         return '62' + raw;
       })();
       return [
-        'Debit',
+        'Credit',
         parentAccount.replace(/\s/g, ''),
         va,
         vaName,
-        'One Time',
-        limitDebit,
+        'Open Limit',
         '',
+        limitAmount,
         '',
         'Yes',
         '',

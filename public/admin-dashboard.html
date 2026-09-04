@@ -2905,72 +2905,155 @@
   <script src="js/admin-dashboard.js" defer></script>
   <script src="js/payroll-admin.js" defer></script>
 
-  <!-- Student Edit Modal -->
-  <div id="studentEditModal" class="modal fixed inset-0 bg-black bg-opacity-50 z-[10000] justify-center items-center">
-    <div class="main-card w-full max-w-2xl mx-4 bg-white max-h-[90vh] flex flex-col">
-      <div class="p-5 border-b border-gray-100 flex items-center justify-between">
-        <div class="flex items-center">
-          <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
-            <i class="fas fa-user-graduate text-blue-600"></i>
+    <!-- Student Edit Modal -->
+    <div id="studentEditModal" class="modal fixed inset-0 bg-black bg-opacity-50 z-[10000] justify-center items-center">
+      <div class="main-card w-full max-w-2xl mx-4 bg-white max-h-[90vh] flex flex-col">
+        <div class="p-5 border-b border-gray-100 flex items-center justify-between">
+          <div class="flex items-center">
+            <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+              <i class="fas fa-user-graduate text-blue-600"></i>
+            </div>
+            <div>
+              <h3 class="text-lg font-semibold text-gray-900">Edit Data Siswa</h3>
+              <p class="text-gray-600 text-sm">Semua field dari tabel students &amp; parents</p>
+            </div>
           </div>
-          <div>
-            <h3 class="text-lg font-semibold text-gray-900">Edit Data Siswa</h3>
-            <p class="text-gray-600 text-sm">Semua field dari tabel students &amp; parents</p>
+          <button onclick="closeStudentEditModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
+        </div>
+        <div class="p-5 overflow-y-auto flex-1">
+          <input type="hidden" id="editStudentId">
+
+          <!-- Step Indicator -->
+          <div class="flex mb-4">
+            <div id="editStep1Bar" class="flex-1 text-center py-2 bg-blue-600 text-white rounded-l-md text-sm cursor-pointer" onclick="showEditStep(1)">1. Data Pribadi</div>
+            <div id="editStep2Bar" class="flex-1 text-center py-2 bg-gray-300 text-gray-700 text-sm cursor-pointer" onclick="showEditStep(2)">2. Data Orang Tua</div>
+            <div id="editStep3Bar" class="flex-1 text-center py-2 bg-gray-300 text-gray-700 rounded-r-md text-sm cursor-pointer" onclick="showEditStep(3)">3. Data SPP & Biaya</div>
+          </div>
+
+          <!-- Step 1: Data Pribadi -->
+          <div id="editStep1Content">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Sekolah (Tenant)</label>
+                <select id="editStudentTenant" onchange="fetchClassesForTenant(this.value)" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"></select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Kelas</label>
+                <select id="editStudentClass" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"></select>
+              </div>
+            </div>
+            <div class="mb-4">
+              <label class="block text-sm font-medium text-gray-700 mb-1">Nama Siswa <span class="text-red-500">*</span></label>
+              <input type="text" id="editStudentNama" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600">
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">NIS</label>
+                <div class="flex">
+                  <input type="text" id="editStudentNis" class="flex-1 px-3 py-2 border border-gray-300 rounded-l-md text-sm focus:ring-2 focus:ring-blue-600" readonly placeholder="Klik Generate untuk membuat NIS">
+                  <button type="button" onclick="generateNisEdit()" class="px-3 py-2 bg-amber-500 text-white border border-amber-500 rounded-r-md hover:bg-amber-600 text-sm" title="Generate NIS"><i class="fas fa-magic"></i></button>
+                </div>
+                <p class="text-xs text-gray-500 mt-1">Klik tombol <i class="fas fa-magic text-amber-500"></i> untuk generate NIS</p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">NISN</label>
+                <input type="text" id="editStudentNisn" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600">
+              </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Jenis Kelamin</label>
+                <select id="editStudentJk" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600">
+                  <option value="">Pilih</option>
+                  <option value="L">Laki-laki</option>
+                  <option value="P">Perempuan</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Tahun Masuk <span class="text-red-500">*</span></label>
+                <input type="text" id="editStudentTahunMasuk" maxlength="4" placeholder="2024" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600">
+                <p class="text-xs text-gray-500 mt-1">Format: 4 digit tahun, contoh: 2024</p>
+              </div>
+            </div>
+            <div class="mb-4">
+              <label class="block text-sm font-medium text-gray-700 mb-1">Status</label>
+              <select id="editStudentStatus" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600">
+                <option value="aktif">Aktif</option>
+                <option value="alumni">Alumni</option>
+                <option value="mutasi">Mutasi</option>
+                <option value="keluar">Keluar</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Step 2: Data Orang Tua -->
+          <div id="editStep2Content" class="hidden">
+            <div class="mb-4">
+              <label class="block text-sm font-medium text-gray-700 mb-1">Nama Orang Tua/Wali</label>
+              <input type="text" id="editStudentParent" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600">
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">No. WhatsApp</label>
+                <input type="text" id="editStudentWa" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600" placeholder="08xxx">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">NIK Orang Tua</label>
+                <input type="text" id="editStudentNik" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600" placeholder="Opsional">
+              </div>
+            </div>
+            <div class="mb-4">
+              <label class="block text-sm font-medium text-gray-700 mb-1">Email Orang Tua</label>
+              <input type="email" id="editStudentEmail" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600" placeholder="Opsional">
+            </div>
+          </div>
+
+          <!-- Step 3: Data SPP & Biaya -->
+          <div id="editStep3Content" class="hidden">
+            <div class="mb-4">
+              <label class="block text-sm font-medium text-gray-700 mb-1">Iuran Bulanan (Rp)</label>
+              <input type="number" id="editStudentIuran" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600" min="0" step="1000">
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Ransportasi (Rp)</label>
+                <input type="number" id="editStudentRansportasi" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600" min="0" step="1000" value="0">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Subsidi (Rp)</label>
+                <input type="number" id="editStudentSubsidi" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600" min="0" step="1000" value="0">
+                <p class="text-xs text-gray-500 mt-1">Subsidi default per bulan</p>
+              </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Privat (Rp)</label>
+                <input type="number" id="editStudentPrivat" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600" min="0" step="1000" value="0">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Biaya Lain (Rp)</label>
+                <input type="number" id="editStudentBiayaLain" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600" min="0" step="1000" value="0">
+              </div>
+            </div>
+            <div class="mb-4">
+              <label class="block text-sm font-medium text-gray-700 mb-1">Nama Biaya Lain</label>
+              <input type="text" id="editStudentBiayaLainNama" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-600" placeholder="Contoh: Seragam, Buku, Kegiatan">
+            </div>
           </div>
         </div>
-        <button onclick="closeStudentEditModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
-      </div>
-      <div class="p-5 overflow-y-auto flex-1">
-        <input type="hidden" id="editStudentId">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="p-4 border-t border-gray-100 flex justify-between">
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Sekolah (Tenant)</label>
-            <select id="editStudentTenant" onchange="fetchClassesForTenant(this.value)" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"></select>
+            <button type="button" id="editPrevBtn" onclick="prevEditStep()" class="px-4 py-2 text-gray-600 hover:text-gray-800 hidden"><i class="fas fa-chevron-left mr-1"></i>Kembali</button>
           </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Kelas</label>
-            <select id="editStudentClass" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"></select>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Nama Siswa</label>
-            <input type="text" id="editStudentNama" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">NIS</label>
-            <input type="text" id="editStudentNis" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">NISN</label>
-            <input type="text" id="editStudentNisn" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Jenis Kelamin</label>
-            <select id="editStudentJk" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500">
-              <option value="">--</option>
-              <option value="L">Laki-laki</option>
-              <option value="P">Perempuan</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Iuran Bulanan (Rp)</label>
-            <input type="number" id="editStudentIuran" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500" min="0" step="1000">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Nama Orang Tua</label>
-            <input type="text" id="editStudentParent" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">No. WA Orang Tua</label>
-            <input type="text" id="editStudentWa" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500">
+          <div class="flex space-x-2">
+            <button onclick="closeStudentEditModal()" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-md text-sm font-medium hover:bg-gray-200">Batal</button>
+            <button type="button" id="editNextBtn" onclick="nextEditStep()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-md text-sm font-medium hover:bg-gray-400">Lanjut</button>
+            <button onclick="saveStudentEdit()" id="editSaveBtn" class="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700 hidden">Simpan</button>
           </div>
         </div>
       </div>
-      <div class="p-4 border-t border-gray-100 flex justify-end space-x-2">
-        <button onclick="closeStudentEditModal()" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-md text-sm font-medium hover:bg-gray-200">Batal</button>
-        <button onclick="saveStudentEdit()" class="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-medium hover:bg-blue-700">Simpan</button>
-      </div>
-</div>
-  </div>
+    </div>
+
 
   <!-- Akun Guru Modal -->
   <div id="accountModal" class="modal fixed inset-0 bg-black bg-opacity-50 z-[10001] justify-center items-center">

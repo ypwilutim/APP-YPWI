@@ -134,8 +134,57 @@ async function ensureBillingTables() {
     await db.query(`ALTER TABLE billing_payment ADD COLUMN IF NOT EXISTS tanggal_bayar DATE DEFAULT NULL AFTER metode_pembayaran`);
     await db.query(`ALTER TABLE billing_payment ADD COLUMN IF NOT EXISTS dibayar_oleh VARCHAR(100) DEFAULT NULL AFTER tanggal_bayar`);
     await db.query(`ALTER TABLE billing_payment ADD COLUMN IF NOT EXISTS catatan_pelunasan TEXT DEFAULT NULL AFTER dibayar_oleh`);
+    await db.query(`ALTER TABLE billing_payment ADD COLUMN IF NOT EXISTS biaya_admin_va DECIMAL(12,2) DEFAULT 0 AFTER subsidi`);
   } catch (e) {
     // Columns might already exist
+  }
+
+  // Payment admin settings table (per siswa/guru - biaya admin VA BSI)
+  // Tabel ini berbeda dari payment_settings (auto-billing config)
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS payment_admin_settings (
+      id INT(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      subject_type ENUM('student', 'teacher') NOT NULL,
+      subject_id INT(11) NOT NULL,
+      tenant_id VARCHAR(20) DEFAULT NULL,
+      biaya_admin_va DECIMAL(12,2) NOT NULL DEFAULT 2000.00,
+      keterangan TEXT DEFAULT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_subject (subject_type, subject_id),
+      KEY idx_tenant (tenant_id),
+      KEY idx_subject (subject_type, subject_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // Backfill default payment admin settings untuk siswa
+  try {
+    await db.query(`
+      INSERT IGNORE INTO payment_admin_settings (subject_type, subject_id, tenant_id, biaya_admin_va, keterangan)
+      SELECT 'student', s.id, s.tenant_id, 2000.00, 'Default biaya admin VA BSI'
+      FROM students s
+      WHERE NOT EXISTS (
+        SELECT 1 FROM payment_admin_settings ps
+        WHERE ps.subject_type = 'student' AND ps.subject_id = s.id
+      )
+    `);
+  } catch (e) {
+    // Tabel belum ada, skip
+  }
+
+  // Backfill default payment admin settings untuk guru
+  try {
+    await db.query(`
+      INSERT IGNORE INTO payment_admin_settings (subject_type, subject_id, tenant_id, biaya_admin_va, keterangan)
+      SELECT 'teacher', t.id, NULL, 2000.00, 'Default biaya admin VA BSI'
+      FROM teachers t
+      WHERE NOT EXISTS (
+        SELECT 1 FROM payment_admin_settings ps
+        WHERE ps.subject_type = 'teacher' AND ps.subject_id = t.id
+      )
+    `);
+  } catch (e) {
+    // Tabel belum ada, skip
   }
 
   await db.query(`
@@ -268,16 +317,26 @@ async function insertIncoming(rec) {
 async function generateBilling(tenantId, fallbackStart) {
   const end = currentMonth();
   const students = await db.query(
-    `SELECT id, tenant_id, iuran_bulanan, ransportasi, tahun_masuk FROM students
-     WHERE tenant_id = ? AND (status = 'active' OR status = 'aktif' OR status IS NULL)`,
+    `SELECT s.id, s.tenant_id, s.iuran_bulanan, s.ransportasi, s.tahun_masuk, s.subsidi, s.va_number
+     FROM students s
+     WHERE s.tenant_id = ? AND (s.status = 'active' OR s.status = 'aktif' OR s.status IS NULL)
+       AND COALESCE(s.iuran_bulanan, 0) > 0`,
     [tenantId]
   );
+
+  // Get global biaya admin VA setting (single row)
+  const psResult = await db.query(
+    `SELECT biaya_admin_va FROM payment_admin_settings WHERE subject_type = 'global' AND subject_id = 0 LIMIT 1`
+  );
+  const ps = Array.isArray(psResult) ? psResult[0] : psResult;
+  const globalBiayaAdmin = ps ? (parseFloat(ps.biaya_admin_va) || 0) : 2000;
 
   let created = 0, skipped = 0;
   for (const s of students) {
     // Check for existing bills to determine the real start
-    const [existingBills] = await db.query('SELECT MIN(bulan) as min_bulan FROM billing_payment WHERE student_id = ? LIMIT 1', [s.id]);
-    const minBulan = existingBills?.min_bulan;
+    const existingBills = await db.query('SELECT MIN(bulan) as min_bulan FROM billing_payment WHERE student_id = ? LIMIT 1', [s.id]);
+    const billsArr = Array.isArray(existingBills) ? existingBills : [existingBills];
+    const minBulan = billsArr[0]?.min_bulan;
 
     // Start from earliest existing bill, tahun_masuk (YYYY), or fallbackStart
     let start = minBulan;
@@ -291,17 +350,27 @@ async function generateBilling(tenantId, fallbackStart) {
     const months = monthList(start, end);
     const spp = parseFloat(s.iuran_bulanan) || 0;
     const transport = parseFloat(s.ransportasi) || 0;
+    const subsidi = parseFloat(s.subsidi) || 0;
+    // Biaya admin hanya untuk siswa yang punya VA
+    const biayaAdmin = s.va_number ? globalBiayaAdmin : 0;
+    // Total tagihan: SPP + Transport - Subsidi + Biaya Admin
+    const totalTagihan = Math.max(0, spp + transport - subsidi + biayaAdmin);
+
     for (const m of months) {
-      const [existing] = await db.query('SELECT id, bulan FROM billing_payment WHERE student_id = ? AND bulan = ?', [s.id, m]);
+      const existingResult = await db.query('SELECT id, bulan FROM billing_payment WHERE student_id = ? AND bulan = ?', [s.id, m]);
+      const existing = Array.isArray(existingResult) ? existingResult[0] : existingResult;
       if (existing) {
-        // Lock snapshot spp_bulanan for months already past
+        // Lock snapshot for months already past
         if (m < end) { skipped++; continue; }
-        await db.query('UPDATE billing_payment SET spp_bulanan = ?, ransportasi = ?, transaksi = 0, keterangan_spp = ?, status = "belum" WHERE id = ?', [spp, transport, spp + transport, existing.id]);
+        await db.query(
+          'UPDATE billing_payment SET spp_bulanan = ?, ransportasi = ?, subsidi = ?, biaya_admin_va = ?, transaksi = 0, keterangan_spp = ?, status = "belum" WHERE id = ?',
+          [spp, transport, subsidi, biayaAdmin, totalTagihan, existing.id]
+        );
         created++;
       } else {
         await db.query(
-          'INSERT INTO billing_payment (tenant_id, student_id, spp_bulanan, ransportasi, bulan, transaksi, keterangan_spp, status) VALUES (?, ?, ?, ?, ?, 0, ?, "belum")',
-          [s.tenant_id, s.id, spp, transport, m, spp + transport]
+          'INSERT INTO billing_payment (tenant_id, student_id, spp_bulanan, ransportasi, subsidi, biaya_admin_va, bulan, transaksi, keterangan_spp, status) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, "belum")',
+          [s.tenant_id, s.id, spp, transport, subsidi, biayaAdmin, m, totalTagihan]
         );
         created++;
       }
@@ -329,7 +398,8 @@ async function recalcStudent(studentId) {
     const spp = parseFloat(b.spp_bulanan) || 0;
     const transport = parseFloat(b.ransportasi) || 0;
     const subsidi = parseFloat(b.subsidi) || 0;
-    const totalTagihan = spp + transport - subsidi;
+    const adminVa = parseFloat(b.biaya_admin_va) || 0;
+    const totalTagihan = spp + transport - subsidi + adminVa;
     const trans = incMap[b.bulan] || 0;
     const available = trans + carry;
     let keterangan, status, newCarry;
