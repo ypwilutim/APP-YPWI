@@ -1526,7 +1526,7 @@ async function checkActiveLeave() {
 
 async function loadLeaveStatus() {
     try {
-        const response = await fetch('/api/leave-requests?status=pending', {
+        const response = await fetch('/api/leave-requests?status=all', {
             headers: { 'Authorization': 'Bearer ' + (window.token || localStorage.getItem('token')) }
         });
 
@@ -2538,7 +2538,7 @@ function setupTreasurerNav() {
 
     if (hasBendahara) {
         const isYPWILUTIM = assignments.some(a => a.tenant_id === 'YPWILUTIM');
-        const targetPage = isYPWILUTIM ? 'bendahara-dashboard.html' : 'treasurer-dashboard.html';
+        const targetPage = isYPWILUTIM ? 'bendahara-dashboard.html' : 'bendahara-sekolah.html';
         if (mobileNav) {
             mobileNav.style.display = 'block';
             mobileNav.onclick = () => { window.location.href = targetPage; };

@@ -564,7 +564,7 @@
           </button>
           <div id="adminNavSection" class="hidden" style="margin:0; display: inline-flex; gap: 0.5rem;"></div>
           <div id="desktopTreasurerBtn" style="display: none; margin-right: 0.5rem;">
-            <button onclick="window.location.href='treasurer-dashboard.html'"
+            <button onclick="window.location.href = (window.userAssignments && window.userAssignments.some(a => a.tenant_id === 'YPWILUTIM')) ? 'bendahara-dashboard.html' : 'bendahara-sekolah.html'"
               style="display: inline-flex; align-items: center; gap: 0.5rem; background: #fef3c7; color: #b45309; padding: 0.6rem 1.25rem; border-radius: 0.5rem; font-weight: 700; font-size: 0.85rem; border: 1px solid #fcd34d; cursor: pointer; transition: all 0.2s;">
               <i class="fas fa-wallet"></i> Bendahara
             </button>

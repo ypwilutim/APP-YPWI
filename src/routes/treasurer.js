@@ -3469,13 +3469,30 @@ router.get('/treasurer/bendahara/student-billing/:student_id', authenticateBenda
       return res.status(404).json({ success: false, message: 'Siswa tidak ditemukan' });
     }
     // Ambil SEMUA billing (tidak filter status) - baik lunas maupun belum lunas
-    const bills = await db.query(
-      `SELECT id, bulan, spp_bulanan, ransportasi, subsidi, biaya_admin_va, transaksi, keterangan_spp, status,
-              metode_pembayaran, tanggal_bayar, dibayar_oleh, catatan_pelunasan, catatan, created_at, updated_at
-       FROM billing_payment WHERE student_id = ? ORDER BY bulan DESC`,
-      [studentId]
-    );
-    const [saldoRow] = await db.query('SELECT saldo FROM saldo_siswa WHERE student_id = ?', [studentId]);
+     const bills = await db.query(
+       `SELECT id, bulan, spp_bulanan, ransportasi, subsidi, biaya_admin_va, transaksi, keterangan_spp, status,
+               metode_pembayaran, tanggal_bayar, dibayar_oleh, catatan_pelunasan, catatan, created_at, updated_at
+        FROM billing_payment WHERE student_id = ? ORDER BY bulan DESC`,
+       [studentId]
+     );
+     const [saldoRow] = await db.query('SELECT saldo FROM saldo_siswa WHERE student_id = ?', [studentId]);
+
+     const billIds = bills.map(b => b.id);
+     const allocationsMap = {};
+     if (billIds.length > 0) {
+       const placeholders = billIds.map(() => '?').join(',');
+       const allocs = await db.query(
+         `SELECT a.billing_id, a.amount, a.incoming_payment_id, ip.periode, ip.total_amount, ip.channel, ip.remarks, ip.created_at
+          FROM billing_payment_allocations a
+          JOIN incoming_payments ip ON ip.id = a.incoming_payment_id
+          WHERE a.billing_id IN (${placeholders})`,
+         billIds
+       );
+       allocs.forEach(a => {
+         if (!allocationsMap[a.billing_id]) allocationsMap[a.billing_id] = [];
+         allocationsMap[a.billing_id].push(a);
+       });
+     }
 
     // Hitung ringkasan
     const totalBilling = bills.length;
@@ -3516,7 +3533,8 @@ router.get('/treasurer/bendahara/student-billing/:student_id', authenticateBenda
           catatan: b.catatan,
           created_at: b.created_at,
           updated_at: b.updated_at,
-          total_tagihan: (parseFloat(b.spp_bulanan) || 0) + (parseFloat(b.ransportasi) || 0) - (parseFloat(b.subsidi) || 0) + (parseFloat(b.biaya_admin_va) || 0)
+          total_tagihan: (parseFloat(b.spp_bulanan) || 0) + (parseFloat(b.ransportasi) || 0) - (parseFloat(b.subsidi) || 0) + (parseFloat(b.biaya_admin_va) || 0),
+          allocations: allocationsMap[b.id] || []
         })),
         summary: {
           total_billing: totalBilling,

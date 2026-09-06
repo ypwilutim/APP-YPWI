@@ -1232,6 +1232,7 @@
                   <th class="px-3 py-2 text-right">Sisa</th>
                   <th class="px-3 py-2 text-center">Aksi</th>
                   <th class="px-3 py-2 text-center">Status</th>
+                  <th class="px-3 py-2 text-left">Alokasi Pembayaran</th>
                 </tr>
               </thead>
               <tbody id="detailBillingRows">
@@ -1258,6 +1259,9 @@
                     </td>
                     <td class="px-3 py-2 text-center">
                       <span class="text-xs px-2 py-1 rounded ${statusClass}" title="${b.metode_pembayaran ? b.metode_pembayaran + (b.tanggal_bayar ? ' - ' + b.tanggal_bayar : '') : ''}">${statusText}</span>
+                    </td>
+                    <td class="px-3 py-2 text-left">
+                      ${b.allocations && b.allocations.length > 0 ? b.allocations.map(a => '<div class="text-xs text-blue-700">' + fmtRp(a.amount) + ' <span class="text-gray-400">(' + (a.periode || '') + ')</span></div>').join('') : '<span class="text-xs text-gray-400">-</span>'}
                     </td>
                   </tr>`;
                 }).join('')}
