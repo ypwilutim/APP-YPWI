@@ -32,6 +32,8 @@ function normalizeWhatsAppNumber(noWa) {
 
 const router = express.Router();
 const XLSX = require('xlsx');
+const billing = require('../utils/billing');
+const { monthList } = billing;
 
 // Ensure students table has required columns (auto-migrate)
 async function ensureStudentColumns() {
@@ -3701,6 +3703,11 @@ router.post('/admin/students/import', authenticateOperator, excelUpload.single('
       return res.status(403).json({ success: false, message: 'Akses ditolak untuk tenant ini' });
     }
 
+    // Opsi auto-generate billing setelah import
+    // Default: bulan 7 (Juli) — overridable via req.body.billing_start (format "YYYY-MM")
+    const billingStart = (req.body.billing_start || '7').toString().trim();
+    const autoBilling = req.body.auto_billing !== 'false'; // default true
+
     const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
@@ -3708,6 +3715,7 @@ router.post('/admin/students/import', authenticateOperator, excelUpload.single('
     const errors = [];
     let created = 0;
     let updated = 0;
+    const newStudentIds = [];
 
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
@@ -3902,11 +3910,91 @@ router.post('/admin/students/import', authenticateOperator, excelUpload.single('
         }
 
         await db.query('UPDATE students SET nis = ? WHERE id = ?', [nisValue, result.insertId]);
+        newStudentIds.push(result.insertId);
         created++;
       }
     }
 
-    res.json({ success: true, created, updated, errors, message: `${created} siswa ditambahkan, ${updated} siswa diperbarui` });
+    // Auto-generate billing untuk siswa yang baru di-import
+    let billingResult = null;
+    if (autoBilling && newStudentIds.length > 0) {
+      try {
+        await billing.ensureBillingTables();
+        // billing_start: "7" → Juli tahun ini; "2026-07" → explicit
+        let startMonth;
+        if (/^\d{4}-\d{2}$/.test(billingStart)) {
+          startMonth = billingStart;
+        } else {
+          const m = parseInt(billingStart, 10) || 7;
+          const y = new Date().getFullYear();
+          startMonth = `${y}-${String(m).padStart(2, '0')}`;
+        }
+        const currentYear = new Date().getFullYear();
+        const currentMonthNum = new Date().getMonth() + 1;
+        const endMonth = `${currentYear}-${String(currentMonthNum).padStart(2, '0')}`;
+
+        // Ambil iuran siswa yang baru di-import
+        const placeholders = newStudentIds.map(() => '?').join(',');
+        const importedStudents = await db.query(
+          `SELECT id, tenant_id, iuran_bulanan, ransportasi, subsidi, va_number
+           FROM students WHERE id IN (${placeholders})`,
+          newStudentIds
+        );
+
+        // Biaya admin VA global
+        const psResult = await db.query(
+          `SELECT biaya_admin_va FROM payment_admin_settings WHERE subject_type = 'global' AND subject_id = 0 LIMIT 1`
+        );
+        const ps = Array.isArray(psResult) ? psResult[0] : psResult;
+        const globalBiayaAdmin = ps ? (parseFloat(ps.biaya_admin_va) || 0) : 2000;
+
+        let billingCreated = 0;
+        const months = monthList(startMonth, endMonth);
+        for (const s of importedStudents) {
+          const spp = parseFloat(s.iuran_bulanan) || 0;
+          if (spp <= 0) continue;
+          const transport = parseFloat(s.ransportasi) || 0;
+          const subsidi = parseFloat(s.subsidi) || 0;
+          const biayaAdmin = s.va_number ? globalBiayaAdmin : 0;
+          const totalTagihan = Math.max(0, spp + transport - subsidi + biayaAdmin);
+
+          for (const m of months) {
+            // Skip jika bulan sudah lewat dari tahun ajaran (mis. tahun ajaran 2026/2027 mulai Juli 2026)
+            const [my, mm] = m.split('-').map(Number);
+            // Tentukan tahunajaran: jika startMonth Juli 2026, maka bulan 7-12 = 2026, 1-6 = 2027
+            const [sy, sm] = startMonth.split('-').map(Number);
+            const isPast = (my < sy) || (my === sy && mm < sm);
+            if (isPast) continue;
+            // Skip jika bulan > endMonth
+            if (m > endMonth) continue;
+
+            const [existing] = await db.query(
+              'SELECT id FROM billing_payment WHERE student_id = ? AND bulan = ?',
+              [s.id, m]
+            );
+            if (existing) continue;
+            await db.query(
+              `INSERT INTO billing_payment
+                (tenant_id, student_id, spp_bulanan, ransportasi, subsidi, biaya_admin_va, bulan, transaksi, keterangan_spp, status)
+               VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, 'belum')`,
+              [s.tenant_id, s.id, spp, transport, subsidi, biayaAdmin, m, totalTagihan]
+            );
+            billingCreated++;
+          }
+        }
+        billingResult = { created: billingCreated, start_month: startMonth, end_month: endMonth };
+      } catch (billErr) {
+        console.error('[IMPORT] Auto-billing error:', billErr.message);
+        billingResult = { error: billErr.message };
+      }
+    }
+
+    res.json({
+      success: true,
+      created, updated, errors,
+      message: `${created} siswa ditambahkan, ${updated} siswa diperbarui${billingResult && billingResult.created ? `, ${billingResult.created} billing dibuat dari ${billingResult.start_month}` : ''}`,
+      billing: billingResult
+    });
   } catch (error) {
     console.error('Import students error:', error);
     res.status(500).json({ success: false, message: 'Error import siswa: ' + error.message });
@@ -5705,7 +5793,7 @@ router.put('/public/teachers/:teacherId', berkasUpload.fields([
     const ijazah = req.files && req.files.ijazah && req.files.ijazah[0] ? `/uploads/${req.files.ijazah[0].filename}` : null;
 
     // Get existing values if not provided (fields may be disabled in form)
-    let selectQuery = 'SELECT nama, nik, nip, email, tempat_lahir, tanggal_lahir, jenis_kelamin, alamat, no_wa, status_kepegawaian, status_aktif, tmt, pendidikan_terakhir';
+    let selectQuery = 'SELECT nama, nik, nip, email, tempat_lahir, tanggal_lahir, jenis_kelamin, alamat, no_wa, status_kepegawaian, status_aktif, tmt, pendidikan_terakhir, pendidikan_kode';
     const selectParams = [];
     try {
       await db.query('SELECT bank, nomor_rekening FROM teachers LIMIT 1');
@@ -5748,12 +5836,19 @@ router.put('/public/teachers/:teacherId', berkasUpload.fields([
       pendidikanFormatted = `${pendidikan_terakhir}/${tahun_angkatan}` || null;
     }
 
+    // Pendidikan_kode: kolom standar untuk lookup (SD/SMP/SMA/SMK/D1/D2/D3/S1/S2/S3/Lainnya)
+    const KODE_VALID = ['SD', 'SMP', 'SMA', 'SMK', 'D1', 'D2', 'D3', 'S1', 'S2', 'S3', 'Lainnya'];
+    const finalPendidikanKode = (pendidikan_terakhir && KODE_VALID.includes(pendidikan_terakhir))
+      ? pendidikan_terakhir
+      : (existingTeacher?.pendidikan_kode || null);
+
     const safeParams = {
       nama: finalNama, nik: finalNik, nip: finalNip, email: finalEmail,
       tempat_lahir: finalTempatLahir, tanggal_lahir: finalTanggalLahir,
       jenis_kelamin: finalJenisKelamin, alamat: finalAlamat, no_wa: finalNoWa,
       status_kepegawaian: finalStatusKepegawaian, status_aktif: finalStatusAktif,
       tmt: finalTmt, pendidikan_terakhir: pendidikanFormatted,
+      pendidikan_kode: finalPendidikanKode,
       bank: finalBank, nomor_rekening: finalNomorRekening,
       status_perkawinan: finalStatusPerkawinan, jumlah_anak: finalJumlahAnak,
       data_keluarga: finalDataKeluarga
@@ -5761,6 +5856,12 @@ router.put('/public/teachers/:teacherId', berkasUpload.fields([
 
     let updateQuery = 'UPDATE teachers SET nama=?, nik=?, nip=?, email=?, tempat_lahir=?, tanggal_lahir=?, jenis_kelamin=?, alamat=?, no_wa=?, status_kepegawaian=?, status_aktif=?, tmt=?, pendidikan_terakhir=?';
     let updateParams = [safeParams.nama, safeParams.nik, safeParams.nip, safeParams.email, safeParams.tempat_lahir, safeParams.tanggal_lahir, safeParams.jenis_kelamin, safeParams.alamat, safeParams.no_wa, safeParams.status_kepegawaian, safeParams.status_aktif, safeParams.tmt, safeParams.pendidikan_terakhir];
+
+    try {
+      await db.query('SELECT pendidikan_kode FROM teachers LIMIT 1');
+      updateQuery += ', pendidikan_kode=?';
+      updateParams.push(safeParams.pendidikan_kode);
+    } catch (err) { }
 
     try {
       await db.query('SELECT bank FROM teachers LIMIT 1');

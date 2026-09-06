@@ -86,11 +86,14 @@ async function getPayrollData(tenantId, bulan, tahun) {
   const lastDay = new Date(tahun, bulan, 0).getDate();
   const end = `${periode}-${String(lastDay).padStart(2, '0')} 23:59:59`;
 
-  let tQuery = `SELECT t.id, t.nama, t.nik, t.nip, t.status_kepegawaian, t.bank, t.nomor_rekening, (SELECT ta.tenant_id FROM teacher_assignments ta WHERE ta.teacher_id = t.id LIMIT 1) as tenant_id, t.gaji_pokok, t.tunj_kinerja, t.tunj_umum, t.tunj_istri, t.tunj_anak, t.tunj_kepala_sekolah, t.tunj_wali_kelas, t.honor_bendahara, t.tunj_kehadiran, t.potongan FROM teachers t`;
-  const tParams = [];
-  if (tenantId) { tQuery += ' JOIN teacher_assignments ta ON t.id = ta.teacher_id AND ta.tenant_id = ?'; tParams.push(tenantId); }
-  tQuery += ' WHERE t.status_aktif = 1';
-  const teachers = await db.query(tQuery, tParams);
+  // Ambil assignment yang is_paid=1 di tenant tsb (override per-unit)
+  const aQuery2 = `SELECT teacher_id, gaji_pokok, tunj_kinerja, tunj_umum, tunj_istri, tunj_anak, tunj_kepala_sekolah, tunj_wali_kelas, honor_bendahara, tunj_kehadiran, potongan FROM teacher_assignments WHERE tenant_id = ? AND is_paid = 1`;
+  const assignRows = await db.query(aQuery2, [tenantId]);
+  const assignMap = {};
+  assignRows.forEach(r => { assignMap[r.teacher_id] = r; });
+
+  let tQuery = `SELECT t.id, t.nama, t.nik, t.nip, t.status_kepegawaian, t.bank, t.nomor_rekening, t.gaji_pokok, t.tunj_kinerja, t.tunj_umum, t.tunj_istri, t.tunj_anak, t.tunj_kepala_sekolah, t.tunj_wali_kelas, t.honor_bendahara, t.tunj_kehadiran, t.potongan FROM teachers t JOIN teacher_assignments ta ON t.id = ta.teacher_id AND ta.tenant_id = ? AND ta.is_paid = 1 WHERE t.status_aktif = 1`;
+  const teachers = await db.query(tQuery, [tenantId]);
 
   let aQuery = `SELECT teacher_id,
     SUM(CASE WHEN status = 'tepat_waktu' THEN 1 ELSE 0 END) as hadir,
@@ -121,11 +124,18 @@ async function getPayrollData(tenantId, bulan, tahun) {
       working_days: workingDays
     },
     data: teachers.map(t => {
+      const ov = assignMap[t.id] || {};
+      const overrideFields = ['gaji_pokok','tunj_kinerja','tunj_umum','tunj_istri','tunj_anak','tunj_kepala_sekolah','tunj_wali_kelas','honor_bendahara','tunj_kehadiran','potongan'];
+      // Resolve: override per-unit jika tidak NULL, else default dari teachers
+      const resolved = { ...t };
+      overrideFields.forEach(f => {
+        if (ov[f] !== null && ov[f] !== undefined) resolved[f] = ov[f];
+      });
       const a = attMap[t.id] || { hadir: 0, terlambat: 0, izin: 0, sakit: 0, dinas_luar: 0 };
       const hadir = num(a.hadir), terlambat = num(a.terlambat), izin = num(a.izin),
         sakit = num(a.sakit), dinas_luar = num(a.dinas_luar);
       const tanpa_keterangan = Math.max(0, workingDays - (hadir + terlambat + izin + sakit + dinas_luar));
-      const tidak_hadir = tanpa_keterangan; // hari alpha (tanpa kehadiran & bukan izin/sakit)
+      const tidak_hadir = tanpa_keterangan;
       const potonganAbsen = (terlambat * num(settings.potongan_terlambat))
         + (izin * num(settings.potongan_izin))
         + (sakit * num(settings.potongan_sakit))
@@ -134,13 +144,13 @@ async function getPayrollData(tenantId, bulan, tahun) {
       const tunj_kehadiran = num(settings.tunj_kehadiran);
       const row = {
         id: t.id, nama: t.nama, nik: t.nik, nip: t.nip,
-        status_kepegawaian: t.status_kepegawaian, tenant_id: t.tenant_id,
+        status_kepegawaian: t.status_kepegawaian, tenant_id,
         bank: t.bank, nomor_rekening: t.nomor_rekening,
-        gaji_pokok: num(t.gaji_pokok), tunj_kinerja: num(t.tunj_kinerja), tunj_umum: num(t.tunj_umum),
-        tunj_istri: num(t.tunj_istri), tunj_anak: num(t.tunj_anak),
-        tunj_kepala_sekolah: num(t.tunj_kepala_sekolah), tunj_wali_kelas: num(t.tunj_wali_kelas),
-        honor_bendahara: num(t.honor_bendahara), tunj_kehadiran,
-        potongan: potonganAbsen, potongan_manual: num(t.potongan),
+        gaji_pokok: num(resolved.gaji_pokok), tunj_kinerja: num(resolved.tunj_kinerja), tunj_umum: num(resolved.tunj_umum),
+        tunj_istri: num(resolved.tunj_istri), tunj_anak: num(resolved.tunj_anak),
+        tunj_kepala_sekolah: num(resolved.tunj_kepala_sekolah), tunj_wali_kelas: num(resolved.tunj_wali_kelas),
+        honor_bendahara: num(resolved.honor_bendahara), tunj_kehadiran,
+        potongan: potonganAbsen, potongan_manual: num(resolved.potongan),
         hadir, terlambat, izin, sakit, dinas_luar,
         tanpa_keterangan, tidak_hadir,
         potongan_absensi: potonganAbsen,

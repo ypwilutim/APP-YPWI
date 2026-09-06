@@ -208,17 +208,43 @@ async function sendBillTemplate(phoneNumber, params, templateName = 'tagihan_spp
     parameters: bodyParams
   });
 
-  if (isInvoiceSpp && urlParam) {
-    components.push({
-      type: 'button',
-      sub_type: 'url',
-      index: '0',
-      parameters: [{
-        type: 'text',
-        text: urlParam
-      }]
-    });
-  }
+   if (isInvoiceSpp && urlParam) {
+     components.push({
+       type: 'button',
+       sub_type: 'url',
+       index: '0',
+       parameters: [{
+         type: 'text',
+         text: urlParam
+       }]
+     });
+   }
+
+   if (!isTagihanBsi && !isInvoiceSpp && (params.invoice_url || params.nomor_rekening)) {
+     const sppUrl = params.invoice_url || `https://app.ypwilutim.com/spp-info.html?va=${encodeURIComponent(params.nomor_rekening || '')}`;
+     components.push({
+       type: 'button',
+       sub_type: 'url',
+       index: '0',
+       parameters: [{
+         type: 'text',
+         text: sppUrl
+       }]
+     });
+   }
+
+   if (isTagihanBsi && params.nomor_rekening) {
+     const vaUrl = `https://app.ypwilutim.com/spp-info.html?va=${encodeURIComponent(params.nomor_rekening)}`;
+     components.push({
+       type: 'button',
+       sub_type: 'url',
+       index: '0',
+       parameters: [{
+         type: 'text',
+         text: vaUrl
+       }]
+     });
+   }
 
   if (isTagihanBsi && params.va_raw) {
     components.push({

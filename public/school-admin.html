@@ -1708,6 +1708,8 @@ if (d.success) {
         }
 
         // ===== ADOPT ALUMNI (from other schools) =====
+        let alumniPoolCache = null;
+
         async function showAdoptAlumniModal() {
           try {
             const params = new URLSearchParams();
@@ -1725,55 +1727,104 @@ if (d.success) {
               return;
             }
 
-            let html = '<div class="text-left max-h-96 overflow-y-auto">';
-            d.grouped.forEach(group => {
-              html += `
-                <div class="mb-4">
-                  <div class="bg-gray-100 px-3 py-2 rounded-lg mb-2">
-                    <strong>${group.school}</strong> - Tahun ${group.year}
-                    <span class="text-xs text-gray-500 ml-2">(${group.alumni.length} alumni)</span>
-                  </div>
-                  <div class="space-y-1">`;
-
-              group.alumni.forEach(a => {
-                // Build education history summary
-                let historySummary = '';
-                if (a.education_history && a.education_history.length > 0) {
-                  historySummary = '<div class="text-xs text-gray-500 mt-1"><i class="fas fa-graduation-cap mr-1"></i>' + 
-                    a.education_history.map(h => h.nama_sekolah + (h.tahun_lulus ? ` (${h.tahun_lulus})` : '')).join(', ') + 
-                    '</div>';
-                }
-                
-                html += `
-                    <div class="flex items-center justify-between p-2 hover:bg-gray-50 rounded border-b border-gray-100">
-                      <div>
-                        <span class="font-medium text-sm">${a.nama_siswa}</span>
-                        <span class="text-xs text-gray-500 ml-2">NIS: ${a.nis || '-'}</span>
-                        ${historySummary}
-                      </div>
-                      <button onclick="adoptAlumni(${a.id})" class="text-xs bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700">
-                        <i class="fas fa-plus mr-1"></i>Adopsi
-                      </button>
-                    </div>`;
-              });
-
-              html += `
-                  </div>
-                </div>`;
-            });
-            html += '</div>';
-
-            Swal.fire({
-              title: 'Adopsi Alumni dari Sekolah Lain',
-              html: html,
-              showConfirmButton: true,
-              confirmButtonText: 'Tutup',
-              width: '600px'
-            });
+            alumniPoolCache = d.grouped;
+            renderAdoptSchoolList(d.grouped);
           } catch (e) {
             console.error('[ADOPT ALUMNI MODAL]', e);
             showToast('Gagal memuat data alumni pool', 'error');
           }
+        }
+
+        function renderAdoptSchoolList(groups) {
+          const schools = [...new Set(groups.map(g => g.school))];
+          let html = `
+            <div class="text-left">
+              <p class="text-sm text-gray-600 mb-3">Cari dan pilih sekolah asal alumni:</p>
+              <input type="text" id="schoolSearchInput" placeholder="Ketik nama sekolah..."
+                class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm mb-3 focus:ring-2 focus:ring-blue-500"
+                oninput="filterAdoptSchools(this.value)">
+              <div id="adoptSchoolList" class="space-y-1 max-h-96 overflow-y-auto">
+          `;
+
+          schools.forEach(school => {
+            const count = groups
+              .filter(g => g.school === school)
+              .reduce((sum, g) => sum + g.alumni.length, 0);
+            html += `
+              <button onclick="renderAdoptAlumniList('${school.replace(/'/g, "\\'")}')"
+                      class="school-option w-full text-left px-3 py-2 hover:bg-gray-50 rounded border-b border-gray-100 flex justify-between items-center"
+                      data-school="${school.replace(/"/g, '&quot;')}">
+                <span class="font-medium text-sm">${school}</span>
+                <span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">${count} alumni</span>
+              </button>
+            `;
+          });
+
+          html += '</div></div>';
+
+          Swal.fire({
+            title: 'Adopsi Alumni - Pilih Sekolah',
+            html: html,
+            showConfirmButton: false,
+            width: '600px'
+          });
+        }
+
+        window.filterAdoptSchools = function (query) {
+          const lower = query.toLowerCase();
+          document.querySelectorAll('.school-option').forEach(btn => {
+            const school = btn.getAttribute('data-school') || '';
+            btn.style.display = school.toLowerCase().includes(lower) ? '' : 'none';
+          });
+        };
+
+        function renderAdoptAlumniList(schoolName) {
+          if (!alumniPoolCache) return;
+          const groups = alumniPoolCache.filter(g => g.school === schoolName);
+          const alumni = groups.flatMap(g => g.alumni);
+
+          let html = `
+            <div class="text-left max-h-96 overflow-y-auto">
+              <button onclick="renderAdoptSchoolList(alumniPoolCache)" class="text-xs text-gray-500 hover:text-gray-700 mb-2">
+                <i class="fas fa-arrow-left mr-1"></i>Kembali ke daftar sekolah
+              </button>
+              <div class="bg-blue-50 px-3 py-2 rounded-lg mb-2">
+                <strong>${schoolName}</strong>
+                <span class="text-xs text-gray-500 ml-2">(${alumni.length} alumni)</span>
+              </div>
+              <div class="space-y-1">
+          `;
+
+          alumni.forEach(a => {
+            let historySummary = '';
+            if (a.education_history && a.education_history.length > 0) {
+              historySummary = '<div class="text-xs text-gray-500 mt-1"><i class="fas fa-graduation-cap mr-1"></i>' + 
+                a.education_history.map(h => h.nama_sekolah + (h.tahun_lulus ? ` (${h.tahun_lulus})` : '')).join(', ') + 
+                '</div>';
+            }
+            
+            html += `
+              <div class="flex items-center justify-between p-2 hover:bg-gray-50 rounded border-b border-gray-100">
+                <div>
+                  <span class="font-medium text-sm">${a.nama_siswa}</span>
+                  <span class="text-xs text-gray-500 ml-2">NIS: ${a.nis || '-'}</span>
+                  ${historySummary}
+                </div>
+                <button onclick="adoptAlumni(${a.id})" class="text-xs bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700">
+                  <i class="fas fa-plus mr-1"></i>Adopsi
+                </button>
+              </div>
+            `;
+          });
+
+          html += '</div></div>';
+
+          Swal.fire({
+            title: 'Adopsi Alumni',
+            html: html,
+            showConfirmButton: false,
+            width: '600px'
+          });
         }
 
         async function adoptAlumni(id) {
@@ -2775,6 +2826,8 @@ if (d.success) {
           const formData = new FormData();
           formData.append('file', file);
           formData.append('tenant_id', tenantId);
+          formData.append('billing_start', '7');
+          formData.append('auto_billing', 'true');
 
           const swalProgress = Swal.fire({
             title: 'Mengupload...',
@@ -2799,6 +2852,11 @@ if (d.success) {
               const d = xhr.responseText ? JSON.parse(xhr.responseText) : {};
               if (xhr.status === 200 && d.success) {
                 let msg = `${d.created} siswa baru berhasil ditambahkan.`;
+                if (d.billing && d.billing.created) {
+                  msg += `\n🧾 ${d.billing.created} billing otomatis dibuat (${d.billing.start_month} → ${d.billing.end_month}).`;
+                } else if (d.billing && d.billing.error) {
+                  msg += `\n⚠️ Auto-billing gagal: ${d.billing.error}`;
+                }
                 if (d.errors && d.errors.length) msg += `\n${d.errors.length} baris gagal:\n` + d.errors.slice(0, 10).join('\n');
                 await Swal.fire('Selesai', msg, d.errors && d.errors.length ? 'warning' : 'success');
                 loadStudents(currentStudentPage);

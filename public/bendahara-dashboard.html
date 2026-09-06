@@ -118,6 +118,12 @@
         </button>
         <button
           class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+          data-tab="kafalah">
+          <i class="fas fa-coins"></i>
+          <span>KAFALAH</span>
+        </button>
+        <button
+          class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
           data-tab="attendanceRecap">
           <i class="fas fa-calendar-check"></i>
           <span>Rekap Absensi</span>
@@ -326,6 +332,84 @@
             </table>
           </div>
           <div id="payrollPagination" class="flex justify-center gap-1 mt-4"></div>
+        </div>
+      </div>
+
+      <!-- KAFALAH Tab -->
+      <div id="kafalahTab" class="tab-content hidden">
+        <div class="bg-white rounded-xl shadow-sm border-2 border-yellow-200 p-6 mb-4">
+          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+            <div>
+              <h3 class="text-lg font-semibold text-gray-900"><i class="fas fa-coins mr-2 text-yellow-600"></i>Penggajian KAFALAH</h3>
+              <p class="text-sm text-gray-500">Mengikuti struktur KAFALAH YPWI Luwu Timur (Pokok + Tunjangan + Pemotongan)</p>
+            </div>
+            <div class="flex flex-wrap items-end gap-2">
+              <div><label class="block text-xs font-medium text-gray-600 mb-1">Sekolah</label>
+                <select id="kafalahTenantSelect" onchange="loadKafalahMatrix()" class="px-3 py-2 border border-gray-300 rounded-md text-sm">
+                  <option value="">Pilih sekolah</option>
+                </select>
+              </div>
+              <div><label class="block text-xs font-medium text-gray-600 mb-1">Periode Mulai</label>
+                <input type="date" id="kafalahStart" class="px-3 py-2 border border-gray-300 rounded-md text-sm" />
+              </div>
+              <div><label class="block text-xs font-medium text-gray-600 mb-1">Periode Selesai</label>
+                <input type="date" id="kafalahEnd" class="px-3 py-2 border border-gray-300 rounded-md text-sm" />
+              </div>
+              <button onclick="previewKafalah()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm"><i
+                  class="fas fa-calculator mr-1"></i>Hitung Preview</button>
+              <button onclick="generateKafalah()" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm"><i
+                  class="fas fa-save mr-1"></i>Simpan Slip</button>
+              <button onclick="exportKafalahExcel()" class="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm"><i
+                  class="fas fa-file-excel mr-1"></i>Excel</button>
+              <button onclick="loadKafalahHistory()" class="bg-gray-600 text-white px-4 py-2 rounded-lg text-sm"><i
+                  class="fas fa-history mr-1"></i>History</button>
+            </div>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs divide-y divide-gray-100">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-2 py-2 text-left font-semibold text-gray-600 uppercase">No</th>
+                  <th class="px-2 py-2 text-left font-semibold text-gray-600 uppercase">Nama</th>
+                  <th class="px-2 py-2 text-left font-semibold text-gray-600 uppercase">NIK</th>
+                  <th class="px-2 py-2 text-left font-semibold text-gray-600 uppercase">Status</th>
+                  <th class="px-2 py-2 text-left font-semibold text-gray-600 uppercase">Jabatan</th>
+                  <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase">Kafalah Pokok</th>
+                  <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase">T. Istri</th>
+                  <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase">T. Anak</th>
+                  <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase bg-blue-50">Total A</th>
+                  <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase">Struktural</th>
+                  <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase">Pengabdian</th>
+                  <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase">Fungsional</th>
+                  <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase">Pembina</th>
+                  <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase">Pondok</th>
+                  <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase">Transport</th>
+                  <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase">Tepat Waktu</th>
+                  <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase">Tdk Cepat Plg</th>
+                  <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase">KJM</th>
+                  <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase">Kinerja</th>
+                  <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase">Apresiasi</th>
+                  <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase bg-emerald-50">Total B</th>
+                  <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase bg-red-50">Potongan</th>
+                  <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase bg-yellow-50">Total KAFALAH</th>
+                </tr>
+              </thead>
+              <tbody id="kafalahTable" class="divide-y divide-gray-100">
+                <tr>
+                  <td colspan="23" class="px-4 py-8 text-center text-gray-500">
+                    <i class="fas fa-spinner fa-spin text-xl mb-2"></i>
+                    <p>Pilih sekolah & periode lalu klik Hitung Preview</p>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div id="kafalahSummary" class="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3 hidden">
+            <div class="bg-blue-50 p-3 rounded-lg"><p class="text-xs text-blue-700">Total Pendapatan Wajib</p><p class="text-lg font-bold text-blue-900" id="kSumWajib">Rp 0</p></div>
+            <div class="bg-emerald-50 p-3 rounded-lg"><p class="text-xs text-emerald-700">Total Pendapatan Insentif</p><p class="text-lg font-bold text-emerald-900" id="kSumInsentif">Rp 0</p></div>
+            <div class="bg-red-50 p-3 rounded-lg"><p class="text-xs text-red-700">Total Pemotongan</p><p class="text-lg font-bold text-red-900" id="kSumPotong">Rp 0</p></div>
+            <div class="bg-yellow-50 p-3 rounded-lg"><p class="text-xs text-yellow-700">Total KAFALAH Diterima</p><p class="text-lg font-bold text-yellow-900" id="kSumTotal">Rp 0</p></div>
+          </div>
         </div>
       </div>
 
@@ -855,6 +939,144 @@
                 </ul>
               </div>
             </div>
+
+            <!-- KAFALAH Settings Section -->
+            <div class="bg-white rounded-xl shadow-sm border-2 border-yellow-200 p-6 mb-4">
+              <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold"><i class="fas fa-coins mr-2 text-yellow-600"></i>Pengaturan KAFALAH (Komponen Tunjangan & Potongan)</h3>
+              </div>
+              <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4 text-sm text-yellow-800">
+                <i class="fas fa-info-circle mr-1"></i>
+                Pengaturan komponen KAFALAH ini berlaku GLOBAL untuk semua unit. Bisa diubah sewaktu-waktu, namun tidak akan mengubah slip yang sudah tersimpan.
+              </div>
+              <form id="kafalahSettingsForm" onsubmit="saveKafalahSettings(event)" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Tunj. Pengabdian (flat)</label>
+                  <input type="number" id="ksTunjPengabdian" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Tunj. Fungsional (flat)</label>
+                  <input type="number" id="ksTunjFungsional" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Tunj. Transportasi</label>
+                  <input type="number" id="ksTunjTransport" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Tunj. Tepat Waktu Datang</label>
+                  <input type="number" id="ksTunjTepatWaktu" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Tunj. Tidak Cepat Pulang</label>
+                  <input type="number" id="ksTunjTidakCepatPulang" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Tunj. Prestasi Kinerja (flat)</label>
+                  <input type="number" id="ksTunjPrestasiKinerja" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Nominal KJM (per jam)</label>
+                  <input type="number" id="ksNominalKjm" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Tunj. Pembina (default)</label>
+                  <input type="number" id="ksTunjPembina" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Tunj. Pondok (default)</label>
+                  <input type="number" id="ksTunjPondok" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Tunj. Anak (per anak)</label>
+                  <input type="number" id="ksTunjAnak" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Tunj. Istri (flat)</label>
+                  <input type="number" id="ksTunjIstri" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                </div>
+                <div class="md:col-span-2 flex items-center gap-3">
+                  <button type="submit" class="px-5 py-2.5 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 font-medium">
+                    <i class="fas fa-save mr-1"></i>Simpan Pengaturan KAFALAH
+                  </button>
+                  <span id="ksSavedInfo" class="text-sm text-gray-500"></span>
+                </div>
+              </form>
+
+              <div class="mt-6 pt-4 border-t">
+                <h4 class="font-medium text-gray-800 mb-2"><i class="fas fa-table mr-1"></i>Matrix Gaji Pokok - Config Kenaikan</h4>
+                <p class="text-xs text-gray-500 mb-2">
+                  Gaji Pokok Awal untuk 2 tahun pertama, kemudian naik per interval tahun.
+                  Pendidik & Jenjang bisa ditambah/diedit.
+                </p>
+                <div class="flex flex-wrap items-center gap-2 mb-3">
+                  <label class="text-xs text-gray-600">Status:</label>
+                  <select id="kenaikanStatusFilter" onchange="loadKafalahKenaikan()" class="text-xs border rounded px-2 py-1">
+                    <option value="">Semua</option>
+                    <option value="PT" selected>PT (Tetap)</option>
+                    <option value="PK">PK (Kontrak)</option>
+                  </select>
+                  <label class="text-xs text-gray-600 ml-2">Jenjang:</label>
+                  <select id="kenaikanJenjangFilter" onchange="loadKafalahKenaikan()" class="text-xs border rounded px-2 py-1">
+                    <option value="">Semua</option>
+                    <option value="TK">TK</option>
+                    <option value="SD" selected>SD</option>
+                    <option value="SMP">SMP</option>
+                    <option value="SMA">SMA</option>
+                    <option value="PONPES">PONPES</option>
+                  </select>
+                </div>
+                <div class="overflow-x-auto max-h-96">
+                  <table class="w-full text-xs">
+                    <thead class="bg-gray-50 sticky top-0">
+                      <tr>
+                        <th class="px-2 py-2 text-left">Status</th>
+                        <th class="px-2 py-2 text-left">Jenjang</th>
+                        <th class="px-2 py-2 text-left">Pendidikan</th>
+                        <th class="px-2 py-2 text-right">Gaji Pokok Awal (0-2 th)</th>
+                        <th class="px-2 py-2 text-right">Kenaikan</th>
+                        <th class="px-2 py-2 text-center">Tiap (th)</th>
+                        <th class="px-2 py-2 text-center">Max (th)</th>
+                        <th class="px-2 py-2 text-left">Preview Kenaikan</th>
+                      </tr>
+                    </thead>
+                    <tbody id="kafalahKenaikanBody">
+                      <tr><td colspan="8" class="px-4 py-6 text-center text-gray-500">Memuat...</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div class="mt-3 flex items-center gap-2 flex-wrap">
+                  <button onclick="syncPendidikanMatrix()" class="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"><i class="fas fa-sync mr-1"></i>Sync dari Data Guru</button>
+                  <span class="text-xs text-gray-500">Otomatis menambah pendidikan baru ke matrix</span>
+                </div>
+                <div class="mt-2 flex items-center gap-2">
+                  <span class="text-xs text-gray-600">Tambah Pendidikan:</span>
+                  <input type="text" id="newPendidikanKode" placeholder="Kode (cth: D3)" class="text-xs border rounded px-2 py-1 w-24" maxlength="20">
+                  <input type="text" id="newPendidikanLabel" placeholder="Label (cth: Diploma 3)" class="text-xs border rounded px-2 py-1 flex-1 max-w-xs">
+                  <button onclick="addPendidikanRef()" class="text-xs bg-emerald-600 text-white px-3 py-1 rounded hover:bg-emerald-700"><i class="fas fa-plus mr-1"></i>Tambah</button>
+                </div>
+                <div id="pendidikanRefList" class="mt-2 flex flex-wrap gap-1 text-xs"></div>
+              </div>
+
+              <div class="mt-6 pt-4 border-t">
+                <h4 class="font-medium text-gray-800 mb-2"><i class="fas fa-user-tie mr-1"></i>Tunjangan Struktural per Jabatan (Otomatis)</h4>
+                <p class="text-xs text-gray-500 mb-2">Tunjangan struktural akan otomatis terisi sesuai jabatan guru. Bisa diubah kapan saja.</p>
+                <div class="overflow-x-auto">
+                  <table class="w-full text-xs">
+                    <thead class="bg-gray-50">
+                      <tr>
+                        <th class="px-2 py-2 text-left">Jabatan</th>
+                        <th class="px-2 py-2 text-left">Key</th>
+                        <th class="px-2 py-2 text-right">Tunj. Struktural (Rp)</th>
+                      </tr>
+                    </thead>
+                    <tbody id="kafalahJabatanBody">
+                      <tr><td colspan="3" class="px-4 py-6 text-center text-gray-500">Memuat...</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
           </div>
         </main>
      </div>
@@ -969,6 +1191,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="js/payroll-admin.js"></script>
+  <script src="js/kafalah-bendahara.js"></script>
   <script>
     let currentMonth = new Date().toISOString().slice(0, 7);
 
@@ -1072,13 +1295,14 @@
             if (tabName === 'dashboard') loadDashboardData();
             if (tabName === 'payments') loadSaldo();
             if (tabName === 'payroll') loadPayroll();
+            if (tabName === 'kafalah') { loadTenantFilters(); document.getElementById('kafalahStart').value = '2026-06-26'; document.getElementById('kafalahEnd').value = '2026-07-25'; }
             if (tabName === 'payment-gateway') loadBsiTenants();
             if (tabName === 'attendanceRecap') loadAttendanceRecap();
             if (tabName === 'sppReminder') loadPaymentDefaulters();
             if (tabName === 'autoBilling') { loadAutoBillingSettings(); loadAutoBillingReport(); }
             if (tabName === 'customerService') { loadCSContacts(); }
             if (tabName === 'messageHistory') { loadMessageHistory(); }
-            if (tabName === 'paymentSettings') { loadPaymentSettings(); }
+            if (tabName === 'paymentSettings') { loadPaymentSettings(); loadKafalahSettings(); loadKafalahMatrix(); loadJabatanTunjangan(); loadPendidikanRef(); }
           });
       });
     }
@@ -1264,7 +1488,7 @@
         const data = await res.json();
         if (data.success) {
           const options = data.data.map(t => `<option value="${t.tenant_id}">${t.nama_sekolah}</option>`).join('');
-          ['dashboardTenantFilter', 'paymentsTenantFilter', 'payrollTenantSelect', 'recapTenantSelect', 'reminderTenantFilter'].forEach(id => {
+          ['dashboardTenantFilter', 'paymentsTenantFilter', 'payrollTenantSelect', 'recapTenantSelect', 'reminderTenantFilter', 'kafalahTenantSelect'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.innerHTML = '<option value="">Semua Sekolah</option>' + options;
           });
@@ -1453,6 +1677,7 @@
       loadSaldo(1);
     }
 
+    let currentStudentBillingId = null;
     async function showStudentBilling(studentId) {
       try {
         const res = await fetch('/api/treasurer/bendahara/student-billing/' + studentId, {
@@ -1460,11 +1685,13 @@
         });
         const data = await res.json();
         if (!data.success) { showToast(data.message || 'Gagal ambil data', 'error'); return; }
+        if (!data.data || !data.data.student) { showToast('Data siswa tidak ditemukan', 'error'); return; }
+        currentStudentBillingId = studentId;
 
         const modal = document.getElementById('studentBillingModal');
         const content = document.getElementById('studentBillingContent');
-        const s = data.data.student;
-        const billing = data.data.billing;
+        const s = data.data.student || {};
+        const billing = data.data.billing || [];
         const summary = data.data.summary;
         const saldo = data.data.saldo;
 
@@ -1506,19 +1733,28 @@
             </div>
           </div>
 
-          <div class="flex items-center gap-2 mb-2">
-            <input type="text" id="studentBillingFilter" placeholder="Filter bulan (YYYY-MM)..." onkeyup="filterStudentBillingRows()" class="flex-1 px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500">
+          <div class="flex items-center gap-2 mb-2 flex-wrap">
+            <input type="text" id="studentBillingFilter" placeholder="Filter bulan (YYYY-MM)..." onkeyup="filterStudentBillingRows()" class="flex-1 min-w-[150px] px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500">
             <select id="studentBillingStatusFilter" onchange="filterStudentBillingRows()" class="px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500">
               <option value="">Semua Status</option>
               <option value="lunas">Lunas</option>
               <option value="belum">Belum Lunas</option>
             </select>
+            <button onclick="showPembayaranManualModal(currentStudentBillingId)" class="px-3 py-1.5 text-sm bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
+              <i class="fas fa-money-bill-wave mr-1"></i>Bayar Manual
+            </button>
+            <button onclick="showBatalLunasModal()" class="px-3 py-1.5 text-sm bg-orange-500 text-white rounded-lg hover:bg-orange-600 hidden" id="batalLunasBtn" title="Batalkan pelunasan yang dipilih">
+              <i class="fas fa-undo mr-1"></i>Batal Lunas (<span id="batalLunasCount">0</span>)
+            </button>
           </div>
 
           <div class="overflow-x-auto max-h-96">
             <table class="w-full text-sm">
               <thead class="bg-gray-50 border-b sticky top-0">
                 <tr>
+                  <th class="px-2 py-2 text-center">
+                    <input type="checkbox" id="studentBillingSelectAll" onchange="toggleSelectAllStudentBilling(this)">
+                  </th>
                   <th class="px-3 py-2 text-left">Bulan</th>
                   <th class="px-3 py-2 text-right">SPP</th>
                   <th class="px-3 py-2 text-right">Trans</th>
@@ -1527,6 +1763,7 @@
                   <th class="px-3 py-2 text-right">Total</th>
                   <th class="px-3 py-2 text-right">Bayar</th>
                   <th class="px-3 py-2 text-right">Sisa</th>
+                  <th class="px-3 py-2 text-center">Aksi</th>
                   <th class="px-3 py-2 text-center">Status</th>
                 </tr>
               </thead>
@@ -1536,6 +1773,9 @@
                   const statusText = b.status === 'lunas' ? 'Lunas' : 'Belum';
                   return `
                   <tr class="border-b hover:bg-gray-50 billing-row" data-bulan="${b.bulan}" data-status="${b.status}">
+                    <td class="px-2 py-2 text-center">
+                      <input type="checkbox" class="student-billing-check" value="${b.id}" data-bulan="${b.bulan}" onchange="updateBatalLunasCount()" ${b.status === 'lunas' ? '' : 'disabled'}>
+                    </td>
                     <td class="px-3 py-2">${b.bulan}</td>
                     <td class="px-3 py-2 text-right">${fmtRp(b.spp_bulanan)}</td>
                     <td class="px-3 py-2 text-right">${fmtRp(b.ransportasi)}</td>
@@ -1544,6 +1784,11 @@
                     <td class="px-3 py-2 text-right font-semibold">${fmtRp(b.total_tagihan)}</td>
                     <td class="px-3 py-2 text-right text-emerald-600">${fmtRp(b.transaksi)}</td>
                     <td class="px-3 py-2 text-right ${b.keterangan_spp > 0 ? 'text-orange-600 font-semibold' : 'text-gray-400'}">${b.keterangan_spp > 0 ? fmtRp(b.keterangan_spp) : '-'}</td>
+                    <td class="px-3 py-2 text-center">
+                      <button onclick="openPembayaranManualForBilling(${b.id}, '${b.bulan}')" class="text-xs px-2 py-1 bg-emerald-100 text-emerald-700 rounded hover:bg-emerald-200" title="Bayar manual untuk bulan ini">
+                        <i class="fas fa-plus"></i>
+                      </button>
+                    </td>
                     <td class="px-3 py-2 text-center">
                       <span class="text-xs px-2 py-1 rounded ${statusClass}" title="${b.metode_pembayaran ? b.metode_pembayaran + (b.tanggal_bayar ? ' - ' + b.tanggal_bayar : '') : ''}">${statusText}</span>
                     </td>
@@ -1589,6 +1834,392 @@
       const emptyEl = document.getElementById('studentBillingEmpty');
       if (emptyEl) emptyEl.classList.toggle('hidden', visible > 0);
     }
+
+    function toggleSelectAllStudentBilling(source) {
+      document.querySelectorAll('.student-billing-check:not(:disabled)').forEach(cb => cb.checked = source.checked);
+      updateBatalLunasCount();
+    }
+
+    function updateBatalLunasCount() {
+      const count = document.querySelectorAll('.student-billing-check:checked').length;
+      const btn = document.getElementById('batalLunasBtn');
+      if (btn) btn.classList.toggle('hidden', count === 0);
+      const el = document.getElementById('batalLunasCount');
+      if (el) el.textContent = count;
+    }
+
+    function showBatalLunasModal() {
+      const count = document.querySelectorAll('.student-billing-check:checked').length;
+      if (count === 0) { showToast('Pilih billing lunas yang akan dibatalkan', 'warning'); return; }
+      document.getElementById('blCount').textContent = count;
+      document.getElementById('blAlasan').value = '';
+      document.getElementById('batalLunasModal').classList.remove('hidden');
+    }
+
+    function closeBatalLunasModal() {
+      document.getElementById('batalLunasModal').classList.add('hidden');
+    }
+
+    async function submitBatalLunas() {
+      const billingIds = Array.from(document.querySelectorAll('.student-billing-check:checked')).map(cb => parseInt(cb.value));
+      const alasan = document.getElementById('blAlasan')?.value.trim();
+      if (billingIds.length === 0) return;
+
+      if (!confirm(`Yakin ingin membatalkan ${billingIds.length} pelunasan?`)) return;
+
+      closeBatalLunasModal();
+      showProgress('Membatalkan pelunasan...');
+      updateProgress(0, billingIds.length, 'Memproses...');
+
+      try {
+        const res = await fetch('/api/treasurer/bendahara/billing/batal-lunas', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+          body: JSON.stringify({ billing_ids: billingIds, alasan: alasan || null })
+        });
+        const d = await res.json();
+        if (d.success) {
+          updateProgress(billingIds.length, billingIds.length, 'Selesai');
+          finishProgress(d.message || 'Berhasil');
+          showToast(d.message || 'Pelunasan berhasil dibatalkan', 'success');
+          // Uncheck all
+          document.querySelectorAll('.student-billing-check').forEach(cb => cb.checked = false);
+          document.getElementById('studentBillingSelectAll').checked = false;
+          // Reload
+          if (currentStudentBillingId) showStudentBilling(currentStudentBillingId);
+        } else {
+          errorProgress(d.message || 'Gagal');
+          showToast(d.message || 'Gagal membatalkan', 'error');
+        }
+      } catch (e) {
+        errorProgress(e.message);
+        showToast('Gagal: ' + e.message, 'error');
+      }
+    }
+
+    // ==================== BATAL LUNAS MASSAL ====================
+    let blmStudents = [];
+
+    async function showBatalLunasMassalModal() {
+      document.getElementById('batalLunasMassalModal').classList.remove('hidden');
+      document.getElementById('batalLunasMassalPreview').classList.add('hidden');
+      const now = new Date();
+      const yyyymm = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      document.getElementById('batalLunasMassalFrom').value = yyyymm;
+      document.getElementById('batalLunasMassalTo').value = yyyymm;
+      if (blmStudents.length === 0) await loadBatalLunasMassalStudents();
+    }
+
+    function closeBatalLunasMassalModal() {
+      document.getElementById('batalLunasMassalModal').classList.add('hidden');
+    }
+
+    function toggleBatalLunasMassalTarget() {
+      const target = document.querySelector('input[name="batalLunasMassalTarget"]:checked')?.value;
+      document.getElementById('batalLunasMassalStudentListWrap').classList.toggle('hidden', target !== 'specific');
+    }
+
+    async function loadBatalLunasMassalStudents() {
+      try {
+        const res = await fetch('/api/treasurer/public/students-by-tenant?tenant_id=' + (currentTenantId || ''), { headers: getAuthHeader() });
+        const data = await res.json();
+        blmStudents = data.students || data.data || (Array.isArray(data) ? data : []);
+        const listEl = document.getElementById('batalLunasMassalStudentList');
+        if (blmStudents.length === 0) { listEl.innerHTML = '<p class="text-sm text-gray-500 text-center py-2">Tidak ada siswa</p>'; return; }
+        listEl.innerHTML = blmStudents.map(s => `
+          <label class="flex items-center gap-2 p-1 hover:bg-white rounded cursor-pointer">
+            <input type="checkbox" class="batal-lunas-massal-student-check" value="${s.id}" onchange="document.getElementById('batalLunasMassalSelectedCount').textContent = document.querySelectorAll('.batal-lunas-massal-student-check:checked').length">
+            <span class="text-sm">${s.nama_siswa || '-'} <span class="text-gray-400 text-xs">${s.nisn || ''}</span></span>
+          </label>`).join('');
+      } catch (e) { showToast('Gagal memuat siswa: ' + e.message, 'error'); }
+    }
+
+    function filterBatalLunasMassalStudents() {
+      const search = (document.getElementById('batalLunasMassalStudentSearch')?.value || '').toLowerCase();
+      const filtered = blmStudents.filter(s => (s.nama_siswa || '').toLowerCase().includes(search) || (s.nisn || '').toLowerCase().includes(search));
+      const listEl = document.getElementById('batalLunasMassalStudentList');
+      if (filtered.length === 0) { listEl.innerHTML = '<p class="text-sm text-gray-500 text-center py-2">Tidak ada hasil</p>'; return; }
+      listEl.innerHTML = filtered.map(s => `
+        <label class="flex items-center gap-2 p-1 hover:bg-white rounded cursor-pointer">
+          <input type="checkbox" class="batal-lunas-massal-student-check" value="${s.id}" onchange="document.getElementById('batalLunasMassalSelectedCount').textContent = document.querySelectorAll('.batal-lunas-massal-student-check:checked').length">
+          <span class="text-sm">${s.nama_siswa || '-'} <span class="text-gray-400 text-xs">${s.nisn || ''}</span></span>
+        </label>`).join('');
+    }
+
+    async function previewBatalLunasMassal() {
+      const bulanFrom = document.getElementById('batalLunasMassalFrom')?.value;
+      const bulanTo = document.getElementById('batalLunasMassalTo')?.value;
+      const target = document.querySelector('input[name="batalLunasMassalTarget"]:checked')?.value;
+      if (!bulanFrom || !bulanTo) { showToast('Pilih rentang bulan', 'error'); return; }
+      if (bulanFrom > bulanTo) { showToast('bulan_from harus <= bulan_to', 'error'); return; }
+      let studentIds = [];
+      if (target === 'specific') {
+        studentIds = Array.from(document.querySelectorAll('.batal-lunas-massal-student-check:checked')).map(cb => parseInt(cb.value));
+        if (studentIds.length === 0) { showToast('Pilih siswa terlebih dahulu', 'error'); return; }
+      }
+      try {
+        const res = await fetch('/api/treasurer/bendahara/billing/preview-batal-lunas-bulk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+          body: JSON.stringify({
+            tenant_id: currentTenantId || undefined,
+            bulan_from: bulanFrom, bulan_to: bulanTo,
+            student_ids: studentIds, all_students: target === 'all'
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          const total = data.total || 0;
+          const studentSet = new Set((data.data || []).map(b => b.student_id));
+          const text = `Akan diurungkan <strong>${total}</strong> billing dari <strong>${studentSet.size}</strong> siswa pada rentang ${bulanFrom} s/d ${bulanTo}.`;
+          document.getElementById('batalLunasMassalPreviewText').innerHTML = text;
+          document.getElementById('batalLunasMassalPreview').classList.remove('hidden');
+        } else { showToast(data.message || 'Gagal preview', 'error'); }
+      } catch (e) { showToast('Gagal: ' + e.message, 'error'); }
+    }
+
+    async function submitBatalLunasMassal() {
+      const bulanFrom = document.getElementById('batalLunasMassalFrom')?.value;
+      const bulanTo = document.getElementById('batalLunasMassalTo')?.value;
+      const target = document.querySelector('input[name="batalLunasMassalTarget"]:checked')?.value;
+      const alasan = document.getElementById('batalLunasMassalAlasan')?.value.trim();
+      if (!bulanFrom || !bulanTo) { showToast('Pilih rentang bulan', 'error'); return; }
+      if (bulanFrom > bulanTo) { showToast('bulan_from harus <= bulan_to', 'error'); return; }
+
+      let studentIds = [];
+      if (target === 'specific') {
+        studentIds = Array.from(document.querySelectorAll('.batal-lunas-massal-student-check:checked')).map(cb => parseInt(cb.value));
+        if (studentIds.length === 0) { showToast('Pilih siswa terlebih dahulu', 'error'); return; }
+      }
+      const targetLabel = target === 'all' ? 'SEMUA siswa aktif' : studentIds.length + ' siswa';
+      if (!confirm(`Yakin ingin membatalkan pelunasan untuk ${targetLabel} dari ${bulanFrom} sampai ${bulanTo}? Tindakan ini TIDAK DAPAT dibatalkan.`)) return;
+
+      showProgress('Membatalkan pelunasan massal...');
+      updateProgress(0, 1, `Mengirim request...`);
+      try {
+        const res = await fetch('/api/treasurer/bendahara/billing/batal-lunas-bulk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+          body: JSON.stringify({
+            tenant_id: currentTenantId || undefined,
+            bulan_from: bulanFrom, bulan_to: bulanTo,
+            student_ids: studentIds, all_students: target === 'all',
+            alasan: alasan || null
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          updateProgress(1, 1, 'Selesai');
+          finishProgress(data.message);
+          showToast(data.message, 'success');
+          closeBatalLunasMassalModal();
+          loadSaldo();
+        } else {
+          errorProgress(data.message || 'Gagal');
+          showToast(data.message || 'Gagal', 'error');
+        }
+      } catch (e) {
+        errorProgress(e.message);
+        showToast('Gagal: ' + e.message, 'error');
+      }
+    }
+
+    // ==================== PEMBAYARAN MANUAL ====================
+    let pmCurrentBilling = null;
+
+    function showPembayaranManualModal(studentId, prefillBulan) {
+      if (!studentId) { showToast('Buka detail billing siswa dulu', 'warning'); return; }
+      pmCurrentBilling = { student_id: studentId };
+
+      // Ambil info siswa dari data yang sudah ada
+      const studentNameEl = document.getElementById('studentBillingContent')?.querySelector('h4');
+      const studentName = studentNameEl?.textContent || 'Siswa';
+
+      document.getElementById('pmStudentName').textContent = studentName;
+      document.getElementById('pmStudentDetail').textContent = `Student ID: ${studentId}`;
+
+      const now = new Date();
+      const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      document.getElementById('pmBulan').value = prefillBulan || currentMonth;
+      document.getElementById('pmTanggal').value = now.toISOString().slice(0, 10);
+      document.getElementById('pmNominal').value = '';
+      document.getElementById('pmMetode').value = 'tunai';
+      document.getElementById('pmDibayarOleh').value = '';
+      document.getElementById('pmCatatan').value = '';
+      document.getElementById('pmBillingInfo').classList.add('hidden');
+      document.getElementById('pmPreview').classList.add('hidden');
+      document.getElementById('pembayaranManualModal').classList.remove('hidden');
+
+      // Auto-load billing info
+      loadPembayaranManualInfo();
+    }
+
+    function openPembayaranManualForBilling(billingId, bulan) {
+      // Buka modal pembayaran manual dengan bulan spesifik
+      if (!currentStudentBillingId) return;
+      showPembayaranManualModal(currentStudentBillingId, bulan);
+    }
+
+    async function loadPembayaranManualInfo() {
+      const bulan = document.getElementById('pmBulan')?.value;
+      const student_id = pmCurrentBilling?.student_id;
+      if (!bulan || !student_id) return;
+
+      try {
+        const res = await fetch(`/api/treasurer/bendahara/student-billing/${student_id}`, { headers: getAuthHeader() });
+        const data = await res.json();
+        if (data.success) {
+          const bill = data.data.billing.find(b => b.bulan === bulan);
+          if (bill) {
+            document.getElementById('pmBillingInfo').classList.remove('hidden');
+            document.getElementById('pmTotalTagihan').textContent = fmtRp(bill.total_tagihan);
+            document.getElementById('pmSudahBayar').textContent = fmtRp(bill.transaksi);
+            document.getElementById('pmSisaTunggakan').textContent = fmtRp(bill.keterangan_spp);
+            // Pre-fill nominal with sisa tunggakan
+            const nominalInput = document.getElementById('pmNominal');
+            if (!nominalInput.value && bill.keterangan_spp > 0) {
+              nominalInput.value = bill.keterangan_spp;
+            }
+            updatePmPreview();
+          } else {
+            document.getElementById('pmBillingInfo').classList.add('hidden');
+            showToast(`Billing ${bulan} belum ada. Generate dulu.`, 'warning');
+          }
+        }
+      } catch (e) {
+        console.error('loadPmInfo:', e);
+      }
+    }
+
+    function setPmNominalPersen(persen) {
+      const totalText = document.getElementById('pmTotalTagihan')?.textContent || '0';
+      const total = parseInt(totalText.replace(/[^0-9]/g, '')) || 0;
+      const sudahBayarText = document.getElementById('pmSudahBayar')?.textContent || '0';
+      const sudahBayar = parseInt(sudahBayarText.replace(/[^0-9]/g, '')) || 0;
+      const sisa = Math.max(0, total - sudahBayar);
+      const nominal = Math.round((sisa * persen) / 100);
+      document.getElementById('pmNominal').value = nominal;
+      updatePmPreview();
+    }
+
+    function setPmNominalLebih() {
+      const totalText = document.getElementById('pmTotalTagihan')?.textContent || '0';
+      const total = parseInt(totalText.replace(/[^0-9]/g, '')) || 0;
+      const sudahBayarText = document.getElementById('pmSudahBayar')?.textContent || '0';
+      const sudahBayar = parseInt(sudahBayarText.replace(/[^0-9]/g, '')) || 0;
+      const sisa = Math.max(0, total - sudahBayar);
+      const nominal = Math.round(sisa * 1.1);
+      document.getElementById('pmNominal').value = nominal;
+      updatePmPreview();
+    }
+
+    function updatePmPreview() {
+      const nominal = parseFloat(document.getElementById('pmNominal')?.value) || 0;
+      const totalText = document.getElementById('pmTotalTagihan')?.textContent || '0';
+      const total = parseInt(totalText.replace(/[^0-9]/g, '')) || 0;
+      const sudahBayarText = document.getElementById('pmSudahBayar')?.textContent || '0';
+      const sudahBayar = parseInt(sudahBayarText.replace(/[^0-9]/g, '')) || 0;
+
+      if (nominal <= 0) {
+        document.getElementById('pmPreview').classList.add('hidden');
+        return;
+      }
+
+      const newTotal = sudahBayar + nominal;
+      let status, icon;
+      if (newTotal > total) {
+        status = `Kelebihan ${fmtRp(newTotal - total)} (akan jadi saldo positif)`;
+        icon = 'fa-arrow-up';
+      } else if (newTotal === total) {
+        status = `Akan LUNAS`;
+        icon = 'fa-check-circle';
+      } else {
+        const sisa = total - newTotal;
+        status = `Sisa setelah bayar: ${fmtRp(sisa)}`;
+        icon = 'fa-info-circle';
+      }
+
+      document.getElementById('pmPreviewText').innerHTML = `<i class="fas ${icon} mr-1"></i>${status}`;
+      document.getElementById('pmPreview').classList.remove('hidden');
+    }
+
+    function closePembayaranManualModal() {
+      document.getElementById('pembayaranManualModal').classList.add('hidden');
+      pmCurrentBilling = null;
+    }
+
+    async function submitPembayaranManual() {
+      const student_id = pmCurrentBilling?.student_id;
+      if (!student_id) { showToast('Buka detail billing siswa dulu', 'warning'); return; }
+      const bulan = document.getElementById('pmBulan')?.value;
+      const nominal = parseFloat(document.getElementById('pmNominal')?.value);
+      const metode = document.getElementById('pmMetode')?.value;
+      const tanggal = document.getElementById('pmTanggal')?.value;
+      const dibayarOleh = document.getElementById('pmDibayarOleh')?.value.trim();
+      const catatan = document.getElementById('pmCatatan')?.value.trim();
+
+      if (!bulan) { showToast('Pilih bulan', 'error'); return; }
+      if (!nominal || nominal <= 0) { showToast('Nominal harus > 0', 'error'); return; }
+      if (!metode) { showToast('Pilih metode', 'error'); return; }
+      if (!tanggal) { showToast('Pilih tanggal', 'error'); return; }
+      if (!student_id) { showToast('Student ID tidak ada', 'error'); return; }
+
+      const totalText = document.getElementById('pmTotalTagihan')?.textContent || '0';
+      const total = parseInt(totalText.replace(/[^0-9]/g, '')) || 0;
+      const sudahBayarText = document.getElementById('pmSudahBayar')?.textContent || '0';
+      const sudahBayar = parseInt(sudahBayarText.replace(/[^0-9]/g, '')) || 0;
+      const newTotal = sudahBayar + nominal;
+
+      const confirmMsg = newTotal > total
+        ? `Konfirmasi pembayaran ${fmtRp(nominal)} (kelebihan ${fmtRp(newTotal - total)})?`
+        : `Konfirmasi pembayaran ${fmtRp(nominal)}?${newTotal === total ? ' Tagihan akan LUNAS.' : ''}`;
+      if (!confirm(confirmMsg)) return;
+
+      closePembayaranManualModal();
+      showProgress('Memproses pembayaran manual...');
+      updateProgress(0, 1, `Mengirim pembayaran ${fmtRp(nominal)}...`);
+
+      try {
+        const res = await fetch('/api/treasurer/bendahara/billing/pembayaran-manual', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+          body: JSON.stringify({
+            student_id: student_id,
+            bulan,
+            nominal,
+            metode_pembayaran: metode,
+            tanggal_bayar: tanggal,
+            dibayar_oleh: dibayarOleh || null,
+            catatan: catatan || null
+          })
+        });
+        const d = await res.json();
+        if (d.success) {
+          updateProgress(1, 1, 'Selesai');
+          finishProgress(d.message || 'Pembayaran berhasil');
+          showToast(d.message || 'Pembayaran berhasil', 'success');
+          if (currentStudentBillingId) showStudentBilling(currentStudentBillingId);
+        } else {
+          errorProgress(d.message || 'Gagal');
+          showToast(d.message || 'Gagal', 'error');
+        }
+      } catch (e) {
+        errorProgress(e.message);
+        showToast('Gagal: ' + e.message, 'error');
+      }
+    }
+
+    // Auto-update preview saat user ubah nominal
+    document.addEventListener('input', function(e) {
+      if (e.target && e.target.id === 'pmNominal') {
+        updatePmPreview();
+      }
+    });
+    document.addEventListener('change', function(e) {
+      if (e.target && e.target.id === 'pmBulan') {
+        loadPembayaranManualInfo();
+      }
+    });
 
     function closeStudentBilling() {
       document.getElementById('studentBillingModal').classList.add('hidden');
@@ -3508,6 +4139,9 @@ async function openBsiVaModal() {
           <button onclick="showLunasiBulkModal()" class="px-3 py-2 bg-emerald-600 text-white text-sm rounded-lg hover:bg-emerald-700" title="Lunaskan banyak siswa untuk banyak bulan sekaligus">
             <i class="fas fa-check-double mr-1"></i>Lunaskan Massal
           </button>
+          <button onclick="showBatalLunasMassalModal()" class="px-3 py-2 bg-orange-500 text-white text-sm rounded-lg hover:bg-orange-600" title="Batalkan pelunasan banyak siswa untuk banyak bulan sekaligus">
+            <i class="fas fa-undo mr-1"></i>Batalkan Lunas Massal
+          </button>
           <button onclick="lunaskanSelectedBilling()" class="px-3 py-2 bg-emerald-500 text-white text-sm rounded-lg hover:bg-emerald-600 hidden" id="lunaskanSelectedBtn" title="Tandai lunas (tunai/transfer)">
             <i class="fas fa-check-circle mr-1"></i>Lunaskan (<span id="lunaskanSelectedCount">0</span>)
           </button>
@@ -3741,6 +4375,188 @@ async function openBsiVaModal() {
         </button>
         <button onclick="submitLunasiBulk()" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium">
           <i class="fas fa-check-double mr-1"></i>Lunaskan
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pembayaran Manual Modal (cicilan/partial/overpayment) -->
+  <div id="pembayaranManualModal" class="hidden fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl max-w-md w-full max-h-[90vh] flex flex-col overflow-hidden">
+      <!-- Header (fixed) -->
+      <div class="flex justify-between items-center p-4 border-b sticky top-0 bg-white z-10 flex-shrink-0">
+        <h4 class="font-semibold text-lg"><i class="fas fa-money-bill-wave text-emerald-600 mr-2"></i>Pembayaran Manual</h4>
+        <button onclick="closePembayaranManualModal()" class="text-gray-500 hover:text-gray-700 text-2xl leading-none">&times;</button>
+      </div>
+
+      <!-- Body (scrollable) -->
+      <div class="p-4 overflow-y-auto flex-1">
+        <div class="bg-emerald-50 border border-emerald-200 rounded-lg p-3 mb-4 text-sm">
+          <p class="text-emerald-800 font-medium" id="pmStudentName">-</p>
+          <p class="text-xs text-emerald-700" id="pmStudentDetail">-</p>
+        </div>
+
+        <div class="mb-3">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Bulan <span class="text-red-500">*</span></label>
+          <input type="month" id="pmBulan" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500">
+        </div>
+
+        <div id="pmBillingInfo" class="hidden bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3 text-sm">
+          <p class="text-blue-800">Total Tagihan: <strong id="pmTotalTagihan">-</strong></p>
+          <p class="text-blue-800">Sudah Dibayar: <strong id="pmSudahBayar">-</strong></p>
+          <p class="text-blue-800">Sisa Tunggakan: <strong id="pmSisaTunggakan">-</strong></p>
+        </div>
+
+        <div class="mb-3">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Nominal Pembayaran (Rp) <span class="text-red-500">*</span></label>
+          <input type="number" id="pmNominal" min="1" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-lg font-semibold focus:ring-2 focus:ring-emerald-500" placeholder="0">
+          <div class="flex flex-wrap gap-2 mt-2">
+            <button type="button" onclick="setPmNominalPersen(25)" class="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded">25%</button>
+            <button type="button" onclick="setPmNominalPersen(50)" class="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded">50%</button>
+            <button type="button" onclick="setPmNominalPersen(75)" class="text-xs px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded">75%</button>
+            <button type="button" onclick="setPmNominalPersen(100)" class="text-xs px-2 py-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 rounded">Lunas (100%)</button>
+            <button type="button" onclick="setPmNominalLebih()" class="text-xs px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded">Lebih (+10%)</button>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Metode Pembayaran <span class="text-red-500">*</span></label>
+          <select id="pmMetode" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500">
+            <option value="tunai">Tunai</option>
+            <option value="transfer_pusat">Transfer ke Rekening Pusat</option>
+          </select>
+        </div>
+
+        <div class="mb-3">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Tanggal Pembayaran <span class="text-red-500">*</span></label>
+          <input type="date" id="pmTanggal" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500">
+        </div>
+
+        <div class="mb-3">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Dibayar Oleh (Opsional)</label>
+          <input type="text" id="pmDibayarOleh" placeholder="Contoh: Bpk. Ahmad (Ayah)" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500">
+        </div>
+
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Catatan (Opsional)</label>
+          <textarea id="pmCatatan" rows="2" placeholder="Cicilan pertama / pembayaran sebagian / dll" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"></textarea>
+        </div>
+
+        <div id="pmPreview" class="hidden bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-3 text-sm text-yellow-800">
+          <i class="fas fa-info-circle mr-1"></i>
+          <span id="pmPreviewText">-</span>
+        </div>
+      </div>
+
+      <!-- Footer (fixed) -->
+      <div class="flex justify-end gap-2 p-4 border-t bg-gray-50 flex-shrink-0">
+        <button onclick="closePembayaranManualModal()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400">Batal</button>
+        <button onclick="submitPembayaranManual()" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium">
+          <i class="fas fa-paper-plane mr-1"></i>Submit Pembayaran
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Batal Lunas Confirmation Modal -->
+  <div id="batalLunasModal" class="hidden fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+      <div class="flex justify-between items-center mb-4">
+        <h4 class="font-semibold text-lg"><i class="fas fa-undo text-orange-600 mr-2"></i>Batalkan Pelunasan</h4>
+        <button onclick="closeBatalLunasModal()" class="text-gray-500 hover:text-gray-700 text-2xl leading-none">&times;</button>
+      </div>
+
+      <div class="bg-orange-50 border border-orange-200 rounded-lg p-3 mb-4 text-sm text-orange-800">
+        <i class="fas fa-exclamation-triangle mr-1"></i>
+        Tindakan ini akan mengembalikan status billing ke <strong>belum lunas</strong>. Gunakan untuk mengurungkan pelunasan manual yang salah klik.
+      </div>
+
+      <div class="mb-3">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Alasan Pembatalan (Opsional)</label>
+        <textarea id="blAlasan" rows="2" placeholder="Salah klik / salah nominal / dll" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"></textarea>
+      </div>
+
+      <div class="bg-gray-50 border rounded-lg p-3 mb-4 text-sm">
+        <p class="text-gray-700">Akan membatalkan <strong id="blCount">0</strong> pelunasan billing.</p>
+        <p class="text-xs text-gray-500 mt-1">Record incoming_payments terkait juga akan dihapus, dan saldo akan di-recalculate.</p>
+      </div>
+
+      <div class="flex justify-end gap-2">
+        <button onclick="closeBatalLunasModal()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400">Batal</button>
+        <button onclick="submitBatalLunas()" class="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-medium">
+          <i class="fas fa-undo mr-1"></i>Ya, Batalkan
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Batal Lunas Massal -->
+  <div id="batalLunasMassalModal" class="hidden fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-semibold text-gray-800">
+          <i class="fas fa-undo text-orange-500 mr-2"></i>Batalkan Lunas Massal
+        </h3>
+        <button onclick="closeBatalLunasMassalModal()" class="text-gray-400 hover:text-gray-600">
+          <i class="fas fa-times text-xl"></i>
+        </button>
+      </div>
+      <div class="bg-orange-50 border border-orange-200 rounded-lg p-3 mb-4 text-sm text-orange-800">
+        <i class="fas fa-exclamation-triangle mr-1"></i>
+        <strong>Perhatian:</strong> Tindakan ini akan mengembalikan status billing dari <strong>LUNAS → BELUM</strong>, menghapus catatan pelunasan, dan menghapus record incoming_payments terkait. Tidak bisa dibatalkan.
+      </div>
+
+      <div class="grid grid-cols-2 gap-3 mb-3">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Dari Bulan <span class="text-red-500">*</span></label>
+          <input type="month" id="batalLunasMassalFrom" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Sampai Bulan <span class="text-red-500">*</span></label>
+          <input type="month" id="batalLunasMassalTo" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500">
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Target Siswa</label>
+        <div class="space-y-2">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="batalLunasMassalTarget" value="all" checked onchange="toggleBatalLunasMassalTarget()">
+            <span>Semua siswa aktif di sekolah ini</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="batalLunasMassalTarget" value="specific" onchange="toggleBatalLunasMassalTarget()">
+            <span>Siswa tertentu saja</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="mb-3 hidden" id="batalLunasMassalStudentListWrap">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Cari & Pilih Siswa</label>
+        <input type="text" id="batalLunasMassalStudentSearch" placeholder="Cari nama/NISN..." onkeyup="filterBatalLunasMassalStudents()" class="w-full px-3 py-2 border border-gray-300 rounded-lg mb-2 focus:ring-2 focus:ring-orange-500">
+        <div id="batalLunasMassalStudentList" class="border rounded-lg max-h-48 overflow-y-auto p-2 space-y-1 bg-gray-50">
+          <p class="text-sm text-gray-500 text-center py-2">Memuat siswa...</p>
+        </div>
+        <p class="text-xs text-gray-500 mt-1">Dipilih: <strong id="batalLunasMassalSelectedCount">0</strong> siswa</p>
+      </div>
+
+      <div class="mb-3">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Alasan Pembatalan (Opsional)</label>
+        <textarea id="batalLunasMassalAlasan" rows="2" placeholder="Contoh: Salah catat / Double input / Pembatalan oleh orang tua" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"></textarea>
+      </div>
+
+      <div id="batalLunasMassalPreview" class="hidden bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3 text-sm text-blue-800">
+        <i class="fas fa-info-circle mr-1"></i>
+        <span id="batalLunasMassalPreviewText">-</span>
+      </div>
+
+      <div class="flex gap-2 justify-end">
+        <button onclick="closeBatalLunasMassalModal()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">Batal</button>
+        <button onclick="previewBatalLunasMassal()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+          <i class="fas fa-search mr-1"></i>Preview
+        </button>
+        <button onclick="submitBatalLunasMassal()" class="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 font-medium">
+          <i class="fas fa-undo mr-1"></i>Batalkan Sekarang
         </button>
       </div>
     </div>

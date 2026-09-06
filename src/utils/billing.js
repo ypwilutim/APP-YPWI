@@ -198,6 +198,20 @@ async function ensureBillingTables() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS billing_payment_allocations (
+      id BIGINT(20) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      billing_id BIGINT(20) NOT NULL,
+      incoming_payment_id BIGINT(20) NOT NULL,
+      amount DECIMAL(12,2) NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      KEY idx_billing (billing_id),
+      KEY idx_incoming (incoming_payment_id),
+      CONSTRAINT fk_alloc_billing FOREIGN KEY (billing_id) REFERENCES billing_payment(id) ON DELETE CASCADE,
+      CONSTRAINT fk_alloc_incoming FOREIGN KEY (incoming_payment_id) REFERENCES incoming_payments(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
   // Tambah kolom tahun_masuk di students (4 digit tahun, format YYYY)
   try {
     await db.query(`ALTER TABLE students ADD COLUMN tahun_masuk VARCHAR(10) DEFAULT NULL`);
@@ -357,11 +371,14 @@ async function generateBilling(tenantId, fallbackStart) {
     const totalTagihan = Math.max(0, spp + transport - subsidi + biayaAdmin);
 
     for (const m of months) {
-      const existingResult = await db.query('SELECT id, bulan FROM billing_payment WHERE student_id = ? AND bulan = ?', [s.id, m]);
+      const existingResult = await db.query('SELECT id, bulan, status FROM billing_payment WHERE student_id = ? AND bulan = ?', [s.id, m]);
       const existing = Array.isArray(existingResult) ? existingResult[0] : existingResult;
       if (existing) {
-        // Lock snapshot for months already past
-        if (m < end) { skipped++; continue; }
+        const isLunas = existing.status === 'lunas';
+        if (isLunas) {
+          skipped++;
+          continue;
+        }
         await db.query(
           'UPDATE billing_payment SET spp_bulanan = ?, ransportasi = ?, subsidi = ?, biaya_admin_va = ?, transaksi = 0, keterangan_spp = ?, status = "belum" WHERE id = ?',
           [spp, transport, subsidi, biayaAdmin, totalTagihan, existing.id]
@@ -379,55 +396,81 @@ async function generateBilling(tenantId, fallbackStart) {
   return { created, skipped, end };
 }
 
-// Hitung ulang keterangan_spp + saldo untuk 1 siswa (dengan carry-over kelebihan)
+// Hitung ulang keterangan_spp + saldo untuk 1 siswa
+// Model: semua pembayaran dikumpulkan, lalu dialokasikan ke billing tertua dulu sampai lunas, sisanya jadi saldo positif
 async function recalcStudent(studentId) {
   const [student] = await db.query('SELECT id, tenant_id FROM students WHERE id = ?', [studentId]);
   if (!student) return null;
 
   const bills = await db.query('SELECT * FROM billing_payment WHERE student_id = ? ORDER BY bulan ASC', [studentId]);
   const inc = await db.query(
-    "SELECT periode, SUM(total_amount) as total FROM incoming_payments WHERE matched_student_id = ? AND status IN ('Success', 'SUCCESS', 'success', 'Sukses', 'Settlement', 'Paid', 'PAID', 'Referral') GROUP BY periode",
+    "SELECT id, periode, SUM(total_amount) as total FROM incoming_payments WHERE matched_student_id = ? AND status IN ('Success', 'SUCCESS', 'success', 'Sukses', 'Settlement', 'Paid', 'PAID', 'Referral') GROUP BY periode, id",
     [studentId]
   );
-  const incMap = {};
-  inc.forEach(r => { incMap[r.periode] = parseFloat(r.total) || 0; });
 
-  let carry = 0;
-  let totalKeterangan = 0;
+  const incByPeriode = {};
+  inc.forEach(r => {
+    if (!incByPeriode[r.periode]) incByPeriode[r.periode] = [];
+    incByPeriode[r.periode].push({ id: r.id, total: parseFloat(r.total) || 0 });
+  });
+
+  await db.query('DELETE FROM billing_payment_allocations WHERE billing_id IN (SELECT id FROM billing_payment WHERE student_id = ?)', [studentId]);
+
+  let pool = 0;
+  let remainingKeterangan = 0;
+
+  for (const key of Object.keys(incByPeriode)) {
+    pool += incByPeriode[key].reduce((s, r) => s + r.total, 0);
+  }
+
   for (const b of bills) {
     const spp = parseFloat(b.spp_bulanan) || 0;
     const transport = parseFloat(b.ransportasi) || 0;
     const subsidi = parseFloat(b.subsidi) || 0;
     const adminVa = parseFloat(b.biaya_admin_va) || 0;
     const totalTagihan = spp + transport - subsidi + adminVa;
-    const trans = incMap[b.bulan] || 0;
-    const available = trans + carry;
-    let keterangan, status, newCarry;
-    if (available >= totalTagihan) {
+
+    let keterangan, status;
+    if (pool >= totalTagihan) {
+      pool -= totalTagihan;
       keterangan = 0;
       status = 'lunas';
-      newCarry = available - totalTagihan;
+      remainingKeterangan = 0;
     } else {
-      keterangan = totalTagihan - available;
+      keterangan = totalTagihan - pool;
       status = 'belum';
-      newCarry = 0;
+      remainingKeterangan += keterangan;
+      pool = 0;
     }
-    carry = newCarry;
-    totalKeterangan += keterangan;
+
+    const bulanTotal = incByPeriode[b.bulan] ? incByPeriode[b.bulan].reduce((s, r) => s + r.total, 0) : 0;
     await db.query(
       'UPDATE billing_payment SET transaksi = ?, keterangan_spp = ?, status = ? WHERE id = ?',
-      [trans, keterangan, status, b.id]
+      [bulanTotal, keterangan, status, b.id]
     );
+
+    if (status === 'lunas' && incByPeriode[b.bulan]) {
+      let allocated = totalTagihan;
+      for (const r of incByPeriode[b.bulan]) {
+        if (allocated <= 0) break;
+        const use = Math.min(r.total, allocated);
+        await db.query(
+          'INSERT INTO billing_payment_allocations (billing_id, incoming_payment_id, amount) VALUES (?, ?, ?)',
+          [b.id, r.id, use]
+        );
+        r.total -= use;
+        allocated -= use;
+      }
+    }
   }
 
-  // saldo: + kelebihan (carry), - tunggakan (Σ keterangan)
-  const saldo = carry - totalKeterangan;
+  const saldo = pool - remainingKeterangan;
   await db.query(
     `INSERT INTO saldo_siswa (student_id, tenant_id, saldo) VALUES (?, ?, ?)
      ON DUPLICATE KEY UPDATE saldo = VALUES(saldo), tenant_id = VALUES(tenant_id)`,
     [studentId, student.tenant_id, saldo]
   );
-  return { studentId, saldo, carry, totalKeterangan };
+  return { studentId, saldo, pool, remainingKeterangan };
 }
 
 async function recalcTenant(tenantId) {
