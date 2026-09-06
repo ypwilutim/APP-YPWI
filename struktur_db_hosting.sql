@@ -112,6 +112,9 @@ CREATE TABLE `billing_payment` (
   `tenant_id` varchar(20) DEFAULT NULL,
   `student_id` int(11) NOT NULL,
   `spp_bulanan` decimal(12,2) DEFAULT 0.00,
+  `ransportasi` decimal(12,2) DEFAULT 0.00,
+  `subsid` decimal(12,2) DEFAULT 0.00,
+  `biaya_admin_va` decimal(12,2) DEFAULT 0.00,
   `bulan` varchar(7) NOT NULL,
   `transaksi` decimal(12,2) DEFAULT 0.00,
   `keterangan_spp` decimal(12,2) DEFAULT 0.00,
@@ -834,6 +837,7 @@ CREATE TABLE `students` (
   `privat` decimal(10,2) DEFAULT 0.00,
   `biaya_lain` decimal(10,2) DEFAULT 0.00,
   `biaya_lain_nama` varchar(255) DEFAULT NULL,
+  `biaya_admin_va` decimal(10,2) NOT NULL DEFAULT 0.00,
   `status` enum('aktif','alumni','mutasi','keluar') NOT NULL DEFAULT 'aktif',
   `tanggal_masuk` varchar(7) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -910,6 +914,13 @@ CREATE TABLE `teachers` (
   `pendidikan_terakhir` varchar(100) DEFAULT NULL,
   `gaji_pokok` decimal(12,2) NOT NULL DEFAULT 0.00,
   `tunj_kinerja` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `tunj_umum` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `tunj_istri` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `tunj_anak` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `tunj_kepala_sekolah` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `tunj_wali_kelas` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `honor_bendahara` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `potongan` decimal(12,2) NOT NULL DEFAULT 0.00,
   `tunj_kehadiran` decimal(12,2) NOT NULL DEFAULT 0.00
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -941,6 +952,17 @@ CREATE TABLE `teacher_assignments` (
   `tenant_id` varchar(20) NOT NULL,
   `jabatan_di_unit` varchar(100) DEFAULT NULL,
   `class_id` int(11) DEFAULT NULL,
+  `is_paid` tinyint(1) NOT NULL DEFAULT 1,
+  `gaji_pokok` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `tunj_kinerja` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `tunj_umum` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `tunj_istri` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `tunj_anak` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `tunj_kepala_sekolah` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `tunj_wali_kelas` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `honor_bendahara` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `tunj_kehadiran` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `potongan` decimal(12,2) NOT NULL DEFAULT 0.00,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -1134,6 +1156,198 @@ CREATE TABLE `xendit_invoices` (
   `paid_at` datetime DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `payment_admin_settings`
+--
+
+CREATE TABLE `payment_admin_settings` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `subject_type` varchar(20) NOT NULL,
+  `subject_id` int(11) NOT NULL,
+  `tenant_id` varchar(20) DEFAULT NULL,
+  `biaya_admin_va` decimal(12,2) NOT NULL DEFAULT 2000.00 COMMENT 'Biaya admin VA BSI per transaksi',
+  `keterangan` text DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `kafalah_settings`
+--
+
+CREATE TABLE `kafalah_settings` (
+  `id` int(11) NOT NULL DEFAULT 1,
+  `tunj_pengabdian` decimal(12,2) NOT NULL DEFAULT 150000,
+  `tunj_fungsional` decimal(12,2) NOT NULL DEFAULT 100000,
+  `tunj_transport` decimal(12,2) NOT NULL DEFAULT 168000,
+  `tunj_tepat_waktu` decimal(12,2) NOT NULL DEFAULT 120000,
+  `tunj_tidak_cepat_pulang` decimal(12,2) NOT NULL DEFAULT 120000,
+  `tunj_prestasi_kinerja` decimal(12,2) NOT NULL DEFAULT 150000,
+  `nominal_kjm` decimal(12,2) NOT NULL DEFAULT 10000,
+  `tunj_pembina` decimal(12,2) NOT NULL DEFAULT 0,
+  `tunj_pondok` decimal(12,2) NOT NULL DEFAULT 0,
+  `tunj_anak` decimal(12,2) NOT NULL DEFAULT 20000,
+  `tunj_istri` decimal(12,2) NOT NULL DEFAULT 0,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `kafalah_gaji_matrix`
+--
+
+CREATE TABLE `kafalah_gaji_matrix` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `status_pegawai` enum('PT','PK') NOT NULL,
+  `jenjang` varchar(20) NOT NULL,
+  `pendidikan` varchar(10) NOT NULL,
+  `masa_kerja_min` int(11) NOT NULL,
+  `masa_kerja_max` int(11) NOT NULL,
+  `nominal` decimal(12,2) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `idx_lookup` (`status_pegawai`,`jenjang`,`pendidikan`,`masa_kerja_min`,`masa_kerja_max`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `kafalah_jabatan_tunjangan`
+--
+
+CREATE TABLE `kafalah_jabatan_tunjangan` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `jabatan_key` varchar(50) NOT NULL,
+  `jabatan_label` varchar(100) NOT NULL,
+  `nominal` decimal(12,2) NOT NULL DEFAULT 0,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_key` (`jabatan_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `kafalah_kenaikan_config`
+--
+
+CREATE TABLE `kafalah_kenaikan_config` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `status_pegawai` enum('PT','PK') NOT NULL,
+  `jenjang` varchar(20) NOT NULL,
+  `pendidikan` varchar(20) NOT NULL,
+  `gaji_awal` decimal(12,2) NOT NULL DEFAULT 0,
+  `kenaikan_per_tahun` decimal(12,2) NOT NULL DEFAULT 0,
+  `interval_tahun` int(11) NOT NULL DEFAULT 2,
+  `masa_kerja_max` int(11) NOT NULL DEFAULT 20,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_combo` (`status_pegawai`,`jenjang`,`pendidikan`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `kafalah_pendidikan_ref`
+--
+
+CREATE TABLE `kafalah_pendidikan_ref` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `kode` varchar(20) NOT NULL,
+  `label` varchar(100) NOT NULL,
+  `urutan` int(11) NOT NULL DEFAULT 0,
+  `is_active` tinyint(1) NOT NULL DEFAULT 1,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_kode` (`kode`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `kafalah_teacher_overrides`
+--
+
+CREATE TABLE `kafalah_teacher_overrides` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `teacher_id` int(11) NOT NULL,
+  `tenant_id` varchar(50) NOT NULL,
+  `tunj_struktural` decimal(12,2) NOT NULL DEFAULT 0,
+  `tunj_pembina` decimal(12,2) NOT NULL DEFAULT 0,
+  `tunj_pondok` decimal(12,2) NOT NULL DEFAULT 0,
+  `tunj_apresiasi` decimal(12,2) NOT NULL DEFAULT 0,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_teacher_tenant` (`teacher_id`,`tenant_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `kafalah_payroll`
+--
+
+CREATE TABLE `kafalah_payroll` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `teacher_id` int(11) NOT NULL,
+  `tenant_id` varchar(50) NOT NULL,
+  `periode_mulai` date NOT NULL,
+  `periode_selesai` date NOT NULL,
+  `label_periode` varchar(50) DEFAULT NULL,
+  `nama` varchar(200) DEFAULT NULL,
+  `nik` varchar(30) DEFAULT NULL,
+  `jabatan` varchar(100) DEFAULT NULL,
+  `status_pegawai` varchar(10) DEFAULT NULL,
+  `jenjang` varchar(20) DEFAULT NULL,
+  `pendidikan` varchar(10) DEFAULT NULL,
+  `masa_kerja_tahun` int(11) DEFAULT 0,
+  `jumlah_anak` int(11) DEFAULT 0,
+  `predikat_kinerja` varchar(5) DEFAULT NULL,
+  `hari_efektif` int(11) DEFAULT 0,
+  `hadir` int(11) DEFAULT 0,
+  `tidak_hadir` int(11) DEFAULT 0,
+  `tepat_waktu` int(11) DEFAULT 0,
+  `terlambat` int(11) DEFAULT 0,
+  `tidak_absen_masuk` int(11) DEFAULT 0,
+  `cepat_pulang` int(11) DEFAULT 0,
+  `tidak_absen_pulang` int(11) DEFAULT 0,
+  `kjm` int(11) DEFAULT 0,
+  `kafalah_pokok` decimal(12,2) NOT NULL DEFAULT 0,
+  `tunj_keluarga_istri` decimal(12,2) NOT NULL DEFAULT 0,
+  `tunj_keluarga_anak` decimal(12,2) NOT NULL DEFAULT 0,
+  `total_a` decimal(14,2) NOT NULL DEFAULT 0,
+  `tunj_struktural` decimal(12,2) NOT NULL DEFAULT 0,
+  `tunj_pengabdian` decimal(12,2) NOT NULL DEFAULT 0,
+  `tunj_fungsional` decimal(12,2) NOT NULL DEFAULT 0,
+  `tunj_pembina` decimal(12,2) NOT NULL DEFAULT 0,
+  `tunj_pondok` decimal(12,2) NOT NULL DEFAULT 0,
+  `tunj_transport` decimal(12,2) NOT NULL DEFAULT 0,
+  `tunj_tepat_waktu` decimal(12,2) NOT NULL DEFAULT 0,
+  `tunj_tidak_cepat_pulang` decimal(12,2) NOT NULL DEFAULT 0,
+  `tunj_kjm` decimal(12,2) NOT NULL DEFAULT 0,
+  `tunj_prestasi_kinerja` decimal(12,2) NOT NULL DEFAULT 0,
+  `tunj_apresiasi` decimal(12,2) NOT NULL DEFAULT 0,
+  `total_b` decimal(14,2) NOT NULL DEFAULT 0,
+  `potong_taawun` decimal(12,2) NOT NULL DEFAULT 0,
+  `potong_simt` decimal(12,2) NOT NULL DEFAULT 0,
+  `potong_pinjaman` decimal(12,2) NOT NULL DEFAULT 0,
+  `potong_cuti_luar_tanggungan` decimal(12,2) NOT NULL DEFAULT 0,
+  `potong_persen_cuti` decimal(5,2) NOT NULL DEFAULT 0,
+  `total_c` decimal(14,2) NOT NULL DEFAULT 0,
+  `total_pendapatan` decimal(14,2) NOT NULL DEFAULT 0,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  `created_by` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_teacher_periode` (`teacher_id`,`tenant_id`,`periode_mulai`,`periode_selesai`),
+  KEY `idx_periode` (`periode_mulai`,`periode_selesai`),
+  KEY `idx_tenant` (`tenant_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------
@@ -1578,6 +1792,59 @@ ALTER TABLE `xendit_invoices`
   ADD KEY `idx_status` (`status`);
 
 --
+-- Indeks untuk tabel `payment_admin_settings`
+--
+ALTER TABLE `payment_admin_settings`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uniq_subject` (`subject_type`,`subject_id`),
+  ADD KEY `idx_tenant` (`tenant_id`),
+  ADD KEY `idx_subject` (`subject_type`,`subject_id`);
+
+--
+-- Indeks untuk tabel `kafalah_gaji_matrix`
+--
+ALTER TABLE `kafalah_gaji_matrix`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_lookup` (`status_pegawai`,`jenjang`,`pendidikan`,`masa_kerja_min`,`masa_kerja_max`);
+
+--
+-- Indeks untuk tabel `kafalah_jabatan_tunjangan`
+--
+ALTER TABLE `kafalah_jabatan_tunjangan`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uniq_key` (`jabatan_key`);
+
+--
+-- Indeks untuk tabel `kafalah_kenaikan_config`
+--
+ALTER TABLE `kafalah_kenaikan_config`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uniq_combo` (`status_pegawai`,`jenjang`,`pendidikan`);
+
+--
+-- Indeks untuk tabel `kafalah_pendidikan_ref`
+--
+ALTER TABLE `kafalah_pendidikan_ref`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uniq_kode` (`kode`);
+
+--
+-- Indeks untuk tabel `kafalah_teacher_overrides`
+--
+ALTER TABLE `kafalah_teacher_overrides`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uniq_teacher_tenant` (`teacher_id`,`tenant_id`);
+
+--
+-- Indeks untuk tabel `kafalah_payroll`
+--
+ALTER TABLE `kafalah_payroll`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uniq_teacher_periode` (`teacher_id`,`tenant_id`,`periode_mulai`,`periode_selesai`),
+  ADD KEY `idx_periode` (`periode_mulai`,`periode_selesai`),
+  ADD KEY `idx_tenant` (`tenant_id`);
+
+--
 -- AUTO_INCREMENT untuk tabel yang dibuang
 --
 
@@ -1813,6 +2080,48 @@ ALTER TABLE `whatsapp_messages`
 -- AUTO_INCREMENT untuk tabel `xendit_invoices`
 --
 ALTER TABLE `xendit_invoices`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `payment_admin_settings`
+--
+ALTER TABLE `payment_admin_settings`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `kafalah_gaji_matrix`
+--
+ALTER TABLE `kafalah_gaji_matrix`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `kafalah_jabatan_tunjangan`
+--
+ALTER TABLE `kafalah_jabatan_tunjangan`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `kafalah_kenaikan_config`
+--
+ALTER TABLE `kafalah_kenaikan_config`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `kafalah_pendidikan_ref`
+--
+ALTER TABLE `kafalah_pendidikan_ref`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `kafalah_teacher_overrides`
+--
+ALTER TABLE `kafalah_teacher_overrides`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT untuk tabel `kafalah_payroll`
+--
+ALTER TABLE `kafalah_payroll`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --

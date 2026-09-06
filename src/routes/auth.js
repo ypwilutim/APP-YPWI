@@ -422,4 +422,131 @@ router.put('/auth/update-email', authenticateToken, async (req, res) => {
   }
 });
 
+// ============================================================
+// PARENT LOGIN - Phone number only
+// ============================================================
+
+router.post('/parent/login', async (req, res) => {
+  const { phoneNumber } = req.body || {};
+
+  if (!phoneNumber) {
+    return res.status(400).json({
+      success: false,
+      message: 'Nomor WhatsApp wajib diisi.'
+    });
+  }
+
+  try {
+    // Normalize phone number (remove spaces, dashes, etc.)
+    const cleanPhone = phoneNumber.replace(/\s+/g, '').replace(/[-()]/g, '');
+    
+    // Find parent by phone number
+    const parents = await db.query(
+      'SELECT * FROM parents WHERE REPLACE(REPLACE(no_wa, "+", ""), " ", "") = ?',
+      [cleanPhone]
+    );
+
+    if (parents.length === 0) {
+      return res.status(401).json({
+        success: false,
+        message: 'Nomor WhatsApp tidak terdaftar.'
+      });
+    }
+
+    const parent = parents[0];
+
+    // Get students associated with this parent
+    const students = await db.query(
+      'SELECT * FROM students WHERE parent_id = ? AND is_active = 1',
+      [parent.id]
+    );
+
+    if (students.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Tidak ada siswa aktif yang terdaftar untuk nomor WhatsApp ini.'
+      });
+    }
+
+    // Create token payload for parent session
+    const tokenPayload = {
+      id: parent.id,
+      nama_orang_tua: parent.nama_orang_tua,
+      no_wa: parent.no_wa,
+      email: parent.email,
+      nik: parent.nik,
+      role: 'parent',
+      students: students,
+      timestamp: new Date().toISOString()
+    };
+
+    const token = jwt.sign(tokenPayload, SECRET_KEY, { expiresIn: '8h' });
+
+    // Debug: Log what we're sending to client
+    console.log('[PARENT LOGIN DEBUG] Parent login result:', { 
+      parentId: parent.id, 
+      parentName: parent.nama_orang_tua,
+      studentCount: students.length 
+    });
+
+    return res.json({
+      success: true,
+      message: 'Login orang tua berhasil.',
+      token: token,
+      parent: {
+        id: parent.id,
+        nama_orang_tua: parent.nama_orang_tua,
+        no_wa: parent.no_wa,
+        email: parent.email,
+        nik: parent.nik
+      },
+      students: students.map(student => ({
+        id: student.id,
+        nisn: student.nisn,
+        nis: student.nis,
+        nama_siswa: student.nama_siswa,
+        jenis_kelamin: student.jenis_kelamin,
+        tempat_lahir: student.tempat_lahir,
+        tanggal_lahir: student.tanggal_lahir,
+        agama: student.agama,
+        kewarganegaraan: student.kewarganegaraan,
+        alamat: student.alamat,
+        golongan_darah: student.golongan_darah,
+        tingkatan: student.tingkatan,
+        nama_kelas: student.nama_kelas,
+        jenis_kelas: student.jenis_kelas,
+        status: student.status,
+        jumlah_saudara: student.jumlah_saudara,
+        anak_ke: student.anak_ke,
+        ayah: student.ayah,
+        ibu: student.ibu,
+        no_wa_ortu: student.no_wa_ortu,
+        email_ortu: student.email_ortu,
+        pekerjaan_ayah: student.pekerjaan_ayah,
+        pekerjaan_ibu: student.pekerjaan_ibu,
+        penghasilan_orang_tua: student.penghasilan_orang_tua,
+        jumlah_tanggungan: student.jumlah_tanggungan,
+        biaya_masuk: student.biaya_masuk,
+        iuran_bulanan: student.iuran_bulanan,
+        biaya_lain: student.biaya_lain,
+        ransportasi: student.ransportasi,
+        subsidi: student.subsidi,
+        privat: student.privat,
+        biaya_lain_nama: student.biaya_lain_nama,
+        tanggal_masuk: student.tanggal_masuk,
+        tahun_masuk: student.tahun_masuk,
+        status: student.status,
+        biaya_admin_va: student.biaya_admin_va,
+        is_active: student.is_active
+      }))
+    });
+  } catch (error) {
+    console.error('[PARENT LOGIN ERROR]', error.message);
+    res.status(500).json({
+      success: false,
+      message: 'Terjadi kesalahan sistem.'
+    });
+  }
+});
+
 module.exports = router;

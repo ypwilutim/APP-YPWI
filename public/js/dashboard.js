@@ -108,6 +108,7 @@ const token = localStorage.getItem('token');
 const user = JSON.parse(localStorage.getItem('user') || '{}');
 window.token = token;
 window.userRole = (parseJwt(token) || {}).role || user.role || null;
+window.userTenantId = (parseJwt(token) || {}).tenant_id || user.tenant_id || null;
 
 if (!token) {
     window.location.href = 'login.html';
@@ -530,7 +531,10 @@ function canApproveIzin(assignments) {
 
 function getApprovalTenantFilter(assignments) {
     const list = assignments || [];
-    if (window.userRole === 'admin') return ['YPWILUTIM'];
+    if (window.userRole === 'admin') {
+        if (window.userTenantId === 'YPWILUTIM') return null; // semua tenant
+        return window.userTenantId ? [window.userTenantId] : []; // hanya tenant sendiri
+    }
 
     const ketuaRoles = ['kepalasekolah', 'pimpinan', 'ketua', 'kepalapondok'];
     const isKetuaYpwilutim = list.some(a => {

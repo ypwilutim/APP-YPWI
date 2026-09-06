@@ -249,6 +249,7 @@ if (process.env.WHATSAPP_ENABLED !== 'false') {
 
 app.use('/api', absensiRoutes);
 app.use('/api', authRoutes);
+app.use('/api', require('./src/routes/parent'));
 app.use('/api', scannerRoutes);
 app.use('/api', adminRoutes);
 app.use('/api', require('./src/routes/employment-rules'));
@@ -1046,6 +1047,292 @@ async function startServer() {
       console.log('Profile access requests table migration note:', e.message);
     }
 
+    // ============================================
+    // Auto-Migration: Ensure missing tables and columns
+    // exist on hosting DB (self-healing pattern)
+    // ============================================
+
+    // Helper: add column if it doesn't exist
+    async function ensureColumn(table, column, definition) {
+      try {
+        const [cols] = await db.query(
+          'SELECT COUNT(*) as c FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?',
+          [table, column]
+        );
+        if (cols.c === 0) {
+          await db.query(`ALTER TABLE \`${table}\` ADD COLUMN \`${column}\` ${definition}`);
+          console.log(`[MIGRATION] Added column: ${table}.${column}`);
+        }
+      } catch (e) {
+        console.log(`[MIGRATION] Column ${table}.${column}: ${e.message}`);
+      }
+    }
+
+    // Helper: create table if not exists
+    async function ensureTable(sql, name) {
+      try {
+        await db.query(sql);
+        console.log(`[MIGRATION] Ensured table: ${name}`);
+      } catch (e) {
+        console.log(`[MIGRATION] Table ${name}: ${e.message}`);
+      }
+    }
+
+    // --- students: biaya_admin_va ---
+    await ensureColumn('students', 'biaya_admin_va', 'DECIMAL(10,2) NOT NULL DEFAULT 0.00 AFTER subsidi');
+
+    // --- students: tambahan kolom dari fix_payroll_columns_hosting.sql ---
+    await ensureColumn('students', 'iuran_bulanan', 'DECIMAL(10,2) DEFAULT 0.00 AFTER jenis_kelamin');
+    await ensureColumn('students', 'biaya_lain', 'DECIMAL(10,2) DEFAULT 0.00 AFTER privat');
+
+    // --- teachers: kolom payroll yang belum ada di hosting ---
+    await ensureColumn('teachers', 'tunj_umum', 'DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER tunj_kinerja');
+    await ensureColumn('teachers', 'tunj_istri', 'DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER tunj_umum');
+    await ensureColumn('teachers', 'tunj_anak', 'DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER tunj_istri');
+    await ensureColumn('teachers', 'tunj_kepala_sekolah', 'DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER tunj_anak');
+    await ensureColumn('teachers', 'tunj_wali_kelas', 'DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER tunj_kepala_sekolah');
+    await ensureColumn('teachers', 'honor_bendahara', 'DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER tunj_wali_kelas');
+    await ensureColumn('teachers', 'potongan', 'DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER honor_bendahara');
+    await ensureColumn('teachers', 'pending_password_hash', 'VARCHAR(255) DEFAULT NULL AFTER link_foto');
+
+    // --- teacher_assignments: kolom payroll override + is_paid ---
+    await ensureColumn('teacher_assignments', 'is_paid', 'TINYINT(1) NOT NULL DEFAULT 1 COMMENT "1=digaji, 0=tidak"');
+    await ensureColumn('teacher_assignments', 'gaji_pokok', 'DECIMAL(12,2) NOT NULL DEFAULT 0.00');
+    await ensureColumn('teacher_assignments', 'tunj_kinerja', 'DECIMAL(12,2) NOT NULL DEFAULT 0.00');
+    await ensureColumn('teacher_assignments', 'tunj_umum', 'DECIMAL(12,2) NOT NULL DEFAULT 0.00');
+    await ensureColumn('teacher_assignments', 'tunj_istri', 'DECIMAL(12,2) NOT NULL DEFAULT 0.00');
+    await ensureColumn('teacher_assignments', 'tunj_anak', 'DECIMAL(12,2) NOT NULL DEFAULT 0.00');
+    await ensureColumn('teacher_assignments', 'tunj_kepala_sekolah', 'DECIMAL(12,2) NOT NULL DEFAULT 0.00');
+    await ensureColumn('teacher_assignments', 'tunj_wali_kelas', 'DECIMAL(12,2) NOT NULL DEFAULT 0.00');
+    await ensureColumn('teacher_assignments', 'honor_bendahara', 'DECIMAL(12,2) NOT NULL DEFAULT 0.00');
+    await ensureColumn('teacher_assignments', 'tunj_kehadiran', 'DECIMAL(12,2) NOT NULL DEFAULT 0.00');
+    await ensureColumn('teacher_assignments', 'potongan', 'DECIMAL(12,2) NOT NULL DEFAULT 0.00');
+
+    // --- billing_payment: kolom biaya tambahan ---
+    await ensureColumn('billing_payment', 'ransportasi', 'DECIMAL(12,2) DEFAULT 0.00');
+    await ensureColumn('billing_payment', 'subsid', 'DECIMAL(12,2) DEFAULT 0.00');
+    await ensureColumn('billing_payment', 'biaya_admin_va', 'DECIMAL(12,2) DEFAULT 0.00');
+
+    // --- payment_admin_settings (auto-created at runtime, ensure schema) ---
+    await ensureTable(`
+      CREATE TABLE IF NOT EXISTS payment_admin_settings (
+        id INT(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        subject_type VARCHAR(20) NOT NULL,
+        subject_id INT(11) NOT NULL,
+        tenant_id VARCHAR(20) DEFAULT NULL,
+        biaya_admin_va DECIMAL(12,2) NOT NULL DEFAULT 2000.00 COMMENT 'Biaya admin VA BSI per transaksi',
+        keterangan TEXT DEFAULT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uniq_subject (subject_type, subject_id),
+        KEY idx_tenant (tenant_id),
+        KEY idx_subject (subject_type, subject_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `, 'payment_admin_settings');
+
+    // Seed global payment_admin_settings
+    try {
+      await db.query(
+        `INSERT IGNORE INTO payment_admin_settings (subject_type, subject_id, biaya_admin_va, keterangan) 
+         VALUES ('global', 0, 2000.00, 'Default biaya admin VA BSI - berlaku untuk semua siswa & guru')`
+      );
+      console.log('[MIGRATION] Seeded payment_admin_settings global');
+    } catch (e) {
+      console.log('[MIGRATION] payment_admin_settings seed:', e.message);
+    }
+
+    // --- Kafalah tables ---
+    await ensureTable(`
+      CREATE TABLE IF NOT EXISTS kafalah_settings (
+        id INT(11) NOT NULL DEFAULT 1,
+        tunj_pengabdian DECIMAL(12,2) NOT NULL DEFAULT 150000,
+        tunj_fungsional DECIMAL(12,2) NOT NULL DEFAULT 100000,
+        tunj_transport DECIMAL(12,2) NOT NULL DEFAULT 168000,
+        tunj_tepat_waktu DECIMAL(12,2) NOT NULL DEFAULT 120000,
+        tunj_tidak_cepat_pulang DECIMAL(12,2) NOT NULL DEFAULT 120000,
+        tunj_prestasi_kinerja DECIMAL(12,2) NOT NULL DEFAULT 150000,
+        nominal_kjm DECIMAL(12,2) NOT NULL DEFAULT 10000,
+        tunj_pembina DECIMAL(12,2) NOT NULL DEFAULT 0,
+        tunj_pondok DECIMAL(12,2) NOT NULL DEFAULT 0,
+        tunj_anak DECIMAL(12,2) NOT NULL DEFAULT 20000,
+        tunj_istri DECIMAL(12,2) NOT NULL DEFAULT 0,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `, 'kafalah_settings');
+
+    await ensureTable(`
+      CREATE TABLE IF NOT EXISTS kafalah_gaji_matrix (
+        id INT(11) NOT NULL AUTO_INCREMENT,
+        status_pegawai ENUM('PT','PK') NOT NULL,
+        jenjang VARCHAR(20) NOT NULL,
+        pendidikan VARCHAR(10) NOT NULL,
+        masa_kerja_min INT(11) NOT NULL,
+        masa_kerja_max INT(11) NOT NULL,
+        nominal DECIMAL(12,2) NOT NULL DEFAULT 0,
+        PRIMARY KEY (id),
+        KEY idx_lookup (status_pegawai, jenjang, pendidikan, masa_kerja_min, masa_kerja_max)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `, 'kafalah_gaji_matrix');
+
+    await ensureTable(`
+      CREATE TABLE IF NOT EXISTS kafalah_jabatan_tunjangan (
+        id INT(11) NOT NULL AUTO_INCREMENT,
+        jabatan_key VARCHAR(50) NOT NULL,
+        jabatan_label VARCHAR(100) NOT NULL,
+        nominal DECIMAL(12,2) NOT NULL DEFAULT 0,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY uniq_key (jabatan_key)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `, 'kafalah_jabatan_tunjangan');
+
+    try {
+      await db.query(`
+        INSERT IGNORE INTO kafalah_jabatan_tunjangan (jabatan_key, jabatan_label, nominal) VALUES
+          ('kepalasekolah', 'Kepala Sekolah', 800000),
+          ('kepsek', 'Kepala Sekolah', 800000),
+          ('pimpinanpondok', 'Pimpinan Pondok', 500000),
+          ('bendahara', 'Bendahara', 400000),
+          ('bendaharawali', 'Bendahara/Wali Kelas', 500000),
+          ('walikelas', 'Wali Kelas', 100000),
+          ('walikelasmengaji', 'Wali Kelas (Mengaji)', 100000),
+          ('pjinternalpondok', 'PJ. Internal Pondok', 500000),
+          ('guru', 'Guru', 0),
+          ('tu', 'Tata Usaha', 400000),
+          ('operator', 'Operator', 100000),
+          ('admin', 'Admin', 0)
+      `);
+      console.log('[MIGRATION] Seeded kafalah_jabatan_tunjangan');
+    } catch (e) {
+      console.log('[MIGRATION] kafalah_jabatan_tunjangan seed:', e.message);
+    }
+
+    await ensureTable(`
+      CREATE TABLE IF NOT EXISTS kafalah_kenaikan_config (
+        id INT(11) NOT NULL AUTO_INCREMENT,
+        status_pegawai ENUM('PT','PK') NOT NULL,
+        jenjang VARCHAR(20) NOT NULL,
+        pendidikan VARCHAR(20) NOT NULL,
+        gaji_awal DECIMAL(12,2) NOT NULL DEFAULT 0,
+        kenaikan_per_tahun DECIMAL(12,2) NOT NULL DEFAULT 0,
+        interval_tahun INT(11) NOT NULL DEFAULT 2,
+        masa_kerja_max INT(11) NOT NULL DEFAULT 20,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY uniq_combo (status_pegawai, jenjang, pendidikan)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `, 'kafalah_kenaikan_config');
+
+    await ensureTable(`
+      CREATE TABLE IF NOT EXISTS kafalah_pendidikan_ref (
+        id INT(11) NOT NULL AUTO_INCREMENT,
+        kode VARCHAR(20) NOT NULL,
+        label VARCHAR(100) NOT NULL,
+        urutan INT(11) NOT NULL DEFAULT 0,
+        is_active TINYINT(1) NOT NULL DEFAULT 1,
+        PRIMARY KEY (id),
+        UNIQUE KEY uniq_kode (kode)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `, 'kafalah_pendidikan_ref');
+
+    try {
+      await db.query(`
+        INSERT IGNORE INTO kafalah_pendidikan_ref (kode, label, urutan, is_active) VALUES
+          ('SMA', 'SMA / Sederajat', 1, 1),
+          ('D3', 'Diploma 3 (D3)', 2, 1),
+          ('S1', 'Sarjana (S1)', 3, 1),
+          ('S2', 'Magister (S2)', 4, 1),
+          ('S3', 'Doktor (S3)', 5, 1)
+      `);
+      console.log('[MIGRATION] Seeded kafalah_pendidikan_ref');
+    } catch (e) {
+      console.log('[MIGRATION] kafalah_pendidikan_ref seed:', e.message);
+    }
+
+    await ensureTable(`
+      CREATE TABLE IF NOT EXISTS kafalah_teacher_overrides (
+        id INT(11) NOT NULL AUTO_INCREMENT,
+        teacher_id INT(11) NOT NULL,
+        tenant_id VARCHAR(50) NOT NULL,
+        tunj_struktural DECIMAL(12,2) NOT NULL DEFAULT 0,
+        tunj_pembina DECIMAL(12,2) NOT NULL DEFAULT 0,
+        tunj_pondok DECIMAL(12,2) NOT NULL DEFAULT 0,
+        tunj_apresiasi DECIMAL(12,2) NOT NULL DEFAULT 0,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY uniq_teacher_tenant (teacher_id, tenant_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `, 'kafalah_teacher_overrides');
+
+    await ensureTable(`
+      CREATE TABLE IF NOT EXISTS kafalah_payroll (
+        id INT(11) NOT NULL AUTO_INCREMENT,
+        teacher_id INT(11) NOT NULL,
+        tenant_id VARCHAR(50) NOT NULL,
+        periode_mulai DATE NOT NULL,
+        periode_selesai DATE NOT NULL,
+        label_periode VARCHAR(50) DEFAULT NULL,
+        nama VARCHAR(200) DEFAULT NULL,
+        nik VARCHAR(30) DEFAULT NULL,
+        jabatan VARCHAR(100) DEFAULT NULL,
+        status_pegawai VARCHAR(10) DEFAULT NULL,
+        jenjang VARCHAR(20) DEFAULT NULL,
+        pendidikan VARCHAR(10) DEFAULT NULL,
+        masa_kerja_tahun INT(11) DEFAULT 0,
+        jumlah_anak INT(11) DEFAULT 0,
+        predikat_kinerja VARCHAR(5) DEFAULT NULL,
+        hari_efektif INT(11) DEFAULT 0,
+        hadir INT(11) DEFAULT 0,
+        tidak_hadir INT(11) DEFAULT 0,
+        tepat_waktu INT(11) DEFAULT 0,
+        terlambat INT(11) DEFAULT 0,
+        tidak_absen_masuk INT(11) DEFAULT 0,
+        cepat_pulang INT(11) DEFAULT 0,
+        tidak_absen_pulang INT(11) DEFAULT 0,
+        kjm INT(11) DEFAULT 0,
+        kafalah_pokok DECIMAL(12,2) NOT NULL DEFAULT 0,
+        tunj_keluarga_istri DECIMAL(12,2) NOT NULL DEFAULT 0,
+        tunj_keluarga_anak DECIMAL(12,2) NOT NULL DEFAULT 0,
+        total_a DECIMAL(14,2) NOT NULL DEFAULT 0,
+        tunj_struktural DECIMAL(12,2) NOT NULL DEFAULT 0,
+        tunj_pengabdian DECIMAL(12,2) NOT NULL DEFAULT 0,
+        tunj_fungsional DECIMAL(12,2) NOT NULL DEFAULT 0,
+        tunj_pembina DECIMAL(12,2) NOT NULL DEFAULT 0,
+        tunj_pondok DECIMAL(12,2) NOT NULL DEFAULT 0,
+        tunj_transport DECIMAL(12,2) NOT NULL DEFAULT 0,
+        tunj_tepat_waktu DECIMAL(12,2) NOT NULL DEFAULT 0,
+        tunj_tidak_cepat_pulang DECIMAL(12,2) NOT NULL DEFAULT 0,
+        tunj_kjm DECIMAL(12,2) NOT NULL DEFAULT 0,
+        tunj_prestasi_kinerja DECIMAL(12,2) NOT NULL DEFAULT 0,
+        tunj_apresiasi DECIMAL(12,2) NOT NULL DEFAULT 0,
+        total_b DECIMAL(14,2) NOT NULL DEFAULT 0,
+        potong_taawun DECIMAL(12,2) NOT NULL DEFAULT 0,
+        potong_simt DECIMAL(12,2) NOT NULL DEFAULT 0,
+        potong_pinjaman DECIMAL(12,2) NOT NULL DEFAULT 0,
+        potong_cuti_luar_tanggungan DECIMAL(12,2) NOT NULL DEFAULT 0,
+        potong_persen_cuti DECIMAL(5,2) NOT NULL DEFAULT 0,
+        total_c DECIMAL(14,2) NOT NULL DEFAULT 0,
+        total_pendapatan DECIMAL(14,2) NOT NULL DEFAULT 0,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        created_by INT(11) DEFAULT NULL,
+        PRIMARY KEY (id),
+        UNIQUE KEY uniq_teacher_periode (teacher_id, tenant_id, periode_mulai, periode_selesai),
+        KEY idx_periode (periode_mulai, periode_selesai),
+        KEY idx_tenant (tenant_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `, 'kafalah_payroll');
+
+    // Seed kafalah_settings default row
+    try {
+      await db.query('INSERT IGNORE INTO kafalah_settings (id) VALUES (1)');
+      console.log('[MIGRATION] Seeded kafalah_settings');
+    } catch (e) {
+      console.log('[MIGRATION] kafalah_settings seed:', e.message);
+    }
+
+    // ============================================
     // Admin teacher completion progress
     app.get('/api/admin/teacher-completion-progress', authenticateOperator, async (req, res) => {
       try {

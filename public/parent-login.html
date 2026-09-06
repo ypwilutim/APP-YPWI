@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login Orang Tua - YPWI Lutim</title>
+  <link href="https://cdn.tailwindcss.com" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link rel="icon" href="assets/images/YPWI LOGO HITAM.png" type="image/png">
+  <style>
+    /* Same styles as login.html but simplified for phone-only login */
+  </style>
+</head>
+<body class="min-h-screen py-8">
+  <div class="pt-28 pb-12">
+    <div class="max-w-7xl mx-auto px-6">
+      <div class="glass rounded-3xl shadow-2xl p-10 border border-gray-100">
+        <div class="text-center mb-10 float-animation">
+          <div class="w-20 h-20 mx-auto mb-4 rounded-2xl bg-white flex items-center justify-center shadow-lg p-2">
+            <img src="assets/images/YPWI LOGO HITAM.png" alt="YPWI Logo" class="w-full h-full object-contain">
+          </div>
+          <h1 class="text-4xl font-extrabold text-gray-950">Login Orang Tua</h1>
+          <p class="text-gray-600 mt-2 text-lg">Akses Informasi Anak Anda</p>
+        </div>
+
+        <div class="max-w-md mx-auto">
+          <form id="parentLoginForm" method="POST" novalidate>
+            <div class="mb-6">
+              <label for="phoneNumber" class="block text-sm font-semibold text-gray-700 mb-2">Nomor WhatsApp Orang Tua</label>
+              <div class="relative">
+                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <i class="fas fa-whatsapp text-gray-400"></i>
+                </div>
+                <input type="tel" id="phoneNumber" name="phoneNumber"
+                  class="w-full pl-10 pr-4 py-3 rounded-xl border-2 border-gray-200 bg-white focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition font-medium"
+                  placeholder="Masukkan nomor WhatsApp (contoh: 081234567890)" required>
+              </div>
+              <p class="text-red-500 text-sm mt-1 hidden" id="phoneError">Nomor WhatsApp harus diisi</p>
+            </div>
+            
+            <button type="submit" id="parentLoginBtn"
+              class="w-full bg-[#066e3a] text-white font-extrabold py-4 px-8 rounded-3xl text-xl flex items-center justify-center gap-3 shadow-lg transform hover:scale-[1.02] transition">
+              <i class="fas fa-sign-in-alt"></i>
+              Masuk
+            </button>
+            <div id="loadingSpinner" class="hidden text-center py-4">
+              <div
+                class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-primary border-t-transparent mb-2">
+              </div>
+              <p class="text-gray-600 text-sm">Sedang memproses...</p>
+            </div>
+          </form>
+          
+          <div class="mt-6 text-center space-y-2">
+            <div class="border-t border-gray-200 pt-3">
+              <p class="text-sm text-gray-600 mb-2">Butuh bantuan?</p>
+              <a href="https://wa.me/6282396859771" class="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg text-sm transition">
+                <i class="fab fa-whatsapp"></i>
+                Hubungi Admin via WhatsApp
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="text-center mt-8 text-gray-500 text-sm">
+    <p>© 2026 YPWI Lutim. Semua hak dilindungi.</p>
+  </div>
+  
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // Parent login form handling
+      const parentLoginForm = document.getElementById('parentLoginForm');
+      const parentLoginBtn = document.getElementById('parentLoginBtn');
+      const loadingSpinner = document.getElementById('loadingSpinner');
+      const phoneError = document.getElementById('phoneError');
+
+      if (parentLoginForm) {
+        parentLoginForm.addEventListener('submit', async (e) => {
+          try {
+            e.preventDefault();
+            e.stopPropagation();
+            phoneError.classList.add('hidden');
+
+            const phoneNumber = document.getElementById('phoneNumber').value.trim();
+            let hasError = false;
+
+            if (!phoneNumber) {
+              phoneError.classList.remove('hidden');
+              hasError = true;
+            }
+            
+            if (hasError) return;
+
+            parentLoginBtn.classList.add('hidden');
+            loadingSpinner.classList.remove('hidden');
+
+            console.log('🔐 [PARENT LOGIN DEBUG] Starting login attempt for phone:', phoneNumber);
+
+            try {
+              console.log('🌐 [PARENT LOGIN DEBUG] Sending fetch request to /api/parent/login');
+              const response = await fetch('/api/parent/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phoneNumber }),
+              });
+
+              console.log('📡 [PARENT LOGIN DEBUG] Response received - Status:', response.status, response.statusText);
+              console.log('📡 [PARENT LOGIN DEBUG] Response headers:', Object.fromEntries(response.headers.entries()));
+
+              if (!response.ok) {
+                console.error('❌ [PARENT LOGIN DEBUG] Response not OK - throwing error');
+                throw new Error(`Server error: ${response.status} ${response.statusText}`);
+              }
+
+              console.log('✅ [PARENT LOGIN DEBUG] Response OK, parsing JSON...');
+              const data = await response.json();
+              console.log('📦 [PARENT LOGIN DEBUG] Parsed response data:', data);
+
+              if (data.success) {
+                console.log('✅ [PARENT LOGIN DEBUG] Login successful, token received');
+
+                // Save parent-specific session data
+                const parentData = {
+                  id: data.parent.id,
+                  nama_orang_tua: data.parent.nama_orang_tua,
+                  no_wa: data.parent.no_wa,
+                  email: data.parent.email,
+                  nik: data.parent.nik,
+                  students: data.students || [],
+                  token: data.token,
+                  loginTime: new Date().toISOString()
+                };
+
+                localStorage.setItem('parentToken', data.token);
+                localStorage.setItem('parentData', JSON.stringify(parentData));
+
+                console.log('💾 [PARENT LOGIN DEBUG] Saved parent token and data:', { 
+                  token: !!data.token, 
+                  parentName: data.parent.nama_orang_tua,
+                  studentCount: data.students?.length || 0 
+                });
+
+                Swal.fire({
+                  title: 'Login Berhasil!',
+                  text: data.message,
+                  icon: 'success',
+                  timer: 1500,
+                  showConfirmButton: false
+                }).then(() => {
+                  // Redirect to parent portal
+                  console.log('🔄 [PARENT LOGIN DEBUG] Redirecting to parent portal');
+                  window.location.href = 'anakku-portal.html';
+                });
+              } else {
+                console.warn('⚠️ [PARENT LOGIN DEBUG] Login failed with message:', data.message);
+                Swal.fire({
+                  title: 'Login Gagal',
+                  text: data.message || 'Nomor WhatsApp tidak terdaftar. Silakan coba lagi.',
+                  icon: data.message && data.message.includes('terdaftar') ? 'warning' : 'error',
+                  confirmButtonText: 'Coba Lagi',
+                  confirmButtonColor: '#667eea'
+                });
+              }
+            } catch (jsError) {
+              console.error('❌ [PARENT LOGIN DEBUG] JavaScript error in form submission:', jsError);
+              console.error('❌ [PARENT LOGIN DEBUG] Error stack:', jsError.stack);
+              e.preventDefault();
+              e.stopPropagation();
+              Swal.fire({
+                title: 'Kesalahan Sistem',
+                text: 'Periksa Nomor WhatsApp anda dengan benar!',
+                icon: 'error',
+                confirmButtonText: 'OK',
+                confirmButtonColor: '#667eea'
+              });
+              return;
+            }
+          } catch (error) {
+            console.error('🚫 [PARENT LOGIN DEBUG] Network/Fetch error:', error);
+            console.error('🚫 [PARENT LOGIN DEBUG] Error message:', error.message);
+            Swal.fire({
+              title: 'Kesalahan Jaringan',
+              text: 'Tidak dapat terhubung ke server. Periksa koneksi Anda.',
+              icon: 'error',
+              confirmButtonText: 'OK',
+              confirmButtonColor: '#667eea'
+            });
+          } finally {
+            parentLoginBtn.classList.remove('hidden');
+            loadingSpinner.classList.add('hidden');
+          }
+        });
+      }
+
+      // Input validation reset
+      const inputs = document.querySelectorAll('input[required]');
+      inputs.forEach(input => {
+        input.addEventListener('input', () => {
+          const errorEl = document.getElementById(input.id + 'Error');
+          if (errorEl) errorEl.classList.add('hidden');
+        });
+      });
+    });
+  </script>
+</body>
+</html>

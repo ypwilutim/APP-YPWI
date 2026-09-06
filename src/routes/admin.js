@@ -5426,13 +5426,18 @@ router.get('/admin/leave-requests', authenticateOperator, async (req, res) => {
     let principalOnly = req.query.principal_only === '1' || req.query.principal_only === 'true';
 
     // Tentukan tenant yang diizinkan berdasarkan role/jabatan (enforce server-side)
-    // 1. users.role = admin -> HANYA tenant YPWILUTIM
-    // 2. assignment YPWILUTIM + jabatan ketua/kepala/pimpinan -> semua tenant, HANYA izin pengaju dengan jabatan ketua/kepala/pimpinan
-    // 3. assignment jabatan ketua/kepala/pimpinan (bukan YPWILUTIM) -> hanya tenant assignmentnya (tanpa filter jabatan pengaju)
+    // 1. users.role = admin + tenant_id = YPWILUTIM -> semua tenant, semua jabatan (LIHAT SEMUA)
+    // 2. users.role = admin + tenant_id != YPWILUTIM -> hanya tenant_id user itu
+    // 3. assignment YPWILUTIM + jabatan ketua/kepala/pimpinan -> semua tenant, HANYA izin pengaju dengan jabatan ketua/kepala/pimpinan
+    // 4. assignment jabatan ketua/kepala/pimpinan (bukan YPWILUTIM) -> hanya tenant assignmentnya (tanpa filter jabatan pengaju)
     let allowedTenants = []; // default: tidak ada akses
     let filterPrincipalOnly = false;
     if (req.user.role === 'admin') {
-      allowedTenants = ['YPWILUTIM'];
+      if (req.user.tenant_id === 'YPWILUTIM') {
+        allowedTenants = null; // admin YPWILUTIM melihat SEMUA tenant
+      } else {
+        allowedTenants = [req.user.tenant_id]; // admin lain hanya lihat tenant-nya
+      }
     } else {
       const assignments = req.user.assignments || [];
       const ketuaRoles = ['kepalasekolah', 'pimpinan', 'ketua', 'kepalapondok'];
@@ -5516,6 +5521,12 @@ router.get('/admin/leave-requests', authenticateOperator, async (req, res) => {
   }
 });
 
+// Helper: Display name for leave request jenis
+function jenisDisplayName(jenis) {
+  const map = { 'izin': 'Izin', 'sakit': 'Sakit', 'cuti': 'Cuti', 'dinas_luar': 'Dinas Luar' };
+  return map[jenis] || jenis.toUpperCase();
+}
+
 // PUT /api/admin/leave-requests/:id/status - Approve or reject leave request
 router.put('/admin/leave-requests/:id/status', authenticateOperator, async (req, res) => {
   try {
@@ -5546,11 +5557,93 @@ router.put('/admin/leave-requests/:id/status', authenticateOperator, async (req,
       'UPDATE leave_requests SET status = ?, catatan = ?, updated_at = NOW() WHERE id = ?',
       [status, finalCatatan, id]
     );
-    
+
     if (result.affectedRows === 0) {
       return res.status(404).json({ success: false, message: 'Permohonan izin tidak ditemukan' });
     }
-    
+
+    const leaveRequest = await db.query(
+      'SELECT * FROM leave_requests WHERE id = ?',
+      [id]
+    ).then(rows => rows[0] || null);
+
+    if (leaveRequest) {
+      const [teacher] = await db.query(
+        'SELECT nama, email, no_wa FROM teachers WHERE id = ?',
+        [leaveRequest.teacher_id]
+      );
+
+      if (teacher && teacher.email) {
+        const statusText = status === 'approved' ? 'DISETUJUI' : 'DITOLAK';
+        const statusColor = status === 'approved' ? '#10b981' : '#dc2626';
+        const headerColor = status === 'approved'
+          ? 'linear-gradient(135deg,#10b981,#059669)'
+          : 'linear-gradient(135deg,#dc2626,#b91c1c)';
+        const icon = status === 'approved' ? '✅' : '❌';
+
+        const htmlMessage = `<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Status Pengajuan Izin - YPWI Lutim</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5;">
+  <div style="max-width: 600px; margin: 20px auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+    <div style="background: ${headerColor}; padding: 30px; text-align: center;">
+      <h1 style="margin: 0; color: white; font-size: 24px;">YPWI LUTIM</h1>
+      <p style="margin: 5px 0 0 0; color: rgba(255,255,255,0.9); font-size: 14px;">Notifikasi Perizinan ${icon}</p>
+    </div>
+    <div style="padding: 30px;">
+      <h2 style="margin: 0 0 20px 0; color: #333; font-size: 20px;">Assalamu'alaikum <strong>${teacher.nama}</strong>,</h2>
+      <p style="margin: 0 0 15px 0; color: #555; font-size: 16px; line-height: 1.6;">
+        Pengajuan izin Anda telah <strong style="color: ${statusColor}">${statusText}</strong> oleh ${approverName}.
+      </p>
+      <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+        <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee; color: #666;">Jenis Izin:</td><td style="padding: 8px 0; border-bottom: 1px solid #eee; font-weight: 600;">${leaveRequest.jenis.toUpperCase()}</td></tr>
+        <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee; color: #666;">Periode:</td><td style="padding: 8px 0; border-bottom: 1px solid #eee; font-weight: 600;">${leaveRequest.tanggal_mulai} s/d ${leaveRequest.tanggal_selesai}</td></tr>
+        <tr><td style="padding: 8px 0; border-bottom: 1px solid #eee; color: #666;">Keterangan:</td><td style="padding: 8px 0; border-bottom: 1px solid #eee; font-weight: 600;">${leaveRequest.keterangan}</td></tr>
+        ${catatan ? `<tr><td style="padding: 8px 0; border-bottom: 1px solid #eee; color: #666;">Catatan:</td><td style="padding: 8px 0; border-bottom: 1px solid #eee; font-weight: 600; color: #dc2626;">${catatan}</td></tr>` : ''}
+        <tr><td style="padding: 8px 0; color: #666;">Status:</td><td style="padding: 8px 0; font-weight: 600; color: ${statusColor}">${statusText}</td></tr>
+      </table>
+      <p style="margin: 20px 0 0 0; color: #888; font-size: 14px;">Email ini dikirim otomatis oleh sistem.</p>
+    </div>
+  </div>
+</body>
+</html>`;
+
+        if (typeof global.sendEmail === 'function') {
+          await global.sendEmail(
+            teacher.email,
+            `Status Pengajuan Izin ${jenisDisplayName(leaveRequest.jenis)} - ${statusText} - YPWI Lutim`,
+            htmlMessage,
+            '',
+            [],
+            'leave_approval'
+          );
+        }
+      }
+
+      if (teacher && teacher.no_wa) {
+        const statusText = status === 'approved' ? 'DISETUJUI ✅' : 'DITOLAK ❌';
+        const waMessage = `*STATUS PENGAJUAN IZIN YPWI*
+Hai *${teacher.nama}*, 
+
+Pengajuan izin Anda telah ${statusText} oleh ${approverName}.
+
+*Detail:*
+• Jenis: ${leaveRequest.jenis.toUpperCase()}
+• Periode: ${leaveRequest.tanggal_mulai} s/d ${leaveRequest.tanggal_selesai}
+• Status: ${statusText}
+
+${catatan ? `• Catatan: ${catatan}\n\n` : ''}Pesan ini dikirim otomatis oleh sistem.`;
+
+        if (typeof global.sendWhatsAppMessage === 'function') {
+          await global.sendWhatsAppMessage(teacher.no_wa, waMessage);
+        }
+      }
+    }
+
     res.json({ success: true, message: `Permohonan izin berhasil ${status === 'approved' ? 'disetujui' : 'ditolak'}` });
   } catch (error) {
     console.error('Update leave request status error:', error);

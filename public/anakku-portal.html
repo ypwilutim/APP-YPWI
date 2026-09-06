@@ -529,7 +529,89 @@
       latitude: -2.5489,
       longitude: 116.8127,
       radius: 100,
-      location_name: 'SD YPWI Lutim, Lutim'
+      location_name: 'SD YPWI Lutim, Lutim',
+      total_tagihan: 250000,
+      total_pemasukan: 250000,
+      total_tunggakan: 0,
+      total_kelebihan: 0,
+      iuran_bulanan: 250000,
+      sudah_dibayar: 250000,
+      sisa_tunggakan: 0,
+      payment_status: 'paid',
+      start_date: '2025-09-01',
+      due_date: '2025-09-30',
+      days_until_due: 28,
+      current_month: 'September 2025',
+      // Localization labels
+      portal_title: 'Portal Orang Tua - Anakku',
+      portal_subtitle: 'Akses Informasi Anak Anda',
+      connected_label: 'Terhubung',
+      logout_button: 'Keluar',
+      student_info: 'Informasi Siswa',
+      nisn_label: 'NISN',
+      nis_label: 'NIS',
+      school_label: 'Sekolah',
+      class_label: 'Kelas',
+      status_label: 'Status',
+      current_balance_label: 'Saldo Terkini',
+      total_arrears_label: 'Total Tunggakan',
+      total_excess_label: 'Total Kelebihan',
+      period_label: 'Periode Berjalan',
+      family_members_label: 'Anak dalam Keluarga',
+      financial_summary_title: 'Ringkasan Keuangan',
+      payment_info_title: 'Informasi Pembayaran',
+      monthly_fee_label: 'Iuran Bulanan',
+      paid_this_month_label: 'Sudah Dibayar (Bulan Ini)',
+      remaining_arrears_label: 'Sisa Tunggakan',
+      payment_status_label: 'Status Pembayaran',
+      billing_range_title: 'Rentang Waktu',
+      start_date_label: 'Mulai Tagihan',
+      due_date_label: 'Jatuh Tempo',
+      days_until_due_label: 'Hari Lagi (Waktu Habis)',
+      current_month_label: 'Bulan Berjalan',
+      recent_billing_title: 'Ringkasan Tagihan Terbaru',
+      payments_history_title: 'Riwayat Pembayaran',
+      refresh_button: 'Refresh',
+      billing_details_title: 'Detail Tagihan Bulanan',
+      select_month_label: 'Pilih Bulan',
+      attendance_summary_title: 'Rekap Absensi',
+      period_select_label: 'Periode',
+      school_location_title: 'Lokasi Sekolah',
+      school_name_label: 'Nama Sekolah',
+      address_label: 'Alamat',
+      attendance_radius_label: 'Radius Presensi',
+      attendance_info_title: 'Informasi Presensi',
+      gps_accuracy_label: 'Akurasi GPS',
+      system_valid_label: 'Sistem Valid',
+      // Status labels
+      status_paid: 'Lunas',
+      status_unpaid: 'Belum Lunas',
+      status_overdue: 'Terlambat',
+      status_active: 'Aktif',
+      status_pending: 'Pending',
+      status_late: 'Terlambat',
+      status_present: 'Hadir',
+      status_absent: 'Tidak Hadir',
+      // Button labels
+      pay_now_button: 'Bayar Sekarang',
+      download_invoice_button: 'Download Invoice',
+      view_details_button: 'Lihat Detail',
+      close_button: 'Tutup',
+      // Toast messages
+      toast_success: 'Data berhasil dimuat',
+      toast_error: 'Gagal memuat data',
+      toast_updated: 'Data berhasil diperbarui',
+      toast_payment_updated: 'Data pembayaran diperbarui',
+      toast_redirecting_to_payment: 'Mengalihkan ke halaman pembayaran...',
+      toast_invoice_downloaded: 'Invoice berhasil didownload',
+      toast_all_data_updated: 'Semua data berhasil diperbarui',
+      // Form labels
+      filter_label: 'Filter',
+      search_label: 'Cari',
+      from_date_label: 'Dari Tanggal',
+      to_date_label: 'Ke Tanggal',
+      apply_button: 'Terapkan',
+      reset_button: 'Reset'
     };
     
     const mockPayments = [
@@ -601,165 +683,300 @@
     let currentBilling = [];
     let currentAttendance = [];
     
-    // Initialize the page
-    document.addEventListener('DOMContentLoaded', function() {
-      // Check if user is logged in
-      const token = localStorage.getItem('token');
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
-      
-      if (!token || !user.username) {
-        // Redirect to login if not logged in
-        window.location.href = 'login.html';
-        return;
-      }
-      
-      // Set user info
-      document.getElementById('bendaharaName').textContent = user.username;
-      
-      // Load student data
-      loadStudentData();
-      
-      // Load payments data
-      loadPayments();
-      
-      // Load billing data
-      loadBillingData();
-      
-      // Load attendance data
-      loadAttendanceData();
-      
-      // Load school location
-      loadSchoolLocation();
-    });
+// Initialize the page
+     document.addEventListener('DOMContentLoaded', function() {
+       // Check if parent is logged in
+       const parentToken = localStorage.getItem('parentToken');
+       const parentData = JSON.parse(localStorage.getItem('parentData') || '{}');
+
+       if (!parentToken || !parentData.id) {
+         // Redirect to parent login if not logged in
+         window.location.href = 'parent-login.html';
+         return;
+       }
+
+       // Set parent info
+       document.getElementById('studentName').textContent = parentData.nama_orang_tua || 'Orang Tua';
+
+       // Load students data
+       loadStudentsData();
+       
+       // Load payments data
+       loadPaymentsData();
+       
+       // Load billing data
+       loadBillingData();
+       
+       // Load attendance data
+       loadAttendanceData();
+       
+       // Load school location (for first student)
+       loadSchoolLocation();
+     });
     
-    // Load student data
-    async function loadStudentData() {
-      try {
-        // In a real app, this would be an API call
-        currentStudent = mockStudent;
-        
-        // Update UI with student data
-        document.getElementById('studentName').textContent = currentStudent.nama_siswa;
-        document.getElementById('studentNisn').textContent = currentStudent.nisn;
-        document.getElementById('studentNis').textContent = currentStudent.nis;
-        document.getElementById('schoolName').textContent = currentStudent.nama_sekolah;
-        document.getElementById('studentClass').textContent = formatKelas(currentStudent.tingkatan, currentStudent.nama_kelas);
-        
-        // Set photo
-        const photoElement = document.getElementById('studentPhoto');
-        if (currentStudent.photo) {
-          photoElement.src = currentStudent.photo;
-        } else {
-          photoElement.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(currentStudent.nama_siswa)}&size=200&background=4f46e5&color=fff`;
-        }
-        
-        // Update quick stats
-        updateQuickStats();
-        
-        showToast('Data siswa berhasil dimuat', 'success');
-        
-      } catch (error) {
-        console.error('Error loading student data:', error);
-        showToast('Gagal memuat data siswa', 'error');
-      }
-    }
+// Load students data
+     async function loadStudentsData() {
+       try {
+         // Get students from API
+         const response = await apiCall('/parent/students');
+         const students = response.data || [];
+         
+         if (students.length === 0) {
+           showToast('Tidak ada data siswa yang ditemukan', 'warning');
+           return;
+         }
+         
+         // Store students globally (we'll use the first one for now, or we could implement student selection)
+         window.parentStudents = students;
+         
+         // For now, use the first student for the main display
+         // In a more advanced version, we could add a student selector
+         currentStudent = students[0];
+         
+         // Update UI with student data
+         document.getElementById('studentName').textContent = currentStudent.nama_siswa;
+         document.getElementById('studentNisn').textContent = currentStudent.nisn;
+         document.getElementById('studentNis').textContent = currentStudent.nis;
+         document.getElementById('schoolName').textContent = currentStudent.nama_sekolah;
+         document.getElementById('studentClass').textContent = formatKelas(currentStudent.tingkatan, currentStudent.nama_kelas);
+         
+         // Set photo
+         const photoElement = document.getElementById('studentPhoto');
+         if (currentStudent.photo) {
+           photoElement.src = currentStudent.photo;
+         } else {
+           photoElement.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(currentStudent.nama_siswa)}&size=200&background=4f46e5&color=fff`;
+         }
+         
+         // Update quick stats
+         updateQuickStats();
+         
+         showToast('Data siswa berhasil dimuat', 'success');
+         
+       } catch (error) {
+         console.error('Error loading student data:', error);
+         showToast('Gagal memuat data siswa', 'error');
+       }
+     }
     
-    // Load payments data
-    async function loadPayments() {
-      try {
-        // In a real app, this would be an API call
-        currentPayments = mockPayments;
-        
-        // Render payments table
-        renderPaymentsTable();
-        
-      } catch (error) {
-        console.error('Error loading payments:', error);
-        document.getElementById('paymentsTable').innerHTML = `
-          <div style="text-align: center; padding: 40px; color: #ef4444;">
-            <i class="fas fa-exclamation-triangle" style="font-size: 24px; margin-bottom: 10px;"></i>
-            <p>Gagal memuat riwayat pembayaran</p>
-          </div>
-        `;
-      }
-    }
+// Load payments data
+     async function loadPaymentsData() {
+       try {
+         // If we have students, get payment history for the first student
+         if (!window.parentStudents || window.parentStudents.length === 0) {
+           document.getElementById('paymentsTable').innerHTML = `
+             <div style="text-align: center; padding: 40px; color: #6b7280;">
+               <i class="fas fa-inbox" style="font-size: 48px; margin-bottom: 15px;"></i>
+               <p>Belum ada data siswa</p>
+             </div>
+           `;
+           return;
+         }
+         
+         const studentId = window.parentStudents[0].id;
+         const response = await apiCall(`/parent/payment-history/${studentId}`);
+         const data = response.data || {};
+         
+         // Format data for the existing renderPaymentsTable function
+         currentPayments = data.pembayaran || [];
+         
+         // Render payments table
+         renderPaymentsTable();
+         
+       } catch (error) {
+         console.error('Error loading payments data:', error);
+         document.getElementById('paymentsTable').innerHTML = `
+           <div style="text-align: center; padding: 40px; color: #ef4444;">
+             <i class="fas fa-exclamation-triangle" style="font-size: 24px; margin-bottom: 10px;"></i>
+             <p>Gagal memuat riwayat pembayaran</p>
+           </div>
+         `;
+       }
+     }
     
-    // Load billing data
-    async function loadBillingData() {
-      try {
-        // In a real app, this would be an API call
-        currentBilling = mockBilling;
-        
-        // Populate month select
-        const select = document.getElementById('billingMonthSelect');
-        select.innerHTML = '<option value="">Pilih Bulan</option>';
-        currentBilling.forEach(bill => {
-          const option = document.createElement('option');
-          option.value = bill.bulan;
-          option.textContent = formatMonth(bill.bulan);
-          select.appendChild(option);
-        });
-        
-        // Show current month details
-        const currentMonth = currentBilling.find(bill => bill.bulan === currentStudent.bulan_berjalan);
-        if (currentMonth) {
-          renderBillingDetails(currentMonth);
-        }
-        
-      } catch (error) {
-        console.error('Error loading billing data:', error);
-        document.getElementById('billingDetails').innerHTML = `
-          <div style="text-align: center; padding: 40px; color: #ef4444;">
-            <i class="fas fa-exclamation-triangle" style="font-size: 24px; margin-bottom: 10px;"></i>
-            <p>Gagal memuat data tagihan</p>
-          </div>
-        `;
-      }
-    }
+// Load billing data
+     async function loadBillingData() {
+       try {
+         // If we have students, get billing summary for all students
+         if (!window.parentStudents || window.parentStudents.length === 0) {
+           document.getElementById('billingDetails').innerHTML = `
+             <div style="text-align: center; padding: 40px; color: #6b7280;">
+               <i class="fas fa-file-invoice-dollar" style="font-size: 48px; margin-bottom: 15px;"></i>
+               <p>Belum ada data siswa</p>
+             </div>
+           `;
+           
+           // Also clear recent billing list
+           document.getElementById('recentBillingList').innerHTML = `
+             <div style="text-align: center; padding: 40px; color: #6b7280;">
+               <i class="fas fa-file-invoice-dollar" style="font-size: 48px; margin-bottom: 15px;"></i>
+               <p>Belum ada data tagihan</p>
+             </div>
+           `;
+           
+           return;
+         }
+         
+         const response = await apiCall('/parent/billing-summary');
+         const data = response.data || {};
+         
+         // Store billing data globally for use in other functions
+         window.parentBillingData = data;
+         
+         // For the main display, use the first student's data
+         if (data.students && data.students.length > 0) {
+           const firstStudent = data.students[0];
+           
+           // Update the main billing display with first student's data
+           // We'll need to modify the renderBillingDetails function to work with our data structure
+           // For now, let's update the quick stats which are used in the main display
+           
+           // Update quick stats based on first student's data
+           document.getElementById('totalTunggakan').textContent = formatCurrency(firstStudent.totalTunggakan);
+           
+           // For compatibility with existing code, we'll create a mock currentBilling array
+           // that matches what the existing functions expect
+           currentBilling = firstStudent.tagihan.map(tagihan => ({
+             bulan: tagihan.periode,
+             status: tagihan.status === 'lunas' || tagihan.status === 'paid' ? 'paid' : 
+                       tagihan.status === 'belum_dibayar' || tagihan.status === 'pending' ? 'pending' : 'overdue',
+             iuran_bulanan: tagihan.jumlah,
+             tunggakan: tagihan.status === 'belum_dibayar' || tagihan.status === 'pending' ? tagihan.jumlah : 0,
+             kelebihan: 0, // We don't have excess data in our current structure
+             jatuh_tempo: tagihan.due_date,
+             sudah_dibayar: tagihan.status === 'lunas' || tagihan.status === 'paid' ? tagihan.jumlah : 0,
+             tagihan_list: [] // We don't have detailed line items in our current structure
+           }));
+         } else {
+           currentBilling = [];
+         }
+         
+         // Populate month select
+         const select = document.getElementById('billingMonthSelect');
+         select.innerHTML = '<option value="">Pilih Bulan</option>';
+         
+         // Add unique months from all students' billing data
+         const monthsSet = new Set();
+         if (data.students) {
+           data.students.forEach(student => {
+             student.tagihan.forEach(tagihan => {
+               monthsSet.add(tagihan.periode);
+             });
+           });
+         }
+         
+         const sortedMonths = Array.from(monthsSet).sort().reverse();
+         sortedMonths.forEach(month => {
+           const option = document.createElement('option');
+           option.value = month;
+           option.textContent = formatMonth(month);
+           select.appendChild(option);
+         });
+         
+         // Show current month details (first student, first month)
+         if (currentBilling.length > 0) {
+           renderBillingDetails(currentBilling[0]);
+         }
+         
+         // Render recent billing list (all students)
+         renderRecentBillingList();
+         
+       } catch (error) {
+         console.error('Error loading billing data:', error);
+         document.getElementById('billingDetails').innerHTML = `
+           <div style="text-align: center; padding: 40px; color: #ef4444;">
+             <i class="fas fa-exclamation-triangle" style="font-size: 24px; margin-bottom: 10px;"></i>
+             <p>Gagal memuat data tagihan</p>
+           </div>
+         `;
+         
+         document.getElementById('recentBillingList').innerHTML = `
+           <div style="text-align: center; padding: 40px; color: #6b7280;">
+             <i class="fas fa-file-invoice-dollar" style="font-size: 48px; margin-bottom: 15px;"></i>
+             <p>Belum ada data tagihan</p>
+           </div>
+         `;
+       }
+     }
     
-    // Load attendance data
-    async function loadAttendanceData() {
-      try {
-        // In a real app, this would be an API call
-        currentAttendance = mockAttendance;
-        
-        // Render attendance summary
-        renderAttendanceSummary();
-        
-      } catch (error) {
-        console.error('Error loading attendance data:', error);
-        document.getElementById('attendanceSummary').innerHTML = `
-          <div style="text-align: center; padding: 40px; color: #ef4444;">
-            <i class="fas fa-exclamation-triangle" style="font-size: 24px; margin-bottom: 10px;"></i>
-            <p>Gagal memuat data absensi</p>
-          </div>
-        `;
-      }
-    }
+// Load attendance data
+     async function loadAttendanceData() {
+       try {
+         // If we have students, get attendance for the first student
+         if (!window.parentStudents || window.parentStudents.length === 0) {
+           document.getElementById('attendanceSummary').innerHTML = `
+             <div style="text-align: center; padding: 40px; color: #6b7280;">
+               <i class="fas fa-calendar-times" style="font-size: 48px; margin-bottom: 15px;"></i>
+               <p>Belum ada data absensi</p>
+             </div>
+           `;
+           return;
+         }
+         
+         const studentId = window.parentStudents[0].id;
+         const response = await apiCall(`/parent/student-attendance/${studentId}`);
+         const data = response.data || {};
+         
+         // Format data for the existing renderAttendanceSummary function
+         currentAttendance = data.attendance.records || [];
+         
+         // Render attendance summary
+         renderAttendanceSummary();
+         
+       } catch (error) {
+         console.error('Error loading attendance data:', error);
+         document.getElementById('attendanceSummary').innerHTML = `
+           <div style="text-align: center; padding: 40px; color: #ef4444;">
+             <i class="fas fa-exclamation-triangle" style="font-size: 24px; margin-bottom: 10px;"></i>
+             <p>Gagal memuat data absensi</p>
+           </div>
+         `;
+       }
+     }
     
-    // Load school location
-    async function loadSchoolLocation() {
-      try {
-        // In a real app, this would be an API call
-        const lat = currentStudent.latitude;
-        const lng = currentStudent.longitude;
-        const name = currentStudent.location_name;
-        const address = 'Kp. Lembaha Desa, Kab. East Luwu, South Sulawesi';
-        const radius = currentStudent.radius;
-        
-        // Update UI
-        document.getElementById('schoolNameDisplay').textContent = currentStudent.nama_sekolah;
-        document.getElementById('schoolAddress').textContent = address;
-        document.getElementById('schoolRadius').textContent = radius + ' meter';
-        document.getElementById('radiusValue').textContent = radius;
-        
-        // Initialize map
-        initMap(lat, lng, radius, name);
-        
-      } catch (error) {
-        console.error('Error loading school location:', error);
-      }
-    }
+// Load school location
+     async function loadSchoolLocation() {
+       try {
+         // If we have student data, use it
+         if (currentStudent && currentStudent.latitude && currentStudent.longitude) {
+           // Use real student data
+           const lat = currentStudent.latitude;
+           const lng = currentStudent.longitude;
+           const name = currentStudent.location_name || `${currentStudent.nama_sekolah}, Lutim`;
+           const address = currentStudent.alamat || 'Kp. Lembaha Desa, Kab. East Luwu, South Sulawesi';
+           const radius = currentStudent.radius || 100;
+           
+           // Update UI
+           document.getElementById('schoolNameDisplay').textContent = currentStudent.nama_sekolah;
+           document.getElementById('schoolAddress').textContent = address;
+           document.getElementById('schoolRadius').textContent = radius + ' meter';
+           document.getElementById('radiusValue').textContent = radius;
+           
+           // Initialize map
+           initMap(lat, lng, radius, name);
+         } else {
+           // Fallback to mock data if no location data available
+           // In a real app, this would be an API call
+           const lat = -2.5489;
+           const lng = 116.8127;
+           const name = 'SD YPWI Lutim, Lutim';
+           const address = 'Kp. Lembaha Desa, Kab. East Luwu, South Sulawesi';
+           const radius = 100;
+           
+           // Update UI
+           document.getElementById('schoolNameDisplay').textContent = currentStudent.nama_sekolah || 'SD YPWI Lutim';
+           document.getElementById('schoolAddress').textContent = address;
+           document.getElementById('schoolRadius').textContent = radius + ' meter';
+           document.getElementById('radiusValue').textContent = radius;
+           
+           // Initialize map
+           initMap(lat, lng, radius, name);
+         }
+         
+       } catch (error) {
+         console.error('Error loading school location:', error);
+       }
+     }
     
     // Initialize map
     function initMap(lat, lng, radius, name) {
@@ -1105,7 +1322,11 @@
       }
     }
     
-    // Helper functions
+// Helper functions
+    function L(key) {
+      return currentStudent ? currentStudent[key] : key;
+    }
+    
     function formatCurrency(amount) {
       return 'Rp ' + Number(amount || 0).toLocaleString('id-ID');
     }
@@ -1124,28 +1345,48 @@
       return months[parseInt(month) - 1] + ' ' + year;
     }
     
-    function formatKelas(tingkatan, nama_kelas) {
+    function formatKelas(tingkatan, nama_kelompok) {
       const t = (tingkatan != null && tingkatan !== '') ? String(tingkatan) : '';
-      const n = (nama_kelas != null && nama_kelas !== '') ? String(nama_kelas) : '';
+      const n = (nama_kelompok != null && nama_kelompok !== '') ? String(nama_kelompok) : '';
       if (!t && !n) return '-';
       if (!n) return t;
       return n.length <= 1 ? `${t}${n}` : `${t} ${n}`;
     }
     
-    // Toast notification
-    function showToast(message, type = 'success') {
-      const container = document.getElementById('toastNotification');
-      container.textContent = message;
-      container.className = `notification ${type} show`;
-      container.style.display = 'block';
-      
-      setTimeout(() => {
-        container.classList.remove('show');
-        setTimeout(() => {
-          container.style.display = 'none';
-        }, 300);
-      }, 3000);
-    }
+// Toast notification
+     function showToast(message, type = 'success') {
+       const container = document.getElementById('toastNotification');
+       container.textContent = message;
+       container.className = `notification ${type} show`;
+       container.style.display = 'block';
+       
+       setTimeout(() => {
+         container.classList.remove('show');
+         setTimeout(() => {
+           container.style.display = 'none';
+         }, 300);
+       }, 3000);
+     }
+     
+     // Make authenticated API call
+     async function apiCall(endpoint, options = {}) {
+       const token = localStorage.getItem('parentToken');
+       const headers = {
+         'Content-Type': 'application/json',
+         'Authorization': `Bearer ${token}`
+       };
+       
+       const res = await fetch(`/api${endpoint}`, {
+         headers: headers,
+         ...options
+       });
+       
+       const data = await res.json();
+       if (!res.ok || !data.success) {
+         throw new Error(data.message || 'Request failed');
+       }
+       return data;
+     }
     
     // Other functions (logout, refresh, pay now, download invoice, etc.)
     function logout() {
@@ -1155,7 +1396,7 @@
     }
     
     function refreshPayments() {
-      showToast('Memperbarui data pembayaran...', 'success');
+      showToast(L('toast_payment_updated'), 'success');
       setTimeout(() => {
         loadPayments();
         showToast('Data pembayaran diperbarui', 'success');
@@ -1173,7 +1414,7 @@
     }
     
     function payNow() {
-      showToast('Mengalihkan ke halaman pembayaran...', 'success');
+      showToast(L('toast_redirecting_to_payment'), 'success');
       setTimeout(() => {
         // In a real app, this would redirect to payment page
         window.location.href = 'payment.html?student=' + currentStudent.id;
@@ -1184,18 +1425,18 @@
       showToast('Membuat invoice...', 'success');
       setTimeout(() => {
         // In a real app, this would generate and download invoice
-        showToast('Invoice berhasil didownload', 'success');
+        showToast(L('toast_invoice_downloaded'), 'success');
       }, 1000);
     }
     
     function refreshAll() {
-      showToast('Memperbarui semua data...', 'success');
+      showToast(L('toast_updated'), 'success');
       setTimeout(() => {
         loadStudentData();
         loadPayments();
         loadBillingData();
         loadAttendanceData();
-        showToast('Semua data berhasil diperbarui', 'success');
+        showToast(L('toast_all_data_updated'), 'success');
       }, 1000);
     }
   </script>
