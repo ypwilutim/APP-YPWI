@@ -3038,8 +3038,11 @@ if (data.success) {
                   <button onclick="showStudentMutasiModal(${s.id}, '${s.nama_siswa || ''}', '${s.nama_sekolah || ''}', '${s.tenant_id || ''}')" class="text-purple-600 hover:text-purple-800 mr-2" title="Mutasi">
                     <i class="fas fa-exchange-alt"></i>
                   </button>
-                  <button onclick="editStudent(${s.id})" class="text-blue-600 hover:text-blue-800" title="Edit">
+                  <button onclick="editStudent(${s.id})" class="text-blue-600 hover:text-blue-800 mr-2" title="Edit">
                     <i class="fas fa-edit"></i>
+                  </button>
+                  <button onclick="deleteStudent(${s.id}, '${s.nama_siswa || ''}')" class="text-red-600 hover:text-red-800" title="Hapus">
+                    <i class="fas fa-trash"></i>
                   </button>
                 </td>
               </tr>
@@ -3712,6 +3715,28 @@ window.saveStudentEdit = function () { alert('Fitur edit siswa belum tersedia');
       showEditStep(1);
       document.getElementById('studentEditModal').classList.add('show');
     } catch (e) { console.error(e); alert('Error memuat siswa'); }
+  };
+
+  window.deleteStudent = async function (id, nama) {
+    if (!confirm('Hapus siswa "' + nama + '" secara permanen?\n\nData yang akan dihapus:\n- Data siswa\n- Data orang tua\n- Riwayat pendidikan\n- Semua data terkait\n\nTindakan ini tidak dapat dibatalkan.')) {
+      return;
+    }
+    try {
+      const res = await fetch('/api/admin/students/' + id, {
+        method: 'DELETE',
+        headers: studentAuthHdr()
+      });
+      const d = await res.json();
+      if (d.success) {
+        showToast('Siswa berhasil dihapus', 'success');
+        loadStudents(currentStudentPage);
+      } else {
+        alert(d.message || 'Gagal menghapus siswa');
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Error menghapus siswa');
+    }
   };
 
   window.saveStudentEdit = async function () {

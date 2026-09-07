@@ -215,11 +215,14 @@ const teacherUpload = multer({
 app.use(cors());
 app.use(express.static('public', { index: false }));
 
-// Redirect root: subdomain pembayaran -> landing publik, domain utama -> login admin
+// Redirect root: subdomain pembayaran -> landing publik, subdomain anakku -> parent portal, domain utama -> login admin
 app.get('/', (req, res) => {
   const host = req.get('host') || '';
   if (host.toLowerCase().startsWith('payment.')) {
     return res.redirect('/landing.html');
+  }
+  if (host.toLowerCase().startsWith('anakku.')) {
+    return res.sendFile(path.join(__dirname, 'public', 'anakku-portal.html'));
   }
   res.redirect('/login.html');
 });

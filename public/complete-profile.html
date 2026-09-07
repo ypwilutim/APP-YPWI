@@ -1142,10 +1142,24 @@
         });
 
          if (response.ok) {
-           await fetch('/api/profile-complete/' + teacherId, { method: 'PUT', headers: { 'Content-Type': 'application/json' } });
-           Swal.fire({ title: 'Berhasil!', text: 'Profil berhasil diperbarui!', icon: 'success', timer: 3000, showConfirmButton: false }).then(() => {
-             window.location.href = 'login.html';
-           });
+            await fetch('/api/profile-complete/' + teacherId, { method: 'PUT', headers: { 'Content-Type': 'application/json' } });
+
+            const pendidikanTerakhir = document.getElementById('pendidikan_terakhir').value;
+            if (pendidikanTerakhir) {
+              try {
+                await fetch('/api/profile-complete/' + teacherId + '/pendidikan-kode', {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ pendidikan_terakhir: pendidikanTerakhir })
+                });
+              } catch (kodeErr) {
+                console.warn('Update pendidikan_kode gagal:', kodeErr.message);
+              }
+            }
+
+            Swal.fire({ title: 'Berhasil!', text: 'Profil berhasil diperbarui!', icon: 'success', timer: 3000, showConfirmButton: false }).then(() => {
+              window.location.href = 'login.html';
+            });
          } else {
            let msg = 'Update gagal (status ' + response.status + ')';
            try {

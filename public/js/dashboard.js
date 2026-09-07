@@ -235,6 +235,26 @@ async function setTeacherInfo() {
 
                 adminSection.innerHTML = htmlContent;
             }
+        } else {
+            // Fallback: untuk admin role yang tidak memiliki guru_id
+            // Set userAssignments dari localStorage user object
+            if (user.assignments) {
+                window.userAssignments = user.assignments;
+            }
+
+            if (window.userRole === 'admin' && adminSection) {
+                adminSection.classList.remove('hidden');
+                let htmlContent = '';
+
+                if (canApproveIzin(window.userAssignments || [])) {
+                    htmlContent += `<button onclick="openApprovalIzinModal()" style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.3rem 0.75rem;background:#7c3aed;color:white;border-radius:0.5rem;font-size:0.8rem;font-weight:600;border:none;cursor:pointer;"><span class="fas fa-user-check mr-1"></span> Approval Izin</button>`;
+                }
+
+                if (teacherNameEl) teacherNameEl.textContent = user.username || 'Admin';
+                if (teacherDetailsEl) teacherDetailsEl.textContent = `Tenant: ${window.userTenantId || 'YPWILUTIM'}`;
+
+                adminSection.innerHTML = htmlContent;
+            }
         }
     } catch (error) {
         console.error('Error loading teacher info:', error);

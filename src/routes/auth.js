@@ -226,6 +226,43 @@ try {
   }
 });
 
+// Update pendidikan_kode based on pendidikan_terakhir (no auth required, for complete-profile.html)
+router.put('/profile-complete/:teacherId/pendidikan-kode', async (req, res) => {
+  const { teacherId } = req.params;
+  const { pendidikan_terakhir } = req.body || {};
+
+  try {
+    if (!pendidikan_terakhir) {
+      return res.status(400).json({ success: false, message: 'pendidikan_terakhir required' });
+    }
+
+    const query = `
+      UPDATE teachers
+      SET pendidikan_kode = CASE
+        WHEN pendidikan_terakhir LIKE 'S1%' THEN 'S1'
+        WHEN pendidikan_terakhir LIKE 'S2%' THEN 'S2'
+        WHEN pendidikan_terakhir LIKE 'S3%' THEN 'S3'
+        WHEN pendidikan_terakhir LIKE 'D3%' THEN 'D3'
+        WHEN pendidikan_terakhir LIKE 'D4%' THEN 'D4'
+        WHEN pendidikan_terakhir LIKE 'SMA%' THEN 'SMA/Sederajat'
+        WHEN pendidikan_terakhir LIKE 'SMK%' THEN 'SMA/Sederajat'
+        WHEN pendidikan_terakhir LIKE 'SMP%' THEN 'SMP/Sederajat'
+        WHEN pendidikan_terakhir LIKE 'SD%'  THEN 'SD/Sederajat'
+        ELSE 'Lainnya'
+      END
+      WHERE id = ?
+        AND pendidikan_terakhir IS NOT NULL
+        AND pendidikan_terakhir != ''
+    `;
+
+    await db.query(query, [teacherId]);
+    res.json({ success: true, message: 'pendidikan_kode updated' });
+  } catch (error) {
+    console.error('[PENDIDIKAN KODE ERROR]', error.message);
+    res.status(500).json({ success: false, message: 'Error updating pendidikan_kode' });
+  }
+});
+
 // ============================================================
 // FORGOT PASSWORD - EMAIL OTP ONLY
 // ============================================================
