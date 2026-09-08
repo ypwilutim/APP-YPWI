@@ -168,31 +168,33 @@ function forceLogout() {
 
 
 async function setTeacherInfo() {
+    const teacherNameEl = document.getElementById('teacherName');
+    const teacherDetailsEl = document.getElementById('teacherDetails');
+    const userPhotoElement = document.getElementById('userPhoto');
+    const adminSection = document.getElementById('adminNavSection');
+
+    // Inisialisasi dari localStorage sebagai fallback
+    if (!window.userAssignments && user.assignments) {
+        window.userAssignments = user.assignments;
+    }
+
     try {
         const response = await fetch('/api/teacher/info', {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         const data = await response.json();
 
-        // 1. Ambil elemen dengan aman
-        const teacherNameEl = document.getElementById('teacherName');
-        const teacherDetailsEl = document.getElementById('teacherDetails');
-        const userPhotoElement = document.getElementById('userPhoto');
-        const adminSection = document.getElementById('adminNavSection');
-
         if (data.success) {
             const teacher = data.teacher;
-            const assignments = data.assignments;
+            const assignments = data.assignments || [];
 
             if (teacherNameEl) teacherNameEl.textContent = teacher.nama || user.username || 'Guru';
 
             const schoolNames = assignments.map(a => a.nama_sekolah || a.tenant_id).join(', ');
             if (teacherDetailsEl) teacherDetailsEl.textContent = `Unit Sekolah: ${schoolNames || 'Tidak ada'}`;
 
-            // Always set userAssignments so geofencing works for all roles
             window.userAssignments = assignments;
 
-            // Set foto dengan pengecekan elemen
             if (userPhotoElement) {
                 if (teacher.link_foto && teacher.link_foto.trim() !== '' && teacher.link_foto !== 'null') {
                     userPhotoElement.src = teacher.link_foto;
@@ -203,61 +205,30 @@ async function setTeacherInfo() {
                     showFallbackAvatar();
                 }
             }
-
-            // 2. Cek apakah adminSection ada sebelum manipulasi
-            if (adminSection) {
-                adminSection.classList.remove('hidden');
-                let htmlContent = '';
-
-                // --- Logika Ketua Yayasan ---
-                const ketuaYayasan = assignments.find(a => {
-                    const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
-                    return jabatan.includes('ketua') && jabatan.includes('yayasan');
-                });
-                if (ketuaYayasan) {
-                    htmlContent += '<a href="master-dashboard.html" style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.3rem 0.75rem;background:#7c3aed;color:white;border-radius:0.5rem;font-size:0.8rem;font-weight:600;text-decoration:none;"><span class="fas fa-crown mr-1"></span> Dashboard Yayasan</a>';
-                }
-
-                // --- Logika Admin Sekolah (admin/operator/media/tu/tata usaha) ---
-                const adminRoles = ['admin', 'operator', 'media', 'tu', 'tatausaha', 'tatausaha'];
-                const adminUnits = assignments.filter(a => {
-                    const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
-                    return adminRoles.some(role => jabatan.includes(role));
-                });
-
-                if (adminUnits.length > 0) {
-                    htmlContent += `<button onclick="showAdminUnitModal.call(null, window.userAssignments ? window.userAssignments.filter(a => ['admin','operator','media','tu','tatausaha'].some(r => (a.jabatan_di_unit||'').toLowerCase().replace(/\\s/g,'').includes(r))) : [])" style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.3rem 0.75rem;background:#059669;color:white;border-radius:0.5rem;font-size:0.8rem;font-weight:600;border:none;cursor:pointer;"><span class="fas fa-user-cog mr-1"></span> Admin Unit</button>`;
-                }
-
-                if (canApproveIzin(assignments)) {
-                    htmlContent += `<button onclick="openApprovalIzinModal()" style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.3rem 0.75rem;background:#7c3aed;color:white;border-radius:0.5rem;font-size:0.8rem;font-weight:600;border:none;cursor:pointer;"><span class="fas fa-user-check mr-1"></span> Approval Izin</button>`;
-                }
-
-                adminSection.innerHTML = htmlContent;
-            }
         } else {
-            // Fallback: untuk admin role yang tidak memiliki guru_id
-            // Set userAssignments dari localStorage user object
-            if (user.assignments) {
-                window.userAssignments = user.assignments;
-            }
-
-            if (window.userRole === 'admin' && adminSection) {
-                adminSection.classList.remove('hidden');
-                let htmlContent = '';
-
-                if (canApproveIzin(window.userAssignments || [])) {
-                    htmlContent += `<button onclick="openApprovalIzinModal()" style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.3rem 0.75rem;background:#7c3aed;color:white;border-radius:0.5rem;font-size:0.8rem;font-weight:600;border:none;cursor:pointer;"><span class="fas fa-user-check mr-1"></span> Approval Izin</button>`;
-                }
-
-                if (teacherNameEl) teacherNameEl.textContent = user.username || 'Admin';
-                if (teacherDetailsEl) teacherDetailsEl.textContent = `Tenant: ${window.userTenantId || 'YPWILUTIM'}`;
-
-                adminSection.innerHTML = htmlContent;
-            }
+            // API gagal/tidak ditemukan - fallback dari localStorage
+            if (teacherNameEl) teacherNameEl.textContent = user.username || 'Admin';
+            if (teacherDetailsEl) teacherDetailsEl.textContent = `Tenant: ${window.userTenantId || 'YPWILUTIM'}`;
+            if (userPhotoElement) { userPhotoElement.src = ''; showFallbackAvatar(); }
         }
     } catch (error) {
         console.error('Error loading teacher info:', error);
+        // Fallback saat fetch gagal
+        if (teacherNameEl) teacherNameEl.textContent = user.username || 'Admin';
+        if (teacherDetailsEl) teacherDetailsEl.textContent = `Tenant: ${window.userTenantId || 'YPWILUTIM'}`;
+        if (userPhotoElement) { userPhotoElement.src = ''; showFallbackAvatar(); }
+    }
+
+    // Render admin nav section untuk semua admin role
+    if (adminSection && window.userRole === 'admin') {
+        adminSection.classList.remove('hidden');
+        let htmlContent = '';
+
+        if (canApproveIzin(window.userAssignments || [])) {
+            htmlContent += `<button onclick="openApprovalIzinModal()" style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.3rem 0.75rem;background:#7c3aed;color:white;border-radius:0.5rem;font-size:0.8rem;font-weight:600;border:none;cursor:pointer;"><span class="fas fa-user-check mr-1"></span> Approval Izin</button>`;
+        }
+
+        adminSection.innerHTML = htmlContent;
     }
 }
 
@@ -530,6 +501,7 @@ function escapeHtml(str) {
 
 function canApproveIzin(assignments) {
     const list = assignments || [];
+    // Admin role selalu bisa approve (YPWILUTIM admin melihat semua, admin lain hanya tenant-nya via server-side filter)
     if (window.userRole === 'admin') return true;
     if (list.length === 0) return false;
 

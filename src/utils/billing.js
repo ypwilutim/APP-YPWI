@@ -258,30 +258,37 @@ async function insertIncoming(rec) {
   };
   const status = statusMap[rawStatus] || rawStatus;
 
-  // Match siswa by VA (hanya 10-16 digit awal)
+  // Match siswa by VA (strict: exact match only, or exact match after BSI prefix strip)
+  // Avoid loose suffix matching which can attribute payments to wrong students
   let matchedStudentId = null;
   if (beneficiaryDigits) {
-    // Try multiple matching patterns - VA in database may have different formats
     // Pattern 1: Exact match (with/without spaces)
     let [st] = await db.query('SELECT id FROM students WHERE REPLACE(va_number, " ", "") = ? OR va_number = ? LIMIT 1', [beneficiaryDigits, beneficiaryDigits]);
-    
-    // Pattern 2: Last 10-12 digits (VA prefix variations)
-    if (!st && beneficiaryDigits.length > 10) {
-      for (let len = 12; len >= 10; len--) {
-        const suffix = beneficiaryDigits.slice(-len);
-        [st] = await db.query('SELECT id FROM students WHERE REPLACE(va_number, " ", "") LIKE ? LIMIT 1', ['%' + suffix]);
-        if (st) break;
-      }
-    }
-    
-    // Pattern 3: Remove BSI prefix (832231) if present
+
+    // Pattern 2: Exact match after removing BSI common prefixes (832231, 172, 196, 14)
     if (!st) {
-      const withoutPrefix = beneficiaryDigits.replace(/^832231/, '');
+      const withoutPrefix = beneficiaryDigits.replace(/^832231/, '').replace(/^172/, '').replace(/^196/, '').replace(/^14/, '');
       if (withoutPrefix.length >= 10) {
         [st] = await db.query('SELECT id FROM students WHERE REPLACE(va_number, " ", "") = ? OR va_number = ? LIMIT 1', [withoutPrefix, withoutPrefix]);
       }
     }
-    
+
+    // Pattern 3: Exact match of the last N digits ONLY when there's exactly one match
+    // (avoids cross-student attribution)
+    if (!st && beneficiaryDigits.length > 10) {
+      for (let len = 12; len >= 10; len--) {
+        const suffix = beneficiaryDigits.slice(-len);
+        const rows = await db.query(
+          'SELECT id FROM students WHERE REPLACE(va_number, " ", "") LIKE ? AND CHAR_LENGTH(REPLACE(va_number, " ", "")) = ?',
+          ['%' + suffix, len]
+        );
+        if (rows.length === 1) {
+          st = rows[0];
+          break;
+        }
+      }
+    }
+
     matchedStudentId = st ? st.id : null;
     if (!matchedStudentId) {
       console.log(`[VA_MATCH] Tidak ditemukan siswa untuk VA ${beneficiaryDigits}`);
@@ -392,6 +399,10 @@ async function generateBilling(tenantId, fallbackStart) {
         created++;
       }
     }
+
+    // Recalculate saldo after billing changes — prevents saldo_siswa from
+    // showing stale 0 (Lunas) when billing_payment was reset to "belum"
+    await recalcStudent(s.id);
   }
   return { created, skipped, end };
 }
@@ -435,7 +446,10 @@ async function recalcStudent(studentId) {
       pool -= totalTagihan;
       keterangan = 0;
       status = 'lunas';
-      remainingKeterangan = 0;
+      // FIX: do NOT reset remainingKeterangan here — that would erase
+      // accumulated unpaid amounts from prior months (e.g. when a zero-iuran
+      // or already-paid bill sits between unpaid bills). remainingKeterangan
+      // must only accumulate, never reset, so saldo reflects all outstanding bills.
     } else {
       keterangan = totalTagihan - pool;
       status = 'belum';

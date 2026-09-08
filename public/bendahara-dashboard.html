@@ -1921,7 +1921,7 @@
 
     async function loadBatalLunasMassalStudents() {
       try {
-        const res = await fetch('/api/treasurer/public/students-by-tenant?tenant_id=' + (currentTenantId || ''), { headers: getAuthHeader() });
+        const res = await fetch('/api/treasurer/public/students-by-tenant?tenant_id=' + (document.getElementById('paymentsTenantFilter')?.value || ''), { headers: getAuthHeader() });
         const data = await res.json();
         blmStudents = data.students || data.data || (Array.isArray(data) ? data : []);
         const listEl = document.getElementById('batalLunasMassalStudentList');
@@ -1962,7 +1962,7 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
           body: JSON.stringify({
-            tenant_id: currentTenantId || undefined,
+            tenant_id: document.getElementById('paymentsTenantFilter')?.value || undefined,
             bulan_from: bulanFrom, bulan_to: bulanTo,
             student_ids: studentIds, all_students: target === 'all'
           })
@@ -2001,7 +2001,7 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
           body: JSON.stringify({
-            tenant_id: currentTenantId || undefined,
+            tenant_id: document.getElementById('paymentsTenantFilter')?.value || undefined,
             bulan_from: bulanFrom, bulan_to: bulanTo,
             student_ids: studentIds, all_students: target === 'all',
             alasan: alasan || null
@@ -2242,17 +2242,67 @@
 
     async function recalcBilling() {
       const tenantId = document.getElementById('paymentsTenantFilter').value;
-      if (!tenantId) { showToast('Pilih sekolah terlebih dahulu', 'error'); return; }
+      const allTenants = !tenantId;
+
+      let tenants = [];
+      if (allTenants) {
+        try {
+          const r = await fetch('/api/treasurer/public/tenants', { headers: { ...getAuthHeader() } });
+          const data = await r.json();
+          tenants = data.tenants || data.data || [];
+        } catch (e) { tenants = []; }
+      }
+
+      const total = allTenants ? tenants.length : 1;
+      showProgress(allTenants ? 'Menghitung Saldo Semua Sekolah' : 'Menghitung Saldo Sekolah');
+
+      let progressInterval = null;
+      if (allTenants) {
+        let step = 0;
+        progressInterval = setInterval(() => {
+          step++;
+          const pct = Math.min(95, Math.floor((step / (tenants.length + 5)) * 100));
+          updateProgress(step, tenants.length, `Memproses ${Math.min(step, tenants.length)}/${tenants.length} sekolah`);
+          if (step > tenants.length + 3) clearInterval(progressInterval);
+        }, 150);
+      } else {
+        updateProgress(0, 1, 'Memproses...');
+      }
+
       try {
         const res = await fetch('/api/treasurer/bendahara/billing/recalc', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
-          body: JSON.stringify({ tenant_id: tenantId })
+          body: JSON.stringify(tenantId ? { tenant_id: tenantId } : {})
         });
         const d = await res.json();
-        if (d.success) { showToast(d.message, 'success'); loadSaldo(); }
-        else showToast(d.message || 'Gagal hitung saldo', 'error');
-      } catch (e) { showToast('Gagal: ' + e.message, 'error'); }
+
+        if (progressInterval) clearInterval(progressInterval);
+
+        if (allTenants && d.details) {
+          d.details.forEach((item, i) => {
+            const nm = item.nama_sekolah || item.tenant_id;
+            if (item.error) logProgress(`${nm}: ${item.error}`, true);
+            else logProgress(`${nm}: ${item.updated} siswa`, false);
+          });
+          updateProgress(tenants.length, tenants.length, 'Selesai');
+        } else {
+          updateProgress(1, 1, 'Selesai');
+        }
+
+        finishProgress(d.message || 'Berhasil');
+
+        if (d.success) {
+          showToast(allTenants ? `${d.message} (${d.details?.length || d.tenants_processed} sekolah)` : d.message, 'success');
+          loadSaldo();
+        } else {
+          showToast(d.message || 'Gagal hitung saldo', 'error');
+        }
+      } catch (e) {
+        if (progressInterval) clearInterval(progressInterval);
+        showToast('Gagal: ' + e.message, 'error');
+        errorProgress(e.message);
+      }
     }
 
     // ===================== UPDATE BILLING =====================

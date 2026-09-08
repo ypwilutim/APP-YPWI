@@ -188,9 +188,7 @@ async function sendBillTemplate(phoneNumber, params, templateName = 'tagihan_spp
       { type: 'text', text: params.jumlah_tagihan || '0' },
       { type: 'text', text: params.tanggal_jatuh_tempo || '-' },
       { type: 'text', text: params.invoice_url || params.nomor_rekening || '-' },
-      { type: 'text', text: params.nama_pembayaran || params.nama_penerima || '-' },
-      { type: 'text', text: params.kelas || '-' },
-      { type: 'text', text: params.info_sekolah || '-' }
+      { type: 'text', text: params.nama_pembayaran || params.nama_penerima || '-' }
     ];
   }
 
@@ -221,7 +219,7 @@ async function sendBillTemplate(phoneNumber, params, templateName = 'tagihan_spp
    }
 
    if (!isTagihanBsi && !isInvoiceSpp && (params.invoice_url || params.nomor_rekening)) {
-     const sppUrl = params.invoice_url || `https://app.ypwilutim.com/spp-info.html?va=${encodeURIComponent(params.nomor_rekening || '')}`;
+      const sppUrl = params.invoice_url || `https://app.ypwilutim.com/spp-payment.html?va=${encodeURIComponent(params.nomor_rekening || '')}`;
      components.push({
        type: 'button',
        sub_type: 'url',
@@ -233,32 +231,32 @@ async function sendBillTemplate(phoneNumber, params, templateName = 'tagihan_spp
      });
    }
 
-   if (isTagihanBsi && params.nomor_rekening) {
-     const vaUrl = `https://app.ypwilutim.com/spp-info.html?va=${encodeURIComponent(params.nomor_rekening)}`;
-     components.push({
-       type: 'button',
-       sub_type: 'url',
-       index: '0',
-       parameters: [{
-         type: 'text',
-         text: vaUrl
-       }]
-     });
-   }
+    if (isTagihanBsi && params.nomor_rekening) {
+      const vaUrl = `https://app.ypwilutim.com/spp-payment.html?va=${encodeURIComponent(params.nomor_rekening)}`;
+      components.push({
+        type: 'button',
+        sub_type: 'url',
+        index: '1',
+        parameters: [{
+          type: 'text',
+          text: vaUrl
+        }]
+      });
+    }
 
-  if (isTagihanBsi && params.va_raw) {
-    components.push({
-      type: 'button',
-      sub_type: 'copy_code',
-      index: '0',
-      parameters: [{
-        type: 'coupon_code',
-        coupon_code: params.va_raw
-      }]
-    });
-  } else if (isTagihanBsi) {
-    throw new Error('Siswa belum memiliki VA BSI. Harap generate VA terlebih dahulu sebelum mengirim pengingat.');
-  }
+    if (isTagihanBsi && params.va_raw) {
+      components.push({
+        type: 'button',
+        sub_type: 'copy_code',
+        index: '0',
+        parameters: [{
+          type: 'coupon_code',
+          coupon_code: params.va_raw
+        }]
+      });
+    } else if (isTagihanBsi) {
+      throw new Error('Siswa belum memiliki VA BSI. Harap generate VA terlebih dahulu sebelum mengirim pengingat.');
+    }
 
   const payload = {
     messaging_product: 'whatsapp',

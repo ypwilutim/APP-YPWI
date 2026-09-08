@@ -998,10 +998,12 @@
       `;
       
       currentAttendance.forEach(record => {
-        const statusIcon = record.status === 'present' ? 'check-circle' : 
-                          record.status === 'late' ? 'clock' : 'x-circle';
-        const statusColor = record.status === 'present' ? '#166534' : 
-                           record.status === 'late' ? '#c2410c' : '#991b1b';
+        const statusIcon = record.status === 'hadir' ? 'check-circle' : 
+                          record.status === 'izin' ? 'clock' : 
+                          record.status === 'sakit' ? 'medkit' : 'times-circle';
+        const statusColor = record.status === 'hadir' ? '#166534' : 
+                           record.status === 'izin' ? '#c2410c' : 
+                           record.status === 'sakit' ? '#2563eb' : '#991b1b';
         
         html += `
           <div style="display: flex; align-items: center; gap: 10px; padding: 10px; border-bottom: 1px solid #f3f4f6;">
@@ -1010,11 +1012,10 @@
             </div>
             <div style="flex: 1;">
               <div style="font-size: 13px; font-weight: 600; color: #1f2937;">${formatDate(record.tanggal)}</div>
-              <div style="font-size: 12px; color: #6b7280;">${record.jam} - ${record.lokasi}</div>
+              <div style="font-size: 12px; color: #6b7280;">${record.keterangan || '-'}</div>
             </div>
             <div style="text-align: right;">
               <div style="font-size: 12px; font-weight: 600; color: ${statusColor}; text-transform: uppercase;">${record.status}</div>
-              <div style="font-size: 11px; color: #9ca3af;">${record.guru}</div>
             </div>
           </div>
         `;
@@ -1033,13 +1034,15 @@
        // Use parentBillingData if available, otherwise fall back to currentBilling
        const billingData = window.parentBillingData || {};
        
-       if (billingData.students && billingData.students.length > 0) {
-         // Calculate from all students
-         billingData.students.forEach(student => {
-           totalTunggakan += student.totalTunggakan || 0;
-           totalKelebihan += 0; // We don't have kelebihan data in our current structure
-         });
-       } else {
+        if (billingData.students && billingData.students.length > 0) {
+          // Calculate from all students
+          billingData.students.forEach(student => {
+            totalTunggakan += student.totalTunggakan || 0;
+            totalKelebihan += student.totalPembayaran > (student.totalTagihan || 0) 
+              ? student.totalPembayaran - student.totalTagihan 
+              : 0;
+          });
+        } else {
          // Fallback to currentBilling (for compatibility)
          currentBilling.forEach(bill => {
            totalTunggakan += bill.tunggakan || 0;
@@ -1066,18 +1069,32 @@
        }
        document.getElementById('bulanBerjalan').textContent = bulanBerjalan;
        
-       document.getElementById('totalSiswa').textContent = window.parentStudents ? window.parentStudents.length.toString() : '1';
-       
-       // Update current balance (simplified - in a real app this might come from a different endpoint)
-       const monthlyFee = 250000; // This should ideally come from student data or config
-       const paidThisMonth = monthlyFee; // Simplified assumption
-       const remainingTunggakan = totalTunggakan;
-       const currentBalance = paidThisMonth - monthlyFee + remainingTunggakan;
-       
-       document.getElementById('currentBalance').textContent = formatCurrency(currentBalance);
-       document.getElementById('monthlyFee').textContent = formatCurrency(monthlyFee);
-       document.getElementById('paidThisMonth').textContent = formatCurrency(paidThisMonth);
-       document.getElementById('remainingTunggakan').textContent = formatCurrency(remainingTunggakan);
+        document.getElementById('totalSiswa').textContent = window.parentStudents ? window.parentStudents.length.toString() : '1';
+        
+        // Calculate real values from API data
+        const firstStudent = window.parentStudents && window.parentStudents.length > 0 ? window.parentStudents[0] : null;
+        const monthlyFee = firstStudent && firstStudent.iuran_bulanan ? parseFloat(firstStudent.iuran_bulanan) : 0;
+        
+        // Calculate paid this month from billing data
+        let paidThisMonth = 0;
+        const currentMonth = new Date().toISOString().slice(0, 7);
+        if (billingData.students && billingData.students.length > 0) {
+          billingData.students.forEach(student => {
+            (student.pembayaran || []).forEach(payment => {
+              if (payment.tanggal && payment.tanggal.startsWith(currentMonth)) {
+                paidThisMonth += parseFloat(payment.jumlah) || 0;
+              }
+            });
+          });
+        }
+        
+        const remainingTunggakan = totalTunggakan;
+        const currentBalance = remainingTunggakan + Math.max(0, monthlyFee - paidThisMonth);
+        
+        document.getElementById('currentBalance').textContent = formatCurrency(currentBalance);
+        document.getElementById('monthlyFee').textContent = formatCurrency(monthlyFee);
+        document.getElementById('paidThisMonth').textContent = formatCurrency(paidThisMonth);
+        document.getElementById('remainingTunggakan').textContent = formatCurrency(remainingTunggakan);
        
        // Update payment status based on first student's data
        const statusBadge = document.getElementById('paymentStatus');
@@ -1297,7 +1314,9 @@ function renderRecentBillingList() {
     function logout() {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      window.location.href = 'login.html';
+      localStorage.removeItem('parentToken');
+      localStorage.removeItem('parentData');
+      window.location.href = 'parent-login.html';
     }
     
 function refreshPayments() {

@@ -2172,32 +2172,32 @@ if (d.success) {
            if (row) row.remove();
          }
 
-         async function loadClassesForJabatanRow(row, tenantId, selectedClassId) {
-           const classSelect = row.querySelector('.jabatan-class');
-           if (!tenantId) {
-             classSelect.innerHTML = '<option value="">Pilih Kelas (Wali Kelas)</option>';
-             return;
-           }
-           classSelect.innerHTML = '<option value="">Memuat...</option>';
-           try {
-             const r = await fetch(apiUrl('/admin/classes?tenant_id=' + tenantId), { headers: { 'Authorization': `Bearer ${authToken}` } });
-             if (!r.ok) throw new Error('HTTP ' + r.status);
-             const d = await r.json();
-             if (d.success) {
-               classSelect.innerHTML = '<option value="">Pilih Kelas (Wali Kelas)</option>';
-               (d.data || []).forEach(c => {
-                 const opt = document.createElement('option');
-                 opt.value = c.id;
-                 opt.textContent = c.nama_kelas;
-                 classSelect.appendChild(opt);
-               });
-               if (selectedClassId) classSelect.value = selectedClassId;
-             }
-           } catch (e) {
-             console.error('[LOAD CLASSES FOR JABATAN]', e);
-             classSelect.innerHTML = '<option value="">Error memuat kelas</option>';
-           }
-         }
+          async function loadClassesForJabatanRow(row, tenantId, selectedClassId) {
+            const classSelect = row.querySelector('.jabatan-class');
+            if (!tenantId) {
+              classSelect.innerHTML = '<option value="">Pilih Kelas (Wali Kelas)</option>';
+              return;
+            }
+            classSelect.innerHTML = '<option value="">Memuat...</option>';
+            try {
+              const r = await fetch('/api/admin/classes?tenant_id=' + encodeURIComponent(tenantId), { headers: { 'Authorization': `Bearer ${authToken}` } });
+              if (!r.ok) throw new Error('HTTP ' + r.status);
+              const d = await r.json();
+              if (d.success) {
+                classSelect.innerHTML = '<option value="">Pilih Kelas (Wali Kelas)</option>';
+                (d.data || []).forEach(c => {
+                  const opt = document.createElement('option');
+                  opt.value = c.id;
+                  opt.textContent = c.nama_kelas;
+                  classSelect.appendChild(opt);
+                });
+                if (selectedClassId) classSelect.value = selectedClassId;
+              }
+            } catch (e) {
+              console.error('[LOAD CLASSES FOR JABATAN]', e);
+              classSelect.innerHTML = '<option value="">Error memuat kelas</option>';
+            }
+          }
 
         function hideAssignmentModal() {
           document.getElementById('assignmentModal').classList.remove('show');

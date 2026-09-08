@@ -915,7 +915,7 @@
               <td class="px-4 py-2">${d.nama_siswa}</td>
               <td class="px-4 py-2">${d.nama_sekolah}</td>
               <td class="px-4 py-2 text-right">${fmtRp(d.iuran_bulanan)}</td>
-              <td class="px-4 py-2 text-center">${d.saldo > 0 ? 'Lunas' : 'Tunggakan'}</td>
+              <td class="px-4 py-2 text-center">${(d.saldo || 0) < 0 ? 'Tunggakan' : (d.saldo || 0) > 0 ? 'Kelebihan' : 'Lunas'}</td>
               <td class="px-4 py-2 text-right">${d.saldo < 0 ? '-' : ''}${fmtRp(Math.abs(d.saldo))}</td>
             </tr>`).join('');
         }

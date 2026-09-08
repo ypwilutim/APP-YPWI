@@ -474,8 +474,10 @@ router.post('/parent/login', async (req, res) => {
   }
 
   try {
-    // Normalize phone number (remove spaces, dashes, etc.)
-    const cleanPhone = phoneNumber.replace(/\s+/g, '').replace(/[-()]/g, '');
+    let cleanPhone = phoneNumber.replace(/\s+/g, '').replace(/[-()]/g, '');
+    if (/^08\d+$/.test(cleanPhone)) {
+      cleanPhone = '62' + cleanPhone.substring(1);
+    }
     
     // Find parent by phone number
     const parents = await db.query(
@@ -494,7 +496,7 @@ router.post('/parent/login', async (req, res) => {
 
     // Get students associated with this parent
     const students = await db.query(
-      'SELECT * FROM students WHERE parent_id = ? AND is_active = 1',
+      'SELECT * FROM students WHERE parent_id = ? AND status = "aktif"',
       [parent.id]
     );
 
@@ -573,8 +575,7 @@ router.post('/parent/login', async (req, res) => {
         tanggal_masuk: student.tanggal_masuk,
         tahun_masuk: student.tahun_masuk,
         status: student.status,
-        biaya_admin_va: student.biaya_admin_va,
-        is_active: student.is_active
+        biaya_admin_va: student.biaya_admin_va
       }))
     });
   } catch (error) {

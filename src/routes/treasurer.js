@@ -389,12 +389,13 @@ router.post('/treasurer/public/send-all-spp-reminders', async (req, res) => {
     let tenantId = tenant_id || null;
 
     let defaulterQuery = `
-      SELECT s.id, s.nama_siswa, s.nisn, s.no_wa, s.va_number, s.class_id, c.nama_kelas, c.tingkatan, p.nama_orang_tua, tn.nama_sekolah, tn.tenant_id,
-        COALESCE(CASE WHEN s.kelas = 'PI' THEN s.arrears_pi WHEN s.kelas = 'XI' THEN s.arrears_xi ELSE 0 END, 0) as total_arrears
+      SELECT s.id, s.nama_siswa, s.nisn, p.no_wa, s.va_number, s.class_id, c.nama_kelas, c.tingkatan, p.nama_orang_tua, tn.nama_sekolah, tn.tenant_id,
+        COALESCE(ss.saldo, 0) as total_arrears
       FROM students s
       JOIN tenants tn ON s.tenant_id = tn.tenant_id
       LEFT JOIN parents p ON s.parent_id = p.id
       LEFT JOIN classes c ON s.class_id = c.id
+      LEFT JOIN saldo_siswa ss ON ss.student_id = s.id
       WHERE s.status = 'active'
         AND s.va_number IS NOT NULL AND s.va_number != ''
     `;
@@ -403,7 +404,7 @@ router.post('/treasurer/public/send-all-spp-reminders', async (req, res) => {
       defaulterQuery += ' AND s.tenant_id = ?';
       params.push(tenantId);
     }
-    defaulterQuery += ' AND (COALESCE(CASE WHEN s.kelas = "PI" THEN s.arrears_pi WHEN s.kelas = "XI" THEN s.arrears_xi ELSE 0 END, 0) > 0)';
+    defaulterQuery += ' AND COALESCE(ss.saldo, 0) < 0';
 
     const [defaulters] = await db.query(defaulterQuery, params);
 
@@ -517,7 +518,7 @@ router.post('/treasurer/public/send-selected-spp-reminders', async (req, res) =>
 
     const placeholders = student_ids.map(() => '?').join(',');
      const [defaulters] = await db.query(
-      `SELECT s.id, s.nama_siswa, s.nisn, p.no_wa, s.va_number, s.parent_id, s.tenant_id, c.nama_kelas, c.tingkatan, tn.nama_sekolah, COALESCE(COALESCE(CASE WHEN s.kelas = 'PI' THEN s.arrears_pi WHEN s.kelas = 'XI' THEN s.arrears_xi ELSE 0 END, 0), 0) as total_arrears FROM students s JOIN tenants tn ON s.tenant_id = tn.tenant_id LEFT JOIN classes c ON s.class_id = c.id LEFT JOIN parents p ON s.parent_id = p.id WHERE s.id IN (${placeholders})`,
+      `SELECT s.id, s.nama_siswa, s.nisn, p.no_wa, s.va_number, s.parent_id, s.tenant_id, c.nama_kelas, c.tingkatan, tn.nama_sekolah, COALESCE(ss.saldo, 0) as total_arrears FROM students s JOIN tenants tn ON s.tenant_id = tn.tenant_id LEFT JOIN classes c ON s.class_id = c.id LEFT JOIN parents p ON s.parent_id = p.id LEFT JOIN saldo_siswa ss ON ss.student_id = s.id WHERE s.id IN (${placeholders})`,
       student_ids
     );
 
@@ -1032,7 +1033,7 @@ router.get('/treasurer/public/export-va', async (req, res) => {
     students.forEach(s => {
       const limit = parseFloat(s.iuran_bulanan) || 150000;
       const wa = s.no_wa || '';
-      csv += `Debit;${parentAccount};${s.nis};A/N ${s.nama_siswa};Open Limit;${limit};;;;No;;;${expiryStr};${s.nama_siswa};${wa};KTP;;;;;;;;\n`;
+      csv += `Debit;${parentAccount};${s.nis};A/N ${s.nama_siswa};Close Limit;${limit};;;;No;;;${expiryStr};${s.nama_siswa};${wa};KTP;;;;;;;;\n`;
     });
 
     res.setHeader('Content-Type', 'text/csv');
@@ -3842,7 +3843,7 @@ router.get('/treasurer/bsi/generate-csv', authenticateBendahara, async (req, res
         parentAccount.replace(/\s/g, ''),
         va,
         vaName,
-        'Open Limit',
+        'Close Limit',
         '',
         limitAmount,
         '',
