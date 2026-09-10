@@ -2946,14 +2946,15 @@ router.get('/admin/students', authenticateOperator, async (req, res) => {
     const total = totalResult.total;
 
     let query = `
- SELECT s.id, s.nama_siswa, s.nisn, s.nis, s.jenis_kelamin, s.iuran_bulanan,
-        s.class_id, s.tenant_id, s.tahun_masuk,
-        c.nama_kelas, c.tingkatan, tn.nama_sekolah, p.nama_orang_tua, p.no_wa as no_wa_ortu
-        FROM students s
-        LEFT JOIN classes c ON s.class_id = c.id
-        LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id
-        LEFT JOIN parents p ON s.parent_id = p.id
-        WHERE s.status != 'alumni'
+  SELECT s.id, s.nama_siswa, s.nisn, s.nis, s.jenis_kelamin, s.iuran_bulanan,
+         s.class_id, s.tenant_id, s.tahun_masuk,
+         c.nama_kelas, c.tingkatan, tn.nama_sekolah, p.nama_orang_tua, p.no_wa as no_wa_ortu,
+         (SELECT tn2.nama_sekolah FROM mutasi_students ms2 JOIN tenants tn2 ON ms2.new_tenant_id = tn2.tenant_id WHERE ms2.student_id = s.id ORDER BY ms2.id DESC LIMIT 1) as sekolah_tujuan
+         FROM students s
+         LEFT JOIN classes c ON s.class_id = c.id
+         LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id
+         LEFT JOIN parents p ON s.parent_id = p.id
+         WHERE s.status != 'alumni'
      `;
     let params = [];
 
@@ -3199,11 +3200,14 @@ router.post('/admin/alumni/:id/adopt', authenticateOperator, async (req, res) =>
     }
 
     // Record education history for the previous school
-    await db.query(
-      `INSERT INTO student_education_history (student_id, tenant_id, nama_sekolah, tahun_masuk, tahun_lulus, status) 
-       VALUES (?, ?, ?, ?, ?, 'lulus')`,
-      [id, student.tenant_id, student.nama_sekolah_asal || 'Sekolah Asal', student.tahun_masuk, new Date().getFullYear().toString()]
-    );
+    const prevSchoolName = student.nama_sekolah_asal || 'Sekolah Asal';
+    if (student.tenant_id) {
+      await db.query(
+        `INSERT INTO student_education_history (student_id, tenant_id, nama_sekolah, tahun_masuk, tahun_lulus, status) 
+         VALUES (?, ?, ?, ?, ?, 'lulus')`,
+        [id, student.tenant_id, prevSchoolName, student.tahun_masuk, new Date().getFullYear().toString()]
+      );
+    }
 
     // Adopt: move alumni to new school, set status to aktif
     await db.query(
@@ -4145,10 +4149,10 @@ router.post('/admin/students/:id/mutasi', authenticateOperator, async (req, res)
     let isSpecialExit = false;
     let statusText = 'dimutasi';
 
-    // Handle special exit reasons: 'keluar' (leaving) and 'lulus' (graduating)
-    if (target_tenant_id === 'keluar' || target_tenant_id === 'lulus') {
+    // Handle special exit reasons: 'keluar' (leaving), 'berhenti' (stopping), and 'lulus' (graduating)
+    if (target_tenant_id === 'keluar' || target_tenant_id === 'berhenti' || target_tenant_id === 'lulus') {
       isSpecialExit = true;
-      statusText = target_tenant_id === 'keluar' ? 'dikeluarkan' : 'lulus';
+      statusText = target_tenant_id === 'keluar' ? 'dikeluarkan' : target_tenant_id === 'berhenti' ? 'berhenti' : 'lulus';
       newTenantId = oldTenantId; // keep student in same tenant, just clear class
     }
 
@@ -4174,12 +4178,12 @@ router.post('/admin/students/:id/mutasi', authenticateOperator, async (req, res)
     const [oldSchool] = await db.query('SELECT nama_sekolah FROM tenants WHERE tenant_id = ?', [oldTenantId]);
 
     // Record education history for the old school
-    if (oldTenantId && oldSchool) {
+    if (oldTenantId) {
       const historyStatus = isSpecialExit ? (target_tenant_id === 'lulus' ? 'lulus' : 'keluar') : 'pindah';
       await db.query(
         `INSERT INTO student_education_history (student_id, tenant_id, nama_sekolah, tahun_masuk, tahun_lulus, status, keterangan) 
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [id, oldTenantId, oldSchool.nama_sekolah, student.tahun_masuk, new Date().getFullYear().toString(), historyStatus, reason || null]
+        [id, oldTenantId, oldSchool?.nama_sekolah || null, student.tahun_masuk || null, new Date().getFullYear().toString(), historyStatus, reason || null]
       );
     }
 
@@ -4191,7 +4195,15 @@ router.post('/admin/students/:id/mutasi', authenticateOperator, async (req, res)
 
     // Update student: clear class_id, set mutasi_status
     // For special exits (keluar/lulus), keep tenant_id unchanged
+    let hasMutasiColumn = false;
     try {
+      await db.query('SELECT mutasi_status FROM students LIMIT 0');
+      hasMutasiColumn = true;
+    } catch (colError) {
+      hasMutasiColumn = false;
+    }
+
+    if (hasMutasiColumn) {
       if (isSpecialExit) {
         await db.query(
           'UPDATE students SET class_id = NULL, mutasi_status = ? WHERE id = ?',
@@ -4200,10 +4212,10 @@ router.post('/admin/students/:id/mutasi', authenticateOperator, async (req, res)
       } else {
         await db.query(
           'UPDATE students SET tenant_id = ?, class_id = NULL, mutasi_status = ? WHERE id = ?',
-          [newTenantId, 'completed', id]
+          [newTenantId, 'pending', id]
         );
       }
-    } catch (colError) {
+    } else {
       if (isSpecialExit) {
         await db.query(
           'UPDATE students SET class_id = NULL WHERE id = ?',
@@ -4229,27 +4241,50 @@ router.post('/admin/students/:id/mutasi', authenticateOperator, async (req, res)
 router.get('/admin/mutasi/students', authenticateOperator, async (req, res) => {
   try {
     let tenantId = req.query.tenant_id;
-    let query = `
-      SELECT m.id as mutasi_id, m.student_id, m.old_tenant_id, m.new_tenant_id, m.reason, m.created_at,
-             s.nama_siswa, s.nisn, s.nis, s.jenis_kelamin, s.iuran_bulanan, s.tenant_id,
-             t.nama_sekolah as old_school, tn.nama_sekolah as new_school
-      FROM mutasi_students m
-      JOIN students s ON m.student_id = s.id
-      LEFT JOIN tenants t ON m.old_tenant_id = t.tenant_id
-      LEFT JOIN tenants tn ON m.new_tenant_id = tn.tenant_id
-      WHERE s.class_id IS NULL
-    `;
-    let params = [];
-    if (tenantId) {
-      query += ' AND s.tenant_id = ?';
-      params.push(tenantId);
+
+    let hasMutasiColumn = false;
+    try {
+      await db.query('SELECT mutasi_status FROM students LIMIT 0');
+      hasMutasiColumn = true;
+    } catch (colError) {
+      hasMutasiColumn = false;
     }
-    query += ' ORDER BY m.created_at DESC';
-    const mutasiList = await db.query(query, params);
-    res.json({ success: true, data: mutasiList });
+
+    let query = '';
+    let params = [];
+
+    if (hasMutasiColumn) {
+      query = `
+        SELECT s.id, s.nama_siswa, s.nisn, s.nis, s.tenant_id as old_tenant_id, tn.nama_sekolah as old_school, c.nama_kelas
+        FROM students s
+        LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id
+        LEFT JOIN classes c ON s.class_id = c.id
+        WHERE s.mutasi_status = 'pending'
+      `;
+      if (tenantId) {
+        query += ' AND s.tenant_id = ?';
+        params.push(tenantId);
+      }
+    } else {
+      query = `
+        SELECT s.id, s.nama_siswa, s.nisn, s.nis, s.tenant_id as old_tenant_id, tn.nama_sekolah as old_school, c.nama_kelas
+        FROM students s
+        LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id
+        LEFT JOIN classes c ON s.class_id = c.id
+        WHERE s.status = 'mutasi'
+      `;
+      if (tenantId) {
+        query += ' AND s.tenant_id = ?';
+        params.push(tenantId);
+      }
+    }
+
+    query += ' ORDER BY s.nama_siswa ASC';
+    const students = await db.query(query, params);
+    res.json({ success: true, data: students });
   } catch (error) {
     console.error('Get mutasi students error:', error);
-    res.status(500).json({ success: false, message: 'Error fetching mutasi records' });
+    res.status(500).json({ success: false, message: 'Error fetching mutasi students' });
   }
 });
 
@@ -4261,7 +4296,20 @@ router.put('/admin/students/:id/class', authenticateOperator, async (req, res) =
     if (!class_id) {
       return res.status(400).json({ success: false, message: 'class_id wajib diisi' });
     }
-    await db.query('UPDATE students SET class_id = ? WHERE id = ?', [class_id, id]);
+
+    let hasMutasiColumn = false;
+    try {
+      await db.query('SELECT mutasi_status FROM students LIMIT 0');
+      hasMutasiColumn = true;
+    } catch (colError) {
+      hasMutasiColumn = false;
+    }
+
+    if (hasMutasiColumn) {
+      await db.query('UPDATE students SET class_id = ?, mutasi_status = NULL WHERE id = ?', [class_id, id]);
+    } else {
+      await db.query('UPDATE students SET class_id = ?, status = ? WHERE id = ?', [class_id, 'aktif', id]);
+    }
     await db.query('DELETE FROM mutasi_students WHERE student_id = ?', [id]);
     res.json({ success: true, message: 'Kelas siswa berhasil diset' });
   } catch (error) {
@@ -5144,10 +5192,25 @@ router.put('/admin/students/:id/transfer', authenticateOperator, async (req, res
     }
 
     // Set mutasi_status to pending, clear tenant for adoption pool
-    await db.query(
-      'UPDATE students SET mutasi_status = "pending" WHERE id = ?',
-      [id]
-    );
+    let hasMutasiColumn = false;
+    try {
+      await db.query('SELECT mutasi_status FROM students LIMIT 0');
+      hasMutasiColumn = true;
+    } catch (colError) {
+      hasMutasiColumn = false;
+    }
+
+    if (hasMutasiColumn) {
+      await db.query(
+        'UPDATE students SET mutasi_status = ? WHERE id = ?',
+        ['pending', id]
+      );
+    } else {
+      await db.query(
+        'UPDATE students SET status = ? WHERE id = ?',
+        ['mutasi', id]
+      );
+    }
 
     const [studentInfo] = await db.query('SELECT nama_siswa FROM students WHERE id = ?', [id]);
     res.json({ success: true, message: `${studentInfo.nama_siswa} siap diadopsi sekolah lain` });
@@ -5236,15 +5299,23 @@ router.post('/admin/mutasi/students/:id/initiate', authenticateOperator, async (
     }
 
     // Check if mutasi_status column exists
+    let hasMutasiColumn = false;
     try {
+      await db.query('SELECT mutasi_status FROM students LIMIT 0');
+      hasMutasiColumn = true;
+    } catch (colError) {
+      hasMutasiColumn = false;
+    }
+
+    if (hasMutasiColumn) {
       await db.query(
-        'UPDATE students SET tenant_id = NULL, mutasi_status = ?, mutasi_reason = ?, mutasi_date = NOW() WHERE id = ?',
+        'UPDATE students SET mutasi_status = ?, mutasi_reason = ?, mutasi_date = NOW() WHERE id = ?',
         ['pending', reason || null, id]
       );
-    } catch (colError) {
+    } else {
       await db.query(
-        'UPDATE students SET tenant_id = NULL WHERE id = ?',
-        [id]
+        'UPDATE students SET status = ? WHERE id = ?',
+        ['mutasi', id]
       );
     }
 
@@ -5297,8 +5368,17 @@ router.get('/admin/mutasi/students', authenticateOperator, async (req, res) => {
   try {
     logToFile(`MUTASI_STUDENTS_REQUEST: user=${req.user.username}, role=${req.user.role}, tenant=${req.query.tenant_id || 'all'}`);
     // Try with mutasi_status column first, fallback to students without tenant
+    let hasMutasiColumn = false;
     try {
-      const students = await db.query(`
+      await db.query('SELECT mutasi_status FROM students LIMIT 0');
+      hasMutasiColumn = true;
+    } catch (colError) {
+      hasMutasiColumn = false;
+    }
+
+    let students = [];
+    if (hasMutasiColumn) {
+      students = await db.query(`
          SELECT s.id, s.nama_siswa, s.nisn, s.nis, s.tenant_id as old_tenant_id, tn.nama_sekolah as old_school, c.nama_kelas
          FROM students s
          LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id
@@ -5306,20 +5386,13 @@ router.get('/admin/mutasi/students', authenticateOperator, async (req, res) => {
          WHERE s.mutasi_status = 'pending'
          ORDER BY s.nama_siswa ASC
        `);
-
-      logToFile(`MUTASI_STUDENTS_RESPONSE: count=${students.length}`);
-      return res.json({ success: true, data: students });
-    } catch (colError) {
-      // Fallback: students without tenant assignment
-      const students = await db.query(`
+    } else {
+      students = await db.query(`
          SELECT s.id, s.nama_siswa, s.nisn, s.nis, NULL as old_tenant_id, NULL as old_school, NULL as nama_kelas
          FROM students s
          WHERE s.tenant_id IS NULL OR s.tenant_id = ''
          ORDER BY s.nama_siswa ASC
        `);
-
-      logToFile(`MUTASI_STUDENTS_RESPONSE_FALLBACK: count=${students.length}`);
-      res.json({ success: true, data: students });
     }
   } catch (error) {
     logToFile(`MUTASI_STUDENTS_ERROR: ${error.message}`);
@@ -5384,12 +5457,20 @@ router.post('/admin/mutasi/students/:id/adopt', authenticateOperator, async (req
     // Get new school name for education history
     const [newSchool] = await db.query('SELECT nama_sekolah FROM tenants WHERE tenant_id = ?', [tenant_id]);
 
+    let hasMutasiColumn = false;
     try {
+      await db.query('SELECT mutasi_status FROM students LIMIT 0');
+      hasMutasiColumn = true;
+    } catch (colError) {
+      hasMutasiColumn = false;
+    }
+
+    if (hasMutasiColumn) {
       await db.query(
         'UPDATE students SET tenant_id = ?, class_id = ?, mutasi_status = NULL WHERE id = ?',
         [tenant_id, class_id || null, id]
       );
-    } catch (colError) {
+    } else {
       await db.query(
         'UPDATE students SET tenant_id = ?, class_id = ? WHERE id = ?',
         [tenant_id, class_id || null, id]
@@ -5398,10 +5479,11 @@ router.post('/admin/mutasi/students/:id/adopt', authenticateOperator, async (req
 
     // Record education history for the new school entry
     const [student] = await db.query('SELECT nama_siswa, tahun_masuk FROM students WHERE id = ?', [id]);
+    const currentYear = new Date().getFullYear().toString();
     await db.query(
-      `INSERT INTO student_education_history (student_id, tenant_id, nama_sekolah, tahun_masuk, status, keterangan) 
-       VALUES (?, ?, ?, ?, 'aktif', ?)`,
-      [id, tenant_id, newSchool?.nama_sekolah || 'Sekolah Baru', new Date().getFullYear().toString(), 'Diadopsi dari mutasi pool']
+      `INSERT INTO student_education_history (student_id, tenant_id, nama_sekolah, tahun_masuk, tahun_lulus, status, keterangan) 
+       VALUES (?, ?, ?, ?, NULL, 'aktif', ?)`,
+      [id, tenant_id, newSchool?.nama_sekolah || 'Sekolah Baru', currentYear, 'Diadopsi dari mutasi pool']
     );
 
     res.json({ success: true, message: `${student.nama_siswa} berhasil diadopsi` });

@@ -3000,7 +3000,7 @@ window.loadStudents = async function (page = 1) {
     const tenantId = window.studentTenantFilterValue || window.tenantId || (JSON.parse(localStorage.getItem('user') || '{}'))?.tenant_id || (JSON.parse(localStorage.getItem('user') || '{}'))?.assignments?.[0]?.tenant_id || '';
     const gender = window.studentGenderFilterValue || '';
 
-    tbody.innerHTML = '<tr><td colspan="10" class="px-6 py-12 text-center text-gray-500"><i class="fas fa-spinner fa-spin"></i> Memuat...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" class="px-6 py-12 text-center text-gray-500"><i class="fas fa-spinner fa-spin"></i> Memuat...</td></tr>';
 
     try {
         const params = new URLSearchParams({
@@ -3031,11 +3031,12 @@ if (data.success) {
                 <td class="px-6 py-4">${s.nis || '-'}</td>
                 <td class="px-6 py-4">${s.nama_kelas || '-'}</td>
                 <td class="px-6 py-4">${s.jenis_kelamin === 'L' ? 'Laki-laki' : s.jenis_kelamin === 'P' ? 'Perempuan' : '-'}</td>
-                <td class="px-6 py-4">${s.tahun_masuk || '-'}</td>
+                <td class="px-6 py-4">${s.nama_sekolah || '-'}</td>
+                <td class="px-6 py-4">${s.sekolah_tujuan || '-'}</td>
                 <td class="px-6 py-4">${s.nama_orang_tua || '-'}<br><small>${s.no_wa_ortu || ''}</small></td>
                 <td class="px-6 py-4">Rp ${(s.iuran_bulanan || 0).toLocaleString('id-ID')}</td>
                 <td class="px-6 py-4">
-                  <button onclick="showStudentMutasiModal(${s.id}, '${s.nama_siswa || ''}', '${s.nama_sekolah || ''}', '${s.tenant_id || ''}')" class="text-purple-600 hover:text-purple-800 mr-2" title="Mutasi">
+                  <button onclick="showStudentMutasiModal(${s.id}, '${(s.nama_siswa || '').replace(/'/g, "\\'")}', '${(s.nama_sekolah || '').replace(/'/g, "\\'")}', '${s.tenant_id || ''}')" class="text-purple-600 hover:text-purple-800 mr-2" title="Mutasi">
                     <i class="fas fa-exchange-alt"></i>
                   </button>
                   <button onclick="editStudent(${s.id})" class="text-blue-600 hover:text-blue-800 mr-2" title="Edit">
@@ -3046,14 +3047,14 @@ if (data.success) {
                   </button>
                 </td>
               </tr>
-            `).join('') || '<tr><td colspan="10" class="px-6 py-12 text-center text-gray-500">Tidak ada data siswa</td></tr>';
+            `).join('') || '<tr><td colspan="11" class="px-6 py-12 text-center text-gray-500">Tidak ada data siswa</td></tr>';
 
 renderStudentPagination();
         } else {
-            tbody.innerHTML = '<tr><td colspan="10" class="px-6 py-12 text-center text-red-500">Gagal memuat data</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="11" class="px-6 py-12 text-center text-red-500">Gagal memuat data</td></tr>';
         }
     } catch (error) {
-        tbody.innerHTML = '<tr><td colspan="10" class="px-6 py-12 text-center text-red-500">Error: ' + error.message + '</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" class="px-6 py-12 text-center text-red-500">Error: ' + error.message + '</td></tr>';
     }
 };
 
@@ -3872,9 +3873,12 @@ window.saveStudentEdit = function () { alert('Fitur edit siswa belum tersedia');
   // Student Mutasi Functions
   window.showStudentMutasiModal = async function (id, namaSiswa, oldSchool, oldTenant) {
     const modal = document.getElementById('studentMutasiModal');
-    if (!modal) return;
+    console.log('[MUTASI] open mutasi modal', { id, namaSiswa, oldSchool, oldTenant });
+    if (!modal) {
+      console.error('[MUTASI] studentMutasiModal not found');
+      return;
+    }
     
-    // If called from header button without args, get selected students
     if (!id) {
       const checked = Array.from(document.querySelectorAll('.student-checkbox:checked')).map(cb => cb.value);
       if (checked.length === 0) return;
@@ -3886,19 +3890,38 @@ window.saveStudentEdit = function () { alert('Fitur edit siswa belum tersedia');
       }
     }
     
-    document.getElementById('mutasiStudentId').value = id;
-    document.getElementById('mutasiOldSchool').value = oldSchool || '-';
-    document.getElementById('mutasiReason').value = '';
+    const studentIdEl = document.getElementById('studentMutasiStudentId');
+    const oldSchoolEl = document.getElementById('studentMutasiOldSchool');
+    const reasonEl = document.getElementById('studentMutasiReason');
+    const targetSel = document.getElementById('studentMutasiTarget');
     
-    const targetSel = document.getElementById('mutasiTarget');
-    const tenantsRes = await fetch('/api/admin/tenants?limit=500', { headers: studentAuthHdr() });
-    const tenantsData = await tenantsRes.json();
-    const tenants = tenantsData.success ? tenantsData.data : [];
-    targetSel.innerHTML = '<option value="">Pilih Sekolah Tujuan</option>' +
-      tenants.filter(t => t.tenant_id !== oldTenant).map(t => `<option value="${t.tenant_id}">${t.nama_sekolah}</option>`).join('') +
-      '<option value="other">Lainnya...</option>';
+    if (studentIdEl) studentIdEl.value = id;
+    if (oldSchoolEl) oldSchoolEl.value = oldSchool || '-';
+    if (reasonEl) reasonEl.value = '';
     
-    document.getElementById('mutasiOtherInput').classList.add('hidden');
+    if (!targetSel) {
+      console.error('[MUTASI] studentMutasiTarget not found');
+      modal.classList.add('show');
+      return;
+    }
+    
+    try {
+      const authHdr = () => ({ 'Authorization': 'Bearer ' + (window.authToken || localStorage.getItem('token') || '') });
+      console.log('[MUTASI] fetch tenants...');
+      const tenantsRes = await fetch('/api/admin/tenants?limit=500', { headers: authHdr() });
+      console.log('[MUTASI] tenants status', tenantsRes.status);
+      const tenantsData = await tenantsRes.json();
+      console.log('[MUTASI] tenants data', tenantsData);
+      const tenants = tenantsData.success ? tenantsData.data : [];
+      targetSel.innerHTML = '<option value="">Pilih Tujuan Mutasi</option>' +
+        tenants.filter(t => t.tenant_id !== oldTenant).map(t => `<option value="${t.tenant_id}">${t.nama_sekolah}</option>`).join('') +
+        '<option value="keluar">Keluar</option>' +
+        '<option value="berhenti">Berhenti</option>';
+    } catch (e) {
+      console.error('[MUTASI] Gagal memuat daftar sekolah:', e);
+      targetSel.innerHTML = '<option value="">Pilih Tujuan Mutasi</option><option value="keluar">Keluar</option><option value="berhenti">Berhenti</option>';
+    }
+    
     modal.classList.add('show');
   };
 
@@ -3931,28 +3954,33 @@ window.saveStudentEdit = function () { alert('Fitur edit siswa belum tersedia');
   window.openBulkMutasiModal = async function (ids) {
     const modal = document.getElementById('studentMutasiModal');
     if (!modal) return;
-    document.getElementById('mutasiStudentId').value = ids.join(',');
-    document.getElementById('mutasiOldSchool').value = ids.length + ' siswa dipilih';
-    document.getElementById('mutasiReason').value = '';
+    document.getElementById('studentMutasiStudentId').value = ids.join(',');
+    document.getElementById('studentMutasiOldSchool').value = ids.length + ' siswa dipilih';
+    document.getElementById('studentMutasiReason').value = '';
 
-    const targetSel = document.getElementById('mutasiTarget');
-    const tenantsRes = await fetch('/api/admin/tenants?limit=500', { headers: studentAuthHdr() });
-    const tenantsData = await tenantsRes.json();
-    const tenants = tenantsData.success ? tenantsData.data : [];
-    targetSel.innerHTML = '<option value="">Pilih Sekolah Tujuan</option>' +
-      tenants.map(t => `<option value="${t.tenant_id}">${t.nama_sekolah}</option>`).join('') +
-      '<option value="other">Lainnya...</option>';
+    const targetSel = document.getElementById('studentMutasiTarget');
+    try {
+      const authHdr = () => ({ 'Authorization': 'Bearer ' + (window.authToken || localStorage.getItem('token') || '') });
+      const tenantsRes = await fetch('/api/admin/tenants?limit=500', { headers: authHdr() });
+      const tenantsData = await tenantsRes.json();
+      const tenants = tenantsData.success ? tenantsData.data : [];
+      targetSel.innerHTML = '<option value="">Pilih Tujuan Mutasi</option>' +
+        tenants.map(t => `<option value="${t.tenant_id}">${t.nama_sekolah}</option>`).join('') +
+        '<option value="keluar">Keluar</option>' +
+        '<option value="berhenti">Berhenti</option>';
+    } catch (e) {
+      console.error('[MUTASI] Gagal memuat daftar sekolah:', e);
+      targetSel.innerHTML = '<option value="">Pilih Tujuan Mutasi</option><option value="keluar">Keluar</option><option value="berhenti">Berhenti</option>';
+    }
 
-    document.getElementById('mutasiOtherInput').classList.add('hidden');
     modal.classList.add('show');
   };
 
   window.submitStudentMutasi = async function () {
-    const idInput = document.getElementById('mutasiStudentId').value;
+    const idInput = document.getElementById('studentMutasiStudentId').value;
     const ids = idInput.includes(',') ? idInput.split(',').map(s => s.trim()) : [idInput];
-    const targetTenant = document.getElementById('mutasiTarget').value;
-    const otherSchoolName = document.getElementById('mutasiOtherSchoolName').value.trim();
-    const reason = document.getElementById('mutasiReason').value.trim();
+    const targetTenant = document.getElementById('studentMutasiTarget').value;
+    const reason = document.getElementById('studentMutasiReason').value.trim();
 
     if (!targetTenant) {
       if (typeof Swal !== 'undefined') {
@@ -3963,14 +3991,26 @@ window.saveStudentEdit = function () { alert('Fitur edit siswa belum tersedia');
       return;
     }
 
+    const isSpecialExit = targetTenant === 'keluar' || targetTenant === 'berhenti';
+    const finalStatus = isSpecialExit ? 'keluar' : null;
+
     try {
-      const promises = ids.map(sid =>
-        fetch('/api/admin/students/' + sid + '/mutasi', {
+      const authHdr = () => ({ 'Authorization': 'Bearer ' + (window.authToken || localStorage.getItem('token') || '') });
+      const promises = ids.map(sid => {
+        if (isSpecialExit) {
+          return fetch('/api/admin/students/' + sid, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', ...authHdr() },
+            body: JSON.stringify({ status: finalStatus })
+          }).then(r => r.json());
+        }
+        return fetch('/api/admin/students/' + sid + '/mutasi', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...studentAuthHdr() },
-          body: JSON.stringify({ target_tenant_id: targetTenant, target_tenant_name: otherSchoolName || null, reason })
-        }).then(r => r.json())
-      );
+          headers: { 'Content-Type': 'application/json', ...authHdr() },
+          body: JSON.stringify({ target_tenant_id: targetTenant, reason })
+        }).then(r => r.json());
+      });
+
       const results = await Promise.all(promises);
       const success = results.filter(r => r.success).length;
       closeStudentMutasiModal();

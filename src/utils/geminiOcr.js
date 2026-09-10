@@ -38,6 +38,35 @@ Aturan:
 - is_ktp bernilai true hanya jika gambar benar-benar KTP Indonesia (mengandung NIK 16 digit dan label "Nama", "Alamat", "Tempat/Tgl Lahir").
 - Jangan menebak. Keluarkan JSON murni.`;
 
+const RECEIPT_PROMPT = `Kamu adalah OCR ahli untuk struk belanja/struk pembayaran di Indonesia. Ekstrak informasi dari gambar struk ini dan kembalikan HANYA dalam format JSON berikut (tanpa teks lain, tanpa markdown, tanpa penjelasan):
+
+{
+  "tanggal": "YYYY-MM-DD (konversi dari DD/MM/YYYY atau DD-MM-YYYY ke ISO)",
+  "keterangan": "nama toko/tempat/merchant",
+  "nominal": "angka bulat (tanpa pemisah ribuan, titik, koma, atau karakter Rp)",
+  "no_bukti": "nomor bukti/struk/nota jika ada, else kosong",
+  "jenis": "beli" atau "bayar" (pilih "beli" jika ini pembelian barang/inventory, "bayar" jika pembayaran layanan/listrik/gaji/dll),
+  "kategori": "kategori pengeluaran yang cocok dari daftar: Perlengkapan Sekolah, Buku dan Materi, Peralatan Elektronik, Perlengkapan Kantin, Perlengkapan Taman/Kebun, Kendaraan, Gaji Honor / Servis, Listrik, Air, Telepon, Internet / Langganan, Pajak dan Retribusi, Sewa Tempat, ATK / Kantor, Konsumsi / Catering, Transportasi / Bensin, Lain-lain",
+  "akun": "kode rekening/akun jika terlihat di struk (bisa kosong)",
+  "is_struk": true
+}
+
+  PENTING: Jika tidak yakin, kirimkan nominal=0 dan is_struk=false.`;
+
+const RECEIPT_ITEMS_PROMPT = `Kamu adalah OCR ahli untuk struk belanja Indonesia. Ekstrak DAFTAR BARANG dari gambar struk ini. Kembalikan HANYA JSON array (tanpa teks lain, tanpa markdown):
+
+[
+  {"no": 1, "nama_barang": "nama barang", "qty": 1, "harga": 5000, "total": 5000},
+  {"no": 2, "nama_barang": "nama barang 2", "qty": 2, "harga": 3000, "total": 6000}
+]
+
+Aturan:
+- qty dan harga harus angka (tanpa pemisah ribuan, titik, koma, atau Rp)
+- total = qty * harga
+- Jika hanya ada total (tidak ada qty/harga terpisah), qty=1, harga=total
+- Hapus baris pajak/subtotal/discount dari daftar
+- Jika tidak ada barang, kirimkan array kosong []`;
+
 function fileToBase64(filePath) {
   const buffer = fs.readFileSync(filePath);
   const mime = mimeFromPath(filePath);
@@ -122,4 +151,113 @@ async function extractKTPFromImage(filePath) {
   return parsed;
 }
 
-module.exports = { extractKTPFromImage };
+async function extractReceiptFromImage(fileBuffer, mimeType = 'image/jpeg') {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error('GEMINI_API_KEY belum dikonfigurasi di .env');
+  }
+
+  const base64 = fileBuffer.toString('base64');
+
+  const body = {
+    contents: [
+      {
+        parts: [
+          { text: RECEIPT_PROMPT },
+          {
+            inlineData: {
+              mimeType: mimeType,
+              data: base64
+            }
+          }
+        ]
+      }
+    ],
+    generationConfig: {
+      temperature: 0.1,
+      responseMimeType: 'application/json'
+    }
+  };
+
+  const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Gemini API error ${response.status}: ${errText}`);
+  }
+
+  const json = await response.json();
+  const candidate = json?.candidates?.[0];
+  const text = candidate?.content?.parts?.map(p => p.text || '').join('') || '';
+
+  if (!text) {
+    throw new Error('Gemini tidak mengembalikan teks hasil OCR');
+  }
+
+  return parseGeminiJson(text);
+}
+
+async function extractReceiptItems(fileBuffer, mimeType = 'image/jpeg') {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error('GEMINI_API_KEY belum dikonfigurasi di .env');
+  }
+
+  const base64 = fileBuffer.toString('base64');
+
+  const body = {
+    contents: [
+      {
+        parts: [
+          { text: RECEIPT_ITEMS_PROMPT },
+          {
+            inlineData: {
+              mimeType: mimeType,
+              data: base64
+            }
+          }
+        ]
+      }
+    ],
+    generationConfig: {
+      temperature: 0.1,
+      responseMimeType: 'application/json'
+    }
+  };
+
+  const response = await fetch(`${GEMINI_API_URL}?key=${apiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Gemini API error ${response.status}: ${errText}`);
+  }
+
+  const json = await response.json();
+  const candidate = json?.candidates?.[0];
+  const text = candidate?.content?.parts?.map(p => p.text || '').join('') || '';
+
+  if (!text) {
+    throw new Error('Gemini tidak mengembalikan teks hasil OCR');
+  }
+
+  // Parse as array instead of single object
+  let cleaned = text.trim();
+  const fenceMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenceMatch) cleaned = fenceMatch[1].trim();
+  const start = cleaned.indexOf('[');
+  const end = cleaned.lastIndexOf(']');
+  if (start !== -1 && end !== -1 && end > start) {
+    cleaned = cleaned.substring(start, end + 1);
+  }
+  return JSON.parse(cleaned);
+}
+
+module.exports = { extractKTPFromImage, extractReceiptFromImage, extractReceiptItems };

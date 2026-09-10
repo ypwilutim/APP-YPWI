@@ -236,6 +236,10 @@ const authenticateBendahara = (req, res, next) => {
     }
     req.user = user;
 
+    // DEBUG: Log what we're checking
+    console.log('[AUTH_BENDAHARA_DEBUG] user.role:', user.role, 'guru_id:', user.guru_id);
+    console.log('[AUTH_BENDAHARA_DEBUG] assignments:', JSON.stringify(user.assignments));
+
     // 1. Role admin selalu diizinkan
     if (user.role === 'admin') {
       return next();
@@ -248,12 +252,13 @@ const authenticateBendahara = (req, res, next) => {
         (a.tenant_id === 'YPWILUTIM') &&
         bendaharaRoles.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''))
       );
-      if (hasBendaharaAccess) {
+       if (hasBendaharaAccess) {
         return next();
       }
     }
 
-    return res.status(403).json({ success: false, message: 'Akses ditolak. Peran bendahara/admin di YPWILUTIM diperlukan.' });
+    console.log('[AUTH_BENDAHARA_DEBUG] Access DENIED - role:', user.role, 'assignments:', JSON.stringify(user.assignments || []));
+    return res.status(403).json({ success: false, message: 'Akses ditolak. Peran bendahara/admin di YPWILUTIM diperlukan.', debug: { role: user.role, guru_id: user.guru_id, assignments: user.assignments || [] } });
   });
 };
 

@@ -1196,15 +1196,28 @@ async function startServer() {
           ('kepalasekolah', 'Kepala Sekolah', 800000),
           ('kepsek', 'Kepala Sekolah', 800000),
           ('pimpinanpondok', 'Pimpinan Pondok', 500000),
+          ('pimpinan', 'Pimpinan', 500000),
+          ('ketua', 'Ketua', 600000),
+          ('wakasek', 'Wakasek', 600000),
           ('bendahara', 'Bendahara', 400000),
           ('bendaharawali', 'Bendahara/Wali Kelas', 500000),
           ('walikelas', 'Wali Kelas', 100000),
           ('walikelasmengaji', 'Wali Kelas (Mengaji)', 100000),
           ('pjinternalpondok', 'PJ. Internal Pondok', 500000),
           ('guru', 'Guru', 0),
+          ('gurumapel', 'Guru Mapel', 0),
+          ('gurumengaji', 'Guru Mengaji', 0),
+          ('muhaffiz', 'Muhaffiz', 0),
+          ('muhaffizah', 'Muhaffizah', 0),
           ('tu', 'Tata Usaha', 400000),
+          ('tatacara', 'Tata Usaha', 400000),
           ('operator', 'Operator', 100000),
-          ('admin', 'Admin', 0)
+          ('admin', 'Admin', 0),
+          ('media', 'Media', 0),
+          ('security', 'Security', 150000),
+          ('cleaningservice', 'Cleaning Service', 150000),
+          ('bagdapur', 'Bag. Dapur', 150000),
+          ('bagkantin', 'Bag. Kantin', 150000)
       `);
       console.log('[MIGRATION] Seeded kafalah_jabatan_tunjangan');
     } catch (e) {

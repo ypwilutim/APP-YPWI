@@ -257,10 +257,15 @@
                   <span class="text-red-500">*</span></label>
                 <select id="status_kepegawaian" name="status_kepegawaian" required
                   class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 bg-white outline-none font-medium">
-                  <option value="">Pilih Status</option>
-                  <option value="PTY">PTY</option>
-                  <option value="PKY">PKY</option>
-                  <option value="Honor">Honor</option>
+                   <option value="">Pilih Status</option>
+                   <option value="GTY">GTY (Guru Tetap Yayasan)</option>
+                   <option value="GTTY">GTTY (Guru Tidak Tetap Yayasan)</option>
+                   <option value="GTT">GTT (Guru Tidak Tetap)</option>
+                   <option value="PTY">PTY (Pegawai Tetap Yayasan)</option>
+                   <option value="PTT">PTT (Pegawai Tidak Tetap)</option>
+                   <option value="PTTY">PTTY (Pegawai Tidak Tetap Yayasan)</option>
+                   <option value="PKY">PKY (Pegawai Kontrak Yayasan)</option>
+                   <option value="Honor">Honor</option>
                 </select>
               </div>
 
@@ -525,18 +530,26 @@
             class="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-primary outline-none font-medium">
             <option value="">Pilih Jabatan</option>
             <option value="Ketua">Ketua</option>
+            <option value="Pimpinan">Pimpinan</option>
             <option value="Pimpinan Pondok">Pimpinan Pondok</option>
             <option value="Kepala Sekolah">Kepala Sekolah</option>
             <option value="Wakasek">Wakasek</option>
-            <option value="Admin">Admin</option>
-            <option value="Operator">Operator</option>
-            <option value="Bendahara">Bendahara</option>
-            <option value="Media">Media</option>
+            <option value="Guru">Guru</option>
             <option value="Guru Mapel">Guru Mapel</option>
-            <option value="Walikelas">Walikelas</option>
+            <option value="Guru Mengaji">Guru Mengaji</option>
+            <option value="Wali Kelas">Wali Kelas</option>
+            <option value="Muhaffiz">Muhaffiz</option>
+            <option value="Muhaffizah">Muhaffizah</option>
+            <option value="Bendahara">Bendahara</option>
             <option value="TU">TU</option>
+            <option value="Tata Usaha">Tata Usaha</option>
+            <option value="Operator">Operator</option>
+            <option value="Admin">Admin</option>
+            <option value="Media">Media</option>
             <option value="Security">Security</option>
             <option value="Cleaning Service">Cleaning Service</option>
+            <option value="Bag. Dapur">Bag. Dapur</option>
+            <option value="Bag. Kantin">Bag. Kantin</option>
           </select>
         </div>
       </div>
@@ -1118,8 +1131,8 @@
 
           // Auto-detect employment status based on assignments
         const assignments = localAssignments.map(a => a.jabatan_di_unit);
-        const hasGuruRole = assignments.some(j => ['Guru Mapel', 'Walikelas', 'Guru'].includes(j));
-        const hasPegawaiRole = assignments.some(j => ['Admin', 'TU', 'Operator', 'Pimpinan', 'Kepala Sekolah', 'Bendahara'].includes(j));
+        const hasGuruRole = assignments.some(j => ['Guru', 'Guru Mapel', 'Guru Mengaji', 'Wali Kelas', 'Muhaffiz', 'Muhaffizah'].includes(j));
+        const hasPegawaiRole = assignments.some(j => ['Admin', 'TU', 'Tata Usaha', 'Operator', 'Pimpinan', 'Pimpinan Pondok', 'Kepala Sekolah', 'Wakasek', 'Ketua', 'Bendahara', 'Media', 'Security', 'Cleaning Service', 'Bag. Dapur', 'Bag. Kantin'].includes(j));
         const tmtValue = document.getElementById('tmt').value;
         const masaKerja = tmtValue ? (new Date().getFullYear() - new Date(tmtValue).getFullYear()) : 0;
 

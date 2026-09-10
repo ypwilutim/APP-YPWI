@@ -58,6 +58,10 @@
           class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100">
           <i class="fab fa-whatsapp"></i><span>Riwayat Pesan WA</span>
         </button>
+        <button data-tab="financial"
+          class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100">
+          <i class="fas fa-book-journal"></i><span>Jurnal Umum</span>
+        </button>
       </nav>
     </aside>
 
@@ -460,14 +464,207 @@
           <div id="riwayatWaPagination" class="flex justify-center gap-1 mt-4"></div>
         </div>
       </div>
-    </main>
+     </main>
+
+    <!-- Jurnal Umum Tab (School level) -->
+    <div id="financialTab" class="tab-content hidden">
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
+          <h3 class="text-lg font-semibold text-gray-900">Jurnal Umum</h3>
+          <div class="flex items-end gap-2">
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Bulan</label>
+              <input type="month" id="financialBulanSk" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
+            </div>
+            <button onclick="showFinancialTransactionModalSk()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">
+              <i class="fas fa-plus mr-1"></i>Catat Transaksi
+            </button>
+            <button onclick="loadFinancialTransactionsSk()" class="bg-gray-200 text-gray-700 px-3 py-2 rounded-lg text-sm hover:bg-gray-300">Refresh</button>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div class="bg-blue-50 p-4 rounded-xl border border-blue-100">
+            <p class="text-xs font-medium text-gray-500 uppercase">Beli (Debit)</p>
+            <p class="text-2xl font-bold text-blue-600 mt-1" id="finSkTotalBeli">Rp 0</p>
+          </div>
+          <div class="bg-green-50 p-4 rounded-xl border border-green-100">
+            <p class="text-xs font-medium text-gray-500 uppercase">Pemasukan</p>
+            <p class="text-2xl font-bold text-green-600 mt-1" id="finSkTotalPemasukan">Rp 0</p>
+          </div>
+          <div class="bg-orange-50 p-4 rounded-xl border border-orange-100">
+            <p class="text-xs font-medium text-gray-500 uppercase">Bayar (Kredit)</p>
+            <p class="text-2xl font-bold text-orange-600 mt-1" id="finSkTotalBayar">Rp 0</p>
+          </div>
+          <div class="bg-purple-50 p-4 rounded-xl border border-purple-100">
+            <p class="text-xs font-medium text-gray-500 uppercase">Net</p>
+            <p class="text-2xl font-bold text-purple-600 mt-1" id="finSkTotalNet">Rp 0</p>
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 border-b border-gray-100">
+              <tr>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600">#</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600">Tanggal</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600">Jenis</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600">Kategori</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600">Akun</th>
+                <th class="px-4 py-3 text-right text-xs font-semibold text-gray-600">Nominal</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600">No Bukti</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600">Keterangan</th>
+                <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600">Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="financialSkTableBody" class="divide-y divide-gray-100">
+              <tr><td colspan="9" class="px-4 py-8 text-center text-gray-500">Klik Refresh untuk memuat data</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script src="js/payroll-admin.js"></script>
 
-  <!-- ==================== MODALS ==================== -->
+   <!-- ==================== MODALS ==================== -->
 
-  <!-- Reusable Progress Modal -->
+  <!-- Financial Transaction Modal -->
+  <div id="financialModalSk" class="hidden fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center p-4 border-b">
+        <h4 class="font-semibold text-lg" id="financialModalTitleSk">Catat Transaksi</h4>
+        <button onclick="closeFinancialModalSk()" class="text-gray-500 hover:text-gray-700 text-2xl leading-none">&times;</button>
+      </div>
+      <div class="p-4 space-y-4">
+        <!-- Mode Toggle -->
+        <div class="flex gap-2 border-b pb-3">
+          <button type="button" onclick="setFinModeSk('struk')" id="finModeStrukSk"
+            class="px-4 py-2 text-sm font-medium rounded-lg bg-purple-600 text-white">
+            Dengan Struk
+          </button>
+          <button type="button" onclick="setFinModeSk('manual')" id="finModeManualSk"
+            class="px-4 py-2 text-sm font-medium rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300">
+            Tanpa Struk (butuh approval)
+          </button>
+        </div>
+        <div id="finModeHintSk" class="text-xs text-gray-500">
+          <span id="finModeHintTextSk">Upload foto struk, lalu klik "Proses AI" untuk mengekstrak barang otomatis.</span>
+          <span id="finModeHintManualSk" class="hidden">Input manual, lalu upload foto barang yang dibeli. Transaksi akan status <strong>pending</strong> hingga disetujui.</span>
+        </div>
+
+        <!-- Shared Fields -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Tanggal *</label>
+            <input type="date" id="finTanggalSk" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Jenis *</label>
+            <select id="finJenisSk" class="w-full px-3 py-2 border border-gray-300 rounded-lg" onchange="loadFinancialCategoriesSk()">
+              <option value="beli">Beli (Debit)</option>
+              <option value="bayar">Bayar (Kredit)</option>
+              <option value="pemasukan">Pemasukan</option>
+              <option value="pengeluaran">Pengeluaran</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Kategori *</label>
+            <select id="finKategoriSk" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+              <option value="">Pilih kategori...</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Akun</label>
+            <input type="text" id="finAkunSk" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Kode rekening">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">No Bukti</label>
+            <input type="text" id="finNoBuktiSk" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="No. bukti/nota">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Keterangan</label>
+            <input type="text" id="finKeteranganSk" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Detail transaksi...">
+          </div>
+        </div>
+
+        <!-- Dengan Struk Mode Panel -->
+        <div id="finStrukPanelSk">
+          <div class="border-t pt-3">
+            <label class="block text-xs font-medium text-gray-600 mb-2">Upload Struk/Nota</label>
+            <div class="flex items-end gap-2">
+              <button type="button" onclick="document.getElementById('finFotoStrukSk').click()" class="px-3 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700">
+                <i class="fas fa-camera mr-1"></i>Ambil Foto Struk
+              </button>
+              <button type="button" onclick="scanFotoStrukSk()" class="px-3 py-2 bg-cyan-600 text-white rounded-lg text-sm hover:bg-cyan-700 hidden" id="finScanSk">
+                <i class="fas fa-magic mr-1"></i>Proses AI
+              </button>
+            </div>
+            <input type="file" id="finFotoStrukSk" accept="image/*" capture="environment" class="hidden" onchange="previewFotoStrukSk(this)">
+            <div id="finFotoPreviewSkWrap" class="hidden mt-3">
+              <img id="finFotoPreviewSk" class="max-w-full h-24 rounded-lg border border-gray-300 object-cover" alt="Preview">
+              <button onclick="clearFotoStrukSk()" class="ml-2 text-xs text-red-600 hover:text-red-800"><i class="fas fa-trash"></i> Hapus</button>
+            </div>
+          </div>
+
+          <!-- Item Table -->
+          <div class="border-t pt-3 mt-3">
+            <div class="flex justify-between items-center mb-2">
+              <label class="block text-xs font-medium text-gray-600">Daftar Barang</label>
+              <span class="text-xs font-medium text-gray-700">Total: <span id="finItemsTotalSk" class="font-bold text-indigo-600">Rp 0</span></span>
+             </div>
+             <div class="overflow-x-auto border rounded-lg max-h-60">
+               <table class="w-full text-sm">
+                 <thead class="bg-gray-50">
+                   <tr>
+                     <th class="px-2 py-2 text-left text-xs font-medium text-gray-500">NO</th>
+                     <th class="px-2 py-2 text-left text-xs font-medium text-gray-500">NAMA BARANG</th>
+                     <th class="px-2 py-2 text-center text-xs font-medium text-gray-500">QTY</th>
+                     <th class="px-2 py-2 text-right text-xs font-medium text-gray-500">HARGA</th>
+                     <th class="px-2 py-2 text-right text-xs font-medium text-gray-500">TOTAL</th>
+                   </tr>
+                 </thead>
+                 <tbody id="finItemsTableBodySk"></tbody>
+               </table>
+             </div>
+             <div class="flex justify-between items-center mt-2">
+               <button type="button" onclick="addFinItemSk()" class="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs hover:bg-gray-200"><i class="fas fa-plus mr-1"></i>Tambah Barang</button>
+               <span class="text-xs font-medium text-gray-700">Total: <span id="finItemsTotalSk" class="font-bold text-indigo-600">Rp 0</span></span>
+             </div>
+           </div>
+         </div>
+
+        <!-- Tanpa Struk Mode Panel -->
+        <div id="finManualPanelSk" class="hidden border-t pt-3">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Nominal *</label>
+              <input type="number" id="finNominalSk" class="w-full px-3 py-2 border border-gray-300 rounded-lg" min="0" placeholder="Rp 0">
+            </div>
+          </div>
+          <div class="mt-3">
+            <label class="block text-xs font-medium text-gray-600 mb-2">Upload Foto Barang yang Dibeli *</label>
+            <div class="flex items-end gap-2">
+              <button type="button" onclick="document.getElementById('finFotoBarangSk').click()" class="px-3 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700">
+                <i class="fas fa-camera mr-1"></i>Ambil Foto Barang
+              </button>
+              <span class="text-xs text-red-500">(Wajib — transaksi akan status pending hingga disetujui)</span>
+            </div>
+            <input type="file" id="finFotoBarangSk" accept="image/*" capture="environment" class="hidden" onchange="previewFotoBarangSk(this)">
+            <div id="finFotoBarangWrapSk" class="hidden mt-3">
+              <img id="finFotoBarangPreviewSk" class="max-w-full h-24 rounded-lg border border-gray-300 object-cover" alt="Preview">
+              <button onclick="clearFotoBarangSk()" class="ml-2 text-xs text-red-600 hover:text-red-800"><i class="fas fa-trash"></i> Hapus</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="p-4 border-t flex gap-2 justify-end">
+        <button onclick="closeFinancialModalSk()" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">Batal</button>
+        <button onclick="submitFinancialTransactionSk()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700" id="finSubmitSk">Simpan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Financial Progress Modal (school level uses dashboard's) -->
   <div id="progressModal" class="hidden fixed inset-0 z-[80] bg-black/60 flex items-center justify-center p-4">
     <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
       <div class="flex items-center justify-between mb-4">
@@ -828,6 +1025,12 @@
           if (btn.dataset.tab === 'riwayatWa') {
             riwayatWaPage = 0;
             loadRiwayatWa();
+          }
+          if (btn.dataset.tab === 'financial') {
+            document.getElementById('financialBulanSk').value = new Date().toISOString().slice(0, 7);
+            loadFinancialCategoriesSk();
+            loadFinancialTransactionsSk();
+            loadFinancialSummarySk();
           }
           if (btn.dataset.tab === 'dashboard') {
             loadDashboardData();
@@ -2238,7 +2441,389 @@
         tbody.innerHTML = '<tr><td colspan="9" class="p-4 text-red-500">Error: ' + e.message + '</td></tr>';
       }
     };
-  </script>
+
+    // ==================== JURNAL UMUM (school level) ====================
+     let finSkFotoFile = null;
+    let finSkFotoStrukPath = '';
+    let finSkFotoBarang = null;
+    let finSkFotoBarangPath = '';
+    let finSkItems = [];
+    let finSkEditingId = null;
+
+    async function loadFinancialTransactionsSk() {
+      const bulan = document.getElementById('financialBulanSk')?.value || '';
+      const tbody = document.getElementById('financialSkTableBody');
+      if (!tbody) return;
+       tbody.innerHTML = '<tr><td colspan="10" class="px-4 py-8 text-center text-gray-500"><i class="fas fa-spinner fa-spin"></i> Memuat...</td></tr>';
+      try {
+        const params = new URLSearchParams();
+        params.set('tenant_id', currentTenantId || '');
+        if (bulan) params.set('bulan', bulan);
+        const res = await fetch(`/api/treasurer/financial/transactions?${params.toString()}`, { headers: getAuthHeader() });
+        const data = await res.json();
+        if (!data.success || !data.data.length) {
+          tbody.innerHTML = '<tr><td colspan="10" class="px-4 py-8 text-center text-gray-500">Tidak ada transaksi</td></tr>';
+          return;
+        }
+        const jenisBadge = {
+          beli: 'bg-blue-100 text-blue-800',
+          bayar: 'bg-orange-100 text-orange-800',
+          pemasukan: 'bg-green-100 text-green-800',
+          pengeluaran: 'bg-red-100 text-red-800'
+        };
+        const statusBadge = {
+          pending: 'bg-yellow-100 text-yellow-800',
+          approved: 'bg-green-100 text-green-800',
+          rejected: 'bg-red-100 text-red-800'
+        };
+        const statusText = {
+          pending: 'Menunggu Persetujuan',
+          approved: 'Disetujui',
+          rejected: 'Ditolak'
+        };
+        tbody.innerHTML = data.data.map((s, i) => `
+          <tr class="border-b">
+            <td class="px-4 py-2">${i + 1}</td>
+            <td class="px-4 py-2">${s.tanggal || '-'}</td>
+            <td class="px-4 py-2"><span class="text-xs px-2 py-1 rounded ${jenisBadge[s.jenis] || 'bg-gray-100 text-gray-800'}">${s.jenis}</span></td>
+            <td class="px-4 py-2">${s.kategori || '-'}</td>
+            <td class="px-4 py-2 text-xs">${s.akun || '-'}</td>
+            <td class="px-4 py-2 text-right font-mono">${fmtRp(s.nominal)}</td>
+            <td class="px-4 py-2 text-xs">${s.no_bukti || '-'}</td>
+            <td class="px-4 py-2 text-sm">${s.keterangan || '-'}</td>
+            <td class="px-4 py-2"><span class="text-xs px-2 py-1 rounded ${statusBadge[s.status] || 'bg-gray-100 text-gray-800'}">${statusText[s.status] || s.status}</span></td>
+            <td class="px-4 py-2 text-center">
+              ${s.foto_struk ? `<a href="${s.foto_struk}" target="_blank" class="px-1 py-0.5 text-purple-600 hover:text-purple-800" title="Lihat Struk"><i class="fas fa-receipt"></i></a>` : '<span class="px-1 text-gray-300">&mdash;</span>'}
+              ${s.foto_barang ? `<a href="${s.foto_barang}" target="_blank" class="px-1 py-0.5 text-indigo-600 hover:text-indigo-800" title="Lihat Foto Barang"><i class="fas fa-camera"></i></a>` : ''}
+              <button onclick="editFinancialTransactionSk(${s.id})" class="px-1 py-0.5 text-blue-600 hover:text-blue-800" title="Edit"><i class="fas fa-pen"></i></button>
+              <button onclick="deleteFinancialTransactionSk(${s.id})" class="px-1 py-0.5 text-red-600 hover:text-red-800" title="Hapus"><i class="fas fa-trash"></i></button>
+            </td>
+          </tr>`).join('');
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="10" class="px-4 py-8 text-center text-red-500">Error: ' + e.message + '</td></tr>';
+      }
+    }
+
+    async function loadFinancialCategoriesSk() {
+      const jenis = document.getElementById('finJenisSk')?.value || 'beli';
+      const sel = document.getElementById('finKategoriSk');
+      if (!sel) return;
+      sel.innerHTML = '<option value="">Pilih kategori...</option>';
+      try {
+        const res = await fetch(`/api/treasurer/financial/categories?tenant_id=${currentTenantId || ''}`, { headers: getAuthHeader() });
+        const data = await res.json();
+        if (data.success) {
+          const seen = new Set();
+          data.data.filter(c => (!c.tenant_id || c.jenis === jenis) && !seen.has((c.tenant_id||'')+'_'+c.nama+'_'+(c.jenis||'')) && seen.add((c.tenant_id||'')+'_'+c.nama+'_'+(c.jenis||''))).forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.nama;
+            opt.textContent = !c.tenant_id ? c.nama + ' (global)' : c.nama;
+            sel.appendChild(opt);
+          });
+        }
+      } catch (e) { console.error('loadFinancialCategoriesSk', e); }
+    }
+
+    async function loadFinancialSummarySk() {
+      const bulan = document.getElementById('financialBulanSk')?.value || '';
+      try {
+        const params = new URLSearchParams();
+        params.set('tenant_id', currentTenantId || '');
+        if (bulan) params.set('bulan', bulan);
+        const res = await fetch(`/api/treasurer/financial/summary?${params.toString()}`, { headers: getAuthHeader() });
+        const data = await res.json();
+        if (data.success) {
+          document.getElementById('finSkTotalBeli').textContent = fmtRp(data.totals.beli);
+          document.getElementById('finSkTotalPemasukan').textContent = fmtRp(data.totals.pemasukan);
+          document.getElementById('finSkTotalBayar').textContent = fmtRp(data.totals.bayar);
+          document.getElementById('finSkTotalNet').textContent = fmtRp(data.totals.net);
+        }
+      } catch (e) { console.error('loadFinancialSummarySk', e); }
+    }
+
+    async function showFinancialTransactionModalSk() {
+      finSkEditingId = null;
+      finSkFotoStrukPath = '';
+      finSkFotoFile = null;
+      finSkFotoBarang = null;
+      finSkFotoBarangPath = '';
+      finSkItems = [];
+      document.getElementById('finFotoStrukSk').value = '';
+      document.getElementById('finFotoPreviewSk').src = '';
+      document.getElementById('finFotoPreviewSkWrap').classList.add('hidden');
+      document.getElementById('finScanSk').classList.add('hidden');
+      document.getElementById('finFotoBarangSk').value = '';
+      document.getElementById('finFotoBarangPreviewSk').src = '';
+      document.getElementById('finFotoBarangWrapSk').classList.add('hidden');
+      document.getElementById('finItemsTableBodySk').innerHTML = '';
+      document.getElementById('finItemsTotalSk').textContent = 'Rp 0';
+      document.getElementById('financialModalTitleSk').textContent = 'Catat Transaksi';
+      document.getElementById('finTanggalSk').value = new Date().toISOString().split('T')[0];
+      document.getElementById('finJenisSk').value = 'beli';
+      document.getElementById('finAkunSk').value = '';
+      document.getElementById('finNominalSk').value = '';
+      document.getElementById('finNoBuktiSk').value = '';
+      document.getElementById('finKeteranganSk').value = '';
+      setFinModeSk('struk');
+      await loadFinancialCategoriesSk();
+      await loadFinancialAccountInfoSk();
+      document.getElementById('financialModalSk').classList.remove('hidden');
+    }
+
+    function closeFinancialModalSk() {
+      document.getElementById('financialModalSk').classList.add('hidden');
+    }
+
+    function setFinModeSk(mode) {
+      if (mode === 'struk') {
+        document.getElementById('finStrukPanelSk').classList.remove('hidden');
+        document.getElementById('finManualPanelSk').classList.add('hidden');
+        document.getElementById('finModeStrukSk').classList.add('bg-purple-600', 'text-white');
+        document.getElementById('finModeStrukSk').classList.remove('bg-gray-200', 'text-gray-700');
+        document.getElementById('finModeManualSk').classList.remove('bg-purple-600', 'text-white');
+        document.getElementById('finModeManualSk').classList.add('bg-gray-200', 'text-gray-700');
+        document.getElementById('finModeHintTextSk').classList.remove('hidden');
+        document.getElementById('finModeHintManualSk').classList.add('hidden');
+      } else {
+        document.getElementById('finStrukPanelSk').classList.add('hidden');
+        document.getElementById('finManualPanelSk').classList.remove('hidden');
+        document.getElementById('finModeManualSk').classList.add('bg-purple-600', 'text-white');
+        document.getElementById('finModeManualSk').classList.remove('bg-gray-200', 'text-gray-700');
+        document.getElementById('finModeStrukSk').classList.remove('bg-purple-600', 'text-white');
+        document.getElementById('finModeStrukSk').classList.add('bg-gray-200', 'text-gray-700');
+        document.getElementById('finModeHintTextSk').classList.add('hidden');
+        document.getElementById('finModeHintManualSk').classList.remove('hidden');
+      }
+    }
+
+    function previewFotoBarangSk(input) {
+      const file = input.files[0];
+      if (!file) return;
+      if (file.size > 10 * 1024 * 1024) { showToast('Ukuran file maksimal 10MB', 'error'); return; }
+      finSkFotoBarang = file;
+      const reader = new FileReader();
+      reader.onload = e => {
+        document.getElementById('finFotoBarangPreviewSk').src = e.target.result;
+        document.getElementById('finFotoBarangWrapSk').classList.remove('hidden');
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function clearFotoBarangSk() {
+      finSkFotoBarang = null;
+      finSkFotoBarangPath = '';
+      document.getElementById('finFotoBarangSk').value = '';
+      document.getElementById('finFotoBarangWrapSk').classList.add('hidden');
+      document.getElementById('finFotoBarangPreviewSk').src = '';
+    }
+
+    function renderFinItemsTableSk() {
+      const tbody = document.getElementById('finItemsTableBodySk');
+      if (!tbody) return;
+      tbody.innerHTML = finSkItems.map((it, idx) => `
+        <tr>
+          <td class="px-2 py-1">${idx + 1}</td>
+          <td class="px-2 py-1"><input type="text" value="${it.nama_barang || ''}" onchange="updateFinItemSk(${idx}, 'nama_barang', this.value)" class="w-full text-sm border rounded px-1"></td>
+          <td class="px-2 py-1 text-center"><input type="number" value="${it.qty || 1}" onchange="updateFinItemSk(${idx}, 'qty', parseFloat(this.value) || 1)" class="w-16 text-center text-sm border rounded px-1"></td>
+          <td class="px-2 py-1 text-right"><input type="number" value="${it.harga || 0}" onchange="updateFinItemSk(${idx}, 'harga', parseFloat(this.value) || 0)" class="w-24 text-right text-sm border rounded px-1"></td>
+          <td class="px-2 py-1 text-right font-mono">${fmtRp((it.qty || 1) * (it.harga || 0))}</td>
+        </tr>`).join('');
+      updateFinItemsTotalSk();
+    }
+
+    function addFinItemSk() {
+      finSkItems.push({ no: finSkItems.length + 1, nama_barang: '', qty: 1, harga: 0, total: 0 });
+      renderFinItemsTableSk();
+    }
+
+    function removeFinItemSk(idx) {
+      finSkItems.splice(idx, 1);
+      finSkItems.forEach((it, i) => it.no = i + 1);
+      renderFinItemsTableSk();
+    }
+
+    function updateFinItemSk(idx, field, value) {
+      finSkItems[idx][field] = value;
+      if (field === 'qty' || field === 'harga') {
+        finSkItems[idx].total = (finSkItems[idx].qty || 1) * (finSkItems[idx].harga || 0);
+      }
+      renderFinItemsTableSk();
+    }
+
+    function updateFinItemsTotalSk() {
+      const total = finSkItems.reduce((sum, it) => sum + ((it.qty || 1) * (it.harga || 0)), 0);
+      document.getElementById('finItemsTotalSk').textContent = fmtRp(total);
+      if (total > 0) document.getElementById('finNominalSk').value = Math.round(total);
+    }
+
+    async function loadFinancialAccountInfoSk() {
+      try {
+        const res = await fetch(`/api/treasurer/financial/account-info?tenant_id=${encodeURIComponent(currentTenantId || '')}`, { headers: getAuthHeader() });
+        const d = await res.json();
+        if (d.success && d.data) {
+          document.getElementById('finAkunSk').value = d.data.bank_account_number || d.data.nomor_rekening || '';
+        }
+      } catch (e) { /* no account info */ }
+    }
+
+    function previewFotoStrukSk(input) {
+      const file = input.files[0];
+      if (!file) return;
+      finSkFotoFile = file;
+      const reader = new FileReader();
+      reader.onload = e => {
+        document.getElementById('finFotoPreviewSk').src = e.target.result;
+        document.getElementById('finFotoPreviewSkWrap').classList.remove('hidden');
+        document.getElementById('finScanSk').classList.remove('hidden');
+      };
+      reader.readAsDataURL(file);
+      setTimeout(() => { scanFotoStrukSk(); }, 300);
+    }
+
+    function clearFotoStrukSk() {
+      finSkFotoFile = null;
+      finSkFotoStrukPath = '';
+      document.getElementById('finFotoStrukSk').value = '';
+      document.getElementById('finFotoPreviewSkWrap').classList.add('hidden');
+      document.getElementById('finScanSk').classList.add('hidden');
+      document.getElementById('finFotoPreviewSk').src = '';
+    }
+
+    async function scanFotoStrukSk() {
+      if (!finSkFotoFile) { showToast('Upload foto struk dulu', 'error'); return; }
+      showProgress('Memindai struk dengan AI...');
+      updateProgress(0, 1, 'Mengirim gambar ke Gemini...');
+      try {
+        const formData = new FormData();
+        formData.append('image', finSkFotoFile);
+        const res = await fetch('/api/treasurer/financial/ocr/receipt', {
+          method: 'POST',
+          headers: { 'Authorization': (getAuthHeader().Authorization || '') },
+          body: formData
+        });
+        const d = await res.json();
+        if (d.success && d.data) {
+          const data = d.data;
+          finSkFotoStrukPath = d.foto_struk || '';
+          updateProgress(1, 1, 'Berhasil!');
+          finishProgress('OCR selesai');
+          if (data.tanggal) document.getElementById('finTanggalSk').value = data.tanggal;
+          if (data.jenis) document.getElementById('finJenisSk').value = data.jenis;
+          if (data.nominal) document.getElementById('finNominalSk').value = data.nominal;
+          if (data.kategori) document.getElementById('finKategoriSk').value = data.kategori;
+          if (data.akun && !document.getElementById('finAkunSk').value) document.getElementById('finAkunSk').value = data.akun || '';
+          if (data.no_bukti) document.getElementById('finNoBuktiSk').value = data.no_bukti;
+           if (data.keterangan && !document.getElementById('finKeteranganSk').value) document.getElementById('finKeteranganSk').value = data.keterangan;
+           const ocrItems = Array.isArray(d.items) ? d.items : (Array.isArray(data.items) ? data.items : []);
+           if (ocrItems.length > 0) {
+             finSkItems = ocrItems.map(it => ({ ...it, qty: it.qty || 1, harga: it.harga || 0 }));
+             renderFinItemsTableSk();
+           }
+           showToast('Data struk terisi otomatis dari OCR', 'success');
+        } else {
+          errorProgress(d.message || 'Gagal OCR');
+          showToast(d.message || 'Gagal memindai struk', 'error');
+        }
+      } catch (e) {
+        errorProgress(e.message);
+        showToast('Gagal: ' + e.message, 'error');
+      }
+    }
+
+    async function editFinancialTransactionSk(id) {
+       fetch(`/api/treasurer/financial/transactions/${id}`, { headers: getAuthHeader() })
+        .then(r => r.json())
+        .then(d => {
+          if (!d.success) { showToast(d.message, 'error'); return; }
+          const t = d.data;
+          finSkEditingId = t.id;
+          document.getElementById('financialModalTitleSk').textContent = 'Edit Transaksi';
+          document.getElementById('finTanggalSk').value = t.tanggal;
+          document.getElementById('finJenisSk').value = t.jenis;
+          document.getElementById('finKategoriSk').value = t.kategori || '';
+          document.getElementById('finAkunSk').value = t.akun || '';
+          document.getElementById('finNominalSk').value = t.nominal;
+          document.getElementById('finNoBuktiSk').value = t.no_bukti || '';
+          document.getElementById('finKeteranganSk').value = t.keterangan || '';
+          finSkFotoStrukPath = t.foto_struk || '';
+          finSkFotoBarangPath = t.foto_barang || '';
+          finSkItems = Array.isArray(t.items) ? t.items.map(it => ({ ...it, qty: it.qty || 1, harga: it.harga || 0 })) : [];
+          if (finSkFotoStrukPath) {
+            document.getElementById('finFotoPreviewSk').src = finSkFotoStrukPath;
+            document.getElementById('finFotoPreviewSkWrap').classList.remove('hidden');
+            document.getElementById('finScanSk').classList.add('hidden');
+            setFinModeSk('struk');
+          } else {
+            document.getElementById('finFotoPreviewSk').src = '';
+            document.getElementById('finFotoPreviewSkWrap').classList.add('hidden');
+            document.getElementById('finScanSk').classList.add('hidden');
+            setFinModeSk('manual');
+          }
+          if (finSkFotoBarangPath) {
+            document.getElementById('finFotoBarangPreviewSk').src = finSkFotoBarangPath;
+            document.getElementById('finFotoBarangWrapSk').classList.remove('hidden');
+          }
+          renderFinItemsTableSk();
+          loadFinancialCategoriesSk();
+          document.getElementById('financialModalSk').classList.remove('hidden');
+        })
+        .catch(e => showToast('Gagal load: ' + e.message, 'error'));
+    }
+
+    async function deleteFinancialTransactionSk(id) {
+      if (!confirm('Hapus transaksi ini?')) return;
+      try {
+        const res = await fetch(`/api/treasurer/financial/transactions/${id}`, {
+          method: 'DELETE', headers: { 'Content-Type': 'application/json', ...getAuthHeader() }
+        });
+        const d = await res.json();
+        if (d.success) { showToast('Transaksi dihapus', 'success'); loadFinancialTransactionsSk(); loadFinancialSummarySk(); }
+        else showToast(d.message || 'Gagal hapus', 'error');
+      } catch (e) { showToast('Gagal: ' + e.message, 'error'); }
+    }
+
+    async function submitFinancialTransactionSk() {
+      const tanggal = document.getElementById('finTanggalSk').value;
+      const jenis = document.getElementById('finJenisSk').value;
+      const kategori = document.getElementById('finKategoriSk').value;
+      const akun = document.getElementById('finAkunSk').value.trim() || null;
+      const keterangan = document.getElementById('finKeteranganSk').value.trim() || null;
+      const nominal = parseFloat(document.getElementById('finNominalSk').value);
+      const noBukti = document.getElementById('finNoBuktiSk').value.trim() || null;
+
+       if (!tanggal || !jenis || !kategori || !nominal || isNaN(nominal)) {
+        showToast('Isi tanggal, jenis, kategori, dan nominal', 'error'); return;
+      }
+      const isManual = !finSkFotoStrukPath;
+      if (!finSkFotoStrukPath) {
+        showToast('Upload foto struk/nota wajib (bendahara sekolah harus melampirkan struk)', 'error'); return;
+      }
+      try {
+        const url = finSkEditingId
+          ? `/api/treasurer/financial/transactions/${finSkEditingId}`
+          : '/api/treasurer/financial/transactions';
+        const res = await fetch(url, {
+          method: finSkEditingId ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+          body: JSON.stringify({
+            tenant_id: currentTenantId || undefined,
+            tanggal, jenis, kategori, akun, keterangan, nominal, no_bukti: noBukti,
+            foto_struk: finSkFotoStrukPath,
+            foto_barang: finSkFotoBarangPath || undefined,
+            items: finSkItems,
+            status: 'pending'
+          })
+        });
+        const d = await res.json();
+        if (d.success) {
+          showToast(d.message, 'success');
+          closeFinancialModalSk();
+          loadFinancialTransactionsSk();
+          loadFinancialSummarySk();
+        } else showToast(d.message || 'Gagal simpan', 'error');
+      } catch (e) { showToast('Gagal: ' + e.message, 'error'); }
+    }
+   </script>
 </body>
 
 </html>

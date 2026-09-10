@@ -36,6 +36,14 @@ async function rateLimitedSend(sendFn) {
   return sendQueue;
 }
 
+function cleanVaNumber(va) {
+  if (!va) return '';
+  let s = String(va).trim();
+  s = s.replace(/^(Bsi|BNI|BRI|Mandiri|BTN|BSI|BTPN|BCA|Mandiri Bil| Mandiri)\s*[:\-]?\s*/i, '');
+  s = s.replace(/[^0-9]/g, '');
+  return s;
+}
+
 function formatPhoneNumber(phoneNumber) {
   if (!phoneNumber) return null;
   let cleaned = phoneNumber.toString().trim();
@@ -152,10 +160,10 @@ async function sendBillTemplate(phoneNumber, params, templateName = 'tagihan_spp
 
   const isInvoiceSpp = templateName === 'invoice_spp';
   const isTagihanBsi = templateName === 'tagihan_spp_bsi';
-  let urlParam = '';
-  if (isInvoiceSpp && params.invoice_url) {
-    try { urlParam = new URL(params.invoice_url).pathname + new URL(params.invoice_url).search; } catch (e) { urlParam = params.invoice_url; }
-  }
+   let urlParam = '';
+   if (isInvoiceSpp && params.invoice_url) {
+     try { urlParam = new URL(params.invoice_url).pathname + new URL(params.invoice_url).search; } catch (e) { urlParam = params.invoice_url; }
+   }
 
   let bodyParams = [];
   let headerParams = [];
@@ -218,30 +226,30 @@ async function sendBillTemplate(phoneNumber, params, templateName = 'tagihan_spp
      });
    }
 
-   if (!isTagihanBsi && !isInvoiceSpp && (params.invoice_url || params.nomor_rekening)) {
-      const sppUrl = params.invoice_url || `https://app.ypwilutim.com/spp-payment.html?va=${encodeURIComponent(params.nomor_rekening || '')}`;
-     components.push({
-       type: 'button',
-       sub_type: 'url',
-       index: '0',
-       parameters: [{
-         type: 'text',
-         text: sppUrl
-       }]
-     });
-   }
+    if (!isTagihanBsi && !isInvoiceSpp && (params.invoice_url || params.nomor_rekening)) {
+       const vaParam = cleanVaNumber(params.va_raw || params.nomor_rekening);
+       components.push({
+         type: 'button',
+         sub_type: 'url',
+         index: '0',
+         parameters: [{
+           type: 'text',
+           text: vaParam
+         }]
+       });
+    }
 
     if (isTagihanBsi && params.nomor_rekening) {
-      const vaUrl = `https://app.ypwilutim.com/spp-payment.html?va=${encodeURIComponent(params.nomor_rekening)}`;
-      components.push({
-        type: 'button',
-        sub_type: 'url',
-        index: '1',
-        parameters: [{
-          type: 'text',
-          text: vaUrl
-        }]
-      });
+       const vaParam = cleanVaNumber(params.va_raw || params.nomor_rekening);
+       components.push({
+         type: 'button',
+         sub_type: 'url',
+         index: '1',
+         parameters: [{
+           type: 'text',
+           text: vaParam
+         }]
+       });
     }
 
     if (isTagihanBsi && params.va_raw) {

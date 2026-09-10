@@ -53,7 +53,6 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
         fetch(event.request)
             .then((response) => {
-                // Cek apakah response valid dan bukan chrome-extension
                 if (response && response.status === 200 && response.type === 'basic' &&
                     event.request.url.startsWith('http')) {
                     const responseClone = response.clone();
@@ -64,8 +63,10 @@ self.addEventListener('fetch', (event) => {
                 return response;
             })
             .catch(() => {
-                // Fallback ke cache
-                return caches.match(event.request);
+                return caches.match(event.request).then((cachedResponse) => {
+                    if (cachedResponse) return cachedResponse;
+                    return new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
+                });
             })
     );
 });

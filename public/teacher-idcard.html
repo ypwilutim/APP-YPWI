@@ -12,10 +12,24 @@
     .id-card {
       width: 5.5cm; height: 8.5cm; background: white; border-radius: 6px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.12); overflow: hidden; position: relative;
-      page-break-inside: avoid; border: 1px solid #e0e0e0;
+      page-break-inside: avoid; border: 1px solid #e5e7eb;
     }
-    .photo-frame { width: 42px; height: 54px; border: 2px solid #e5e7eb; border-radius: 3px; overflow: hidden; background: #f9fafb; }
-    .photo-frame-large { width: 60px; height: 78px; border: 2px solid #e5e7eb; border-radius: 4px; overflow: hidden; background: #f9fafb; }
+    .id-card-inner {
+      border: 1px solid #c5a24e;
+      border-radius: 5px;
+      margin: 2px;
+      height: calc(100% - 4px);
+      position: relative;
+      background: white;
+    }
+    .photo-frame-new {
+      width: 2.2cm; height: 3.0cm;
+      border: 1px solid #c5a24e;
+      border-radius: 2px;
+      overflow: hidden;
+      background: #f9fafb;
+      box-shadow: 0 0 0 1px #fbbf24 inset;
+    }
     @media print {
       body { background: white; padding: 0; margin: 0; }
       .no-print { display: none !important; }
@@ -121,20 +135,39 @@
         const card = document.createElement('div');
         card.className = 'id-card';
         card.innerHTML = `
-          <div class="text-center pt-1.5">
-            <img src="/assets/images/YPWI%20LOGO%20FULL%20COLOR.png" alt="Logo YPWI" class="mx-auto h-4 w-auto" onerror="this.style.display='none'">
-            <div class="text-[#066e3a] font-bold text-[10px] tracking-wider">YPWI LUTIM</div>
-          </div>
-          <div class="mt-2 flex justify-center">
-            <div class="photo-frame-large">
-              <img src="${fotoUrl(teacher)}" class="w-full h-full object-cover" onerror="this.src='https://ui-avatars.com/api/?name=Guru&size=150&background=066e3a&color=fff'">
+          <div class="id-card-inner">
+            <div class="flex items-start gap-1.5 p-1.5">
+              <img src="/assets/images/icon.png" alt="Logo YPWI" class="w-7 h-7 mt-0.5" onerror="this.style.display='none'">
+              <div class="text-right leading-tight">
+                <div class="text-[6px] font-bold text-green-900">${(teacher.nama_sekolah || '').split('; ')[0] || ''}</div>
+                <div class="text-[5px] font-bold text-green-800">KARTU IDENTITAS GURU</div>
+              </div>
             </div>
-          </div>
-          <div class="font-bold text-center text-[11px] text-gray-800 mt-1.5 px-2">${teacher.nama || 'Guru'}</div>
-          <div class="text-[7px] text-gray-500 text-center mt-0.5">${scanId}</div>
-          <div class="text-[7px] text-[#044e24] font-semibold text-center mt-0.5 px-2">${teacher.jabatan_di_unit || 'Guru'}</div>
-          <div class="mt-2 flex justify-center">
-            <img src="${qrUrl}" class="w-14 h-14" alt="QR Scan">
+            <div class="h-px bg-[#c5a24e] mx-2"></div>
+            <div class="flex gap-2 p-2">
+              <div class="photo-frame-new">
+                <img src="${fotoUrl(teacher)}" class="w-full h-full object-cover" onerror="this.src='https://ui-avatars.com/api/?name=Guru&size=150&background=066e3a&color=fff'">
+              </div>
+              <div class="text-[6px] leading-tight pt-0.5">
+                <div class="font-bold text-gray-800">${teacher.nama || 'Guru'}</div>
+                <div class="text-green-900 font-semibold">${teacher.jabatan_di_unit || '-'}</div>
+                <div class="text-gray-600">NIK: ${teacher.nik || '-'}</div>
+                <div class="text-gray-600">Mata Pelajaran: ${teacher.jabatan_di_unit || '-'}</div>
+                <div class="text-gray-600">Berlaku s.d: ${teacher.tmt ? new Date(teacher.tmt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-'}</div>
+              </div>
+            </div>
+            <div class="text-center mt-0.5">
+              <div class="text-[7px] font-bold text-green-900">${(teacher.status_kepegawaian || 'GURU').toUpperCase()}</div>
+              <div class="text-[5px] italic text-gray-500">Mengajar, membentuk, dan mencetak generasi berakhlak</div>
+              <div class="text-[6px] font-bold text-green-900">${(teacher.nama_sekolah || '').split('; ')[0] || ''}</div>
+            </div>
+            <div class="absolute bottom-1 right-1 text-center">
+              <div class="border border-[#c5a24e] rounded p-0.5 bg-white">
+                <img src="${qrUrl}" class="w-7 h-7" alt="QR Scan">
+              </div>
+              <div class="text-[5px] text-green-900 font-semibold">Scan ID</div>
+            </div>
+            ${teacher.alamat ? `<div class="absolute bottom-0.5 left-0 right-0 text-center"><div class="text-[5px] text-gray-400">${teacher.alamat}</div></div>` : ''}
           </div>
           <input type="checkbox" data-id="${teacher.id}" class="card-check absolute top-1 left-1 no-print w-3 h-3 rounded border-gray-400 text-indigo-600" title="Pilih kartu ini">
           <button onclick="exportSinglePdf(${teacher.id}, '${safeNama}')" class="absolute top-1 right-1 no-print bg-blue-600 hover:bg-blue-700 text-white text-xs px-1.5 py-0.5 rounded" title="Unduh PDF kartu ini"><i class="fas fa-file-pdf"></i></button>

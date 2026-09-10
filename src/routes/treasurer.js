@@ -2,9 +2,18 @@ const express = require('express');
 const db = require('../../db');
 const nodemailer = require('nodemailer');
 const axios = require('axios');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const { authenticateToken, authenticateOperator, authenticateBendahara, verifyTenantAccess } = require('../middleware/auth');
 const { sendBillTemplate } = require('../utils/whatsappTemplate');
+const { extractReceiptFromImage, extractReceiptItems } = require('../utils/geminiOcr');
 const billing = require('../utils/billing');
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }
+});
 
 const router = express.Router();
 
@@ -3666,9 +3675,93 @@ router.post('/treasurer/bsi/create-single', authenticateBendahara, async (req, r
       message: student.va_number ? 'VA BSI sudah ada dan tetap digunakan' : 'VA BSI berhasil dibuat',
       data: { student_id, va_number: vaNumber, va_name: student.nama_siswa, amount: finalAmount }
     });
-  } catch (error) {
+   } catch (error) {
     console.error('Create BSI VA error:', error);
     res.status(500).json({ success: false, message: 'Gagal buat VA BSI' });
+  }
+});
+
+// POST /api/treasurer/bsi/reset-va - Reset VA BSI untuk siswa (generate new VA, invalidate old)
+router.post('/treasurer/bsi/reset-va', authenticateBendahara, async (req, res) => {
+  try {
+    const { tenant_id, student_id } = req.body;
+    if (!tenant_id || !student_id) {
+      return res.status(400).json({ success: false, message: 'tenant_id dan student_id wajib' });
+    }
+    if (!verifyTenantAccess(req, tenant_id)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+
+    const [student] = await db.query(
+      'SELECT id, nama_siswa, tenant_id, iuran_bulanan, va_number FROM students WHERE id = ? AND tenant_id = ?',
+      [student_id, tenant_id]
+    );
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Siswa tidak ditemukan' });
+    }
+
+    const oldVa = student.va_number ? String(student.va_number).replace(/[^0-9]/g, '') : '';
+
+    // Generate new VA number (ensure different from old)
+    const vaPrefix = (process.env.BSI_VA_PREFIX || '832231').replace(/[^0-9]/g, '');
+    let newVa;
+    let attempts = 0;
+    do {
+      const vaSuffix = String(Math.floor(1000000000 + Math.random() * 9000000000));
+      newVa = `${vaPrefix}${vaSuffix}`;
+      attempts++;
+    } while ((newVa === oldVa || (await db.query('SELECT 1 FROM students WHERE va_number = ? AND id != ?', [newVa, student_id])).length > 0) && attempts < 10);
+
+    // Invalidate old payment_transactions record (mark as reset)
+    if (oldVa) {
+      await db.query(
+        `UPDATE payment_transactions SET status = 'cancelled', description = CONCAT(description, ' [VA RESET to ${newVa}]')
+         WHERE external_id = ? AND gateway = 'bsi_manual'`,
+        [oldVa]
+      );
+    }
+
+    // Update student VA number
+    await db.query(
+      'UPDATE students SET va_number = ?, va_name = ? WHERE id = ?',
+      [newVa, student.nama_siswa, student_id]
+    );
+
+    // Create new pending transaction record
+    const finalAmount = parseFloat(student.iuran_bulanan) || 0;
+    if (finalAmount > 0) {
+      await db.query(
+        `INSERT INTO payment_transactions (tenant_id, student_id, gateway, external_id, amount, status, payment_method, description, metadata)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE amount = VALUES(amount), description = VALUES(description)`,
+        [
+          tenant_id,
+          student_id,
+          'bsi_manual',
+          newVa,
+          finalAmount,
+          'pending',
+          'BSI VA',
+          `VA BSI ${newVa} - ${student.nama_siswa} [RESET]`,
+          JSON.stringify({ student_name: student.nama_siswa, reset: true, old_va: oldVa })
+        ]
+      );
+    }
+
+    res.json({
+      success: true,
+      message: 'VA BSI berhasil direset',
+      data: {
+        student_id,
+        va_number: newVa,
+        va_name: student.nama_siswa,
+        old_va: oldVa,
+        amount: finalAmount
+      }
+    });
+  } catch (error) {
+    console.error('Reset BSI VA error:', error);
+    res.status(500).json({ success: false, message: 'Gagal reset VA BSI' });
   }
 });
 
@@ -4181,10 +4274,634 @@ router.get('/treasurer/bendahara/auto-billing/report', authenticateBendahara, as
       data: reports,
       summary: summary
     });
-  } catch (error) {
+   } catch (error) {
     console.error('Get auto billing report error:', error);
     res.status(500).json({ success: false, message: 'Gagal mengambil laporan' });
   }
 });
+
+// ==================== FINANCIAL / JURNAL UMUM ====================
+
+// GET /api/treasurer/financial/categories?tenant_id=XXX
+router.get('/treasurer/financial/categories', authenticateBendahara, async (req, res) => {
+  try {
+    await billing.ensureBillingTables();
+    const tenantId = req.query.tenant_id || req.tenant_id || '';
+    if (tenantId && !verifyTenantAccess(req, tenantId)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+    const rows = await db.query(
+      `SELECT DISTINCT * FROM financial_categories
+       WHERE (tenant_id = ? OR tenant_id IS NULL)
+       ORDER BY FIELD(jenis, 'beli', 'bayar', 'pemasukan', 'pengeluaran'), urutan`,
+      [tenantId || null]
+    );
+    res.json({ success: true, data: rows });
+  } catch (e) {
+    console.error('Get financial categories error:', e);
+    res.status(500).json({ success: false, message: 'Gagal mengambil kategori' });
+  }
+});
+
+// GET /api/treasurer/financial/transactions/:id — single transaction (for edit)
+router.get('/treasurer/financial/transactions/:id', authenticateBendahara, async (req, res) => {
+  try {
+    await billing.ensureBillingTables();
+    const { id } = req.params;
+    const [row] = await db.query('SELECT * FROM financial_transactions WHERE id = ?', [id]);
+    if (!row) return res.status(404).json({ success: false, message: 'Data tidak ditemukan' });
+    if (row.tenant_id && !verifyTenantAccess(req, row.tenant_id)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+    // Load transaction items
+    const items = await db.query('SELECT * FROM financial_transaction_items WHERE transaction_id = ? ORDER BY no_urut', [id]);
+    res.json({ success: true, data: row, items: items || [] });
+  } catch (e) {
+    console.error('Get single financial transaction error:', e);
+    res.status(500).json({ success: false, message: 'Gagal mengambil data' });
+  }
+});
+
+// GET /api/treasurer/financial/transactions?tenant_id=XXX&bulan=2026-09&jenis=bayar
+router.get('/treasurer/financial/transactions', authenticateBendahara, async (req, res) => {
+  try {
+    await billing.ensureBillingTables();
+    const { tenant_id, bulan, jenis, search, page, limit } = req.query;
+    const tenantId = tenant_id || req.tenant_id || '';
+    if (tenantId && !verifyTenantAccess(req, tenantId)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+
+    const pageNum = parseInt(page) || 1;
+    const limitNum = parseInt(limit) || 50;
+    const offset = (pageNum - 1) * limitNum;
+
+    let query = `SELECT ft.*, (SELECT COUNT(*) FROM financial_transaction_items WHERE transaction_id = ft.id) AS item_count FROM financial_transactions ft WHERE tenant_id = ?`;
+    const params = [tenantId];
+    if (bulan) {
+      query += ` AND tanggal BETWEEN '${bulan}-01' AND LAST_DAY('${bulan}-01')`;
+    }
+    if (jenis) {
+      query += ` AND jenis = ?`;
+      params.push(jenis);
+    }
+    if (search) {
+      query += ` AND (keterangan LIKE ? OR no_bukti LIKE ? OR akun LIKE ?)`;
+      params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+    }
+    query += ` ORDER BY tanggal DESC, created_at DESC LIMIT ? OFFSET ?`;
+    params.push(limitNum, offset);
+
+    const rows = await db.query(query, params);
+
+    // Count total
+    let countQuery = `SELECT COUNT(*) as total FROM financial_transactions WHERE tenant_id = ?`;
+    const countParams = [tenantId];
+    if (bulan) countQuery += ` AND tanggal BETWEEN '${bulan}-01' AND LAST_DAY('${bulan}-01')`;
+    if (jenis) { countQuery += ` AND jenis = ?`; countParams.push(jenis); }
+    if (search) { countQuery += ` AND (keterangan LIKE ? OR no_bukti LIKE ? OR akun LIKE ?)`; countParams.push(`%${search}%`, `%${search}%`, `%${search}%`); }
+    const [countRow] = await db.query(countQuery, countParams);
+
+    res.json({ success: true, data: rows, total: countRow.total, page: pageNum, limit: limitNum });
+  } catch (e) {
+    console.error('Get financial transactions error:', e);
+    res.status(500).json({ success: false, message: 'Gagal mengambil transaksi' });
+  }
+});
+
+// POST /api/treasurer/financial/transactions — create
+router.post('/treasurer/financial/transactions', authenticateBendahara, async (req, res) => {
+  try {
+    await billing.ensureBillingTables();
+    const tenantId = req.body.tenant_id || req.tenant_id || '';
+    if (tenantId && !verifyTenantAccess(req, tenantId)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+    const { tanggal, jenis, kategori, akun, keterangan, nominal, no_bukti, foto_struk, foto_barang, status, items } = req.body;
+    if (!tanggal || !jenis || !kategori || !nominal) {
+      return res.status(400).json({ success: false, message: 'tanggal, jenis, kategori, nominal wajib' });
+    }
+    const trxStatus = status || (foto_struk ? 'approved' : 'pending');
+    const result = await db.query(
+      `INSERT INTO financial_transactions (tenant_id, tanggal, jenis, kategori, akun, keterangan, nominal, no_bukti, foto_struk, foto_barang, status, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [tenantId, tanggal, jenis, kategori, akun || null, keterangan || null, parseFloat(nominal), no_bukti || null, foto_struk || null, foto_barang || null, trxStatus, req.username || req.user?.username || '']
+    );
+
+    // Insert items if provided
+    if (Array.isArray(items) && items.length > 0) {
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        await db.query(
+          `INSERT INTO financial_transaction_items (transaction_id, no_urut, nama_barang, qty, harga, total)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [result.insertId, i + 1, it.nama_barang || '', parseFloat(it.qty) || 1, parseFloat(it.harga) || 0, parseFloat(it.total) || 0]
+        );
+      }
+    }
+
+    res.json({ success: true, message: 'Transaksi berhasil dicatat', id: result.insertId, status: trxStatus });
+  } catch (e) {
+    console.error('Create financial transaction error:', e);
+    res.status(500).json({ success: false, message: 'Gagal menyimpan transaksi' });
+  }
+});
+
+// PUT /api/treasurer/financial/transactions/:id — update
+router.put('/treasurer/financial/transactions/:id', authenticateBendahara, async (req, res) => {
+  try {
+    await billing.ensureBillingTables();
+    const { id } = req.params;
+    const { tanggal, jenis, kategori, akun, keterangan, nominal, no_bukti, foto_struk, foto_barang, status, items } = req.body;
+    const [existing] = await db.query('SELECT tenant_id FROM financial_transactions WHERE id = ?', [id]);
+    if (!existing) return res.status(404).json({ success: false, message: 'Data tidak ditemukan' });
+    if (existing.tenant_id && !verifyTenantAccess(req, existing.tenant_id)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+    const trxStatus = status || (existing.tenant_id === 'YPWILUTIM' ? 'approved' : (foto_struk ? 'approved' : 'pending'));
+    await db.query(
+      `UPDATE financial_transactions SET tanggal = ?, jenis = ?, kategori = ?, akun = ?, keterangan = ?, nominal = ?, no_bukti = ?, foto_struk = ?, foto_barang = ?, status = ? WHERE id = ?`,
+      [tanggal, jenis, kategori, akun || null, keterangan || null, parseFloat(nominal), no_bukti || null, foto_struk || null, foto_barang || null, trxStatus, id]
+    );
+
+    // Sync items
+    if (Array.isArray(items)) {
+      await db.query('DELETE FROM financial_transaction_items WHERE transaction_id = ?', [id]);
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        await db.query(
+          `INSERT INTO financial_transaction_items (transaction_id, no_urut, nama_barang, qty, harga, total)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [id, i + 1, it.nama_barang || '', parseFloat(it.qty) || 1, parseFloat(it.harga) || 0, parseFloat(it.total) || 0]
+        );
+      }
+    }
+
+    res.json({ success: true, message: 'Transaksi berhasil diperbarui', status: trxStatus });
+  } catch (e) {
+    console.error('Update financial transaction error:', e);
+    res.status(500).json({ success: false, message: 'Gagal memperbarui transaksi' });
+  }
+});
+
+// DELETE /api/treasurer/financial/transactions/:id — delete
+router.delete('/treasurer/financial/transactions/:id', authenticateBendahara, async (req, res) => {
+  try {
+    await billing.ensureBillingTables();
+    const { id } = req.params;
+    const [existing] = await db.query('SELECT tenant_id FROM financial_transactions WHERE id = ?', [id]);
+    if (!existing) return res.status(404).json({ success: false, message: 'Data tidak ditemukan' });
+    if (existing.tenant_id && !verifyTenantAccess(req, existing.tenant_id)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+    await db.query('DELETE FROM financial_transactions WHERE id = ?', [id]);
+    res.json({ success: true, message: 'Transaksi berhasil dihapus' });
+  } catch (e) {
+    console.error('Delete financial transaction error:', e);
+    res.status(500).json({ success: false, message: 'Gagal menghapus transaksi' });
+  }
+});
+
+// GET /api/treasurer/financial/pending?tenant_id=XXX — list pending transactions (untuk approval)
+router.get('/treasurer/financial/pending', authenticateBendahara, async (req, res) => {
+  try {
+    await billing.ensureBillingTables();
+    const { tenant_id } = req.query;
+    const tenantId = tenant_id || req.tenant_id || '';
+    const filter = tenantId ? 'WHERE tenant_id = ? AND status = ?' : 'WHERE status = ?';
+    const params = tenantId ? [tenantId, 'pending'] : ['pending'];
+    const [rows] = await db.query(`SELECT * FROM financial_transactions ${filter} ORDER BY created_at DESC LIMIT 100`, params);
+    res.json({ success: true, data: rows || [] });
+  } catch (e) {
+    console.error('Get pending transactions error:', e);
+    res.status(500).json({ success: false, message: 'Gagal mengambil data' });
+  }
+});
+
+// PUT /api/treasurer/financial/transactions/:id/approve — approve pending transaction
+router.put('/treasurer/financial/transactions/:id/approve', authenticateBendahara, async (req, res) => {
+  try {
+    await billing.ensureBillingTables();
+    const { id } = req.params;
+    const { catatan } = req.body;
+    const [existing] = await db.query('SELECT * FROM financial_transactions WHERE id = ?', [id]);
+    if (!existing) return res.status(404).json({ success: false, message: 'Data tidak ditemukan' });
+    if (existing.tenant_id && !verifyTenantAccess(req, existing.tenant_id)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+    const newKeterangan = catatan ? (existing.keterangan || '' + '\n' + catatan) : existing.keterangan;
+    await db.query(
+      `UPDATE financial_transactions SET status = 'approved', keterangan = ? WHERE id = ?`,
+      [newKeterangan, id]
+    );
+    res.json({ success: true, message: 'Transaksi disetujui' });
+  } catch (e) {
+    console.error('Approve transaction error:', e);
+    res.status(500).json({ success: false, message: 'Gagal approve' });
+  }
+});
+
+// PUT /api/treasurer/financial/transactions/:id/reject — reject pending transaction
+router.put('/treasurer/financial/transactions/:id/reject', authenticateBendahara, async (req, res) => {
+  try {
+    await billing.ensureBillingTables();
+    const { id } = req.params;
+    const { catatan } = req.body;
+    const [existing] = await db.query('SELECT * FROM financial_transactions WHERE id = ?', [id]);
+    if (!existing) return res.status(404).json({ success: false, message: 'Data tidak ditemukan' });
+    if (existing.tenant_id && !verifyTenantAccess(req, existing.tenant_id)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+    const newKeterangan = catatan ? (existing.keterangan || '' + '\n' + catatan) : existing.keterangan;
+    await db.query(
+      `UPDATE financial_transactions SET status = 'rejected', keterangan = ? WHERE id = ?`,
+      [newKeterangan, id]
+    );
+    res.json({ success: true, message: 'Transaksi ditolak' });
+  } catch (e) {
+    console.error('Reject transaction error:', e);
+    res.status(500).json({ success: false, message: 'Gagal reject' });
+  }
+});
+
+// GET /api/treasurer/financial/summary?tenant_id=XXX&bulan=2026-09
+router.get('/treasurer/financial/summary', authenticateBendahara, async (req, res) => {
+  try {
+    await billing.ensureBillingTables();
+    const { tenant_id, bulan } = req.query;
+    const tenantId = tenant_id || req.tenant_id || '';
+    if (tenantId && !verifyTenantAccess(req, tenantId)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+
+    let dateFilter = '';
+    const params = [tenantId];
+    if (bulan) {
+      dateFilter = ` AND tanggal BETWEEN '${bulan}-01' AND LAST_DAY('${bulan}-01')`;
+    }
+
+    const [rows] = await db.query(`
+      SELECT jenis, COUNT(*) as jumlah, SUM(nominal) as total
+      FROM financial_transactions
+      WHERE tenant_id = ?${dateFilter}
+      GROUP BY jenis
+    `, params);
+    const summary = Array.isArray(rows) ? rows : [];
+
+    const totals = { beli: 0, bayar: 0, pemasukan: 0, pengeluaran: 0, net: 0 };
+    summary.forEach(r => {
+      if (totals[r.jenis] !== undefined) totals[r.jenis] = parseFloat(r.total) || 0;
+      if (r.jumlah !== undefined) totals[r.jumlah] = r.jumlah;
+    });
+    totals.net = (totals.pemasukan + totals.beli) - (totals.bayar + totals.pengeluaran);
+
+    // Breakdown by kategori
+    const [byKategoriRows] = await db.query(`
+      SELECT jenis, kategori, COUNT(*) as jumlah, SUM(nominal) as total
+      FROM financial_transactions
+      WHERE tenant_id = ?${dateFilter}
+      GROUP BY jenis, kategori
+      ORDER BY jenis, total DESC
+    `, params);
+    const byKategori = Array.isArray(byKategoriRows) ? byKategoriRows : [];
+
+    // Count pending transactions
+    const [pendingCount] = await db.query(
+      `SELECT COUNT(*) as cnt FROM financial_transactions WHERE tenant_id = ?${dateFilter} AND status = 'pending'`,
+      params
+    );
+    res.json({ success: true, totals, by_kategori: byKategori, pending_count: pendingCount[0]?.cnt || 0 });
+  } catch (e) {
+    console.error('Get financial summary error:', e);
+    res.status(500).json({ success: false, message: 'Gagal mengambil ringkasan' });
+  }
+});
+
+// GET /api/treasurer/financial/account-info?tenant_id=XXX — ambil info rekening tenant
+router.get('/treasurer/financial/account-info', authenticateBendahara, async (req, res) => {
+  try {
+    await billing.ensureBillingTables();
+    const tenantId = req.query.tenant_id || req.tenant_id || '';
+    if (tenantId && !verifyTenantAccess(req, tenantId)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+    const [t] = await db.query(
+      'SELECT tenant_id, nama_sekolah, nomor_rekening, bank_account_number, bank_account_name FROM tenants WHERE tenant_id = ?',
+      [tenantId]
+    );
+    res.json({ success: true, data: t || null });
+  } catch (e) {
+    console.error('Get financial account info error:', e);
+    res.status(500).json({ success: false, message: 'Gagal mengambil info rekening' });
+  }
+});
+
+// POST /api/treasurer/financial/ocr/receipt — OCR struk via Gemini, kembalikan JSON terstruktur
+router.post('/treasurer/financial/ocr/receipt', authenticateBendahara, upload.single('image'), (err, req, res, next) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(413).json({ success: false, message: 'Ukuran file terlalu besar. Maksimal 10MB.' });
+      }
+      return res.status(400).json({ success: false, message: 'Upload file gagal: ' + err.message });
+    }
+    next(err);
+  }, async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'File gambar wajib diupload' });
+    }
+
+    const mimeType = req.file.mimetype || 'image/jpeg';
+    const result = await extractReceiptFromImage(req.file.buffer, mimeType);
+
+    // Extract line items from receipt
+    let items = [];
+    try {
+      items = await extractReceiptItems(req.file.buffer, mimeType);
+    } catch (e) {
+      console.error('OCR items extraction error:', e.message);
+      items = [];
+    }
+
+    // Save foto struk ke disk
+    const fs = require('fs');
+    const path = require('path');
+    const uploadsDir = path.join(__dirname, '../../public/uploads/struk');
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+    const ext = path.extname(mimeType.replace('image/', '.'));
+    const fileName = `struk_${Date.now()}_${Math.random().toString(36).substring(2, 8)}${ext}`;
+    const filePath = path.join(uploadsDir, fileName);
+    fs.writeFileSync(filePath, req.file.buffer);
+    const fotoStrukPath = `/uploads/struk/${fileName}`;
+
+    // Auto-calculate total from items
+    const autoTotal = Array.isArray(items) && items.length > 0
+      ? items.reduce((sum, i) => sum + (parseFloat(i.total) || 0), 0)
+      : result.nominal || 0;
+
+    res.json({
+      success: true,
+      message: 'OCR berhasil',
+      data: result,
+      items: Array.isArray(items) ? items : [],
+      foto_struk: fotoStrukPath,
+       auto_total: autoTotal
+     });
+   } catch (error) {
+     console.error('OCR receipt error:', error);
+     res.status(500).json({ success: false, message: error.message || 'OCR gagal' });
+   }
+});
+
+// ==================== ISAK 35 FINANCIAL REPORTS ====================
+const ISAK35_JENIS_KATEGORI = {
+  beli: 'aset',
+  pemasukan: 'pendapatan',
+  pengeluaran: 'beban',
+  bayar: 'beban'
+};
+
+function classifyKelompokAkun(row, kategoriMap) {
+  const fromCat = kategoriMap[row.kategori];
+  if (fromCat) return fromCat;
+  return ISAK35_JENIS_KATEGORI[row.jenis] || 'beban';
+}
+
+async function generateIsak35Report(tenantId, bulan) {
+  const dateFilter = bulan ? ` AND tanggal BETWEEN '${bulan}-01' AND LAST_DAY('${bulan}-01')` : '';
+  const params = [tenantId];
+
+  // Load kategori -> kelompok_akun map (prefer tenant-specific over global)
+  const [cats] = await db.query(
+    'SELECT nama, kelompok_akun FROM financial_categories WHERE tenant_id = ? OR tenant_id IS NULL ORDER BY tenant_id DESC',
+    [tenantId || null]
+  );
+  const kategoriMap = {};
+  (Array.isArray(cats) ? cats : []).forEach(c => {
+    if (c.kelompok_akun && !kategoriMap[c.nama]) kategoriMap[c.nama] = c.kelompok_akun;
+  });
+
+  const [txRows] = await db.query(
+    `SELECT * FROM financial_transactions WHERE tenant_id = ?${dateFilter} ORDER BY tanggal`,
+    params
+  );
+  const tx = Array.isArray(txRows) ? txRows : [];
+
+  // Kas masuk dari penerimaan SPP/BOS yang lunas pada periode (kas masuk tidak tercatat di jurnal)
+  let sppMasuk = 0;
+  if (tenantId) {
+    const bulanParam = bulan || '';
+    const [bpIn] = await db.query(
+      `SELECT COALESCE(SUM(keterangan_spp),0) as total FROM billing_payment bp
+       JOIN students s ON bp.student_id=s.id
+       WHERE bp.tenant_id=? AND bp.status='lunas' AND DATE_FORMAT(bp.tanggal_bayar,'%Y-%m')=?`,
+      [tenantId, bulanParam]
+    );
+    sppMasuk = parseFloat(bpIn[0]?.total || 0);
+  }
+
+  const acc = { aset: 0, aset_tetap: 0, liabilitas: 0, pendapatan: 0, beban: 0, kas_masuk: 0, kas_keluar: 0 };
+
+  tx.forEach(r => {
+    const kg = classifyKelompokAkun(r, kategoriMap);
+    const nominal = parseFloat(r.nominal) || 0;
+    if (kg === 'aset') { acc.aset += nominal; acc.kas_keluar += nominal; }
+    else if (kg === 'aset_tetap') { acc.aset_tetap += nominal; acc.kas_keluar += nominal; }
+    else if (kg === 'liabilitas') acc.liabilitas += nominal;
+    else if (kg === 'pendapatan') { acc.pendapatan += nominal; acc.kas_masuk += nominal; }
+    else if (kg === 'beban') { acc.beban += nominal; acc.kas_keluar += nominal; }
+  });
+
+  acc.pendapatan += sppMasuk;
+  acc.kas_masuk += sppMasuk;
+
+  const totalAset = acc.aset + acc.aset_tetap;
+  const laba = acc.pendapatan - acc.beban;
+  const totalAsetNet = laba;
+
+  // Aset neto periode sebelumnya (saldo akumulasi)
+  let prevAsetNet = 0;
+  if (tenantId) {
+    const prevFilter = bulan ? ` AND tanggal < '${bulan}-01'` : '';
+    const [prevTx] = await db.query(
+      `SELECT SUM(CASE WHEN jenis='pemasukan' THEN nominal ELSE 0 END) as p,
+              SUM(CASE WHEN jenis IN ('pengeluaran','bayar','beli') THEN nominal ELSE 0 END) as b
+       FROM financial_transactions WHERE tenant_id = ?${prevFilter}`,
+      [tenantId]
+    );
+    if (prevTx[0]) {
+      prevAsetNet = parseFloat(prevTx[0].p || 0) - parseFloat(prevTx[0].b || 0);
+    }
+  }
+
+  return {
+    periode: bulan || 'semua',
+    tenant_id: tenantId,
+    posisi_keuangan: {
+      aset_lancar: acc.aset,
+      aset_tetap: acc.aset_tetap,
+      total_aset: totalAset,
+      liabilitas: acc.liabilitas,
+      total_liabilitas: acc.liabilitas,
+      aset_net_terbatas: 0,
+      aset_net_tanpa_batas: totalAsetNet,
+      total_aset_net: totalAsetNet,
+      total: Math.abs(totalAset - acc.liabilitas - totalAsetNet)
+    },
+    laporan_aktivitas: {
+      pendapatan: acc.pendapatan,
+      beban: acc.beban,
+      selisih: laba,
+      perubahan_aset_net: laba
+    },
+    perubahan_aset_net: {
+      awal: prevAsetNet,
+      akhir: prevAsetNet + laba,
+      perubahan: laba
+    },
+    arus_kas: {
+      kas_masuk: acc.kas_masuk,
+      kas_keluar: acc.kas_keluar,
+      selisih: acc.kas_masuk - acc.kas_keluar
+    },
+    catatan: [
+      'Laporan disusun otomatis dari jurnal transaksi keuangan (financial_transactions) sesuai ISAK 35.',
+      'Kas masuk mencakup pemasukan + penerimaan kas (SPP/BOS lunas).',
+      'Kas keluar mencakup pengeluaran, pembayaran, dan pembelian aset.',
+      'Aset dikelompokkan: lancar (inventory/perlengkapan) vs tetap (peralatan/kendaraan).'
+    ]
+  };
+}
+
+// GET /api/treasurer/financial/report?isak=1&tenant_id=XXX&bulan=2026-09&format=xlsx|pdf
+router.get('/treasurer/financial/report', authenticateBendahara, async (req, res) => {
+  try {
+    await billing.ensureBillingTables();
+    const { tenant_id, bulan, format } = req.query;
+    const tenantId = tenant_id || req.tenant_id || '';
+    if (tenantId && !verifyTenantAccess(req, tenantId)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+
+    const report = await generateIsak35Report(tenantId, bulan || '');
+
+    if (format === 'xlsx' || format === 'pdf') {
+      return await exportIsak35(report, tenantId, bulan || 'all', format, res);
+    }
+
+    res.json({ success: true, data: report });
+  } catch (e) {
+    console.error('Generate financial report error:', e);
+    res.status(500).json({ success: false, message: e.message || 'Gagal generate laporan' });
+  }
+});
+
+async function exportIsak35(report, tenantId, bulan, format, res) {
+  const label = bulan === 'all' ? 'SEMUA PERIODE' : bulan;
+  const title = `Laporan Keuangan ISAK 35 - ${tenantId || 'SEKOLAH'} ${label}`;
+
+  if (format === 'xlsx') {
+    const xlsx = require('xlsx');
+    const wb = xlsx.utils.book_new();
+    const cols = ['A', 'B', 'C', 'D'];
+    const makeSheet = (name, rows) => {
+      const ws = xlsx.utils.aoa_to_sheet(rows);
+      ws['!cols'] = [{ wch: 30 }, { wch: 20 }, { wch: 25 }, { wch: 25 }];
+      xlsx.utils.book_append_sheet(wb, ws, name);
+    };
+    makeSheet('Posisi Keuangan', [['POSISI KEUANGAN' + title], [], ['Kelompok', 'Jumlah', '', ''],
+      ['Aset Lancar', report.posisi_keuangan.aset_lancar, '', ''],
+      ['Aset Tetap', report.posisi_keuangan.aset_tetap, '', ''],
+      ['--- Total Aset', report.posisi_keuangan.total_aset, '', ''],
+      ['Liabilitas', report.posisi_keuangan.liabilitas, '', ''],
+      ['--- Total Liabilitas', report.posisi_keuangan.total_liabilitas, '', ''],
+      ['Aset Neto Tanpa Batas', report.posisi_keuangan.aset_net_tanpa_batas, '', ''],
+      ['Aset Neto Terbatas', report.posisi_keuangan.aset_net_terbatas, '', ''],
+      ['--- Total Aset Neto', report.posisi_keuangan.total_aset_net, '', ''],
+      ['KESEIMBANGAN', `=ABS(${report.posisi_keuangan.total})`, '', '']]);
+    makeSheet('Laporan Aktivitas', [['LAPORAN AKTIVITAS' + ' ' + title], [],
+      ['Pendapatan', report.laporan_aktivitas.pendapatan, '', ''],
+      ['Beban', report.laporan_aktivitas.beban, '', ''],
+      ['Selisih', report.laporan_aktivitas.selisih, '', ''],
+      ['Perubahan Aset Neto', report.laporan_aktivitas.perubahan_aset_net, '', '']]);
+    makeSheet('Perubahan Aset Neto', [['PERUBAHAN ASET NETO' + ' ' + title], [],
+      ['Awal', report.perubahan_aset_net.awal, '', ''],
+      ['Akhir', report.perubahan_aset_net.akhir, '', ''],
+      ['Perubahan', report.perubahan_aset_net.perubahan, '', '']]);
+    makeSheet('Arus Kas', [['ARUS KAS' + ' ' + title], [],
+      ['Kas Masuk', report.arus_kas.kas_masuk, '', ''],
+      ['Kas Keluar', report.arus_kas.kas_keluar, '', ''],
+      ['Selisih', report.arus_kas.selisih, '', '']]);
+    const notes = [['CATATAN ATAS LAPORAN']];
+    (report.catatan || []).forEach(c => notes.push([c]));
+    makeSheet('Catatan', notes);
+
+    const buf = xlsx.write(wb, { bookType: 'xlsx', type: 'buffer' });
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="laporan_isak35_${tenantId || 'semua'}_${bulan || 'all'}.xlsx"`);
+    return res.send(buf);
+  }
+
+  if (format === 'pdf') {
+    const PDFDocument = require('pdfkit');
+    const doc = new PDFDocument({ margin: 50 });
+    const chunks = [];
+    const stream = require('stream');
+    const pass = new stream.PassThrough();
+    pass.on('data', c => chunks.push(c));
+    pass.on('end', () => {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="laporan_isak35_${tenantId || 'semua'}_${bulan || 'all'}.pdf"`);
+      res.send(Buffer.concat(chunks));
+    });
+    doc.on('data', c => pass.write(c));
+    doc.on('end', () => pass.end());
+
+    doc.fontSize(16).text('LAPORAN KEUANGAN', { align: 'center' });
+    doc.fontSize(12).text(`ISAK 35 ${title}`, { align: 'center' });
+    doc.moveDown();
+
+    const fmt = v => 'Rp ' + (parseFloat(v) || 0).toLocaleString('id-ID');
+
+    const table = (headline, rows) => {
+      doc.fontSize(11).font('Helvetica-Bold').text(headline);
+      doc.font('Helvetica').table(
+        [['Keterangan', 'Jumlah', '', ''], ...rows],
+        { columnsSize: [180, 90, 90, 90], columnCount: 4 }
+      );
+      doc.moveDown(6);
+    };
+    table('POSISI KEUANGAN', [
+      ['Aset Lancar', fmt(report.posisi_keuangan.aset_lancar), '', ''],
+      ['Aset Tetap', fmt(report.posisi_keuangan.aset_tetap), '', ''],
+      ['Total Aset', fmt(report.posisi_keuangan.total_aset), '', ''],
+      ['Liabilitas', fmt(report.posisi_keuangan.liabilitas), '', ''],
+      ['Aset Neto (Tanpa + Terbatas)', fmt(report.posisi_keuangan.total_aset_net), '', '']
+    ]);
+    table('LAPORAN AKTIVITAS', [
+      ['Pendapatan', fmt(report.laporan_aktivitas.pendapatan), '', ''],
+      ['Beban', fmt(report.laporan_aktivitas.beban), '', ''],
+      ['Selisih (Laba/Rugi)', fmt(report.laporan_aktivitas.selisih), '', ''],
+      ['Perubahan Aset Neto', fmt(report.laporan_aktivitas.perubahan_aset_net), '', '']
+    ]);
+    table('PERUBAHAN ASET NETO', [
+      ['Saldo Awal', fmt(report.perubahan_aset_net.awal), '', ''],
+      ['Saldo Akhir', fmt(report.perubahan_aset_net.akhir), '', ''],
+      ['Perubahan', fmt(report.perubahan_aset_net.perubahan), '', '']
+    ]);
+    table('ARUS KAS', [
+      ['Kas Masuk', fmt(report.arus_kas.kas_masuk), '', ''],
+      ['Kas Keluar', fmt(report.arus_kas.kas_keluar), '', ''],
+      ['Selisih', fmt(report.arus_kas.selisih), '', '']
+    ]);
+    doc.addPage();
+    doc.fontSize(11).font('Helvetica-Bold').text('CATATAN ATAS LAPORAN');
+    doc.font('Helvetica');
+    (report.catatan || []).forEach((c, i) => doc.text(`${i + 1}. ${c}`));
+    doc.end();
+  }
+}
 
 module.exports = router

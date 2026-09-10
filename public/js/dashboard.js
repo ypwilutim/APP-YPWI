@@ -167,6 +167,18 @@ function forceLogout() {
 })();
 
 
+// Helper: cek apakah pengguna memiliki peran admin
+// Berdasarkan role JWT atau jabatan_di_unit di assignment
+function userHasAdminRole(assignments) {
+    const list = assignments || [];
+    if (window.userRole === 'admin') return true;
+    const adminJabatans = ['admin', 'operator', 'media', 'tu', 'tatausaha', 'kepala', 'pimpinan'];
+    return list.some(a => {
+        const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
+        return adminJabatans.some(role => jabatan.includes(role));
+    });
+}
+
 async function setTeacherInfo() {
     const teacherNameEl = document.getElementById('teacherName');
     const teacherDetailsEl = document.getElementById('teacherDetails');
@@ -190,7 +202,15 @@ async function setTeacherInfo() {
 
             if (teacherNameEl) teacherNameEl.textContent = teacher.nama || user.username || 'Guru';
 
-            const schoolNames = assignments.map(a => a.nama_sekolah || a.tenant_id).join(', ');
+            const seen = new Set();
+            const schoolNames = assignments
+                .map(a => a.nama_sekolah || a.tenant_id)
+                .filter(name => {
+                    if (seen.has(name)) return false;
+                    seen.add(name);
+                    return true;
+                })
+                .join(', ');
             if (teacherDetailsEl) teacherDetailsEl.textContent = `Unit Sekolah: ${schoolNames || 'Tidak ada'}`;
 
             window.userAssignments = assignments;
@@ -220,9 +240,12 @@ async function setTeacherInfo() {
     }
 
     // Render admin nav section untuk semua admin role
-    if (adminSection && window.userRole === 'admin') {
-        adminSection.classList.remove('hidden');
+    const isAdmin = userHasAdminRole(window.userAssignments || []);
+    if (adminSection && isAdmin) {
+        adminSection.style.display = 'flex';
         let htmlContent = '';
+
+        htmlContent += `<button onclick="showAdminUnitModal(window.userAssignments || [])" style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.3rem 0.75rem;background:#2563eb;color:white;border-radius:0.5rem;font-size:0.8rem;font-weight:600;border:none;cursor:pointer;"><span class="fas fa-school mr-1"></span> Admin Unit</button>`;
 
         if (canApproveIzin(window.userAssignments || [])) {
             htmlContent += `<button onclick="openApprovalIzinModal()" style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.3rem 0.75rem;background:#7c3aed;color:white;border-radius:0.5rem;font-size:0.8rem;font-weight:600;border:none;cursor:pointer;"><span class="fas fa-user-check mr-1"></span> Approval Izin</button>`;
@@ -1252,7 +1275,7 @@ function startLocationWatcher() {
 
 async function recordAttendance(jenis) {
     if (!currentLocation) { alert('Lokasi belum didapatkan.'); return; }
-    showAttendanceLoading();
+    hideAttendanceLoading();
 
     const checkInBtn = document.getElementById('checkInBtn');
     const checkOutBtn = document.getElementById('checkOutBtn');
@@ -1262,7 +1285,12 @@ async function recordAttendance(jenis) {
 
     try {
         const radiusCheck = await validateLocationRadius(currentLocation.latitude, currentLocation.longitude);
-        if (!radiusCheck.withinRadius && !radiusCheck.isDinasLuarAllowed) {
+        if (!radiusCheck.withinRadius) {
+            const dinasCheck = await checkDinasLuar(currentLocation.latitude, currentLocation.longitude);
+            if (dinasCheck && dinasCheck.canDinasLuar) {
+                showDinasLuarModal(jenis, dinasCheck);
+                return;
+            }
             alert(`Anda di luar radius: ${radiusCheck.schoolName}. Pilih "Ajukan Izin" untuk absen dinas luar.`);
             return;
         }
@@ -1340,6 +1368,9 @@ async function recordAttendance(jenis) {
             return;
         }
 
+        // Show quotes modal with dalil sebagai loading indicator
+        showAbsenQuotesModal();
+
         console.log('[DEBUG_ATTENDANCE] Sending attendance with tenant_id:', window.currentNearestTenantId || window.currentRulesTenantId || window.userAssignments?.[0]?.tenant_id);
         console.log('[DEBUG_ATTENDANCE] formData tenant_id:', formData.get('tenant_id'));
         const response = await fetch('/api/attendance', {
@@ -1356,35 +1387,29 @@ async function recordAttendance(jenis) {
         await loadRecentAttendance();
         loadTodaySummary();
 
-        requestAnimationFrame(async () => {
-            if (result.success) {
-                await new Promise(r => setTimeout(r, 100));
-                Swal.fire({
-                    title: 'Berhasil',
-                    text: result.message,
-                    icon: 'success',
-                    confirmButtonColor: '#066e3a'
-                });
-            } else {
-                Swal.fire({
-                    title: 'Gagal',
-                    text: result.message,
-                    icon: 'error',
-                    confirmButtonColor: '#dc2626'
-                });
-            }
-        });
+        if (result.success) {
+            showAbsenQuotesSuccess();
+        } else {
+            const modal = document.getElementById('absenQuotesModal');
+            if (modal) modal.style.display = 'none';
+            Swal.fire({
+                title: 'Gagal',
+                text: result.message,
+                icon: 'error',
+                confirmButtonColor: '#dc2626'
+            });
+        }
     } catch (error) {
         console.error('Submit error:', error);
         loadTodaySummary();
         loadRecentAttendance();
-        requestAnimationFrame(() => {
-            Swal.fire({
-                title: 'Error',
-                text: 'Terjadi kesalahan jaringan',
-                icon: 'error',
-                confirmButtonColor: '#dc2626'
-            });
+        const modal = document.getElementById('absenQuotesModal');
+        if (modal) modal.style.display = 'none';
+        Swal.fire({
+            title: 'Error',
+            text: 'Terjadi kesalahan jaringan',
+            icon: 'error',
+            confirmButtonColor: '#dc2626'
         });
     } finally {
         hideAttendanceLoading();
@@ -2527,10 +2552,7 @@ function setupTreasurerNav() {
         return jabatan === 'bendahara';
     });
 
-    const hasAdminRoles = assignments.some(a => {
-        const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
-        return ['admin', 'operator', 'media', 'tu', 'tatausaha', 'kepala', 'pimpinan'].some(role => jabatan.includes(role));
-    });
+    const hasAdminRoles = userHasAdminRole(assignments);
 
     if (hasBendahara) {
         const isYPWILUTIM = assignments.some(a => a.tenant_id === 'YPWILUTIM');
@@ -3260,6 +3282,70 @@ function downloadProblemQR() {
 }
 
 // ============================================================
+// ABSEN QUOTES MODAL SYSTEM
+// ============================================================
+// Menampilkan kutipan ayat/hadits saat proses absen
+// Setelah berhasil, tampilkan tombol OK untuk reload halaman
+// ============================================================
+
+const ABSEN_QUOTES = [
+    { text: '"Sesungguhnya orang-orang yang bertakwa akan diberi pertimbangan (taqwa) yang lebih lanjut, dan ditambahkan rezeki."', source: 'QS. Shahihah - QS. Ali Imron: 267' },
+    { text: '"Sesuaikanlah diri kamu dengan orang yang tak bertakwa; kemudian engkau akan mendapatkan tempat yang malang (diminati) orang-orang beriman."', source: 'HR. Bukhari' },
+    { text: '"Barangsiapa yang beriman kepada Allah dan hari akhir, maka hendaklah ia mengucapkan yang baik."', source: 'HR. Bukhari/Muslim' },
+    { text: '"Ketahuilah, sesungguhnya orang yang bertakwa adalah orang yang konsisten menyiapkan diri untuk kebaikan."', source: 'HR. Ahmad' },
+    { text: '"Sesungguhnya amat baiknya orang yang bertakwa, dan dianugerahkan pula oleh Allah sesuatu yang terbaik di sampingnya."', source: 'QS. An-Nahl: 97' },
+    { text: '"Sesungguhnya orang-orang yang selalu bersyukur, Kami beri kesempanan yang lebih penuh."', source: 'QS. Fussilat: 39' },
+    { text: '"Barangsiapa yang beriman kepada Allah dan hari akhir, maka hendaklah ia jujur."', source: 'HR. Tirmidzi Hassan' },
+    { text: '"Sesungguhnya orang-orang yang bertakwa (termasuk) orang yang selalu menjaga shalat dan konsisten."', source: 'QS. Al-Maarij: 28-32' },
+    { text: '"Berjualanlah kamu kepada Allah, maka karena (iman kepada) Allah, barang apa yang engkau niatkan itu akan Kami berikan kepadamu."', source: 'HR. Turmudzi' },
+    { text: '"Sesungguhnya yang lebih utama bagimu ialah (menyiapkan) akhirat dari yang sempasti, tetapi jadilah kamu tekun pada dunia (dengan ikhlas)."', source: 'HR. Abu Dawud' }
+];
+
+let currentAbsenQuote = null;
+
+function showAbsenQuotesModal() {
+    const modal = document.getElementById('absenQuotesModal');
+    if (!modal) return;
+    
+    const quotesText = document.getElementById('absenQuotesText');
+    const quotesSource = document.getElementById('absenQuotesSource');
+    const successDiv = document.getElementById('absenQuotesSuccess');
+    
+    currentAbsenQuote = ABSEN_QUOTES[Math.floor(Math.random() * ABSEN_QUOTES.length)];
+    
+    if (quotesText) {
+        quotesText.innerHTML = `<span style="font-style: italic;">${currentAbsenQuote.text}</span>`;
+        quotesText.style.minHeight = '60px';
+    }
+    if (quotesSource && currentAbsenQuote) {
+        quotesSource.textContent = currentAbsenQuote.source;
+    }
+    if (successDiv) successDiv.style.display = 'none';
+    
+    // Show loading content, hide success
+    const quotesContent = document.getElementById('absenQuotesContent');
+    if (quotesContent) quotesContent.style.display = 'flex';
+    
+    modal.style.display = 'flex';
+}
+
+function showAbsenQuotesSuccess() {
+    const modal = document.getElementById('absenQuotesModal');
+    const successDiv = document.getElementById('absenQuotesSuccess');
+    const quotesContent = document.getElementById('absenQuotesContent');
+    const loadingEl = document.getElementById('absenQuotesLoading');
+    
+    if (modal) modal.style.display = 'flex';
+    if (quotesContent) quotesContent.style.display = 'flex';
+    if (loadingEl) loadingEl.style.display = 'none';
+    if (successDiv) successDiv.style.display = 'block';
+}
+
+function confirmAbsenSuccess() {
+    window.location.reload();
+}
+
+// ============================================================
 // PRAYER TIME NOTIFICATION SYSTEM
 // ============================================================
 // Data from Aladhan API using Kemenag (method 20)
@@ -3278,10 +3364,120 @@ const PRAYER_NAMES = {
 };
 
 const PRAYER_ORDER = ['Fajr', 'Sunrise', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
+const PRAYER_DISPLAY = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
+const PRAYER_ICON = {
+    'Fajr': '🌙',
+    'Dhuhr': '☀️',
+    'Asr': '🌤️',
+    'Maghrib': '🌇',
+    'Isha': '🌌'
+};
 
+// Parse prayer time string (handles "04:28" or "04:28 (WITA)")
+function parsePrayerTime(timeStr) {
+    const clean = (timeStr || '').split(' ')[0];
+    const parts = clean.split(':').map(Number);
+    const h = parts[0] || 0;
+    const m = parts[1] || 0;
+    return { h, m, minutes: h * 60 + m };
+}
 let prayerTimesData = null;
+let prayerCachedLocation = null;
 let prayerNotificationShown = {};
 let prayerCheckInterval = null;
+
+// Reverse geocode lat/lng ke nama kabupaten / kecamatan / kota (bukan propinsi)
+async function reverseGeocodeLocation(lat, lng) {
+    try {
+        const cacheKey = `prayer_geo_${lat.toFixed(3)}_${lng.toFixed(3)}`;
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) return cached;
+
+        const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=10`,
+            { headers: { 'Accept-Language': 'id', 'User-Agent': 'YPWI-Dashboard' } }
+        );
+        if (!response.ok) return null;
+
+        const data = await response.json();
+        const addr = data.address || {};
+
+        // Prioritas: kabupaten/kota > kecamatan > desa (bukan propinsi)
+        let name = addr.county || addr.municipality || addr.district || addr.city || addr.town
+            || addr.city_district || addr.suburb || addr.village || null;
+
+        if (!name && data.display_name) {
+            // Fallback: ambil kabupaten dari display_name (format: "Kabupaten X, Provinsi Y, Indonesia")
+            const parts = data.display_name.split(', ');
+            if (parts.length > 1) {
+                name = parts[parts.length - 3] || parts[0];
+            } else {
+                name = data.name || null;
+            }
+        }
+
+        if (name) {
+            localStorage.setItem(cacheKey, name);
+            localStorage.setItem(cacheKey + '_ts', Date.now().toString());
+        }
+        return name;
+    } catch (e) {
+        console.error('Reverse geocode error:', e);
+        return null;
+    }
+}
+
+// Update elemen lokasi di card dan modal dengan nama kabupaten/desa/kota
+async function updatePrayerLocation(lat, lng) {
+    const cardText = document.getElementById('prayerCardLocationText');
+    const modalText = document.getElementById('prayerLocationText');
+
+    if (!lat || !lng) {
+        lat = parseFloat(localStorage.getItem('prayerLat')) || -6.2088;
+        lng = parseFloat(localStorage.getItem('prayerLng')) || 106.8456;
+    }
+
+    if (!prayerCachedLocation) {
+        prayerCachedLocation = await reverseGeocodeLocation(lat, lng);
+    }
+
+    const display = prayerCachedLocation || 'Lokasi tidak tersedia';
+    if (cardText) cardText.textContent = display;
+    if (modalText) modalText.textContent = display;
+}
+
+// Generate HTML untuk 5 waktu shalat (atau semua yang tersedia)
+function renderPrayerTimingsList(timings, currentMinutes) {
+    if (!timings) return '<div style="color:#94a3b8;font-size:0.85rem;">Tidak ada data</div>';
+
+    return PRAYER_DISPLAY.map(prayer => {
+        const timeStr = timings[prayer] || '-';
+        const prayerTime = parsePrayerTime(timeStr);
+        const prayerMinutes = prayerTime.minutes;
+
+        let bgStyle = 'background:#f3f4f6;';
+        let textStyle = 'color:#64748b;';
+
+        if (timings[prayer] && currentMinutes >= prayerMinutes && currentMinutes < prayerMinutes + 30) {
+            bgStyle = 'background:#dcfce7;';
+            textStyle = 'color:#15803d;';
+        } else if (timings[prayer] && currentMinutes < prayerMinutes) {
+            bgStyle = 'background:#eff6ff;';
+            textStyle = 'color:#2563eb;';
+        } else if (timings[prayer] && currentMinutes >= prayerMinutes + 30) {
+            bgStyle = 'background:#e5e7eb;';
+            textStyle = 'color:#9ca3af;';
+        }
+
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:0.4rem 0.5rem;border-radius:0.4rem;font-size:0.82rem;${bgStyle}">
+            <span style="display:flex;align-items:center;gap:0.4rem;">
+                <span style="font-size:1rem;">${PRAYER_ICON[prayer] || '🕌'}</span>
+                <span style="font-weight:600;${textStyle}">${PRAYER_NAMES[prayer]}</span>
+            </span>
+            <span style="${textStyle};font-family:monospace;font-weight:700;font-variant-numeric:tabular-nums;">${timeStr}</span>
+        </div>`;
+    }).join('');
+}
 let currentPrayerLocationKey = null;
 
 let prayerWatchId = null;
@@ -3385,7 +3581,7 @@ async function loadPrayerTimesForLocation(lat, lng) {
 async function fetchMonthlyPrayerTimes(lat, lng, month, year, locationKey) {
     const currentNow = new Date();
     try {
-        const url = `https://api.aladhan.com/v1/calendar/${month}/${year}?latitude=${lat}&longitude=${lng}&method=20`;
+        const url = `https://api.aladhan.com/v1/calendar?latitude=${lat}&longitude=${lng}&month=${month}&year=${year}&method=20`;
         console.log('Fetching prayer times from:', url);
         
         const response = await fetch(url);
@@ -3431,6 +3627,7 @@ async function fetchMonthlyPrayerTimes(lat, lng, month, year, locationKey) {
                     hijri: todayData.date.hijri
                 };
                 console.log('prayerTimesData set:', !!prayerTimesData);
+                updatePrayerLocation(lat, lng);
             } else {
                 console.log('Today not found in data, available days:', data.data.map(d => d.date.gregorian.day).slice(0, 5));
             }
@@ -3462,6 +3659,12 @@ function loadCachedPrayerTimes(now) {
                 timings: todayData.timings,
                 hijri: todayData.date.hijri
             };
+        }
+        if (prayerTimesData) {
+            updatePrayerLocation(
+                parseFloat(localStorage.getItem('prayerLat')) || -6.2088,
+                parseFloat(localStorage.getItem('prayerLng')) || 106.8456
+            );
         }
     } catch (e) {
         console.error('Failed to load cached prayer times:', e);
@@ -3495,6 +3698,7 @@ async function fetchPrayerTimes(lat, lng) {
                 timings: data.data.timings,
                 hijri: data.data.date.hijri
             };
+            updatePrayerLocation(lat, lng);
         }
     } catch (e) {
         console.error('Failed to fetch prayer times:', e);
@@ -3508,10 +3712,11 @@ function startPrayerCheck() {
     prayerCheckInterval = setInterval(() => {
         checkPrayerTimes();
         updatePrayerCard();
+        updatePrayerTimingsList();
     }, 30000);
     
     // Update countdown every minute
-    setInterval(updatePrayerCard, 60000);
+    setInterval(() => { updatePrayerCard(); updatePrayerTimingsList(); }, 60000);
     
     // Refresh data at midnight for new day
     const now = new Date();
@@ -3565,8 +3770,7 @@ function checkPrayerTimes() {
     console.log('Checking prayer times at', now.toLocaleTimeString(), '- current minutes:', currentTime);
 
     PRAYER_ORDER.forEach(prayer => {
-        const [hours, minutes] = timings[prayer].split(':').map(Number);
-        const prayerTime = hours * 60 + minutes;
+        const prayerTime = parsePrayerTime(timings[prayer]).minutes;
         const prayerId = `${prayerTimesData.date.gregorian.date}-${prayer}`;
         
         console.log(`Prayer ${prayer}: ${timings[prayer]} (${prayerTime} min) - window: ${prayerTime-5} to ${prayerTime+30}`);
@@ -3609,8 +3813,8 @@ function showPrayerNotification(prayer, time) {
     // In-app modal
     showPrayerModal(prayer, time);
     
-    // Sound
-    playAdzanTone();
+    // Sound - play real adzan audio (Subuh vs non-Subuh)
+    playAdzanTone(prayer);
 }
 
 function showPrayerModal(prayer, time) {
@@ -3632,7 +3836,22 @@ function showPrayerModal(prayer, time) {
     document.getElementById('prayerDate').textContent = prayerTimesData?.hijri?.date 
         ? `${prayerTimesData.hijri.day} ${prayerTimesData.hijri.month.en} ${prayerTimesData.hijri.year} H` 
         : '';
-    
+
+    // Populate all 5 prayer times in modal
+    const timingsList = document.getElementById('prayerTimingsList');
+    const allTimings = document.getElementById('prayerAllTimings');
+    if (timingsList && prayerTimesData?.timings) {
+        const now = new Date();
+        const currentMinutes = now.getHours() * 60 + now.getMinutes();
+        timingsList.innerHTML = renderPrayerTimingsList(prayerTimesData.timings, currentMinutes);
+        if (allTimings) allTimings.style.display = 'block';
+    }
+
+    // Update location in modal
+    const lat = parseFloat(localStorage.getItem('prayerLat')) || -6.2088;
+    const lng = parseFloat(localStorage.getItem('prayerLng')) || 106.8456;
+    updatePrayerLocation(lat, lng);
+
     modal.style.display = 'flex';
     
     // Auto close after 5 minutes
@@ -3646,85 +3865,192 @@ function updatePrayerCard() {
     const cardName = document.getElementById('prayerCardName');
     const cardCountdown = document.getElementById('prayerCardCountdown');
     if (!cardName || !cardCountdown) return;
-    
+
     console.log('updatePrayerCard called, prayerTimesData:', prayerTimesData ? 'has data' : 'no data');
-    
+
     if (!prayerTimesData || !prayerTimesData.timings) {
         cardName.textContent = 'Tidak tersedia';
         cardCountdown.textContent = '--:--';
         return;
     }
-    
+
     const now = new Date();
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
     const timings = prayerTimesData.timings;
-    
-    // Find next prayer
-    let nextPrayer = null;
-    let nextPrayerMinutes = Infinity;
-    
-    for (const prayer of PRAYER_ORDER) {
-        const [h, m] = timings[prayer].split(':').map(Number);
-        const prayerMinutes = h * 60 + m;
-        
-        if (prayerMinutes > currentMinutes && prayerMinutes < nextPrayerMinutes) {
-            nextPrayer = prayer;
-            nextPrayerMinutes = prayerMinutes;
+    const PRAYER_WINDOW = 20; // 20 menit jeda "sedang berlangsung"
+
+    // Cek apakah ada waktu shalat sedang berlangsung (dalam 20 menit terakhir)
+    let currentPrayer = null;
+    let currentPrayerMinutes = null;
+    for (const prayer of PRAYER_DISPLAY) {
+        const prayerMinutes = parsePrayerTime(timings[prayer]).minutes;
+        if (currentMinutes >= prayerMinutes && currentMinutes < prayerMinutes + PRAYER_WINDOW) {
+            currentPrayer = prayer;
+            currentPrayerMinutes = prayerMinutes;
+            break;
         }
     }
-    
-    // If no prayer found today, show Fajr for tomorrow
-    if (!nextPrayer) {
-        nextPrayer = 'Fajr';
-        const [h, m] = timings['Fajr'].split(':').map(Number);
-        nextPrayerMinutes = (24 * 60) + (h * 60 + m);
+
+    let displayPrayer = currentPrayer;
+    let displayPrayerMinutes = currentPrayerMinutes;
+    let isCurrent = !!currentPrayer;
+
+    // Jika tidak sedang berlangsung, cari yang akan datang
+    if (!currentPrayer) {
+        let nextPrayer = null;
+        let nextPrayerMinutes = Infinity;
+
+        for (const prayer of PRAYER_ORDER) {
+            const prayerMinutes = parsePrayerTime(timings[prayer]).minutes;
+            if (prayerMinutes > currentMinutes && prayerMinutes < nextPrayerMinutes) {
+                nextPrayer = prayer;
+                nextPrayerMinutes = prayerMinutes;
+            }
+        }
+
+        // Jika tidak ada yang akan datang hari ini, pakai Fajr besok
+        if (!nextPrayer) {
+            nextPrayer = 'Fajr';
+            nextPrayerMinutes = (24 * 60) + parsePrayerTime(timings['Fajr']).minutes;
+        }
+
+        displayPrayer = nextPrayer;
+        displayPrayerMinutes = nextPrayerMinutes;
     }
-    
-    const diffMinutes = nextPrayerMinutes - currentMinutes;
+
+    const diffMinutes = displayPrayerMinutes - currentMinutes;
     const hoursLeft = Math.floor(diffMinutes / 60);
     const minsLeft = diffMinutes % 60;
-    
-    cardName.textContent = PRAYER_NAMES[nextPrayer] || nextPrayer;
-    
-    if (hoursLeft > 0) {
+
+    // Waktu jadwal shalat (strip timezone suffix)
+    const prayerTimeStr = (timings[displayPrayer] || '-').split(' ')[0];
+
+    cardName.textContent = isCurrent
+        ? `🕐 ${PRAYER_NAMES[displayPrayer]} · ${prayerTimeStr}`
+        : `${PRAYER_NAMES[displayPrayer]} · ${prayerTimeStr}`;
+
+    if (isCurrent) {
+        cardCountdown.textContent = `Berlangsung (${minsLeft} menit lagi)`;
+    } else if (hoursLeft > 0) {
         cardCountdown.textContent = `${hoursLeft}j ${minsLeft}m`;
     } else {
         cardCountdown.textContent = `${minsLeft} menit`;
     }
-    
-    // Pulse animation when <= 5 minutes
+
+    // Update location (kabupaten / desa / kota)
+    const lat = parseFloat(localStorage.getItem('prayerLat')) || -6.2088;
+    const lng = parseFloat(localStorage.getItem('prayerLng')) || 106.8456;
+    if (!prayerCachedLocation) {
+        updatePrayerLocation(lat, lng);
+    } else {
+        const cardText = document.getElementById('prayerCardLocationText');
+        const modalText = document.getElementById('prayerLocationText');
+        if (cardText) cardText.textContent = prayerCachedLocation;
+        if (modalText) modalText.textContent = prayerCachedLocation;
+    }
+
+    // Pulse animation when <= 5 minutes atau sedang berlangsung
     const card = document.getElementById('prayerTimeCard');
-    if (card && diffMinutes <= 5) {
+    if (card && (diffMinutes <= 5 || isCurrent)) {
         card.style.animation = 'prayerPulse 1s infinite';
     } else if (card) {
         card.style.animation = 'none';
     }
 }
 
-function playAdzanTone() {
+let prayerAudioContext = null;
+let adzanAudioSubuh = null;
+let adzanAudioGeneral = null;
+
+// Preload audio elemen adzan (Subuh & umum)
+function initPrayerAudio() {
+    if (prayerAudioContext) return prayerAudioContext;
     try {
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const now = audioCtx.currentTime;
-        
-        // Simple adzan-like tone pattern
-        const notes = [
-            { freq: 660, start: 0, duration: 0.4 },
-            { freq: 660, start: 0.5, duration: 0.4 },
-            { freq: 660, start: 1.0, duration: 0.8 },
-            { freq: 523, start: 1.9, duration: 0.4 },
-            { freq: 660, start: 2.4, duration: 0.8 },
-            { freq: 784, start: 3.3, duration: 0.6 },
-            { freq: 660, start: 4.0, duration: 0.8 },
-            { freq: 523, start: 4.9, duration: 0.4 },
-            { freq: 587, start: 5.4, duration: 0.4 },
-            { freq: 659, start: 5.9, duration: 1.2 }
-        ];
-        
+        prayerAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+    } catch (e) {
+        console.warn('AudioContext not available:', e);
+    }
+
+    try {
+        adzanAudioSubuh = new Audio('assets/audio/Adzan-Shubuh-Abu-Hazim.mp3');
+        adzanAudioSubuh.preload = 'auto';
+    } catch (e) { console.warn('Subuh adzan preload failed:', e); }
+
+    try {
+        adzanAudioGeneral = new Audio('assets/audio/Adzan-Misyari-Rasyid.mp3');
+        adzanAudioGeneral.preload = 'auto';
+    } catch (e) { console.warn('General adzan preload failed:', e); }
+
+    return prayerAudioContext;
+}
+
+['touchstart', 'mousedown', 'click', 'keydown'].forEach(evt => {
+    document.addEventListener(evt, function handler() {
+        initPrayerAudio();
+        document.removeEventListener(evt, handler);
+    });
+});
+
+// Main: play real adzan audio file (Subuh vs non-Subuh)
+// prayer param: 'Fajr' = Subuh (pakai Adzan-Shubuh), yang lain pake Adzan-Misyari
+function playAdzanTone(prayer) {
+    const isFajr = prayer === 'Fajr';
+    const audio = isFajr ? adzanAudioSubuh : adzanAudioGeneral;
+
+    if (audio && typeof audio.play === 'function') {
+        audio.currentTime = 0;
+        audio.play().catch(e => {
+            console.warn('Adzan audio play failed, using tone fallback:', e);
+            playAdzanToneFallback(isFajr);
+        });
+        return;
+    }
+
+    // Fallback: generated tone pattern
+    playAdzanToneFallback(isFajr);
+}
+
+// Fallback ton sederhana via Web Audio API
+function playAdzanToneFallback(isFajr) {
+    if (!prayerAudioContext) {
+        var ctx = initPrayerAudio();
+        if (!ctx) return;
+    }
+
+    try {
+        if (prayerAudioContext.state === 'suspended') {
+            prayerAudioContext.resume();
+        }
+
+        const now = prayerAudioContext.currentTime;
+        const notes = isFajr
+            ? [
+                { freq: 784, start: 0, duration: 0.6 },
+                { freq: 784, start: 0.7, duration: 0.6 },
+                { freq: 880, start: 1.4, duration: 0.8 },
+                { freq: 784, start: 2.3, duration: 0.6 },
+                { freq: 660, start: 3.0, duration: 0.6 },
+                { freq: 587, start: 3.7, duration: 0.8 },
+                { freq: 523, start: 4.6, duration: 1.0 }
+            ]
+            : [
+                { freq: 660, start: 0, duration: 0.4 },
+                { freq: 660, start: 0.5, duration: 0.4 },
+                { freq: 660, start: 1.0, duration: 0.8 },
+                { freq: 523, start: 1.9, duration: 0.4 },
+                { freq: 660, start: 2.4, duration: 0.8 },
+                { freq: 784, start: 3.3, duration: 0.6 },
+                { freq: 660, start: 4.0, duration: 0.8 },
+                { freq: 523, start: 4.9, duration: 0.4 },
+                { freq: 587, start: 5.4, duration: 0.4 },
+                { freq: 659, start: 5.9, duration: 1.2 }
+            ];
+
         notes.forEach(note => {
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
+            const osc = prayerAudioContext.createOscillator();
+            const gain = prayerAudioContext.createGain();
             osc.connect(gain);
-            gain.connect(audioCtx.destination);
+            gain.connect(prayerAudioContext.destination);
             osc.frequency.value = note.freq;
             osc.type = 'sine';
             gain.gain.setValueAtTime(0.15, now + note.start);
@@ -3732,10 +4058,6 @@ function playAdzanTone() {
             osc.start(now + note.start);
             osc.stop(now + note.start + note.duration);
         });
-        
-        setTimeout(() => {
-            audioCtx.close().catch(() => {});
-        }, 8000);
     } catch (e) {
         console.error('Audio play failed:', e);
     }
@@ -3747,8 +4069,49 @@ function openPrayerModal() {
         console.error('Prayer modal not found');
         return;
     }
+
+    // Show current/next prayer header in modal
+    if (prayerTimesData && prayerTimesData.timings) {
+        const now = new Date();
+        const currentMinutes = now.getHours() * 60 + now.getMinutes();
+        let nextPrayer = null;
+        let nextPrayerMinutes = Infinity;
+
+        for (const prayer of PRAYER_ORDER) {
+            const prayerMinutes = parsePrayerTime(prayerTimesData.timings[prayer]).minutes;
+            if (prayerMinutes > currentMinutes && prayerMinutes < nextPrayerMinutes) {
+                nextPrayer = prayer;
+                nextPrayerMinutes = prayerMinutes;
+            }
+        }
+
+        if (!nextPrayer) {
+            nextPrayer = 'Fajr';
+        }
+
+        const icons = {
+            Fajr: '🌙', Dhuhr: '☀️', Asr: '🌤️', Maghrib: '🌇', Isha: '🌌'
+        };
+        document.getElementById('prayerIcon').textContent = icons[nextPrayer] || '🕌';
+        document.getElementById('prayerName').textContent = PRAYER_NAMES[nextPrayer] || nextPrayer;
+        document.getElementById('prayerTime').textContent = prayerTimesData.timings[nextPrayer] || '-';
+        document.getElementById('prayerDate').textContent = prayerTimesData?.hijri?.date
+            ? `${prayerTimesData.hijri.day} ${prayerTimesData.hijri.month.en} ${prayerTimesData.hijri.year} H`
+            : '';
+
+        const timingsList = document.getElementById('prayerTimingsList');
+        const allTimings = document.getElementById('prayerAllTimings');
+        if (timingsList) {
+            timingsList.innerHTML = renderPrayerTimingsList(prayerTimesData.timings, currentMinutes);
+            if (allTimings) allTimings.style.display = 'block';
+        }
+
+        const lat = parseFloat(localStorage.getItem('prayerLat')) || -6.2088;
+        const lng = parseFloat(localStorage.getItem('prayerLng')) || 106.8456;
+        updatePrayerLocation(lat, lng);
+    }
+
     modal.style.display = 'flex';
-    updatePrayerCard();
 }
 
 function closePrayerModal() {
@@ -3756,12 +4119,30 @@ function closePrayerModal() {
     if (modal) modal.style.display = 'none';
 }
 
+// Update prayer timings list in modal (jika sedang terbuka)
+function updatePrayerTimingsList() {
+    const allTimings = document.getElementById('prayerAllTimings');
+    const modal = document.getElementById('prayerTimeModal');
+    if (!allTimings || !modal || modal.style.display !== 'flex') return;
+
+    if (prayerTimesData && prayerTimesData.timings) {
+        const now = new Date();
+        const currentMinutes = now.getHours() * 60 + now.getMinutes();
+        const listEl = document.getElementById('prayerTimingsList');
+        if (listEl) {
+            listEl.innerHTML = renderPrayerTimingsList(prayerTimesData.timings, currentMinutes);
+        }
+    }
+}
+
 async function refreshPrayerLocation() {
     try {
         const position = await getUserLocation();
         await loadPrayerTimesForLocation(position.coords.latitude, position.coords.longitude);
-        
-        // Show success feedback
+        prayerCachedLocation = null;
+        await updatePrayerLocation(position.coords.latitude, position.coords.longitude);
+        updatePrayerCard();
+
         if (typeof Swal !== 'undefined') {
             Swal.fire({
                 icon: 'success',

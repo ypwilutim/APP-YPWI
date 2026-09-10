@@ -51,11 +51,11 @@ let logoBuf = null;
 function loadLogo() {
   if (logoBuf) return logoBuf;
   const candidates = [
+    'public/assets/images/icon.png',
     'public/assets/images/YPWI LOGO FULL COLOR.png',
     'public/assets/images/YPWI LOGO HITAM.png',
     'public/assets/images/header-yayasan.png',
     'public/assets/images/header-yayasan-landscape.png',
-    'public/assets/images/icon.png',
     'public/images/header-yayasan.png',
     'public/logo.png'
   ];
@@ -68,8 +68,35 @@ function loadLogo() {
   return null;
 }
 
+let bgBuf = null;
+function loadBackground() {
+  if (bgBuf) return bgBuf;
+  const candidates = [
+    'public/assets/images/background_idcard.png',
+    'public/assets/images/background_idcard.jfif',
+    'public/assets/images/background_idcard.jpg'
+  ];
+  for (const c of candidates) {
+    try {
+      const full = path.isAbsolute(c) ? c : path.join(__dirname, '../../', c);
+      if (fs.existsSync(full)) { 
+        bgBuf = fs.readFileSync(full); 
+        console.log('Background loaded:', full, 'size:', bgBuf.length);
+        return bgBuf; 
+      }
+    } catch (e) { 
+      console.error('Background load error:', e); 
+    }
+  }
+  console.warn('Background not found, using fallback');
+  return null;
+}
+
 const GREEN = '#066e3a';
 const GREEN_DARK = '#044e24';
+const GOLD = '#c5a24e';
+const GOLD_LIGHT = '#f3e6c5';
+const CREAM = '#faf8f3';
 
 router.get('/teachers', authenticateOperator, async (req, res) => {
   try {
@@ -260,88 +287,123 @@ router.get('/students/:id/qr', async (req, res) => {
 function drawCard(doc, ox, oy, teacher, qrBuf, photoBuf, single) {
   const cw = CARD_W;
   const ch = CARD_H;
-  const pad = 10;
+  const pad = 17;
   const logo = loadLogo();
+  const bg = loadBackground();
 
   doc.save();
 
-  doc.roundedRect(ox, oy, cw, ch, 6).lineWidth(0.6).stroke('#cbd5e1');
-  doc.roundedRect(ox, oy, cw, 18, 6).fill(GREEN);
-
-  let curY = oy + 5;
-
-  if (logo) {
-    const logoW = 32;
-    const logoX = ox + (cw - logoW) / 2;
-    try {
-      doc.image(logo, logoX, curY, { width: logoW, height: 12, fit: [logoW, 12] });
-    } catch (e) {
-      doc.rect(logoX, curY, logoW, 12).fill('#e5e7eb');
-    }
-    curY += 14;
+  if (bg) {
+    doc.image(bg, ox, oy, { fit: [cw, ch] });
   }
 
-  doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(10.5)
-    .text('YPWI LUTIM', ox + pad, curY, { width: cw - 2 * pad, align: 'center' });
-  curY += 13;
+  doc.roundedRect(ox, oy, cw, ch, 6).fillOpacity(0.18).fill('#ffffff');
 
-  const photoW = 50;
-  const photoH = 66;
-  const photoX = ox + (cw - photoW) / 2;
-  const photoY = curY;
+  doc.roundedRect(ox, oy, cw, ch, 6).lineWidth(0.7).stroke(GOLD);
+
+  const headerTop = oy + 14;
+  const logoSize = 40;
+  if (logo) {
+    try {
+      doc.image(logo, ox + pad, headerTop, { width: logoSize, height: logoSize, fit: [logoSize, logoSize] });
+    } catch (e) {
+      doc.rect(ox + pad, headerTop, logoSize, logoSize).fill('#e5e7eb');
+    }
+  }
+
+  const sekolah = (teacher.nama_sekolah || '').split('; ')[0] || '';
+  if (sekolah) {
+    const schoolX = ox + pad + logoSize + 5;
+    const schoolW = cw - pad - logoSize - 5 - pad;
+    doc.fillColor(GREEN_DARK).font('Helvetica-Bold').fontSize(7)
+      .text(sekolah, schoolX, headerTop + 4, { width: schoolW, align: 'left' });
+  }
+
+  const titleY = headerTop + logoSize + 3;
+  doc.fillColor(GREEN).font('Helvetica-Bold').fontSize(8)
+    .text('KARTU IDENTITAS GURU', ox + pad, titleY, { width: cw - 2 * pad, align: 'center' });
+
+  const lineY = titleY + 10;
+  doc.moveTo(ox + pad, lineY).lineTo(ox + cw - pad, lineY).stroke(GOLD);
+
+  const photoW = 62;
+  const photoH = 85;
+  const photoX = ox + pad;
+  const photoY = lineY + 8;
+
+  doc.roundedRect(photoX - 1, photoY - 1, photoW + 2, photoH + 2, 3).lineWidth(0.7).stroke(GOLD);
   doc.save();
-  doc.roundedRect(photoX, photoY, photoW, photoH, 4).clip();
+  doc.roundedRect(photoX, photoY, photoW, photoH, 2).clip();
   if (photoBuf) {
     doc.image(photoBuf, photoX, photoY, { width: photoW, height: photoH, fit: [photoW, photoH] });
   } else {
-    doc.rect(photoX, photoY, photoW, photoH).fill('#e5e7eb');
-    doc.fillColor('#9ca3af').font('Helvetica').fontSize(6).text('FOTO', photoX, photoY + photoH / 2 - 3, { width: photoW, align: 'center' });
+    doc.rect(photoX, photoY, photoW, photoH).fill('#f3f4f6');
   }
   doc.restore();
-  doc.roundedRect(photoX, photoY, photoW, photoH, 4).lineWidth(1).stroke('#4ade80');
-  curY = photoY + photoH + 14;
 
-  doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(13)
-    .text(teacher.nama || 'Guru', ox + pad, curY, { width: cw - 2 * pad, align: 'center' });
-  curY += 16;
+  const textX = photoX + photoW + 6;
+  const textW = cw - pad - (textX - ox);
+  let curTextY = photoY;
 
-  doc.fillColor('#4b5563').font('Helvetica').fontSize(8)
-    .text(teacher.scan_id || teacher.id || '', ox + pad, curY, { width: cw - 2 * pad, align: 'center' });
-  curY += 12;
+  doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(7)
+    .text(teacher.nama || 'Guru', textX, curTextY, { width: textW, align: 'left' });
+  curTextY += 9;
 
-  const jabatan = teacher.jabatan_di_unit || '-';
-  const badgeW = cw - 2 * pad;
-  const badgeH = doc.heightOfString(jabatan, { width: badgeW - 6, font: 'Helvetica-Bold', fontSize: 8 });
-  const badgePad = 4;
-  const badgeTotalH = Math.max(badgeH + badgePad * 2, 14);
-  const badgeY = curY;
-  doc.roundedRect(ox + pad, badgeY, badgeW, badgeTotalH, badgeTotalH / 2)
-    .fill(GREEN).fillOpacity(0.1).stroke(GREEN).lineWidth(0.5);
-  doc.save();
-  doc.roundedRect(ox + pad, badgeY, badgeW, badgeTotalH, badgeTotalH / 2).clip();
-  doc.fillColor(GREEN_DARK).font('Helvetica-Bold').fontSize(8)
-    .text(jabatan, ox + pad + badgePad, badgeY + (badgeTotalH - badgeH) / 2, { width: badgeW - badgePad * 2 });
-  doc.restore();
-  curY = badgeY + badgeTotalH + 6;
+  doc.fillColor('#334155').font('Helvetica-Bold').fontSize(6)
+    .text(teacher.jabatan_di_unit || '-', textX, curTextY, { width: textW, align: 'left' });
+  curTextY += 8;
 
-  doc.moveTo(ox + pad, oy + ch - 72).lineTo(ox + cw - pad, oy + ch - 72).stroke('#e5e7eb');
+  doc.fillColor('#475569').font('Helvetica').fontSize(6)
+    .text(`NIK: ${teacher.nik || '-'}`, textX, curTextY, { width: textW, align: 'left' });
+  curTextY += 7;
 
-  const qrSize = 50;
-  const boxPad = 6;
-  const qrX = ox + (cw - qrSize) / 2;
-  const qrY = oy + ch - pad - qrSize - 14;
-  doc.roundedRect(qrX - boxPad, qrY - boxPad, qrSize + boxPad * 2, qrSize + boxPad * 2, 4)
-    .fill('#ffffff').stroke('#e5e7eb').lineWidth(0.6);
+  doc.fillColor('#475569').font('Helvetica').fontSize(6)
+    .text(`Mata Pelajaran: ${teacher.jabatan_di_unit || '-'}`, textX, curTextY, { width: textW, align: 'left' });
+  curTextY += 7;
+
+  const berlaku = teacher.tmt ? new Date(teacher.tmt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-';
+  doc.fillColor('#475569').font('Helvetica').fontSize(6)
+    .text(`Berlaku s.d: ${berlaku}`, textX, curTextY, { width: textW, align: 'left' });
+
+  const photoBottom = photoY + photoH;
+  const statusY = photoBottom + 5;
+  const statusText = (teacher.status_kepegawaian || '').toUpperCase();
+  doc.fillColor(GREEN).font('Helvetica-Bold').fontSize(7)
+    .text(statusText || 'GURU', ox + pad, statusY, { width: cw - 2 * pad, align: 'center' });
+
+  const sloganY = statusY + 10;
+  doc.fillColor('#64748b').font('Helvetica-Oblique').fontSize(5.5)
+    .text('Mengajar, membentuk, dan mencetak generasi berakhlak', ox + pad, sloganY, { width: cw - 2 * pad, align: 'center' });
+
+  const schoolY = sloganY + 9;
+  if (sekolah) {
+    doc.fillColor(GREEN_DARK).font('Helvetica-Bold').fontSize(6)
+      .text(sekolah, ox + pad, schoolY, { width: cw - 2 * pad, align: 'center' });
+  }
+
+  const qrSize = 40;
+  const qrX = ox + cw - pad - qrSize;
+  const qrY = oy + ch - pad - qrSize - 3;
+
+  doc.fillColor(GREEN);
+  doc.rect(qrX - 3, qrY - 3, qrSize + 6, qrSize + 6, 3).fill();
+  doc.roundedRect(qrX - 2, qrY - 2, qrSize + 4, qrSize + 4, 3)
+    .fill('#ffffff').stroke(GOLD).lineWidth(0.8);
+
   if (qrBuf) {
     doc.image(qrBuf, qrX, qrY, { width: qrSize, height: qrSize });
   } else {
     doc.rect(qrX, qrY, qrSize, qrSize).fill('#f3f4f6');
   }
-  doc.fillColor('#475569').font('Helvetica').fontSize(6)
-    .text(`Scan ID: ${teacher.scan_id || teacher.id || ''}`, ox + pad, qrY + qrSize + 4, { width: cw - 2 * pad, align: 'center' });
 
-  doc.fillColor('#9ca3af').font('Helvetica-Oblique').fontSize(6)
-    .text('YAYASAN PENDIDIKAN WIYATA LUTIM', ox + pad, oy + ch - 6);
+  doc.fillColor(GREEN_DARK).font('Helvetica-Bold').fontSize(5)
+    .text('Scan ID', qrX, qrY - 5, { width: qrSize, align: 'center' });
+
+  const alamat = teacher.alamat || '';
+  if (alamat) {
+    doc.fillColor('#94a3b8').font('Helvetica').fontSize(5)
+      .text(alamat, ox + pad, oy + ch - 8, { width: cw - 2 * pad, align: 'center' });
+  }
 
   doc.restore();
 }
@@ -350,7 +412,7 @@ function buildTeacherQuery(opts) {
   const { tenantId, teacherId, ids, limit = 200 } = opts;
   let q = `
     SELECT t.id, t.nama, t.nik, t.nip, t.no_wa, t.email, t.link_foto, t.scan_id,
-           t.tempat_lahir, t.tanggal_lahir, t.status_kepegawaian, t.tmt, t.pendidikan_terakhir,
+           t.tempat_lahir, t.tanggal_lahir, t.status_kepegawaian, t.tmt, t.pendidikan_terakhir, t.alamat,
            GROUP_CONCAT(DISTINCT tn.nama_sekolah SEPARATOR '; ') AS nama_sekolah,
            GROUP_CONCAT(DISTINCT ta.jabatan_di_unit SEPARATOR '; ') AS jabatan_di_unit
     FROM teachers t

@@ -599,7 +599,67 @@ CREATE TABLE `payment_transactions` (
 -- --------------------------------------------------------
 
 --
--- Struktur dari tabel `payroll`
+-- Struktur dari tabel `financial_categories`
+--
+
+CREATE TABLE `financial_categories` (
+  `id` int(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `tenant_id` varchar(20) DEFAULT NULL,
+  `jenis` enum('beli','bayar','pemasukan','pengeluaran') NOT NULL DEFAULT 'pengeluaran',
+  `nama` varchar(100) NOT NULL,
+  `urutan` int(11) NOT NULL DEFAULT 0,
+  UNIQUE KEY `uniq_tenant_jenis_nama` (`tenant_id`, `jenis`, `nama`),
+  KEY `idx_tenant` (`tenant_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `financial_transactions`
+--
+
+CREATE TABLE `financial_transactions` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `tenant_id` varchar(20) NOT NULL,
+  `tanggal` date NOT NULL,
+  `jenis` enum('beli','bayar','pemasukan','pengeluaran') NOT NULL,
+  `kategori` varchar(100) NOT NULL,
+  `akun` varchar(100) DEFAULT NULL,
+  `keterangan` text DEFAULT NULL,
+  `nominal` decimal(15,2) NOT NULL DEFAULT 0.00,
+   `no_bukti` varchar(50) DEFAULT NULL,
+   `foto_struk` varchar(255) DEFAULT NULL,
+   `foto_barang` varchar(255) DEFAULT NULL,
+    `status` varchar(20) NOT NULL DEFAULT 'approved',
+   `created_by` varchar(100) DEFAULT NULL,
+   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+   KEY `idx_tenant_tanggal` (`tenant_id`, `tanggal`),
+   KEY `idx_tenant_jenis` (`tenant_id`, `jenis`),
+   KEY `idx_tenant_kategori` (`tenant_id`, `kategori`),
+   KEY `idx_tenant_status` (`tenant_id`, `status`)
+ ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Table structure for table financial_transaction_items
+CREATE TABLE IF NOT EXISTS `financial_transaction_items` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  `transaction_id` bigint(20) NOT NULL,
+  `no_urut` int(11) NOT NULL DEFAULT 1,
+  `nama_barang` varchar(255) NOT NULL,
+  `qty` decimal(12,2) NOT NULL DEFAULT 1,
+  `harga` decimal(12,2) NOT NULL DEFAULT 0,
+  `total` decimal(15,2) NOT NULL DEFAULT 0,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  KEY `idx_transaksi` (`transaction_id`),
+  KEY `idx_transaksi_urut` (`transaction_id`, `no_urut`),
+  CONSTRAINT `fk_ti_transaksi` FOREIGN KEY (`transaction_id`) REFERENCES `financial_transactions` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Data default untuk tabel `financial_categories`
+--
 --
 
 CREATE TABLE `payroll` (

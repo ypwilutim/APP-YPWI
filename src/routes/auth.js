@@ -121,7 +121,7 @@ router.post('/auth/login', async (req, res) => {
       tokenPayload.assignments = [];
     }
 
-    const token = jwt.sign(tokenPayload, SECRET_KEY, { expiresIn: '8h' });
+    const token = jwt.sign(tokenPayload, SECRET_KEY, { expiresIn: '30d' });
 
     // Debug: Log what we're sending to client
     console.log('[LOGIN_DEBUG] Login result:', { role: user.role, isProfileComplete });
@@ -519,7 +519,7 @@ router.post('/parent/login', async (req, res) => {
       timestamp: new Date().toISOString()
     };
 
-    const token = jwt.sign(tokenPayload, SECRET_KEY, { expiresIn: '8h' });
+    const token = jwt.sign(tokenPayload, SECRET_KEY, { expiresIn: '30d' });
 
     // Debug: Log what we're sending to client
     console.log('[PARENT LOGIN DEBUG] Parent login result:', { 

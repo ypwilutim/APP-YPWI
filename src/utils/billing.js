@@ -210,7 +210,110 @@ async function ensureBillingTables() {
       CONSTRAINT fk_alloc_billing FOREIGN KEY (billing_id) REFERENCES billing_payment(id) ON DELETE CASCADE,
       CONSTRAINT fk_alloc_incoming FOREIGN KEY (incoming_payment_id) REFERENCES incoming_payments(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `   );
+
+  // Financial transactions (jurnal umum / buku besar)
+   await db.query(`
+     CREATE TABLE IF NOT EXISTS financial_transactions (
+       id BIGINT(20) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+       tenant_id VARCHAR(20) NOT NULL,
+       tanggal DATE NOT NULL,
+       jenis ENUM('beli', 'bayar', 'pemasukan', 'pengeluaran') NOT NULL,
+       kategori VARCHAR(100) NOT NULL,
+       akun VARCHAR(100) DEFAULT NULL,
+       keterangan TEXT DEFAULT NULL,
+       nominal DECIMAL(15,2) NOT NULL DEFAULT 0,
+       no_bukti VARCHAR(50) DEFAULT NULL,
+       foto_struk VARCHAR(255) DEFAULT NULL,
+       foto_barang VARCHAR(255) DEFAULT NULL,
+       status ENUM('approved', 'pending') NOT NULL DEFAULT 'approved',
+       created_by VARCHAR(100) DEFAULT NULL,
+       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+       KEY idx_tenant_tanggal (tenant_id, tanggal),
+       KEY idx_tenant_jenis (tenant_id, jenis),
+       KEY idx_tenant_kategori (tenant_id, kategori),
+       KEY idx_tenant_status (tenant_id, status)
+     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+   `);
+
+   // Migration: add new columns jika belum ada (untuk hosting yang sudah ada tabelnya)
+   try {
+     await db.query(`ALTER TABLE financial_transactions ADD COLUMN IF NOT EXISTS foto_struk VARCHAR(255) DEFAULT NULL AFTER no_bukti`);
+    try {
+      await db.query(`ALTER TABLE financial_transactions ADD COLUMN IF NOT EXISTS foto_barang VARCHAR(255) DEFAULT NULL AFTER foto_struk`);
+      try { await db.query(`ALTER TABLE financial_transactions MODIFY COLUMN status VARCHAR(20) NOT NULL DEFAULT 'approved'`); } catch(e2) { await db.query(`ALTER TABLE financial_transactions ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'approved' AFTER foto_barang`); }
+      await db.query(`ALTER TABLE financial_transactions ADD INDEX IF NOT EXISTS idx_tenant_status (tenant_id, status)`);
+    } catch (e) {
+      // Columns might already exist
+    }
+   } catch (e) {
+     // Columns might already exist
+   }
+
+   // Transaction items table (untuk itemized receipt)
+   await db.query(`
+     CREATE TABLE IF NOT EXISTS financial_transaction_items (
+       id BIGINT(20) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+       transaction_id BIGINT(20) NOT NULL,
+       no_urut INT(11) NOT NULL DEFAULT 1,
+       nama_barang VARCHAR(255) NOT NULL,
+       qty DECIMAL(12,2) NOT NULL DEFAULT 1,
+       harga DECIMAL(12,2) NOT NULL DEFAULT 0,
+       total DECIMAL(15,2) NOT NULL DEFAULT 0,
+       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+       KEY idx_transaksi (transaction_id),
+       KEY idx_transaksi_urut (transaction_id, no_urut),
+       CONSTRAINT fk_ti_transaksi FOREIGN KEY (transaction_id) REFERENCES financial_transactions(id) ON DELETE CASCADE
+     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+   `);
+
+  // Financial categories per tenant
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS financial_categories (
+      id INT(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+      tenant_id VARCHAR(20) DEFAULT NULL,
+      jenis ENUM('beli', 'bayar', 'pemasukan', 'pengeluaran') NOT NULL DEFAULT 'pengeluaran',
+      nama VARCHAR(100) NOT NULL,
+      urutan INT DEFAULT 0,
+      kelompok_akun ENUM('aset','aset_tetap','liabilitas','aset_net_terbatas','aset_net_tanpa_batas','pendapatan','beban','modal') DEFAULT NULL,
+      UNIQUE KEY uniq_tenant_jenis_nama (tenant_id, jenis, nama),
+      KEY idx_tenant (tenant_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
+
+  try {
+    await db.query(`ALTER TABLE financial_categories ADD COLUMN IF NOT EXISTS kelompok_akun ENUM('aset','aset_tetap','liabilitas','aset_net_terbatas','aset_net_tanpa_batas','pendapatan','beban','modal') DEFAULT NULL`);
+  } catch (e) { /* column might already exist */ }
+
+  // Seed default categories for yayasan/tenant_id NULL (global defaults)
+  try {
+    const defaultCategories = [
+      { jenis: 'beli', nama: 'Perlengkapan Sekolah', kelompok: 'aset' },
+      { jenis: 'beli', nama: 'Buku dan Materi', kelompok: 'aset' },
+      { jenis: 'beli', nama: 'Peralatan Elektronik', kelompok: 'aset_tetap' },
+      { jenis: 'beli', nama: 'Perlengkapan Kantin', kelompok: 'aset' },
+      { jenis: 'beli', nama: 'Perlengkapan Taman/Kebun', kelompok: 'aset' },
+      { jenis: 'beli', nama: 'Kendaraan', kelompok: 'aset_tetap' },
+      { jenis: 'bayar', nama: 'Gaji Honor / Servis', kelompok: 'beban' },
+      { jenis: 'bayar', nama: 'Listrik, Air, Telepon', kelompok: 'beban' },
+      { jenis: 'bayar', nama: 'Internet / Langganan', kelompok: 'beban' },
+      { jenis: 'bayar', nama: 'Pajak dan Retribusi', kelompok: 'beban' },
+      { jenis: 'bayar', nama: 'Sewa Tempat', kelompok: 'beban' },
+      { jenis: 'bayar', nama: 'ATK / Kantor', kelompok: 'beban' },
+      { jenis: 'bayar', nama: 'Konsumsi / Catering', kelompok: 'beban' },
+      { jenis: 'bayar', nama: 'Transportasi / Bensin', kelompok: 'beban' },
+      { jenis: 'bayar', nama: 'Lain-lain', kelompok: 'beban' }
+    ];
+    for (const cat of defaultCategories) {
+      await db.query(
+        `INSERT IGNORE INTO financial_categories (tenant_id, jenis, nama, urutan, kelompok_akun) VALUES (?, ?, ?, ?, ?)`,
+        [null, cat.jenis, cat.nama, 0, cat.kelompok]
+      );
+    }
+  } catch (e) {
+    // Ignore seeding errors
+  }
 
   // Tambah kolom tahun_masuk di students (4 digit tahun, format YYYY)
   try {

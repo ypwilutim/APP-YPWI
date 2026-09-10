@@ -130,6 +130,12 @@
         </button>
         <button
           class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+          data-tab="financial">
+          <i class="fas fa-book-journal"></i>
+          <span>Jurnal Umum</span>
+        </button>
+        <button
+          class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
           data-tab="payment-gateway">
           <i class="fas fa-credit-card"></i>
           <span>Payment Gateway</span>
@@ -707,8 +713,224 @@
         </div>
       </div>
 
-<!-- Payment Gateway Tab (BSI VA Manual) -->
-       <div id="payment-gatewayTab" class="tab-content hidden">
+<!-- Jurnal Umum Tab -->
+        <div id="financialTab" class="tab-content hidden">
+          <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-4">
+            <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
+              <h3 class="text-lg font-semibold text-gray-900">
+                Jurnal Umum
+                <span id="finPendingBadge" class="hidden ml-2 px-2 py-0.5 bg-yellow-100 text-yellow-800 text-xs rounded-full"></span>
+              </h3>
+              <div class="flex flex-wrap items-end gap-2">
+                <div>
+                  <label class="block text-xs font-medium text-gray-600 mb-1">Sekolah</label>
+                  <select id="financialTenantFilter" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" onchange="loadFinancialTransactions(); loadFinancialSummary(); loadFinancialAccountInfo();">
+                    <option value="">Semua Sekolah</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-600 mb-1">Bulan</label>
+                  <input type="month" id="financialBulan" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" onchange="loadFinancialTransactions()">
+                </div>
+                <button onclick="showFinancialTransactionModal()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">
+                  <i class="fas fa-plus mr-1"></i>Catat Transaksi
+                </button>
+                <button onclick="loadFinancialTransactions()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-300">
+                  <i class="fas fa-sync-alt mr-1"></i>Refresh
+                </button>
+                <button onclick="exportIsak35('xlsx')" class="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-700">
+                  <i class="fas fa-file-excel mr-1"></i>Excel ISAK 35
+                </button>
+                <button onclick="exportIsak35('pdf')" class="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-700">
+                  <i class="fas fa-file-pdf mr-1"></i>PDF ISAK 35
+                </button>
+              </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+              <div class="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                <p class="text-xs font-medium text-gray-500 uppercase">Beli (Debit)</p>
+                <p class="text-2xl font-bold text-blue-600 mt-1" id="finTotalBeli">Rp 0</p>
+              </div>
+              <div class="bg-green-50 p-4 rounded-xl border border-green-100">
+                <p class="text-xs font-medium text-gray-500 uppercase">Pemasukan</p>
+                <p class="text-2xl font-bold text-green-600 mt-1" id="finTotalPemasukan">Rp 0</p>
+              </div>
+              <div class="bg-orange-50 p-4 rounded-xl border border-orange-100">
+                <p class="text-xs font-medium text-gray-500 uppercase">Bayar (Kredit)</p>
+                <p class="text-2xl font-bold text-orange-600 mt-1" id="finTotalBayar">Rp 0</p>
+              </div>
+              <div class="bg-purple-50 p-4 rounded-xl border border-purple-100">
+                <p class="text-xs font-medium text-gray-500 uppercase">Net</p>
+                <p class="text-2xl font-bold text-purple-600 mt-1" id="finTotalNet">Rp 0</p>
+              </div>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead class="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600">#</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600">Tanggal</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600">Jenis</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600">Kategori</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600">Akun</th>
+                    <th class="px-4 py-3 text-right text-xs font-semibold text-gray-600">Nominal</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600">No Bukti</th>
+                     <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600">Keterangan</th>
+                     <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600">Foto</th>
+                     <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600">Status</th>
+                     <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600">Item</th>
+                     <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="financialTableBody" class="divide-y divide-gray-100">
+                  <tr>
+                    <td colspan="12" class="px-4 py-8 text-center text-gray-500">
+                      <i class="fas fa-inbox fa-spin mr-2"></i>Klik refresh untuk memuat data
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Financial Transaction Modal -->
+        <div id="financialModal" class="hidden fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-4">
+          <div class="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center p-4 border-b">
+              <h4 class="font-semibold text-lg" id="financialModalTitle">Catat Transaksi</h4>
+              <button onclick="closeFinancialModal()" class="text-gray-500 hover:text-gray-700 text-2xl leading-none">&times;</button>
+            </div>
+            <div class="p-4 space-y-4" id="finModalBody">
+              <!-- Mode Toggle -->
+              <div class="flex gap-2 border-b pb-3">
+                <button type="button" onclick="setFinMode('struk')" id="finModeStruk"
+                  class="px-4 py-2 text-sm font-medium rounded-lg bg-purple-600 text-white">
+                  Dengan Struk
+                </button>
+                <button type="button" onclick="setFinMode('manual')" id="finModeManual"
+                  class="px-4 py-2 text-sm font-medium rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300">
+                  Tanpa Struk (butuh approval)
+                </button>
+              </div>
+              <div id="finModeHint" class="text-xs text-gray-500">
+                <span id="finModeHintText">Upload foto struk, lalu klik "Proses AI" untuk mengekstrak barang otomatis.</span>
+                <span id="finModeHintManual" class="hidden">Input manual, lalu upload foto barang yang dibeli. Transaksi akan status <strong>pending</strong> hingga disetujui oleh Bendahara Dashboard.</span>
+              </div>
+
+              <!-- Shared Fields -->
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-xs font-medium text-gray-600 mb-1">Tanggal *</label>
+                  <input type="date" id="finTanggal" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-600 mb-1">Jenis *</label>
+                  <select id="finJenis" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
+                    <option value="beli">Beli (Debit)</option>
+                    <option value="bayar">Bayar (Kredit)</option>
+                    <option value="pemasukan">Pemasukan</option>
+                    <option value="pengeluaran">Pengeluaran</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-600 mb-1">Kategori *</label>
+                  <select id="finKategori" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
+                    <option value="">Pilih kategori...</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-600 mb-1">Akun</label>
+                  <input type="text" id="finAkun" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" placeholder="Kode rekening/akun">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-600 mb-1">No Bukti</label>
+                  <input type="text" id="finNoBukti" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" placeholder="No. bukti/nota">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-600 mb-1">Keterangan</label>
+                  <input type="text" id="finKeterangan" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" placeholder="Detail transaksi...">
+                </div>
+              </div>
+
+              <!-- Dengan Struk Mode Panel -->
+              <div id="finStrukPanel">
+                <div class="border-t pt-3">
+                  <label class="block text-xs font-medium text-gray-600 mb-2">Upload Struk/Nota *</label>
+                  <div class="flex items-end gap-2">
+                    <button type="button" onclick="document.getElementById('finFotoStruk').click()" class="px-3 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700">
+                      <i class="fas fa-camera mr-1"></i>Ambil Foto Struk
+                    </button>
+                    <button type="button" onclick="scanFotoStruk()" class="px-3 py-2 bg-cyan-600 text-white rounded-lg text-sm hover:bg-cyan-700 hidden" id="finScanBtn">
+                      <i class="fas fa-magic mr-1"></i>Proses AI
+                    </button>
+                  </div>
+                  <input type="file" id="finFotoStruk" accept="image/*" capture="environment" class="hidden" onchange="previewFotoStruk(this)">
+                  <div id="finFotoPreviewWrap" class="hidden mt-3">
+                    <img id="finFotoPreview" class="max-w-full h-24 rounded-lg border border-gray-300 object-cover" alt="Preview">
+                    <button onclick="clearFotoStruk()" class="ml-2 text-xs text-red-600 hover:text-red-800"><i class="fas fa-trash"></i> Hapus</button>
+                  </div>
+                </div>
+
+                <!-- Item Table -->
+                <div class="border-t pt-3 mt-3">
+                  <div class="flex justify-between items-center mb-2">
+                    <label class="block text-xs font-medium text-gray-600">Daftar Barang</label>
+                    <span class="text-xs font-medium text-gray-700">Total: <span id="finItemsTotal" class="font-bold text-indigo-600">Rp 0</span></span>
+                  </div>
+                  <div class="overflow-x-auto border rounded-lg max-h-60">
+                    <table class="w-full text-sm" id="finItemsTable">
+                      <thead class="bg-gray-50">
+                        <tr>
+                          <th class="px-2 py-2 text-left text-xs font-medium text-gray-500">NO</th>
+                          <th class="px-2 py-2 text-left text-xs font-medium text-gray-500">NAMA BARANG</th>
+                          <th class="px-2 py-2 text-center text-xs font-medium text-gray-500">QTY</th>
+                          <th class="px-2 py-2 text-right text-xs font-medium text-gray-500">HARGA</th>
+                          <th class="px-2 py-2 text-right text-xs font-medium text-gray-500">TOTAL</th>
+                        </tr>
+                      </thead>
+                      <tbody id="finItemsTableBody"></tbody>
+                    </table>
+                  </div>
+                  <button type="button" onclick="addFinItem()" class="mt-2 px-3 py-1 text-xs bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
+                    <i class="fas fa-plus mr-1"></i>Tambah Barang
+                  </button>
+                </div>
+              </div>
+
+              <!-- Tanpa Struk Mode Panel -->
+              <div id="finManualPanel" class="hidden border-t pt-3">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Nominal *</label>
+                    <input type="number" id="finNominal" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" placeholder="Rp 0" min="0">
+                  </div>
+                </div>
+                <div class="mt-3">
+                  <label class="block text-xs font-medium text-gray-600 mb-2">Upload Foto Barang yang Dibeli *</label>
+                  <div class="flex items-end gap-2">
+                    <button type="button" onclick="document.getElementById('finFotoBarang').click()" class="px-3 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700">
+                      <i class="fas fa-camera mr-1"></i>Ambil Foto Barang
+                    </button>
+                    <span class="text-xs text-red-500">(Wajib — transaksi akan status pending hingga disetujui)</span>
+                  </div>
+                  <input type="file" id="finFotoBarang" accept="image/*" capture="environment" class="hidden" onchange="previewFotoBarang(this)">
+                  <div id="finFotoBarangWrap" class="hidden mt-3">
+                    <img id="finFotoBarangPreview" class="max-w-full h-24 rounded-lg border border-gray-300 object-cover" alt="Preview">
+                    <button onclick="clearFotoBarang()" class="ml-2 text-xs text-red-600 hover:text-red-800"><i class="fas fa-trash"></i> Hapus</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="p-4 border-t flex gap-2 justify-end">
+              <button onclick="closeFinancialModal()" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">Batal</button>
+              <button onclick="submitFinancialTransaction()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700" id="finSubmitBtn">Simpan</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Payment Gateway Tab (BSI VA Manual) -->
+        <div id="payment-gatewayTab" class="tab-content hidden">
          <div class="bg-white rounded-xl shadow-sm border-2 border-indigo-200 p-6 mb-4">
            <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
              <h3 class="text-lg font-semibold text-gray-900">Payment Gateway - BSI VA Manual</h3>
@@ -1200,6 +1422,20 @@
       return token ? { 'Authorization': 'Bearer ' + token } : {};
     }
 
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/[&<>'"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[c]);
+    }
+
+    function parseJwt() {
+      const token = localStorage.getItem('token');
+      if (!token) return null;
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+        return payload;
+      } catch (e) { return null; }
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
       const today = new Date();
       document.getElementById('currentDate').textContent = today.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -1216,13 +1452,19 @@
     async function verifyAccess() {
       try {
         const res = await fetch('/api/treasurer/bendahara/profile', { headers: getAuthHeader() });
+        let errMsg = '';
+        try { errMsg = JSON.stringify(await res.clone().json()); } catch(e) {}
         if (!res.ok) {
+          console.error('[VERIFY_ACCESS] Profile check failed:', res.status, errMsg);
+          showToast('Akses ditolak (' + res.status + '): ' + errMsg + '. Silakan login kembali.', 'error');
           localStorage.removeItem('token');
           document.getElementById('loginOverlay').classList.remove('hidden');
           return;
         }
         const data = await res.json();
         if (!data.success) {
+          console.error('[VERIFY_ACCESS] Profile not success:', data.message);
+          showToast('Akses ditolak: ' + (data.message || 'Unknown error'), 'error');
           localStorage.removeItem('token');
           document.getElementById('loginOverlay').classList.remove('hidden');
           return;
@@ -1297,6 +1539,12 @@
             if (tabName === 'payroll') loadPayroll();
             if (tabName === 'kafalah') { loadTenantFilters(); document.getElementById('kafalahStart').value = '2026-06-26'; document.getElementById('kafalahEnd').value = '2026-07-25'; }
             if (tabName === 'payment-gateway') loadBsiTenants();
+            if (tabName === 'financial') {
+              const today = new Date();
+              const defMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+              if (document.getElementById('financialBulan')) document.getElementById('financialBulan').value = defMonth;
+              loadFinancialCategories(); loadFinancialTransactions(); loadFinancialSummary();
+            }
             if (tabName === 'attendanceRecap') loadAttendanceRecap();
             if (tabName === 'sppReminder') loadPaymentDefaulters();
             if (tabName === 'autoBilling') { loadAutoBillingSettings(); loadAutoBillingReport(); }
@@ -1488,7 +1736,7 @@
         const data = await res.json();
         if (data.success) {
           const options = data.data.map(t => `<option value="${t.tenant_id}">${t.nama_sekolah}</option>`).join('');
-          ['dashboardTenantFilter', 'paymentsTenantFilter', 'payrollTenantSelect', 'recapTenantSelect', 'reminderTenantFilter', 'kafalahTenantSelect'].forEach(id => {
+          ['dashboardTenantFilter', 'paymentsTenantFilter', 'payrollTenantSelect', 'recapTenantSelect', 'reminderTenantFilter', 'kafalahTenantSelect', 'financialTenantFilter'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.innerHTML = '<option value="">Semua Sekolah</option>' + options;
           });
@@ -3132,7 +3380,10 @@
               <td class="px-4 py-2 text-center font-mono text-xs">${hasVa ? s.va_number : '<span class="text-gray-400">-</span>'}</td>
               <td class="px-4 py-2 text-center"><span class="text-xs px-2 py-1 rounded ${badge}">${status}</span></td>
               <td class="px-4 py-2 text-center">
-                ${hasVa ? '' : `<button onclick="createBsiVaSingle(${s.id})" class="px-2 py-1 bg-indigo-600 text-white rounded text-xs hover:bg-indigo-700">Buat VA</button>`}
+                ${hasVa
+                  ? `<button onclick="resetBsiVaSingle(${s.id}, '${escapeHtml(s.tenant_id)}')" class="px-2 py-1 bg-orange-600 text-white rounded text-xs hover:bg-orange-700" title="Reset VA">Reset VA</button>`
+                  : `<button onclick="createBsiVaSingle(${s.id})" class="px-2 py-1 bg-indigo-600 text-white rounded text-xs hover:bg-indigo-700">Buat VA</button>`
+                }
               </td>
             </tr>`;
         }).join('');
@@ -3261,6 +3512,24 @@ async function openBsiVaModal() {
         if (d.success) { showToast('VA ' + d.data.va_number + ' berhasil dibuat', 'success'); loadBsiStudents(); }
         else showToast(d.message || 'Gagal buat VA', 'error');
       } catch (e) { showToast('Gagal buat VA', 'error'); }
+    }
+
+    async function resetBsiVaSingle(studentId, tenantId) {
+      if (!tenantId || tenantId === 'all') { showToast('Pilih sekolah tertentu untuk reset VA.', 'error'); return; }
+      if (!confirm('Reset VA BSI untuk siswa ini? VA lama akan ditiadakan dan ganti dengan VA baru. Lanjutkan?')) return;
+      try {
+        const res = await fetch('/api/treasurer/bsi/reset-va', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+          body: JSON.stringify({ tenant_id: tenantId, student_id })
+        });
+        const d = await res.json();
+        if (d.success) {
+          showToast(`VA berhasil direset: ${d.data.old_va} → ${d.data.va_number}`, 'success');
+          loadBsiStudents();
+        }
+        else showToast(d.message || 'Gagal reset VA', 'error');
+      } catch (e) { showToast('Gagal reset VA: ' + e.message, 'error'); }
     }
 
     async function generateBsiCsv() {
@@ -3406,6 +3675,572 @@ async function openBsiVaModal() {
       } catch (e) {
         tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-8 text-center text-red-500">Error: ' + e.message + '</td></tr>';
       }
+     }
+
+    // ==================== JURNAL UMUM / FINANCIAL ====================
+    let financialEditingId = null;
+
+    async function loadFinancialTransactions() {
+      let tenantId = document.getElementById('financialTenantFilter')?.value || '';
+      if (!tenantId || tenantId === 'all') {
+        const payload = parseJwt();
+        const assigned = (payload?.assignments || []).map(a => a.tenant_id).filter(Boolean);
+        if (assigned.length === 1) tenantId = assigned[0];
+      }
+      const bulan = document.getElementById('financialBulan')?.value || '';
+      const tbody = document.getElementById('financialTableBody');
+      if (!tbody) return;
+       tbody.innerHTML = '<tr><td colspan="12" class="px-4 py-8 text-center text-gray-500"><i class="fas fa-spinner fa-spin"></i> Memuat...</td></tr>';
+      try {
+        const params = new URLSearchParams();
+        if (tenantId) params.set('tenant_id', tenantId);
+        if (bulan) params.set('bulan', bulan);
+        const url = `/api/treasurer/financial/transactions?${params.toString()}`;
+        const res = await fetch(url, { headers: getAuthHeader() });
+        const data = await res.json();
+        if (!data.success || !data.data.length) {
+          tbody.innerHTML = '<tr><td colspan="12" class="px-4 py-8 text-center text-gray-500">Tidak ada transaksi</td></tr>';
+          return;
+        }
+        const jenisBadge = {
+          beli: 'bg-blue-100 text-blue-800',
+          bayar: 'bg-orange-100 text-orange-800',
+          pemasukan: 'bg-green-100 text-green-800',
+          pengeluaran: 'bg-red-100 text-red-800'
+        };
+         tbody.innerHTML = data.data.map((s, i) => `
+           <tr class="border-b">
+             <td class="px-4 py-2">${i + 1}</td>
+             <td class="px-4 py-2">${s.tanggal || '-'}</td>
+             <td class="px-4 py-2"><span class="text-xs px-2 py-1 rounded ${jenisBadge[s.jenis] || 'bg-gray-100 text-gray-800'}">${s.jenis}</span></td>
+             <td class="px-4 py-2">${s.kategori || '-'}</td>
+             <td class="px-4 py-2 text-xs">${s.akun || '-'}</td>
+             <td class="px-4 py-2 text-right font-mono">${fmtRp(s.nominal)}</td>
+             <td class="px-4 py-2 text-xs">${s.no_bukti || '-'}</td>
+             <td class="px-4 py-2 text-xs">${s.keterangan || '-'}</td>
+             <td class="px-4 py-2 text-center">
+               ${s.foto_struk ? `<a href="${s.foto_struk}" target="_blank" class="text-blue-600 hover:text-blue-800" title="Lihat foto struk"><i class="fas fa-image"></i></a>` : (s.foto_barang ? `<a href="${s.foto_barang}" target="_blank" class="text-blue-600 hover:text-blue-800" title="Lihat foto barang"><i class="fas fa-image"></i></a>` : '-')}
+             </td>
+             <td class="px-4 py-2 text-center">
+               <span class="text-xs px-2 py-1 rounded ${s.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : s.status === 'rejected' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}">${s.status || 'approved'}</span>
+             </td>
+             <td class="px-4 py-2 text-center">
+               ${s.item_count ? `<span class="text-xs text-gray-500">${s.item_count} barang</span>` : '-'}
+             </td>
+             <td class="px-4 py-2 text-center">
+               ${s.status === 'pending' ? `
+               <button onclick="approveFinancialTransaction(${s.id})" class="px-1 py-0.5 text-green-600 hover:text-green-800" title="Setujui"><i class="fas fa-check"></i></button>
+               <button onclick="rejectFinancialTransaction(${s.id})" class="px-1 py-0.5 text-red-600 hover:text-red-800" title="Tolak"><i class="fas fa-times"></i></button>
+               ` : ''}
+               <button onclick="editFinancialTransaction(${s.id})" class="px-1 py-0.5 text-blue-600 hover:text-blue-800" title="Edit"><i class="fas fa-pen"></i></button>
+               <button onclick="deleteFinancialTransaction(${s.id})" class="px-1 py-0.5 text-red-600 hover:text-red-800" title="Hapus"><i class="fas fa-trash"></i></button>
+             </td>
+           </tr>`).join('');
+      } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="12" class="px-4 py-8 text-center text-red-500">Error: ' + escapeHtml(e.message) + '</td></tr>';
+      }
+    }
+
+    async function loadFinancialCategories() {
+      const tenantId = document.getElementById('financialTenantFilter')?.value || '';
+      const jenis = document.getElementById('finJenis')?.value || 'beli';
+      const sel = document.getElementById('finKategori');
+      if (!sel) return;
+      sel.innerHTML = '<option value="">Pilih kategori...</option>';
+      try {
+        const params = new URLSearchParams();
+        if (tenantId) params.set('tenant_id', tenantId);
+        const res = await fetch(`/api/treasurer/financial/categories?${params.toString()}`, { headers: getAuthHeader() });
+        const data = await res.json();
+        if (data.success) {
+          const seen = new Set();
+          const filtered = data.data.filter(c => (c.jenis === jenis || (!c.tenant_id && !c.jenis)) && !seen.has((c.tenant_id||'')+'_'+c.nama+'_'+(c.jenis||'')) && seen.add((c.tenant_id||'')+'_'+c.nama+'_'+(c.jenis||'')));
+          filtered.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.nama;
+            opt.textContent = c.nama;
+            if (!c.tenant_id) opt.textContent += ' (global)';
+            sel.appendChild(opt);
+          });
+        }
+      } catch (e) {
+        console.error('loadFinancialCategories', e);
+      }
+    }
+
+    async function loadFinancialSummary() {
+      let tenantId = document.getElementById('financialTenantFilter')?.value || '';
+      if (!tenantId || tenantId === 'all') {
+        const payload = parseJwt();
+        const assigned = (payload?.assignments || []).map(a => a.tenant_id).filter(Boolean);
+        if (assigned.length === 1) tenantId = assigned[0];
+      }
+      const bulan = document.getElementById('financialBulan')?.value || '';
+      try {
+        const params = new URLSearchParams();
+        if (tenantId) params.set('tenant_id', tenantId);
+        if (bulan) params.set('bulan', bulan);
+        const res = await fetch(`/api/treasurer/financial/summary?${params.toString()}`, { headers: getAuthHeader() });
+        const data = await res.json();
+        if (data.success) {
+          document.getElementById('finTotalBeli').textContent = fmtRp(data.totals.beli);
+          document.getElementById('finTotalPemasukan').textContent = fmtRp(data.totals.pemasukan);
+          document.getElementById('finTotalBayar').textContent = fmtRp(data.totals.bayar);
+          document.getElementById('finTotalNet').textContent = fmtRp(data.totals.net);
+          // Show pending count badge
+          const badge = document.getElementById('finPendingBadge');
+          if (badge) {
+            if (data.pending_count > 0) {
+              badge.textContent = data.pending_count + ' menunggu persetujuan';
+              badge.classList.remove('hidden');
+            } else {
+              badge.classList.add('hidden');
+            }
+          }
+        }
+       } catch (e) {
+        console.error('loadFinancialSummary', e);
+      }
+    }
+
+    async function exportIsak35(format) {
+      const tenantId = document.getElementById('financialTenantFilter')?.value || '';
+      const bulan = document.getElementById('financialBulan')?.value || '';
+      try {
+        const res = await fetch(`/api/treasurer/financial/report?tenant_id=${encodeURIComponent(tenantId)}&bulan=${encodeURIComponent(bulan)}&format=${format}`, { headers: getAuthHeader() });
+        if (!res.ok) { const d = await res.json(); throw new Error(d.message || 'Gagal export'); }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `laporan_isak35_${tenantId || 'semua'}_${bulan || 'all'}.${format}`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        showToast('Gagal export laporan: ' + e.message, 'error');
+      }
+    }
+
+    async function showFinancialTransactionModal() {
+      financialEditingId = null;
+      finFotoStrukPath = '';
+      finFotoFile = null;
+      finFotoBarang = null;
+      finFotoBarangPath = '';
+      finItems = [];
+      document.getElementById('finFotoStruk').value = '';
+      document.getElementById('finFotoPreview').src = '';
+      document.getElementById('finFotoPreviewWrap').classList.add('hidden');
+      document.getElementById('finScanBtn').classList.add('hidden');
+      document.getElementById('finFotoBarangWrap').classList.add('hidden');
+      document.getElementById('finFotoBarangPreview').src = '';
+      document.getElementById('finItemsTableBody').innerHTML = '';
+      document.getElementById('finItemsTotal').textContent = fmtRp(0);
+      document.getElementById('financialModalTitle').textContent = 'Catat Transaksi';
+      document.getElementById('finTanggal').value = new Date().toISOString().split('T')[0];
+      document.getElementById('finJenis').value = 'beli';
+      document.getElementById('finKategori').value = '';
+      document.getElementById('finAkun').value = '';
+      document.getElementById('finNominal').value = '';
+      document.getElementById('finNoBukti').value = '';
+      document.getElementById('finKeterangan').value = '';
+      document.getElementById('financialTenantFilter').disabled = true;
+      setFinMode('struk');
+      await loadFinancialAccountInfo();
+      await loadFinancialCategories();
+      document.getElementById('financialModal').classList.remove('hidden');
+    }
+
+    async function loadFinancialAccountInfo() {
+      let tenantId = document.getElementById('financialTenantFilter')?.value || '';
+      // Auto-select tenant from JWT assignments if still on "Semua Sekolah"
+      if (!tenantId || tenantId === 'all') {
+        const payload = parseJwt();
+        const assignedTenants = (payload?.assignments || []).map(a => a.tenant_id).filter(Boolean);
+        // Prefer first assigned tenant that exists in dropdown
+        for (const at of assignedTenants) {
+          const opt = document.getElementById('financialTenantFilter')?.querySelector(`option[value="${at}"]`);
+          if (opt) { tenantId = at; break; }
+        }
+        // Fallback: first non-empty option in dropdown
+        if (!tenantId) {
+          const opts = document.getElementById('financialTenantFilter')?.options;
+          if (opts && opts.length > 1 && opts[1].value) tenantId = opts[1].value;
+        }
+        if (tenantId) document.getElementById('financialTenantFilter').value = tenantId;
+      }
+      if (!tenantId || tenantId === 'all') {
+        document.getElementById('finAkun').value = '';
+        return;
+      }
+      try {
+        const res = await fetch(`/api/treasurer/financial/account-info?tenant_id=${encodeURIComponent(tenantId)}`, { headers: getAuthHeader() });
+        const d = await res.json();
+        if (d.success && d.data) {
+          const akun = d.data.bank_account_number || d.data.nomor_rekening || '';
+          document.getElementById('finAkun').value = akun;
+        }
+      } catch (e) { /* no account info available, leave blank */       }
+    }
+
+    function closeFinancialModal() {
+      document.getElementById('financialModal').classList.add('hidden');
+    }
+
+    let finFotoFile = null;
+    let finFotoStrukPath = '';
+    let finFotoBarang = null;
+    let finFotoBarangPath = '';
+    let finItems = [];
+
+    function previewFotoStruk(input) {
+      const file = input.files[0];
+      if (!file) return;
+      finFotoFile = file;
+      const reader = new FileReader();
+      reader.onload = e => {
+        document.getElementById('finFotoPreview').src = e.target.result;
+        document.getElementById('finFotoPreviewWrap').classList.remove('hidden');
+        document.getElementById('finScanBtn').classList.remove('hidden');
+      };
+      reader.readAsDataURL(file);
+      // Auto-trigger AI scan after preview
+      setTimeout(() => { scanFotoStruk(); }, 300);
+    }
+
+    function clearFotoStruk() {
+      finFotoFile = null;
+      finFotoStrukPath = '';
+      document.getElementById('finFotoStruk').value = '';
+      document.getElementById('finFotoPreviewWrap').classList.add('hidden');
+      document.getElementById('finScanBtn').classList.add('hidden');
+      document.getElementById('finFotoPreview').src = '';
+    }
+
+    function previewFotoBarang(input) {
+      const file = input.files[0];
+      if (!file) return;
+      if (file.size > 10 * 1024 * 1024) { showToast('Ukuran file maksimal 10MB', 'error'); return; }
+      finFotoBarang = file;
+      const reader = new FileReader();
+      reader.onload = e => {
+        document.getElementById('finFotoBarangPreview').src = e.target.result;
+        document.getElementById('finFotoBarangWrap').classList.remove('hidden');
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function clearFotoBarang() {
+      finFotoBarang = null;
+      finFotoBarangPath = '';
+      document.getElementById('finFotoBarang').value = '';
+      document.getElementById('finFotoBarangWrap').classList.add('hidden');
+       document.getElementById('finFotoBarangPreview').src = '';
+    }
+
+    function setFinMode(mode) {
+      if (mode === 'struk') {
+        document.getElementById('finStrukPanel').classList.remove('hidden');
+        document.getElementById('finManualPanel').classList.add('hidden');
+        document.getElementById('finModeStruk').classList.add('bg-purple-600', 'text-white');
+        document.getElementById('finModeStruk').classList.remove('bg-gray-200', 'text-gray-700');
+        document.getElementById('finModeManual').classList.remove('bg-purple-600', 'text-white');
+        document.getElementById('finModeManual').classList.add('bg-gray-200', 'text-gray-700');
+        document.getElementById('finModeHintText').classList.remove('hidden');
+        document.getElementById('finModeHintManual').classList.add('hidden');
+      } else {
+        document.getElementById('finStrukPanel').classList.add('hidden');
+        document.getElementById('finManualPanel').classList.remove('hidden');
+        document.getElementById('finModeManual').classList.add('bg-purple-600', 'text-white');
+        document.getElementById('finModeManual').classList.remove('bg-gray-200', 'text-gray-700');
+        document.getElementById('finModeStruk').classList.remove('bg-purple-600', 'text-white');
+        document.getElementById('finModeStruk').classList.add('bg-gray-200', 'text-gray-700');
+        document.getElementById('finModeHintText').classList.add('hidden');
+        document.getElementById('finModeHintManual').classList.remove('hidden');
+      }
+    }
+
+    function renderFinItemsTable() {
+      const tbody = document.getElementById('finItemsTableBody');
+      if (!tbody) return;
+      tbody.innerHTML = finItems.map((it, idx) => `
+        <tr>
+          <td class="px-2 py-1">${idx + 1}</td>
+          <td class="px-2 py-1"><input type="text" value="${it.nama_barang || ''}" onchange="updateFinItem(${idx}, 'nama_barang', this.value)" class="w-full text-sm border rounded px-1"></td>
+          <td class="px-2 py-1 text-center"><input type="number" value="${it.qty || 1}" onchange="updateFinItem(${idx}, 'qty', parseFloat(this.value) || 1)" class="w-16 text-center text-sm border rounded px-1"></td>
+          <td class="px-2 py-1 text-right"><input type="number" value="${it.harga || 0}" onchange="updateFinItem(${idx}, 'harga', parseFloat(this.value) || 0)" class="w-24 text-right text-sm border rounded px-1"></td>
+          <td class="px-2 py-1 text-right font-mono">${fmtRp((it.qty || 1) * (it.harga || 0))}</td>
+          <td class="px-2 py-1 text-center"><button onclick="removeFinItem(${idx})" class="text-red-500 hover:text-red-700"><i class="fas fa-trash"></i></button></td>
+        </tr>`).join('');
+      updateFinItemsTotal();
+    }
+
+    function addFinItem() {
+      finItems.push({ no: finItems.length + 1, nama_barang: '', qty: 1, harga: 0, total: 0 });
+      renderFinItemsTable();
+    }
+
+    function removeFinItem(idx) {
+      finItems.splice(idx, 1);
+      finItems.forEach((it, i) => it.no = i + 1);
+      renderFinItemsTable();
+    }
+
+    function updateFinItem(idx, field, value) {
+      finItems[idx][field] = value;
+      if (field === 'qty' || field === 'harga') {
+        finItems[idx].total = (finItems[idx].qty || 1) * (finItems[idx].harga || 0);
+      }
+      renderFinItemsTable();
+    }
+
+    function updateFinItemsTotal() {
+      const total = finItems.reduce((sum, it) => sum + ((it.qty || 1) * (it.harga || 0)), 0);
+      document.getElementById('finItemsTotal').textContent = fmtRp(total);
+      document.getElementById('finNominal').value = total > 0 ? Math.round(total) : '';
+    }
+
+    async function scanFotoStruk() {
+      if (!finFotoFile) { showToast('Upload foto struk dulu', 'error'); return; }
+      if (finFotoFile.size > 10 * 1024 * 1024) { showToast('Ukuran file maksimal 10MB', 'error'); return; }
+      showProgress('Memindai struk dengan AI...');
+      updateProgress(0, 1, 'Mengirim gambar ke Gemini...');
+      try {
+        const formData = new FormData();
+        formData.append('image', finFotoFile);
+        const res = await fetch('/api/treasurer/financial/ocr/receipt', {
+          method: 'POST',
+          headers: { 'Authorization': (getAuthHeader().Authorization || '') },
+          body: formData
+        });
+        const d = await res.json();
+        if (d.success && d.data) {
+          const data = d.data;
+          finFotoStrukPath = d.foto_struk || '';
+          updateProgress(1, 1, 'Berhasil!');
+          finishProgress('OCR selesai');
+          if (data.tanggal) document.getElementById('finTanggal').value = data.tanggal;
+          if (data.jenis) document.getElementById('finJenis').value = data.jenis;
+          if (data.kategori) document.getElementById('finKategori').value = data.kategori;
+          if (data.akun && !document.getElementById('finAkun').value) document.getElementById('finAkun').value = data.akun || '';
+          if (data.no_bukti) document.getElementById('finNoBukti').value = data.no_bukti;
+          if (data.keterangan && !document.getElementById('finKeterangan').value) document.getElementById('finKeterangan').value = data.keterangan;
+
+          // Populate items table from OCR result
+          if (Array.isArray(d.items) && d.items.length > 0) {
+            finItems = d.items.map((it, i) => ({
+              no: i + 1,
+              nama_barang: it.nama_barang || '',
+              qty: parseFloat(it.qty) || 1,
+              harga: parseFloat(it.harga) || 0,
+              total: parseFloat(it.total) || 0
+            }));
+            renderFinItemsTable();
+          }
+          updateFinItemsTotal();
+
+          showToast('Data struk terisi otomatis dari OCR', 'success');
+        } else {
+          errorProgress(d.message || 'Gagal OCR');
+          showToast(d.message || 'Gagal memindai struk', 'error');
+        }
+      } catch (e) {
+        errorProgress(e.message);
+        showToast('Gagal: ' + e.message, 'error');
+      }
+    }
+
+    function editFinancialTransaction(id) {
+      fetch(`/api/treasurer/financial/transactions/${id}`, { headers: getAuthHeader() })
+        .then(r => r.json())
+         .then(d => {
+          if (!d.success) { showToast(d.message, 'error'); return; }
+          const t = d.data;
+          financialEditingId = t.id;
+          document.getElementById('financialModalTitle').textContent = 'Edit Transaksi';
+          document.getElementById('finTanggal').value = t.tanggal;
+          document.getElementById('finJenis').value = t.jenis;
+          document.getElementById('finKategori').value = t.kategori || '';
+          document.getElementById('finAkun').value = t.akun || '';
+          document.getElementById('finNoBukti').value = t.no_bukti || '';
+          document.getElementById('finKeterangan').value = t.keterangan || '';
+          finFotoStrukPath = t.foto_struk || '';
+          finFotoBarangPath = t.foto_barang || '';
+          document.getElementById('financialTenantFilter').disabled = false;
+
+          // Load items if available
+          finItems = (d.items || []).map(it => ({
+            no: it.no_urut || 0,
+            nama_barang: it.nama_barang || '',
+            qty: parseFloat(it.qty) || 1,
+            harga: parseFloat(it.harga) || 0,
+            total: parseFloat(it.total) || 0
+          }));
+          renderFinItemsTable();
+
+          // Set mode based on whether there are items/foto_struk
+          if (finItems.length > 0 || finFotoStrukPath) {
+            setFinMode('struk');
+            if (finFotoStrukPath) {
+              document.getElementById('finFotoPreview').src = finFotoStrukPath;
+              document.getElementById('finFotoPreviewWrap').classList.remove('hidden');
+              document.getElementById('finScanBtn').classList.add('hidden');
+            }
+            if (finFotoBarangPath) {
+              document.getElementById('finFotoBarangPreview').src = finFotoBarangPath;
+              document.getElementById('finFotoBarangWrap').classList.remove('hidden');
+            }
+            document.getElementById('finNominal').value = finItems.reduce((s, it) => s + ((it.qty||1)*(it.harga||0)), 0);
+          } else {
+            setFinMode(t.foto_barang ? 'manual' : 'struk');
+          }
+          loadFinancialCategories();
+          document.getElementById('financialModal').classList.remove('hidden');
+        })
+        .catch(e => showToast('Gagal load: ' + e.message, 'error'));
+    }
+
+    async function deleteFinancialTransaction(id) {
+      if (!confirm('Hapus transaksi ini?')) return;
+      try {
+        const res = await fetch(`/api/treasurer/financial/transactions/${id}`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeader() }
+        });
+        const d = await res.json();
+        if (d.success) { showToast('Transaksi dihapus', 'success'); loadFinancialTransactions(); loadFinancialSummary(); }
+        else showToast(d.message || 'Gagal hapus', 'error');
+     } catch (e) { showToast('Gagal: ' + e.message, 'error'); }
+     }
+
+     async function approveFinancialTransaction(id) {
+       if (!confirm('Setujui transaksi ini?')) return;
+       try {
+         const res = await fetch(`/api/treasurer/financial/transactions/${id}/approve`, {
+           method: 'PUT',
+           headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+           body: JSON.stringify({ catatan: 'Disetujui oleh Bendahara Dashboard' })
+         });
+         const d = await res.json();
+         if (d.success) { showToast('Transaksi disetujui', 'success'); loadFinancialTransactions(); loadFinancialSummary(); }
+         else showToast(d.message || 'Gagal', 'error');
+       } catch (e) { showToast('Gagal: ' + e.message, 'error'); }
+     }
+
+     async function rejectFinancialTransaction(id) {
+       const alasan = await Swal.fire({
+         title: 'Tolak Transaksi?',
+         input: 'textarea',
+         inputLabel: 'Alasan penolakan',
+         inputPlaceholder: 'Masukkan alasan...',
+         showCancelButton: true,
+         confirmButtonText: 'Tolak',
+         confirmButtonColor: '#ef4444'
+       });
+       if (!alasan.isConfirmed || !alasan.value) return;
+       try {
+         const res = await fetch(`/api/treasurer/financial/transactions/${id}/reject`, {
+           method: 'PUT',
+           headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+           body: JSON.stringify({ catatan: alasan.value })
+         });
+         const d = await res.json();
+         if (d.success) { showToast('Transaksi ditolak', 'success'); loadFinancialTransactions(); loadFinancialSummary(); }
+         else showToast(d.message || 'Gagal', 'error');
+       } catch (e) { showToast('Gagal: ' + e.message, 'error'); }
+     }
+
+     async function submitFinancialTransaction() {
+      const tanggal = document.getElementById('finTanggal').value;
+      const jenis = document.getElementById('finJenis').value;
+      const kategori = document.getElementById('finKategori').value;
+      const akun = document.getElementById('finAkun').value.trim() || null;
+      const keterangan = document.getElementById('finKeterangan').value.trim() || null;
+      const nominal = parseFloat(document.getElementById('finItemsTotal')?.textContent?.replace(/[^0-9]/g, '') || document.getElementById('finNominal').value) || parseFloat(document.getElementById('finNominal').value);
+      const noBukti = document.getElementById('finNoBukti').value.trim() || null;
+      const tenantId = document.getElementById('financialTenantFilter').value || '';
+
+      // Determine mode: struk mode has items or foto_struk, manual mode has foto_barang
+      const isManualMode = document.getElementById('finManualPanel').classList.contains('hidden') === false;
+
+      // Validation
+      if (!tanggal || !jenis || !kategori || isNaN(nominal) || nominal <= 0) {
+        showToast('Isi tanggal, jenis, kategori, dan nominal', 'error');
+        return;
+      }
+
+      if (isManualMode) {
+        // Manual mode: require foto_barang
+        if (!finFotoBarang && !finFotoBarangPath) {
+          showToast('Upload foto barang yang dibeli (wajib untuk transaksi tanpa struk)', 'error');
+          return;
+        }
+        // Upload foto barang ke disk dulu
+        try {
+          const formData = new FormData();
+          if (finFotoBarang) formData.append('image', finFotoBarang);
+          const uploadRes = await fetch('/api/treasurer/financial/ocr/receipt', {
+            method: 'POST',
+            headers: { 'Authorization': (getAuthHeader().Authorization || '') },
+            body: formData
+          });
+          const uploadData = await uploadRes.json();
+          if (uploadData.success && uploadData.foto_struk) {
+            finFotoBarangPath = uploadData.foto_struk;
+          }
+        } catch (e) {
+          console.error('Upload foto barang error:', e);
+          showToast('Gagal upload foto: ' + e.message, 'error');
+          return;
+        }
+      } else {
+        // Struk mode: require foto_struk
+        if (!finFotoStrukPath) {
+          showToast('Upload foto struk terlebih dahu', 'error');
+          return;
+        }
+      }
+
+      try {
+        const url = financialEditingId
+          ? `/api/treasurer/financial/transactions/${financialEditingId}`
+          : '/api/treasurer/financial/transactions';
+        const body = {
+          tenant_id: tenantId || undefined,
+          tanggal, jenis, kategori, akun, keterangan,
+          nominal: Math.round(nominal), no_bukti: noBukti,
+          items: isManualMode ? undefined : finItems,
+        };
+
+        if (isManualMode) {
+          body.foto_barang = finFotoBarangPath;
+          body.status = financialEditingId ? undefined : 'pending';
+        } else {
+          body.foto_struk = finFotoStrukPath || (financialEditingId ? undefined : null);
+          body.foto_barang = null;
+          body.status = 'approved';
+        }
+
+        const res = await fetch(url, {
+          method: financialEditingId ? 'PUT' : 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+          body: JSON.stringify(body)
+        });
+        const d = await res.json();
+        if (d.success) {
+          showToast(d.message, 'success');
+
+          // Show approval notice for pending transactions
+          if (d.status === 'pending' && !financialEditingId) {
+            showToast('Transaksi disubmit, menunggu persetujuan Bendahara Dashboard', 'info');
+          }
+
+          closeFinancialModal();
+          loadFinancialTransactions();
+          loadFinancialSummary();
+        }
+        else showToast(d.message || 'Gagal simpan', 'error');
+      } catch (e) { showToast('Gagal: ' + e.message, 'error'); }
     }
 
      async function loadPaymentDefaulters() {
