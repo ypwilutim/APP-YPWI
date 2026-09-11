@@ -529,6 +529,15 @@ function canApproveIzin(assignments) {
     if (list.length === 0) return false;
 
     const ketuaRoles = ['kepalasekolah', 'pimpinan', 'ketua', 'kepalapondok'];
+    const adminJabatans = ['admin', 'operator', 'media', 'tu', 'tatausaha', 'kepala', 'pimpinan'];
+
+    // Admin jabatan di YPWILUTIM juga bisa approve semua
+    const isAdminYpwilutim = list.some(a => {
+        const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
+        return a.tenant_id === 'YPWILUTIM' && adminJabatans.some(role => jabatan.includes(role));
+    });
+    if (isAdminYpwilutim) return true;
+
     const isKetuaYpwilutim = list.some(a => {
         const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
         return a.tenant_id === 'YPWILUTIM' && ketuaRoles.includes(jabatan);
@@ -552,6 +561,15 @@ function getApprovalTenantFilter(assignments) {
     }
 
     const ketuaRoles = ['kepalasekolah', 'pimpinan', 'ketua', 'kepalapondok'];
+    const adminJabatans = ['admin', 'operator', 'media', 'tu', 'tatausaha', 'kepala', 'pimpinan'];
+
+    // Admin jabatan di YPWILUTIM juga melihat semua tenant
+    const isAdminYpwilutim = list.some(a => {
+        const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
+        return a.tenant_id === 'YPWILUTIM' && adminJabatans.some(role => jabatan.includes(role));
+    });
+    if (isAdminYpwilutim) return null;
+
     const isKetuaYpwilutim = list.some(a => {
         const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
         return a.tenant_id === 'YPWILUTIM' && ketuaRoles.includes(jabatan);

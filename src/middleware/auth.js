@@ -208,7 +208,8 @@ const authenticateKetua = (req, res, next) => {
   });
 };
 
-// Access for: admin role OR guru assigned to tenant YPWILUTIM with jabatan bendahara/admin
+// Access for: admin role OR guru with jabatan bendahara/admin at any tenant
+// verifyTenantAccess will be used in routes to check specific tenant access
 const authenticateBendahara = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -245,11 +246,10 @@ const authenticateBendahara = (req, res, next) => {
       return next();
     }
 
-    // 2. Guru dengan assignment tenant_id = YPWILUTIM dan jabatan bendahara/admin
+    // 2. Guru dengan jabatan bendahara/admin di manapun tenant
     if (user.role === 'guru' && user.assignments) {
       const bendaharaRoles = ['bendahara', 'admin'];
       const hasBendaharaAccess = user.assignments.some(a =>
-        (a.tenant_id === 'YPWILUTIM') &&
         bendaharaRoles.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''))
       );
        if (hasBendaharaAccess) {
@@ -258,7 +258,7 @@ const authenticateBendahara = (req, res, next) => {
     }
 
     console.log('[AUTH_BENDAHARA_DEBUG] Access DENIED - role:', user.role, 'assignments:', JSON.stringify(user.assignments || []));
-    return res.status(403).json({ success: false, message: 'Akses ditolak. Peran bendahara/admin di YPWILUTIM diperlukan.', debug: { role: user.role, guru_id: user.guru_id, assignments: user.assignments || [] } });
+    return res.status(403).json({ success: false, message: 'Akses ditolak. Peran bendahara/admin diperlukan.', debug: { role: user.role, guru_id: user.guru_id, assignments: user.assignments || [] } });
   });
 };
 

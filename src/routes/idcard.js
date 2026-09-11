@@ -5,7 +5,8 @@ const db = require('../../db');
 const { authenticateToken, authenticateOperator } = require('../middleware/auth');
 const QRCode = require('qrcode');
 const PDFDocument = require('pdfkit');
-const fetch = require('node-fetch');
+const axios = require('axios');
+const sharp = require('sharp');
 
 const router = express.Router();
 
@@ -23,9 +24,8 @@ const CARD_GAP = 5 * MM_TO_PT;
 async function fetchImageBuffer(url) {
   if (!url) return null;
   try {
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    return await res.buffer();
+    const response = await axios.get(url, { responseType: 'arraybuffer', timeout: 15000 });
+    return response.data;
   } catch (e) {
     return null;
   }
@@ -81,15 +81,28 @@ function loadBackground() {
       const full = path.isAbsolute(c) ? c : path.join(__dirname, '../../', c);
       if (fs.existsSync(full)) { 
         bgBuf = fs.readFileSync(full); 
-        console.log('Background loaded:', full, 'size:', bgBuf.length);
         return bgBuf; 
       }
     } catch (e) { 
-      console.error('Background load error:', e); 
+      /* try next */ 
     }
   }
-  console.warn('Background not found, using fallback');
   return null;
+}
+
+let patternBuf = null;
+async function getPatternBuffer() {
+  if (patternBuf) return patternBuf;
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80">
+      <rect width="80" height="80" fill="#066e3a"/>
+      <path d="M40 0 L80 40 L40 80 L0 40 Z" fill="none" stroke="#c5a24e" stroke-width="1" opacity="0.5"/>
+      <circle cx="40" cy="40" r="20" fill="none" stroke="#c5a24e" stroke-width="0.8" opacity="0.4"/>
+      <circle cx="40" cy="40" r="8" fill="none" stroke="#c5a24e" stroke-width="0.5" opacity="0.3"/>
+    </svg>
+  `;
+  patternBuf = await sharp(Buffer.from(svg)).png().toBuffer();
+  return patternBuf;
 }
 
 const GREEN = '#066e3a';
@@ -97,6 +110,43 @@ const GREEN_DARK = '#044e24';
 const GOLD = '#c5a24e';
 const GOLD_LIGHT = '#f3e6c5';
 const CREAM = '#faf8f3';
+
+router.get('/proxy-image', async (req, res) => {
+  try {
+    const targetUrl = req.query.url;
+    if (!targetUrl) {
+      return res.status(400).json({ success: false, message: 'URL is required' });
+    }
+
+    if (targetUrl.startsWith('uploads/') || targetUrl.startsWith('/uploads/')) {
+      const filePath = path.join(__dirname, '../../public', targetUrl.replace(/^\//, ''));
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ success: false, message: 'File not found' });
+      }
+      const ext = path.extname(filePath).toLowerCase();
+      const mimeMap = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.gif': 'image/gif', '.webp': 'image/webp' };
+      res.set({
+        'Content-Type': mimeMap[ext] || 'image/jpeg',
+        'Cache-Control': 'public, max-age=86400',
+        'Access-Control-Allow-Origin': '*'
+      });
+      return res.send(fs.readFileSync(filePath));
+    }
+
+    const response = await axios.get(targetUrl, { responseType: 'arraybuffer', timeout: 15000 });
+    const contentType = response.headers['content-type'] || 'image/jpeg';
+
+    res.set({
+      'Content-Type': contentType,
+      'Cache-Control': 'public, max-age=86400',
+      'Access-Control-Allow-Origin': '*'
+    });
+    res.send(response.data);
+  } catch (error) {
+    console.error('Proxy image error:', error.message);
+    res.status(500).json({ success: false, message: 'Error proxying image' });
+  }
+});
 
 router.get('/teachers', authenticateOperator, async (req, res) => {
   try {
@@ -128,13 +178,94 @@ router.get('/teachers', authenticateOperator, async (req, res) => {
       params.push(tenantId);
     }
 
-    query += ' GROUP BY t.id ORDER BY t.nama ASC LIMIT 100';
+    query += ' GROUP BY t.id ORDER BY t.nama ASC LIMIT 500';
     const teachers = await db.query(query, params);
     
     res.json({ success: true, data: teachers });
   } catch (error) {
     console.error('ID Card teachers error:', error);
     res.status(500).json({ success: false, message: 'Error fetching teachers' });
+  }
+});
+
+router.get('/teachers/pdf', authenticateOperator, async (req, res) => {
+  try {
+    console.log('IDCARD PDF REQUEST:', req.query, req.user);
+    let tenantId = req.query.tenant_id;
+    if (req.user.role === 'guru' && !tenantId) {
+      const adminAssignments = (req.user.assignments || []).filter((a) => {
+        const roles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin'];
+        return roles.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''));
+      });
+      if (adminAssignments.length === 1) tenantId = adminAssignments[0].tenant_id;
+    }
+
+    const teacherId = req.query.teacher_id;
+    let ids = null;
+    if (req.query.ids) {
+      ids = String(req.query.ids).split(',').map((s) => s.trim()).filter(Boolean);
+    }
+    const { q, params } = buildTeacherQuery({ tenantId, teacherId, ids, limit: req.query.limit });
+    console.log('IDCARD PDF QUERY:', q, params);
+    const teachers = await db.query(q, params);
+    console.log('IDCARD PDF COUNT:', teachers.length);
+
+    if (!teachers || teachers.length === 0) {
+      return res.status(404).json({ success: false, message: 'Guru tidak ditemukan' });
+    }
+
+    const doc = new PDFDocument({ margin: 0, size: 'A4' });
+    const chunks = [];
+    doc.on('data', (c) => chunks.push(c));
+    doc.on('error', (err) => {
+      console.error('PDFKit stream error:', err);
+      if (!res.headersSent) res.status(500).json({ success: false, message: 'Error generating PDF' });
+    });
+    doc.on('end', () => {
+      const buf = Buffer.concat(chunks);
+      const isSingle = teacherId;
+      const filename = isSingle
+        ? `idcard-guru-${teachers[0].nama || teachers[0].id}.pdf`
+        : `idcard-guru-bulk${tenantId ? '-' + tenantId : ''}.pdf`;
+      res.set({
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `inline; filename="${filename}"`,
+        'X-Card-Count': String(teachers.length),
+        'Content-Length': buf.length
+      });
+      res.send(buf);
+    });
+
+    const a4w = doc.page.width;
+    const a4h = doc.page.height;
+    const marginLeft = PAGE_MARGIN + (a4w - 2 * PAGE_MARGIN - (COLS * CARD_W + (COLS - 1) * CARD_GAP)) / 2;
+    const marginTop = PAGE_MARGIN + (a4h - 2 * PAGE_MARGIN - (ROWS * CARD_H + (ROWS - 1) * CARD_GAP)) / 2;
+
+    let col = 0;
+    let row = 0;
+
+    for (let i = 0; i < teachers.length; i++) {
+      const teacher = teachers[i];
+      const [qrBuf, photoBuf] = await Promise.all([qrBuffer(teacher.scan_id || teacher.id), fetchTeacherPhoto(teacher)]);
+      const ox = marginLeft + col * (CARD_W + CARD_GAP);
+      const oy = marginTop + row * (CARD_H + CARD_GAP);
+      await drawCard(doc, ox, oy, teacher, qrBuf, photoBuf);
+
+      col++;
+      if (col >= COLS) {
+        col = 0;
+        row++;
+        if (row >= ROWS && i < teachers.length - 1) {
+          doc.addPage();
+          row = 0;
+        }
+      }
+    }
+
+    doc.end();
+  } catch (error) {
+    console.error('ID Card PDF error:', error);
+    if (!res.headersSent) res.status(500).json({ success: false, message: 'Error generating PDF' });
   }
 });
 
@@ -284,56 +415,62 @@ router.get('/students/:id/qr', async (req, res) => {
   }
 });
 
-function drawCard(doc, ox, oy, teacher, qrBuf, photoBuf, single) {
+async function drawCard(doc, ox, oy, teacher, qrBuf, photoBuf, single) {
   const cw = CARD_W;
   const ch = CARD_H;
-  const pad = 17;
   const logo = loadLogo();
-  const bg = loadBackground();
+  const bg = loadBackground() || await getPatternBuffer();
 
   doc.save();
 
   if (bg) {
-    doc.image(bg, ox, oy, { fit: [cw, ch] });
+    doc.image(bg, ox, oy, { width: cw * 1.2, height: ch * 1.2, fit: [cw * 1.2, ch * 1.2] });
   }
-
-  doc.roundedRect(ox, oy, cw, ch, 6).fillOpacity(0.18).fill('#ffffff');
-
+  doc.roundedRect(ox, oy, cw, ch, 6).fillOpacity(0.12).fill('#ffffff');
   doc.roundedRect(ox, oy, cw, ch, 6).lineWidth(0.7).stroke(GOLD);
 
-  const headerTop = oy + 14;
-  const logoSize = 40;
+  const headerH = 32;
+  const headerY = oy + 10;
+  const headerGradient = doc.linearGradient(ox, headerY, ox, headerY + headerH);
+  headerGradient.stop(0, '#2563eb');
+  headerGradient.stop(0.5, '#0284c7');
+  headerGradient.stop(1, '#0d9488');
+  doc.roundedRect(ox + 5, headerY, cw - 10, headerH, 8).fill(headerGradient);
+
+  const lanyardY = headerY + 2;
+  const lanyardW = 18;
+  const lanyardH = 3;
+  const lanyardX = ox + (cw - lanyardW) / 2;
+  doc.roundedRect(lanyardX, lanyardY, lanyardW, lanyardH, 2).fill('rgba(255,255,255,0.35)');
+
   if (logo) {
+    const iconW = 16;
+    const iconH = 16;
+    const iconX = ox + 10;
+    const iconY = headerY + (headerH - iconH) / 2;
     try {
-      doc.image(logo, ox + pad, headerTop, { width: logoSize, height: logoSize, fit: [logoSize, logoSize] });
+      doc.image(logo, iconX, iconY, { width: iconW, height: iconH, fit: [iconW, iconH] });
     } catch (e) {
-      doc.rect(ox + pad, headerTop, logoSize, logoSize).fill('#e5e7eb');
+      doc.rect(iconX, iconY, iconW, iconH).fill('#ffffff').fillOpacity(0.3);
     }
   }
 
   const sekolah = (teacher.nama_sekolah || '').split('; ')[0] || '';
   if (sekolah) {
-    const schoolX = ox + pad + logoSize + 5;
-    const schoolW = cw - pad - logoSize - 5 - pad;
-    doc.fillColor(GREEN_DARK).font('Helvetica-Bold').fontSize(7)
-      .text(sekolah, schoolX, headerTop + 4, { width: schoolW, align: 'left' });
+    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(6)
+      .text(sekolah.toUpperCase(), ox + 30, headerY + 5, { width: cw - 38, align: 'left' });
+    doc.fillColor('#e0f2fe').font('Helvetica').fontSize(5)
+      .text('Kartu Pendidik & Tenaga Kependidikan', ox + 30, headerY + 13, { width: cw - 38, align: 'left' });
   }
 
-  const titleY = headerTop + logoSize + 3;
-  doc.fillColor(GREEN).font('Helvetica-Bold').fontSize(8)
-    .text('KARTU IDENTITAS GURU', ox + pad, titleY, { width: cw - 2 * pad, align: 'center' });
+  const photoX = ox + 14;
+  const photoY = headerY + headerH + 8;
+  const photoW = 60;
+  const photoH = 70;
 
-  const lineY = titleY + 10;
-  doc.moveTo(ox + pad, lineY).lineTo(ox + cw - pad, lineY).stroke(GOLD);
-
-  const photoW = 62;
-  const photoH = 85;
-  const photoX = ox + pad;
-  const photoY = lineY + 8;
-
-  doc.roundedRect(photoX - 1, photoY - 1, photoW + 2, photoH + 2, 3).lineWidth(0.7).stroke(GOLD);
+  doc.roundedRect(photoX - 1, photoY - 1, photoW + 2, photoH + 2, 8).fill('#ffffff').stroke('#e0f2fe').lineWidth(0.8);
   doc.save();
-  doc.roundedRect(photoX, photoY, photoW, photoH, 2).clip();
+  doc.roundedRect(photoX, photoY, photoW, photoH, 6).clip();
   if (photoBuf) {
     doc.image(photoBuf, photoX, photoY, { width: photoW, height: photoH, fit: [photoW, photoH] });
   } else {
@@ -341,69 +478,76 @@ function drawCard(doc, ox, oy, teacher, qrBuf, photoBuf, single) {
   }
   doc.restore();
 
-  const textX = photoX + photoW + 6;
-  const textW = cw - pad - (textX - ox);
-  let curTextY = photoY;
+  const infoX = photoX + photoW + 8;
+  const infoW = cw - (infoX - ox) - 14;
+  let curInfoY = photoY + 3;
 
-  doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(7)
-    .text(teacher.nama || 'Guru', textX, curTextY, { width: textW, align: 'left' });
-  curTextY += 9;
+  const statusText = (teacher.status_kepegawaian || '').toUpperCase() || 'GURU';
+  doc.fillColor('#0284c7').font('Helvetica-Bold').fontSize(5.5)
+    .text(statusText, infoX, curInfoY, { width: infoW, align: 'left' });
+  curInfoY += 8;
 
-  doc.fillColor('#334155').font('Helvetica-Bold').fontSize(6)
-    .text(teacher.jabatan_di_unit || '-', textX, curTextY, { width: textW, align: 'left' });
-  curTextY += 8;
+  doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(9)
+    .text(teacher.nama || 'Guru', infoX, curInfoY, { width: infoW, align: 'left' });
+  curInfoY += 11;
 
-  doc.fillColor('#475569').font('Helvetica').fontSize(6)
-    .text(`NIK: ${teacher.nik || '-'}`, textX, curTextY, { width: textW, align: 'left' });
-  curTextY += 7;
+  doc.fillColor('#2563eb').font('Helvetica-Bold').fontSize(6.5)
+    .text(teacher.jabatan_di_unit || '-', infoX, curInfoY, { width: infoW, align: 'left' });
+  curInfoY += 8;
 
-  doc.fillColor('#475569').font('Helvetica').fontSize(6)
-    .text(`Mata Pelajaran: ${teacher.jabatan_di_unit || '-'}`, textX, curTextY, { width: textW, align: 'left' });
-  curTextY += 7;
+  const gridTop = photoY + photoH + 8;
+  const gridPad = 14;
+  const gridX = ox + gridPad;
+  const gridW = cw - 2 * gridPad;
+  const gridH = 26;
 
+  doc.roundedRect(gridX, gridTop, gridW, gridH, 6).fill('#f8fafc').stroke('#f1f5f9').lineWidth(0.5);
+
+  const col1X = gridX + 6;
+  const col2X = gridX + gridW / 2;
+  let gridY = gridTop + 4;
+
+  doc.fillColor('#64748b').font('Helvetica-Bold').fontSize(5).text('NIP', col1X, gridY, { width: gridW/2 - 8, align: 'left' });
+  doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(5.5).text(teacher.nip || '-', col1X, gridY + 5, { width: gridW/2 - 8, align: 'left' });
+
+  doc.fillColor('#64748b').font('Helvetica-Bold').fontSize(5).text('NIK', col2X, gridY, { width: gridW/2 - 8, align: 'left' });
+  doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(5.5).text(teacher.nik || '-', col2X, gridY + 5, { width: gridW/2 - 8, align: 'left' });
+
+  gridY += 12;
   const berlaku = teacher.tmt ? new Date(teacher.tmt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-';
-  doc.fillColor('#475569').font('Helvetica').fontSize(6)
-    .text(`Berlaku s.d: ${berlaku}`, textX, curTextY, { width: textW, align: 'left' });
+  doc.fillColor('#64748b').font('Helvetica-Bold').fontSize(5).text('Berlaku s.d', col1X, gridY, { width: gridW - 10, align: 'left' });
+  doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(5.5).text(berlaku, col1X, gridY + 5, { width: gridW - 10, align: 'left' });
 
-  const photoBottom = photoY + photoH;
-  const statusY = photoBottom + 5;
-  const statusText = (teacher.status_kepegawaian || '').toUpperCase();
-  doc.fillColor(GREEN).font('Helvetica-Bold').fontSize(7)
-    .text(statusText || 'GURU', ox + pad, statusY, { width: cw - 2 * pad, align: 'center' });
+  const footerTop = gridTop + gridH + 8;
+  const footerH = ch - (footerTop - oy) - 10;
+  const footerPad = 14;
+  const footerX = ox + footerPad;
+  const footerW = cw - 2 * footerPad;
+  const footerY = oy + ch - 10 - footerH;
 
-  const sloganY = statusY + 10;
-  doc.fillColor('#64748b').font('Helvetica-Oblique').fontSize(5.5)
-    .text('Mengajar, membentuk, dan mencetak generasi berakhlak', ox + pad, sloganY, { width: cw - 2 * pad, align: 'center' });
+  doc.roundedRect(footerX, footerY, footerW, footerH, 10).fill('#f0f9ff').stroke('#7dd3fc').lineWidth(0.8);
 
-  const schoolY = sloganY + 9;
-  if (sekolah) {
-    doc.fillColor(GREEN_DARK).font('Helvetica-Bold').fontSize(6)
-      .text(sekolah, ox + pad, schoolY, { width: cw - 2 * pad, align: 'center' });
-  }
+  const qrSize = 30;
+  const qrPad = 6;
+  const qrX = footerX + qrPad;
+  const qrY = footerY + (footerH - qrSize) / 2;
 
-  const qrSize = 40;
-  const qrX = ox + cw - pad - qrSize;
-  const qrY = oy + ch - pad - qrSize - 3;
-
-  doc.fillColor(GREEN);
-  doc.rect(qrX - 3, qrY - 3, qrSize + 6, qrSize + 6, 3).fill();
-  doc.roundedRect(qrX - 2, qrY - 2, qrSize + 4, qrSize + 4, 3)
-    .fill('#ffffff').stroke(GOLD).lineWidth(0.8);
-
+  doc.roundedRect(qrX - 2, qrY - 2, qrSize + 4, qrSize + 4, 6).fill('#ffffff').stroke('#bae6fd').lineWidth(0.6);
   if (qrBuf) {
     doc.image(qrBuf, qrX, qrY, { width: qrSize, height: qrSize });
   } else {
     doc.rect(qrX, qrY, qrSize, qrSize).fill('#f3f4f6');
   }
 
-  doc.fillColor(GREEN_DARK).font('Helvetica-Bold').fontSize(5)
-    .text('Scan ID', qrX, qrY - 5, { width: qrSize, align: 'center' });
+  const metaX = qrX + qrSize + 8;
+  const metaW = footerW - (metaX - footerX) - qrPad;
+  let metaY = footerY + 6;
 
-  const alamat = teacher.alamat || '';
-  if (alamat) {
-    doc.fillColor('#94a3b8').font('Helvetica').fontSize(5)
-      .text(alamat, ox + pad, oy + ch - 8, { width: cw - 2 * pad, align: 'center' });
-  }
+  doc.fillColor('#0369a1').font('Helvetica-Bold').fontSize(6)
+    .text('PRESENSI DIGITAL', metaX, metaY, { width: metaW, align: 'left' });
+  metaY += 7;
+  doc.fillColor('#334155').font('Helvetica').fontSize(5)
+    .text('Scan kode QR ini untuk verifikasi presensi & sistem akademik.', metaX, metaY, { width: metaW, align: 'left' });
 
   doc.restore();
 }
@@ -434,83 +578,5 @@ function buildTeacherQuery(opts) {
   q += ` GROUP BY t.id ORDER BY t.nama ASC LIMIT ${Math.min(Math.max(parseInt(limit, 10) || 200, 1), 500)}`;
   return { q, params };
 }
-
-router.get('/teachers/pdf', authenticateOperator, async (req, res) => {
-  try {
-    let tenantId = req.query.tenant_id;
-    if (req.user.role === 'guru' && !tenantId) {
-      const adminAssignments = (req.user.assignments || []).filter((a) => {
-        const roles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin', 'bendahara'];
-        return roles.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''));
-      });
-      if (adminAssignments.length === 1) tenantId = adminAssignments[0].tenant_id;
-    }
-
-    const teacherId = req.query.teacher_id;
-    let ids = null;
-    if (req.query.ids) {
-      ids = String(req.query.ids).split(',').map((s) => s.trim()).filter(Boolean);
-    }
-    const { q, params } = buildTeacherQuery({ tenantId, teacherId, ids, limit: req.query.limit });
-    const teachers = await db.query(q, params);
-
-    if (!teachers || teachers.length === 0) {
-      return res.status(404).json({ success: false, message: 'Guru tidak ditemukan' });
-    }
-
-    const doc = new PDFDocument({ margin: 0, size: 'A4' });
-    const chunks = [];
-    doc.on('data', (c) => chunks.push(c));
-    doc.on('error', (err) => {
-      console.error('PDFKit stream error:', err);
-      if (!res.headersSent) res.status(500).json({ success: false, message: 'Error generating PDF' });
-    });
-
-    const a4w = doc.page.width;
-    const a4h = doc.page.height;
-    const marginLeft = PAGE_MARGIN + (a4w - 2 * PAGE_MARGIN - (COLS * CARD_W + (COLS - 1) * CARD_GAP)) / 2;
-    const marginTop = PAGE_MARGIN + (a4h - 2 * PAGE_MARGIN - (ROWS * CARD_H + (ROWS - 1) * CARD_GAP)) / 2;
-
-    let col = 0;
-    let row = 0;
-
-    for (let i = 0; i < teachers.length; i++) {
-      const teacher = teachers[i];
-      const [qrBuf, photoBuf] = await Promise.all([qrBuffer(teacher.scan_id || teacher.id), fetchTeacherPhoto(teacher)]);
-      const ox = marginLeft + col * (CARD_W + CARD_GAP);
-      const oy = marginTop + row * (CARD_H + CARD_GAP);
-      drawCard(doc, ox, oy, teacher, qrBuf, photoBuf);
-
-      col++;
-      if (col >= COLS) {
-        col = 0;
-        row++;
-        if (row >= ROWS && i < teachers.length - 1) {
-          doc.addPage();
-          row = 0;
-        }
-      }
-    }
-
-    doc.end();
-    doc.on('end', () => {
-      const buf = Buffer.concat(chunks);
-      const isSingle = teacherId;
-      const filename = isSingle
-        ? `idcard-guru-${teachers[0].nama || teachers[0].id}.pdf`
-        : `idcard-guru-bulk${tenantId ? '-' + tenantId : ''}.pdf`;
-      res.set({
-        'Content-Type': 'application/pdf',
-        'Content-Disposition': `inline; filename="${filename}"`,
-        'X-Card-Count': String(teachers.length),
-        'Content-Length': buf.length
-      });
-      res.send(buf);
-    });
-  } catch (error) {
-    console.error('ID Card PDF error:', error);
-    if (!res.headersSent) res.status(500).json({ success: false, message: 'Error generating PDF' });
-  }
-});
 
 module.exports = router;

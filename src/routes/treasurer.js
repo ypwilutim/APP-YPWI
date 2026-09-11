@@ -2013,9 +2013,13 @@ router.post('/treasurer/bendahara/billing/generate-student', authenticateBendaha
       return res.status(400).json({ success: false, message: 'student_id dan bulan wajib' });
     }
 
-    const [student] = await db.query('SELECT id, tenant_id, iuran_bulanan, va_number, subsidi FROM students WHERE id = ?', [student_id]);
+    const [student] = await db.query('SELECT id, tenant_id, iuran_bulanan, va_number, subsidi, ransportasi, status FROM students WHERE id = ?', [student_id]);
     if (!student) {
       return res.status(404).json({ success: false, message: 'Siswa tidak ditemukan' });
+    }
+    // Cek status alumni - tidak boleh generate billing baru
+    if (student.status === 'alumni') {
+      return res.status(400).json({ success: false, message: 'Siswa sudah alumni, tidak bisa generate billing baru' });
     }
 
     const spp = spp_bulanan !== undefined ? parseFloat(spp_bulanan) : parseFloat(student.iuran_bulanan) || 0;
@@ -3053,6 +3057,7 @@ router.get('/treasurer/public/students-by-tenant', async (req, res) => {
       SELECT s.id, s.nama_siswa, s.nisn, s.tenant_id
       FROM students s
       WHERE (s.status = 'active' OR s.status = 'aktif' OR s.status IS NULL)
+        AND s.status != 'alumni'
         AND COALESCE(s.iuran_bulanan, 0) > 0
     `;
     const params = [];

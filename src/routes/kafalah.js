@@ -137,12 +137,29 @@ function computeGajiFromConfig(cfg, tahun) {
   return num(cfg.gaji_awal) + (periods * num(cfg.kenaikan_per_tahun));
 }
 
-// Ambil settings
-async function getKafalahSettings() {
-  let rows = await db.query('SELECT * FROM kafalah_settings WHERE id = 1');
+// Ensure tenant_id column in kafalah_settings
+async function ensureKafalahSettingsTable() {
+  try {
+    await db.query(`ALTER TABLE kafalah_settings ADD COLUMN tenant_id VARCHAR(20) DEFAULT NULL`);
+    await db.query(`CREATE UNIQUE INDEX idx_tenant ON kafalah_settings (tenant_id)`);
+  } catch (e) {
+    // Column might already exist
+  }
+}
+
+// Ambil settings - global atau per tenant
+async function getKafalahSettings(tenantId = null) {
+  await ensureKafalahSettingsTable();
+  let rows;
+  if (tenantId) {
+    rows = await db.query('SELECT * FROM kafalah_settings WHERE tenant_id = ? LIMIT 1', [tenantId]);
+    if (rows.length) return rows[0];
+  }
+  // Fallback ke global (tenant_id IS NULL)
+  rows = await db.query('SELECT * FROM kafalah_settings WHERE tenant_id IS NULL AND id = 1');
   if (!rows.length) {
-    await db.query('INSERT IGNORE INTO kafalah_settings (id) VALUES (1)');
-    rows = await db.query('SELECT * FROM kafalah_settings WHERE id = 1');
+    await db.query('INSERT IGNORE INTO kafalah_settings (id, tenant_id) VALUES (1, NULL)');
+    rows = await db.query('SELECT * FROM kafalah_settings WHERE tenant_id IS NULL AND id = 1');
   }
   return rows[0] || {};
 }
@@ -177,7 +194,7 @@ async function getAttendanceSummary(tenantId, startDate, endDate) {
 
 // ------- Endpoints -------
 
-// GET settings
+// GET settings (global)
 router.get('/kafalah/settings', authenticateBendahara, async (req, res) => {
   try {
     const s = await getKafalahSettings();
@@ -188,7 +205,20 @@ router.get('/kafalah/settings', authenticateBendahara, async (req, res) => {
   }
 });
 
-// PUT settings
+// GET settings (tenant-specific)
+router.get('/kafalah/settings/tenant', authenticateBendahara, async (req, res) => {
+  try {
+    const tenantId = req.query.tenant_id;
+    if (!tenantId) return res.status(400).json({ success: false, message: 'tenant_id required' });
+    const s = await getKafalahSettings(tenantId);
+    res.json({ success: true, data: s });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+// PUT settings (global)
 router.put('/kafalah/settings', authenticateBendahara, async (req, res) => {
   try {
     const fields = ['tunj_pengabdian','tunj_fungsional','tunj_transport','tunj_tepat_waktu','tunj_tidak_cepat_pulang','tunj_prestasi_kinerja','nominal_kjm','tunj_pembina','tunj_pondok','tunj_anak','tunj_istri'];
@@ -198,6 +228,23 @@ router.put('/kafalah/settings', authenticateBendahara, async (req, res) => {
     const set = Object.keys(vals).map(f => `${f}=?`).join(', ');
     await db.query(`INSERT INTO kafalah_settings (id, ${Object.keys(vals).join(',')}) VALUES (1, ${Object.keys(vals).map(()=>'?').join(',')}) ON DUPLICATE KEY UPDATE ${set}`, [...Object.values(vals), ...Object.values(vals)]);
     res.json({ success: true, message: 'Pengaturan KAFALAH tersimpan' });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+// PUT settings (tenant-specific)
+router.put('/kafalah/settings/tenant', authenticateBendahara, async (req, res) => {
+  try {
+    const tenantId = req.body.tenant_id || req.query.tenant_id;
+    if (!tenantId) return res.status(400).json({ success: false, message: 'tenant_id required' });
+    const fields = ['tunj_pengabdian','tunj_fungsional','tunj_transport','tunj_tepat_waktu','tunj_tidak_cepat_pulang','tunj_prestasi_kinerja','nominal_kjm','tunj_pembina','tunj_pondok','tunj_anak','tunj_istri'];
+    const vals = { tenant_id: tenantId };
+    fields.forEach(f => { if (req.body[f] !== undefined) vals[f] = num(req.body[f]); });
+    if (Object.keys(vals).length <= 1) return res.status(400).json({ success: false, message: 'Tidak ada field' });
+    const set = Object.keys(vals).map(f => `${f}=?`).join(', ');
+    await db.query(`INSERT INTO kafalah_settings (tenant_id, ${fields.join(',')}) VALUES (?, ${fields.map(()=>'?').join(',')}) ON DUPLICATE KEY UPDATE ${set}`, [tenantId, ...fields.map(f => vals[f]), ...fields.map(f => vals[f])]);
+    res.json({ success: true, message: 'Pengaturan KAFALAH sekolah tersimpan' });
   } catch (e) {
     res.status(500).json({ success: false, message: e.message });
   }
@@ -617,7 +664,7 @@ async function computeKafalah(tenantId, startDate, endDate, labelPeriode) {
   // Auto-sync matrix dengan pendidikan dari data guru
   await autoSyncPendidikan();
 
-  const settings = await getKafalahSettings();
+  const settings = await getKafalahSettings(tenantId);
   const overrides = await getOverrides(tenantId);
   const att = await getAttendanceSummary(tenantId, startDate, endDate);
   const attMap = {};

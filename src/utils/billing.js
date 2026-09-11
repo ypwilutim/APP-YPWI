@@ -441,9 +441,11 @@ async function insertIncoming(rec) {
 async function generateBilling(tenantId, fallbackStart) {
   const end = currentMonth();
   const students = await db.query(
-    `SELECT s.id, s.tenant_id, s.iuran_bulanan, s.ransportasi, s.tahun_masuk, s.subsidi, s.va_number
+    `SELECT s.id, s.tenant_id, s.iuran_bulanan, s.ransportasi, s.tahun_masuk, s.subsidi, s.va_number, s.status
      FROM students s
-     WHERE s.tenant_id = ? AND (s.status = 'active' OR s.status = 'aktif' OR s.status IS NULL)
+     WHERE s.tenant_id = ? 
+       AND (s.status = 'active' OR s.status = 'aktif' OR s.status IS NULL)
+       AND s.status != 'alumni'
        AND COALESCE(s.iuran_bulanan, 0) > 0`,
     [tenantId]
   );

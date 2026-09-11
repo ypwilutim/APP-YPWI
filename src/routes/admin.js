@@ -5237,7 +5237,7 @@ router.post('/admin/mutasi/teachers/:id/initiate', authenticateOperator, async (
     try {
       if (isKeluar) {
         const result = await db.query(
-          'UPDATE teacher_assignments SET tenant_id = NULL, mutasi_status = ?, mutasi_reason = ?, mutasi_date = NOW() WHERE teacher_id = ?',
+          'UPDATE teacher_assignments SET mutasi_status = ?, mutasi_reason = ?, mutasi_date = NOW() WHERE teacher_id = ?',
           ['keluar', cleanReason || null, id]
         );
         updated = result.affectedRows > 0;
@@ -5250,9 +5250,6 @@ router.post('/admin/mutasi/teachers/:id/initiate', authenticateOperator, async (
       }
     } catch (colError) {
       console.warn('Mutasi columns not found in teacher_assignments, fallback to status-based marking');
-      if (isKeluar) {
-        await db.query('UPDATE teacher_assignments SET tenant_id = NULL WHERE teacher_id = ?', [id]);
-      }
     }
 
     if (!updated) {
@@ -5523,21 +5520,31 @@ router.get('/admin/leave-requests', authenticateOperator, async (req, res) => {
     } else {
       const assignments = req.user.assignments || [];
       const ketuaRoles = ['kepalasekolah', 'pimpinan', 'ketua', 'kepalapondok'];
-      const isKetuaYpwilutim = assignments.some(a => {
+      const adminJabatans = ['admin', 'operator', 'media', 'tu', 'tatausaha', 'kepala', 'pimpinan'];
+      // Admin jabatan di YPWILUTIM -> semua tenant, semua jabatan (sama seperti users.role = admin)
+      const isAdminYpwilutim = assignments.some(a => {
         const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
-        return a.tenant_id === 'YPWILUTIM' && ketuaRoles.includes(jabatan);
+        return a.tenant_id === 'YPWILUTIM' && adminJabatans.some(role => jabatan.includes(role));
       });
-      if (isKetuaYpwilutim) {
-        filterPrincipalOnly = true;
+      if (isAdminYpwilutim) {
         allowedTenants = null; // semua tenant
       } else {
-        const allowed = assignments
-          .filter(a => {
-            const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
-            return a.tenant_id !== 'YPWILUTIM' && ketuaRoles.includes(jabatan);
-          })
-          .map(a => a.tenant_id);
-        allowedTenants = allowed.length > 0 ? allowed : [];
+        const isKetuaYpwilutim = assignments.some(a => {
+          const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
+          return a.tenant_id === 'YPWILUTIM' && ketuaRoles.includes(jabatan);
+        });
+        if (isKetuaYpwilutim) {
+          filterPrincipalOnly = true;
+          allowedTenants = null; // semua tenant
+        } else {
+          const allowed = assignments
+            .filter(a => {
+              const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
+              return a.tenant_id !== 'YPWILUTIM' && ketuaRoles.includes(jabatan);
+            })
+            .map(a => a.tenant_id);
+          allowedTenants = allowed.length > 0 ? allowed : [];
+        }
       }
     }
 

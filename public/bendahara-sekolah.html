@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dashboard Bendahara Sekolah - YPWI Lutim</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="/css/tailwind.css" rel="stylesheet">
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
   <style>
     body {
@@ -42,13 +42,13 @@
           class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100">
           <i class="fas fa-file-invoice-dollar"></i><span>Pembayaran Siswa</span>
         </button>
-        <button data-tab="lunasiMassal"
-          class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100">
-          <i class="fas fa-check-double"></i><span>Lunaskan Massal</span>
-        </button>
         <button data-tab="payroll"
           class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100">
           <i class="fas fa-wallet"></i><span>Slip Gaji</span>
+        </button>
+        <button data-tab="payrollSettings"
+          class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100">
+          <i class="fas fa-cog"></i><span>Pengaturan Gaji</span>
         </button>
         <button data-tab="spp"
           class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100">
@@ -189,62 +189,159 @@
         </div>
       </div>
 
-      <!-- Slip Gaji Tab -->
+      <!-- Slip Gaji Tab (KAFALAH System) -->
       <div id="payrollTab" class="tab-content hidden">
         <div class="bg-white rounded-xl shadow-sm p-6">
-          <h3 class="font-semibold mb-4">Slip Gaji Guru</h3>
+          <h3 class="font-semibold mb-4"><i class="fas fa-coins mr-2 text-yellow-600"></i>Penggajian KAFALAH</h3>
           <div class="flex items-end gap-2 mb-4 flex-wrap">
-            <div><label class="block text-xs mb-1">Sekolah</label>
-              <select id="payrollTenantSelect" class="px-3 py-2 border rounded-lg"></select>
+            <div>
+              <label class="block text-xs font-medium mb-1">Sekolah</label>
+              <select id="kafalahTenantSelect" class="px-3 py-2 border rounded-lg"></select>
             </div>
-            <div><label class="block text-xs mb-1">Bulan</label>
-              <select id="payrollBulan" class="px-3 py-2 border rounded-lg">
-                <option value="1">Januari</option>
-                <option value="2">Februari</option>
-                <option value="3">Maret</option>
-                <option value="4">April</option>
-                <option value="5">Mei</option>
-                <option value="6">Juni</option>
-                <option value="7" selected>Juli</option>
-                <option value="8">Agustus</option>
-                <option value="9">September</option>
-                <option value="10">Oktober</option>
-                <option value="11">November</option>
-                <option value="12">Desember</option>
-              </select>
+            <div>
+              <label class="block text-xs font-medium mb-1">Tanggal Mulai</label>
+              <input type="date" id="kafalahStart" class="px-3 py-2 border rounded-lg">
             </div>
-            <div><label class="block text-xs mb-1">Tahun</label>
-              <select id="payrollTahun" class="px-3 py-2 border rounded-lg"></select>
+            <div>
+              <label class="block text-xs font-medium mb-1">Tanggal Selesai</label>
+              <input type="date" id="kafalahEnd" class="px-3 py-2 border rounded-lg">
             </div>
-            <button onclick="loadPayroll()" class="bg-blue-600 text-white px-4 py-2 rounded-lg">Hitung</button>
+            <button onclick="previewKafalah()" class="bg-blue-600 text-white px-4 py-2 rounded-lg">
+              <i class="fas fa-eye mr-1"></i>Preview
+            </button>
+            <button onclick="generateKafalah()" class="bg-emerald-600 text-white px-4 py-2 rounded-lg hidden" id="generateKafalahBtn">
+              <i class="fas fa-save mr-1"></i>Simpan Slip
+            </button>
           </div>
           <div class="overflow-x-auto">
             <table class="w-full text-sm">
-              <thead class="bg-gray-50">
-                <tr class="border-b">
+              <thead class="bg-gray-50 border-b">
+                <tr>
                   <th class="px-2 py-2 text-left">#</th>
                   <th class="px-2 py-2 text-left">Nama</th>
-                  <th class="px-2 py-2 text-right">Gaji Pokok</th>
-                  <th class="px-2 py-2 text-right">T. Kinerja</th>
-                  <th class="px-2 py-2 text-right">T. Umum</th>
+                  <th class="px-2 py-2 text-left">NIK</th>
+                  <th class="px-2 py-2 text-left">Status</th>
+                  <th class="px-2 py-2 text-left">Jabatan</th>
+                  <th class="px-2 py-2 text-right">Kafalah Pokok</th>
                   <th class="px-2 py-2 text-right">T. Istri</th>
                   <th class="px-2 py-2 text-right">T. Anak</th>
-                  <th class="px-2 py-2 text-right">T. KepSek</th>
-                  <th class="px-2 py-2 text-right">T. WaliKelas</th>
-                  <th class="px-2 py-2 text-right">Honor</th>
-                  <th class="px-2 py-2 text-right">Potongan</th>
-                  <th class="px-2 py-2 text-right">Total</th>
-                  <th class="px-2 py-2">Aksi</th>
+                  <th class="px-2 py-2 text-right bg-blue-50 font-medium">Total A</th>
+                  <th class="px-2 py-2 text-right">
+                    <input type="number" placeholder="T. Struktural" min="0" step="50000" class="w-24 border rounded px-1 py-0.5 text-right text-xs" id="globalStruktural" onchange="applyGlobalStruktural()" />
+                  </th>
+                  <th class="px-2 py-2 text-right">T. Pengabdian</th>
+                  <th class="px-2 py-2 text-right">T. Fungsional</th>
+                  <th class="px-2 py-2 text-right">T. Pembina</th>
+                  <th class="px-2 py-2 text-right">T. Pondok</th>
+                  <th class="px-2 py-2 text-right">T. Transport</th>
+                  <th class="px-2 py-2 text-right">T. Tepat Waktu</th>
+                  <th class="px-2 py-2 text-right">T. Tdk Cepat Plg</th>
+                  <th class="px-2 py-2 text-right">T. KJM</th>
+                  <th class="px-2 py-2 text-right">T. Kinerja</th>
+                  <th class="px-2 py-2 text-right">
+                    <input type="number" placeholder="T. Apresiasi" min="0" step="50000" class="w-24 border rounded px-1 py-0.5 text-right text-xs" id="globalApresiasi" onchange="applyGlobalApresiasi()" />
+                  </th>
+                  <th class="px-2 py-2 text-right bg-emerald-50 font-medium">Total B</th>
+                  <th class="px-2 py-2 text-right bg-red-50">
+                    <input type="number" placeholder="Potongan" min="0" step="1000" class="w-20 border rounded px-1 py-0.5 text-right text-xs" id="globalPotongan" onchange="applyGlobalPotongan()" />
+                  </th>
+                  <th class="px-2 py-2 text-right bg-yellow-50 font-bold">TOTAL KAFALAH</th>
                 </tr>
               </thead>
-              <tbody id="payrollTable">
+              <tbody id="kafalahTable" class="divide-y divide-gray-100">
                 <tr>
-                  <td colspan="13" class="p-4 text-center">Pilih periode lalu klik Hitung</td>
+                  <td colspan="23" class="px-2 py-8 text-center text-gray-500">Pilih sekolah & periode lalu klik Preview</td>
                 </tr>
               </tbody>
             </table>
           </div>
-          <div id="payrollPagination" class="flex justify-center gap-1 mt-4"></div>
+          <div id="kafalahSummary" class="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3 hidden">
+            <div class="bg-blue-50 p-3 rounded-xl border border-blue-100">
+              <p class="text-xs font-medium text-gray-500 uppercase">Total Wajib (A)</p>
+              <p class="text-xl font-bold text-blue-600 mt-1" id="kSumWajib">Rp 0</p>
+            </div>
+            <div class="bg-emerald-50 p-3 rounded-xl border border-emerald-100">
+              <p class="text-xs font-medium text-gray-500 uppercase">Total Insentif (B)</p>
+              <p class="text-xl font-bold text-emerald-600 mt-1" id="kSumInsentif">Rp 0</p>
+            </div>
+            <div class="bg-red-50 p-3 rounded-xl border border-red-100">
+              <p class="text-xs font-medium text-gray-500 uppercase">Total Potongan (C)</p>
+              <p class="text-xl font-bold text-red-600 mt-1" id="kSumPotong">Rp 0</p>
+            </div>
+            <div class="bg-yellow-50 p-3 rounded-xl border border-yellow-100">
+              <p class="text-xs font-medium text-gray-500 uppercase">Total Pendapatan</p>
+              <p class="text-xl font-bold text-yellow-700 mt-1" id="kSumTotal">Rp 0</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pengaturan Gaji Tab -->
+      <div id="payrollSettingsTab" class="tab-content hidden">
+        <div class="bg-white rounded-xl shadow-sm border-2 border-yellow-200 p-6 mb-4">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold"><i class="fas fa-coins mr-2 text-yellow-600"></i>Pengaturan KAFALAH Sekolah</h3>
+            <span id="settingsStatus" class="text-xs text-gray-500 hidden"></span>
+          </div>
+          <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4 text-sm text-yellow-800">
+            <i class="fas fa-info-circle mr-1"></i>
+            Pengaturan ini berlaku untuk <strong>sekolah ini saja</strong>. Jika dikosongkan, akan menggunakan pengaturan global Yayasan. Perubahan tidak mengubah slip yang sudah tersimpan.
+          </div>
+          <form id="payrollSettingsForm" onsubmit="savePayrollSettings(event)" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Tunj. Pengabdian (flat)</label>
+              <input type="number" id="psTunjPengabdian" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Global">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Tunj. Fungsional (flat)</label>
+              <input type="number" id="psTunjFungsional" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Global">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Tunj. Transportasi</label>
+              <input type="number" id="psTunjTransport" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Global">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Tunj. Tepat Waktu Datang</label>
+              <input type="number" id="psTunjTepatWaktu" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Global">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Tunj. Tidak Cepat Pulang</label>
+              <input type="number" id="psTunjTidakCepatPulang" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Global">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Tunj. Prestasi Kinerja (flat)</label>
+              <input type="number" id="psTunjPrestasiKinerja" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Global">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Nominal KJM (per jam)</label>
+              <input type="number" id="psNominalKjm" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Global">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Tunj. Pembina (default)</label>
+              <input type="number" id="psTunjPembina" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Global">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Tunj. Pondok (default)</label>
+              <input type="number" id="psTunjPondok" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Global">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Tunj. Anak (per anak)</label>
+              <input type="number" id="psTunjAnak" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Global">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Tunj. Istri (flat)</label>
+              <input type="number" id="psTunjIstri" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Global">
+            </div>
+            <div class="md:col-span-2 flex items-center gap-3">
+              <button type="submit" class="px-5 py-2.5 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 font-medium">
+                <i class="fas fa-save mr-1"></i>Simpan Pengaturan Sekolah
+              </button>
+              <button type="button" onclick="resetPayrollSettings()" class="px-5 py-2.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium">
+                <i class="fas fa-undo mr-1"></i>Gunakan Global
+              </button>
+              <span id="psSavedInfo" class="text-sm text-gray-500"></span>
+            </div>
+          </form>
         </div>
       </div>
 
@@ -274,10 +371,89 @@
         </div>
       </div>
 
-      <!-- Lunaskan Massal Tab -->
-      <div id="lunasiMassalTab" class="tab-content hidden">
-        <div class="bg-white rounded-xl shadow-sm border-2 border-emerald-200 p-6 mb-4">
-          <h3 class="text-lg font-semibold mb-2"><i class="fas fa-check-double text-emerald-600 mr-2"></i>Lunaskan Massal (Banyak Siswa & Bulan)</h3>
+      <!-- Modal Batal Lunas Massal -->
+      <div id="batalLunasMassalModal" class="hidden fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-semibold text-gray-800">
+              <i class="fas fa-undo text-orange-500 mr-2"></i>Batalkan Lunas Massal
+            </h3>
+            <button onclick="closeBatalLunasMassalModal()" class="text-gray-400 hover:text-gray-600">
+              <i class="fas fa-times text-xl"></i>
+            </button>
+          </div>
+          <div class="bg-orange-50 border border-orange-200 rounded-lg p-3 mb-4 text-sm text-orange-800">
+            <i class="fas fa-exclamation-triangle mr-1"></i>
+            <strong>Perhatian:</strong> Tindakan ini akan mengembalikan status billing dari <strong>LUNAS → BELUM</strong>, menghapus catatan pelunasan, dan menghapus record incoming_payments terkait. Tidak bisa dibatalkan.
+          </div>
+
+          <div class="grid grid-cols-2 gap-3 mb-3">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Dari Bulan <span class="text-red-500">*</span></label>
+              <input type="month" id="batalLunasMassalFrom" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Sampai Bulan <span class="text-red-500">*</span></label>
+              <input type="month" id="batalLunasMassalTo" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500">
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Target Siswa</label>
+            <div class="space-y-2">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="batalLunasMassalTarget" value="all" checked onchange="toggleBatalLunasMassalTarget()">
+                <span>Semua siswa aktif di sekolah ini</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="radio" name="batalLunasMassalTarget" value="specific" onchange="toggleBatalLunasMassalTarget()">
+                <span>Siswa tertentu saja</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="mb-3 hidden" id="batalLunasMassalStudentListWrap">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Cari & Pilih Siswa</label>
+            <input type="text" id="batalLunasMassalStudentSearch" placeholder="Cari nama/NISN..." onkeyup="filterBatalLunasMassalStudents()" class="w-full px-3 py-2 border border-gray-300 rounded-lg mb-2 focus:ring-2 focus:ring-orange-500">
+            <div id="batalLunasMassalStudentList" class="border rounded-lg max-h-48 overflow-y-auto p-2 space-y-1 bg-gray-50">
+              <p class="text-sm text-gray-500 text-center py-2">Memuat siswa...</p>
+            </div>
+            <p class="text-xs text-gray-500 mt-1">Dipilih: <strong id="batalLunasMassalSelectedCount">0</strong> siswa</p>
+          </div>
+
+          <div class="mb-3">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Alasan Pembatalan (Opsional)</label>
+            <textarea id="batalLunasMassalAlasan" rows="2" placeholder="Contoh: Salah catat / Double input / Pembatalan oleh orang tua" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"></textarea>
+          </div>
+
+          <div id="batalLunasMassalPreview" class="hidden bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3 text-sm text-blue-800">
+            <i class="fas fa-info-circle mr-1"></i>
+            <span id="batalLunasMassalPreviewText">-</span>
+          </div>
+
+          <div class="flex gap-2 justify-end">
+            <button onclick="closeBatalLunasMassalModal()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">Batal</button>
+            <button onclick="previewBatalLunasMassal()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+              <i class="fas fa-search mr-1"></i>Preview
+            </button>
+            <button onclick="submitBatalLunasMassal()" class="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 font-medium">
+              <i class="fas fa-undo mr-1"></i>Batalkan Sekarang
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal Lunaskan Massal -->
+      <div id="lunasiMassalModal" class="hidden fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-semibold text-gray-800">
+              <i class="fas fa-check-double text-emerald-600 mr-2"></i>Lunaskan Massal (Banyak Siswa & Bulan)
+            </h3>
+            <button onclick="closeLunasiMassalModal()" class="text-gray-400 hover:text-gray-600">
+              <i class="fas fa-times text-xl"></i>
+            </button>
+          </div>
           <p class="text-sm text-gray-600 mb-4">Fitur untuk melunasi billing banyak siswa sekaligus dalam rentang bulan. Hanya billing berstatus <strong>belum</strong> yang akan diproses.</p>
 
           <div class="grid grid-cols-2 gap-3 mb-3">
@@ -349,78 +525,6 @@
             </button>
             <button onclick="submitLunasiMassal()" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium">
               <i class="fas fa-check-double mr-1"></i>Lunaskan Sekarang
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Modal Batal Lunas Massal -->
-      <div id="batalLunasMassalModal" class="hidden fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-4">
-        <div class="bg-white rounded-xl shadow-xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold text-gray-800">
-              <i class="fas fa-undo text-orange-500 mr-2"></i>Batalkan Lunas Massal
-            </h3>
-            <button onclick="closeBatalLunasMassalModal()" class="text-gray-400 hover:text-gray-600">
-              <i class="fas fa-times text-xl"></i>
-            </button>
-          </div>
-          <div class="bg-orange-50 border border-orange-200 rounded-lg p-3 mb-4 text-sm text-orange-800">
-            <i class="fas fa-exclamation-triangle mr-1"></i>
-            <strong>Perhatian:</strong> Tindakan ini akan mengembalikan status billing dari <strong>LUNAS → BELUM</strong>, menghapus catatan pelunasan, dan menghapus record incoming_payments terkait. Tidak bisa dibatalkan.
-          </div>
-
-          <div class="grid grid-cols-2 gap-3 mb-3">
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Dari Bulan <span class="text-red-500">*</span></label>
-              <input type="month" id="batalLunasMassalFrom" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500">
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Sampai Bulan <span class="text-red-500">*</span></label>
-              <input type="month" id="batalLunasMassalTo" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500">
-            </div>
-          </div>
-
-          <div class="mb-3">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Target Siswa</label>
-            <div class="space-y-2">
-              <label class="flex items-center gap-2 cursor-pointer">
-                <input type="radio" name="batalLunasMassalTarget" value="all" checked onchange="toggleBatalLunasMassalTarget()">
-                <span>Semua siswa aktif di sekolah ini</span>
-              </label>
-              <label class="flex items-center gap-2 cursor-pointer">
-                <input type="radio" name="batalLunasMassalTarget" value="specific" onchange="toggleBatalLunasMassalTarget()">
-                <span>Siswa tertentu saja</span>
-              </label>
-            </div>
-          </div>
-
-          <div class="mb-3 hidden" id="batalLunasMassalStudentListWrap">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Cari & Pilih Siswa</label>
-            <input type="text" id="batalLunasMassalStudentSearch" placeholder="Cari nama/NISN..." onkeyup="filterBatalLunasMassalStudents()" class="w-full px-3 py-2 border border-gray-300 rounded-lg mb-2 focus:ring-2 focus:ring-orange-500">
-            <div id="batalLunasMassalStudentList" class="border rounded-lg max-h-48 overflow-y-auto p-2 space-y-1 bg-gray-50">
-              <p class="text-sm text-gray-500 text-center py-2">Memuat siswa...</p>
-            </div>
-            <p class="text-xs text-gray-500 mt-1">Dipilih: <strong id="batalLunasMassalSelectedCount">0</strong> siswa</p>
-          </div>
-
-          <div class="mb-3">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Alasan Pembatalan (Opsional)</label>
-            <textarea id="batalLunasMassalAlasan" rows="2" placeholder="Contoh: Salah catat / Double input / Pembatalan oleh orang tua" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"></textarea>
-          </div>
-
-          <div id="batalLunasMassalPreview" class="hidden bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3 text-sm text-blue-800">
-            <i class="fas fa-info-circle mr-1"></i>
-            <span id="batalLunasMassalPreviewText">-</span>
-          </div>
-
-          <div class="flex gap-2 justify-end">
-            <button onclick="closeBatalLunasMassalModal()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">Batal</button>
-            <button onclick="previewBatalLunasMassal()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-              <i class="fas fa-search mr-1"></i>Preview
-            </button>
-            <button onclick="submitBatalLunasMassal()" class="px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 font-medium">
-              <i class="fas fa-undo mr-1"></i>Batalkan Sekarang
             </button>
           </div>
         </div>
@@ -918,28 +1022,17 @@
           }
         } catch (e) { }
       }
-      loadYears();
       initTabs();
       loadDashboardData();
     });
-
-    function loadYears() {
-      const sel = document.getElementById('payrollTahun');
-      const curYear = new Date().getFullYear();
-      for (let y = curYear - 2; y <= curYear + 1; y++) {
-        const o = document.createElement('option'); o.value = y; o.textContent = y;
-        if (y === curYear) o.selected = true;
-        sel.appendChild(o);
-      }
-    }
 
     function loadUnitSelector(units) {
       const sel = document.getElementById('unitSelector');
       sel.innerHTML = units.map(u => `<option value="${u.tenant_id}">${u.nama_sekolah || u.tenant_id}</option>`).join('');
       
-      const payrollSel = document.getElementById('payrollTenantSelect');
-      if (payrollSel) {
-        payrollSel.innerHTML = '<option value="">Semua Sekolah</option>' + units.map(u => `<option value="${u.tenant_id}">${u.nama_sekolah || u.tenant_id}</option>`).join('');
+      const kafalahSel = document.getElementById('kafalahTenantSelect');
+      if (kafalahSel) {
+        kafalahSel.innerHTML = '<option value="">Pilih Sekolah</option>' + units.map(u => `<option value="${u.tenant_id}">${u.nama_sekolah || u.tenant_id}</option>`).join('');
       }
     }
 
@@ -1008,15 +1101,24 @@
             loadSaldo();
           }
           if (btn.dataset.tab === 'lunasiMassal') {
-            showLunasiMassalModal();
+            // Tab content already has the form inline, no need for modal
           }
           if (btn.dataset.tab === 'payroll') {
             pagination.payroll.page = 1;
-            const payrollSel = document.getElementById('payrollTenantSelect');
-            if (payrollSel && currentTenantId) {
-              payrollSel.value = currentTenantId;
+            const kafalahSel = document.getElementById('kafalahTenantSelect');
+            if (kafalahSel && currentTenantId) {
+              kafalahSel.value = currentTenantId;
             }
+            // Set default date range (last month)
+            const today = new Date();
+            const firstDayLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+            const lastDayLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
+            document.getElementById('kafalahStart').value = firstDayLastMonth.toISOString().split('T')[0];
+            document.getElementById('kafalahEnd').value = lastDayLastMonth.toISOString().split('T')[0];
             loadPayroll();
+          }
+          if (btn.dataset.tab === 'payrollSettings') {
+            loadPayrollSettings();
           }
           if (btn.dataset.tab === 'spp') {
             pagination.spp.page = 1;
@@ -1129,29 +1231,212 @@
     }
 
     async function loadPayroll() {
-      const tbody = document.getElementById('payrollTable');
-      const pg = pagination.payroll;
-      const bulan = document.getElementById('payrollBulan').value;
-      const tahun = document.getElementById('payrollTahun').value;
-      const tenantId = document.getElementById('payrollTenantSelect').value || currentTenantId;
-      if (!bulan || !tahun) { showToast('Pilih bulan dan tahun', 'error'); return; }
-      tbody.innerHTML = '<tr><td colspan="13" class="text-center py-4">Memuat...</td></tr>';
+      const tenantId = document.getElementById('kafalahTenantSelect').value || currentTenantId;
+      const start = document.getElementById('kafalahStart').value;
+      const end = document.getElementById('kafalahEnd').value;
+      if (!tenantId || !start || !end) { showToast('Pilih sekolah & periode', 'error'); return; }
+      await previewKafalah();
+    }
+
+    // ==================== KAFALAH PAYROLL ====================
+    let kafalahPreviewData = [];
+
+    async function previewKafalah() {
+      const tenantId = document.getElementById('kafalahTenantSelect').value || currentTenantId;
+      const start = document.getElementById('kafalahStart').value;
+      const end = document.getElementById('kafalahEnd').value;
+      if (!tenantId || !start || !end) { showToast('Pilih sekolah & periode', 'error'); return; }
+
+      const tbody = document.getElementById('kafalahTable');
+      tbody.innerHTML = '<tr><td colspan="23" class="text-center py-6"><i class="fas fa-spinner fa-spin"></i> Menghitung...</td></tr>';
+
       try {
-        const token = localStorage.getItem('token');
-        const res = await fetch('/api/treasurer/bendahara/payroll?tenant_id=' + tenantId + '&bulan=' + bulan + '&tahun=' + tahun + '&page=' + pg.page + '&limit=' + pg.limit, { headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
+        const res = await fetch('/api/kafalah/preview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+          body: JSON.stringify({ tenant_id: tenantId, periode_mulai: start, periode_selesai: end })
+        });
         const json = await res.json();
-        if (!json.success) { showToast('Gagal muat data', 'error'); return; }
-        pagination.payroll.total = json.total || json.data.length;
-        const data = json.data;
-        if (!data.length) { tbody.innerHTML = '<tr><td colspan="13" class="text-center py-4">Tidak ada data guru</td></tr>'; return; }
-        tbody.innerHTML = data.map((d, i) => `<tr data-id="${d.id}" class="hover:bg-blue-50 cursor-pointer"><td class="px-2 py-1 text-center">${(pg.page - 1) * pg.limit + i + 1}</td><td class="px-2 py-1" style="min-width:180px">${d.nama}</td><td class="px-2 py-1 text-right editable" data-id="${d.id}" data-field="gaji_pokok">${fmtRp(d.gaji_pokok)}</td><td class="px-2 py-1 text-right editable" data-id="${d.id}" data-field="tunj_kinerja">${fmtRp(d.tunj_kinerja)}</td><td class="px-2 py-1 text-right editable" data-id="${d.id}" data-field="tunj_umum">${fmtRp(d.tunj_umum)}</td><td class="px-2 py-1 text-right editable" data-id="${d.id}" data-field="tunj_istri">${fmtRp(d.tunj_istri)}</td><td class="px-2 py-1 text-right editable" data-id="${d.id}" data-field="tunj_anak">${fmtRp(d.tunj_anak)}</td><td class="px-2 py-1 text-right editable" data-id="${d.id}" data-field="tunj_kepala_sekolah">${fmtRp(d.tunj_kepala_sekolah)}</td><td class="px-2 py-1 text-right editable" data-id="${d.id}" data-field="tunj_wali_kelas">${fmtRp(d.tunj_wali_kelas)}</td><td class="px-2 py-1 text-right editable" data-id="${d.id}" data-field="honor_bendahara">${fmtRp(d.honor_bendahara)}</td><td class="px-2 py-1 text-right">${fmtRp(d.potongan)}</td><td class="px-2 py-1 text-right font-semibold">${fmtRp(d.total_gaji)}</td></tr>`).join('');
+        if (!json.success) { tbody.innerHTML = '<tr><td colspan="23" class="text-center text-red-500">' + json.message + '</td></tr>'; return; }
+        kafalahPreviewData = json.data || [];
+        renderKafalahTable(kafalahPreviewData);
+        renderKafalahSummary(kafalahPreviewData);
+        document.getElementById('generateKafalahBtn').classList.remove('hidden');
       } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="13" class="text-center py-4 text-red-500">Error: ' + e.message + '</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="23" class="text-center text-red-500">' + e.message + '</td></tr>';
       }
-      renderPagination('payrollPagination', 'payroll');
-      document.querySelectorAll('.editable').forEach(td => {
-        td.addEventListener('dblclick', function () { editCell(this); });
+    }
+
+    function renderKafalahTable(rows) {
+      const tbody = document.getElementById('kafalahTable');
+      if (!rows.length) { tbody.innerHTML = '<tr><td colspan="23" class="text-center py-6">Tidak ada data guru</td></tr>'; return; }
+      tbody.innerHTML = rows.map((r, i) => `
+        <tr class="hover:bg-gray-50">
+          <td class="px-2 py-1">${i + 1}</td>
+          <td class="px-2 py-1 font-medium">${r.nama}</td>
+          <td class="px-2 py-1">${r.nik || '-'}</td>
+          <td class="px-2 py-1">${r.status_pegawai}</td>
+          <td class="px-2 py-1">${r.jabatan || '-'}</td>
+          <td class="px-2 py-1 text-right">${fmtRp(r.kafalah_pokok)}</td>
+          <td class="px-2 py-1 text-right">${fmtRp(r.tunj_keluarga_istri)}</td>
+          <td class="px-2 py-1 text-right">${fmtRp(r.tunj_keluarga_anak)}</td>
+          <td class="px-2 py-1 text-right bg-blue-50 font-medium">${fmtRp(r.total_a)}</td>
+          <td class="px-2 py-1 text-right">
+            <input type="number" value="${r.tunj_struktural || 0}" min="0" step="50000" class="w-20 border rounded px-1 py-0.5 text-right text-xs" onchange="updateKafalahRow(${i}, 'tunj_struktural', this.value)" />
+          </td>
+          <td class="px-2 py-1 text-right">${fmtRp(r.tunj_pengabdian)}</td>
+          <td class="px-2 py-1 text-right">${fmtRp(r.tunj_fungsional)}</td>
+          <td class="px-2 py-1 text-right">${fmtRp(r.tunj_pembina)}</td>
+          <td class="px-2 py-1 text-right">${fmtRp(r.tunj_pondok)}</td>
+          <td class="px-2 py-1 text-right">${fmtRp(r.tunj_transport)}</td>
+          <td class="px-2 py-1 text-right">${fmtRp(r.tunj_tepat_waktu)}</td>
+          <td class="px-2 py-1 text-right">${fmtRp(r.tunj_tidak_cepat_pulang)}</td>
+          <td class="px-2 py-1 text-right">${fmtRp(r.tunj_kjm)}</td>
+          <td class="px-2 py-1 text-right">${fmtRp(r.tunj_prestasi_kinerja)}</td>
+          <td class="px-2 py-1 text-right">
+            <input type="number" value="${r.tunj_apresiasi || 0}" min="0" step="50000" class="w-20 border rounded px-1 py-0.5 text-right text-xs" onchange="updateKafalahRow(${i}, 'tunj_apresiasi', this.value)" />
+          </td>
+          <td class="px-2 py-1 text-right bg-emerald-50 font-medium">${fmtRp(r.total_b)}</td>
+          <td class="px-2 py-1 text-right bg-red-50">
+            <input type="number" value="${r.total_c || 0}" min="0" step="1000" class="w-20 border rounded px-1 py-0.5 text-right text-xs" onchange="updateKafalahRow(${i}, 'total_c', this.value)" />
+          </td>
+          <td class="px-2 py-1 text-right bg-yellow-50 font-bold">${fmtRp(r.total_pendapatan)}</td>
+        </tr>
+      `).join('');
+    }
+
+    function renderKafalahSummary(rows) {
+      const summary = document.getElementById('kafalahSummary');
+      let wajib = 0, insentif = 0, potong = 0, total = 0;
+      rows.forEach(r => {
+        wajib += parseFloat(r.total_a) || 0;
+        insentif += parseFloat(r.total_b) || 0;
+        potong += parseFloat(r.total_c) || 0;
+        total += parseFloat(r.total_pendapatan) || 0;
       });
+      document.getElementById('kSumWajib').textContent = fmtRp(wajib);
+      document.getElementById('kSumInsentif').textContent = fmtRp(insentif);
+      document.getElementById('kSumPotong').textContent = fmtRp(potong);
+      document.getElementById('kSumTotal').textContent = fmtRp(total);
+      summary.classList.remove('hidden');
+    }
+
+    function updateKafalahRow(idx, field, value) {
+      const r = kafalahPreviewData[idx];
+      if (!r) return;
+      const v = parseFloat(value) || 0;
+      r[field] = v;
+      if (field === 'tunj_struktural' || field === 'tunj_apresiasi') {
+        r.total_b = (r.tunj_struktural||0) + (r.tunj_pengabdian||0) + (r.tunj_fungsional||0)
+          + (r.tunj_pembina||0) + (r.tunj_pondok||0) + (r.tunj_transport||0)
+          + (r.tunj_tepat_waktu||0) + (r.tunj_tidak_cepat_pulang||0)
+          + (r.tunj_kjm||0) + (r.tunj_prestasi_kinerja||0) + (r.tunj_apresiasi||0);
+      }
+      if (field === 'total_c') {
+        r.potong_taawun = v; r.potong_simt = 0; r.potong_pinjaman = 0; r.potong_cuti_luar_tanggungan = 0;
+      }
+      r.total_c = (r.potong_taawun||0) + (r.potong_simt||0) + (r.potong_pinjaman||0) + (r.potong_cuti_luar_tanggungan||0);
+      r.total_pendapatan = (r.total_a||0) + (r.total_b||0) - (r.total_c||0);
+      renderKafalahTable(kafalahPreviewData);
+      renderKafalahSummary(kafalahPreviewData);
+    }
+
+    function applyGlobalStruktural() {
+      const v = parseFloat(document.getElementById('globalStruktural').value) || 0;
+      kafalahPreviewData.forEach((r, i) => { r.tunj_struktural = v; updateKafalahRow(i, 'tunj_struktural', v); });
+    }
+    function applyGlobalApresiasi() {
+      const v = parseFloat(document.getElementById('globalApresiasi').value) || 0;
+      kafalahPreviewData.forEach((r, i) => { r.tunj_apresiasi = v; updateKafalahRow(i, 'tunj_apresiasi', v); });
+    }
+    function applyGlobalPotongan() {
+      const v = parseFloat(document.getElementById('globalPotongan').value) || 0;
+      kafalahPreviewData.forEach((r, i) => { r.total_c = v; updateKafalahRow(i, 'total_c', v); });
+    }
+
+    async function generateKafalah() {
+      if (!kafalahPreviewData.length) { showToast('Hitung preview dulu', 'error'); return; }
+      const tenantId = document.getElementById('kafalahTenantSelect').value || currentTenantId;
+      const start = document.getElementById('kafalahStart').value;
+      const end = document.getElementById('kafalahEnd').value;
+      if (!confirm(`Simpan ${kafalahPreviewData.length} slip KAFALAH untuk periode ini?`)) return;
+      try {
+        const res = await fetch('/api/kafalah/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+          body: JSON.stringify({ tenant_id: tenantId, periode_mulai: start, periode_selesai: end, data: kafalahPreviewData })
+        });
+        const json = await res.json();
+        if (json.success) { showToast(json.message, 'success'); kafalahPreviewData = []; }
+        else showToast(json.message || 'Gagal', 'error');
+      } catch (e) { showToast('Error: ' + e.message, 'error'); }
+    }
+
+    // ==================== PAYROLL SETTINGS ====================
+    async function loadPayrollSettings() {
+      const tenantId = currentTenantId;
+      if (!tenantId) return;
+      try {
+        const res = await fetch('/api/kafalah/settings/tenant?tenant_id=' + tenantId, { headers: getAuthHeader() });
+        const json = await res.json();
+        if (json.success && json.data) {
+          const s = json.data;
+          setVal('psTunjPengabdian', s.tunj_pengabdian);
+          setVal('psTunjFungsional', s.tunj_fungsional);
+          setVal('psTunjTransport', s.tunj_transport);
+          setVal('psTunjTepatWaktu', s.tunj_tepat_waktu);
+          setVal('psTunjTidakCepatPulang', s.tunj_tidak_cepat_pulang);
+          setVal('psTunjPrestasiKinerja', s.tunj_prestasi_kinerja);
+          setVal('psNominalKjm', s.nominal_kjm);
+          setVal('psTunjPembina', s.tunj_pembina);
+          setVal('psTunjPondok', s.tunj_pondok);
+          setVal('psTunjAnak', s.tunj_anak);
+          setVal('psTunjIstri', s.tunj_istri);
+          document.getElementById('settingsStatus').textContent = 'Menggunakan pengaturan sekolah';
+          document.getElementById('settingsStatus').classList.remove('hidden');
+        } else {
+          document.getElementById('settingsStatus').textContent = 'Menggunakan pengaturan global Yayasan';
+          document.getElementById('settingsStatus').classList.remove('hidden');
+        }
+      } catch (e) { console.error(e); }
+    }
+
+    function setVal(id, v) { const el = document.getElementById(id); if (el) el.value = v || ''; }
+
+    async function savePayrollSettings(e) {
+      e.preventDefault();
+      const tenantId = currentTenantId;
+      if (!tenantId) { showToast('Sekolah tidak dipilih', 'error'); return; }
+      const fields = ['tunj_pengabdian','tunj_fungsional','tunj_transport','tunj_tepat_waktu','tunj_tidak_cepat_pulang','tunj_prestasi_kinerja','nominal_kjm','tunj_pembina','tunj_pondok','tunj_anak','tunj_istri'];
+      const body = { tenant_id: tenantId };
+      fields.forEach(f => {
+        const el = document.getElementById('ps' + f.split('_').map(s => s[0].toUpperCase() + s.slice(1)).join(''));
+        if (el && el.value !== '') body[f] = parseFloat(el.value);
+      });
+      if (Object.keys(body).length <= 1) { showToast('Isi minimal satu field', 'error'); return; }
+      try {
+        const res = await fetch('/api/kafalah/settings/tenant', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+          body: JSON.stringify(body)
+        });
+        const json = await res.json();
+        if (json.success) {
+          showToast('Pengaturan sekolah tersimpan', 'success');
+          document.getElementById('psSavedInfo').textContent = 'Tersimpan ' + new Date().toLocaleTimeString('id-ID');
+          loadPayrollSettings();
+        } else showToast(json.message || 'Gagal', 'error');
+      } catch (e) { showToast('Error: ' + e.message, 'error'); }
+    }
+
+    async function resetPayrollSettings() {
+      if (!confirm('Hapus pengaturan sekolah dan gunakan global?')) return;
+      try {
+        await db.query('DELETE FROM kafalah_settings WHERE tenant_id = ?', [currentTenantId]);
+        showToast('Pengaturan sekolah dihapus, menggunakan global', 'success');
+        document.getElementById('payrollSettingsForm').reset();
+        loadPayrollSettings();
+      } catch (e) { showToast('Error: ' + e.message, 'error'); }
     }
 
     async function loadSpp() {
@@ -1887,6 +2172,11 @@
       document.getElementById('lunasiMassalPreview').classList.add('hidden');
       document.getElementById('lunasiMassalStudentList').innerHTML = '<p class="text-sm text-gray-500 text-center py-2">Memuat siswa...</p>';
       loadLunasiMassalStudents();
+      document.getElementById('lunasiMassalModal').classList.remove('hidden');
+    }
+
+    function closeLunasiMassalModal() {
+      document.getElementById('lunasiMassalModal').classList.add('hidden');
     }
 
     function toggleLunasiMassalTarget() {
@@ -2350,7 +2640,7 @@
       if (!tbody) return;
       tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center">Memuat...</td></tr>';
       try {
-        const res = await fetch(`/api/whatsapp/conversations?limit=100`, { headers: getAuthHeader() });
+        const res = await fetch(`/api/cs/whatsapp/conversations?limit=100`, { headers: getAuthHeader() });
         const data = await res.json();
         if (data.success && data.data && data.data.length > 0) {
           const rows = data.data;
