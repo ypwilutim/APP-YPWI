@@ -1103,13 +1103,19 @@
         return Swal.fire('Error', 'Upload Ijazah wajib diisi.', 'error');
       }
 
-     const submitBtn = e.target.querySelector('button[type="submit"]');
-     submitBtn.disabled = true;
-     submitBtn.innerHTML = '<div class="inline-block animate-spin rounded-full h-5 w-5 border-4 border-white border-t-transparent mr-2"></div>Menyimpan...';
+       const submitBtn = e.target.querySelector('button[type="submit"]');
+       submitBtn.disabled = true;
+       submitBtn.innerHTML = '<div class="inline-block animate-spin rounded-full h-5 w-5 border-4 border-white border-t-transparent mr-2"></div>Menyimpan...';
 
-  try {
-          const formData = new FormData(e.target);
-          formData.append('assignments_json', JSON.stringify(localAssignments));
+    try {
+           const formData = new FormData(e.target);
+           
+           // CRITICAL FIX: Populate assignments_json hidden field - this was missing!
+           const assignmentsJsonField = document.getElementById('assignments_json');
+           if (assignmentsJsonField && localAssignments && localAssignments.length > 0) {
+             assignmentsJsonField.value = JSON.stringify(localAssignments);
+           }
+           formData.append('assignments_json', JSON.stringify(localAssignments));
 
  // Collect pasangan data
            const pasanganList = [];

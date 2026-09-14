@@ -3924,69 +3924,76 @@ router.post('/admin/students/import', authenticateOperator, excelUpload.single('
     if (autoBilling && newStudentIds.length > 0) {
       try {
         await billing.ensureBillingTables();
-        // billing_start: "7" → Juli tahun ini; "2026-07" → explicit
-        let startMonth;
-        if (/^\d{4}-\d{2}$/.test(billingStart)) {
-          startMonth = billingStart;
+
+        // If tahun_ajaran_id provided, use the new function
+        if (req.body.tahun_ajaran_id) {
+          const taResult = await billing.generateBillingByTahunAjaran(null, req.body.tahun_ajaran_id);
+          billingResult = { created: taResult.created, skipped: taResult.skipped, tahun_ajaran: taResult.tahun_ajaran };
         } else {
-          const m = parseInt(billingStart, 10) || 7;
-          const y = new Date().getFullYear();
-          startMonth = `${y}-${String(m).padStart(2, '0')}`;
-        }
-        const currentYear = new Date().getFullYear();
-        const currentMonthNum = new Date().getMonth() + 1;
-        const endMonth = `${currentYear}-${String(currentMonthNum).padStart(2, '0')}`;
-
-        // Ambil iuran siswa yang baru di-import
-        const placeholders = newStudentIds.map(() => '?').join(',');
-        const importedStudents = await db.query(
-          `SELECT id, tenant_id, iuran_bulanan, ransportasi, subsidi, va_number
-           FROM students WHERE id IN (${placeholders})`,
-          newStudentIds
-        );
-
-        // Biaya admin VA global
-        const psResult = await db.query(
-          `SELECT biaya_admin_va FROM payment_admin_settings WHERE subject_type = 'global' AND subject_id = 0 LIMIT 1`
-        );
-        const ps = Array.isArray(psResult) ? psResult[0] : psResult;
-        const globalBiayaAdmin = ps ? (parseFloat(ps.biaya_admin_va) || 0) : 2000;
-
-        let billingCreated = 0;
-        const months = monthList(startMonth, endMonth);
-        for (const s of importedStudents) {
-          const spp = parseFloat(s.iuran_bulanan) || 0;
-          if (spp <= 0) continue;
-          const transport = parseFloat(s.ransportasi) || 0;
-          const subsidi = parseFloat(s.subsidi) || 0;
-          const biayaAdmin = s.va_number ? globalBiayaAdmin : 0;
-          const totalTagihan = Math.max(0, spp + transport - subsidi + biayaAdmin);
-
-          for (const m of months) {
-            // Skip jika bulan sudah lewat dari tahun ajaran (mis. tahun ajaran 2026/2027 mulai Juli 2026)
-            const [my, mm] = m.split('-').map(Number);
-            // Tentukan tahunajaran: jika startMonth Juli 2026, maka bulan 7-12 = 2026, 1-6 = 2027
-            const [sy, sm] = startMonth.split('-').map(Number);
-            const isPast = (my < sy) || (my === sy && mm < sm);
-            if (isPast) continue;
-            // Skip jika bulan > endMonth
-            if (m > endMonth) continue;
-
-            const [existing] = await db.query(
-              'SELECT id FROM billing_payment WHERE student_id = ? AND bulan = ?',
-              [s.id, m]
-            );
-            if (existing) continue;
-            await db.query(
-              `INSERT INTO billing_payment
-                (tenant_id, student_id, spp_bulanan, ransportasi, subsidi, biaya_admin_va, bulan, transaksi, keterangan_spp, status)
-               VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, 'belum')`,
-              [s.tenant_id, s.id, spp, transport, subsidi, biayaAdmin, m, totalTagihan]
-            );
-            billingCreated++;
+          // billing_start: "7" → Juli tahun ini; "2026-07" → explicit
+          let startMonth;
+          if (/^\d{4}-\d{2}$/.test(billingStart)) {
+            startMonth = billingStart;
+          } else {
+            const m = parseInt(billingStart, 10) || 7;
+            const y = new Date().getFullYear();
+            startMonth = `${y}-${String(m).padStart(2, '0')}`;
           }
+          const currentYear = new Date().getFullYear();
+          const currentMonthNum = new Date().getMonth() + 1;
+          const endMonth = `${currentYear}-${String(currentMonthNum).padStart(2, '0')}`;
+
+          // Ambil iuran siswa yang baru di-import
+          const placeholders = newStudentIds.map(() => '?').join(',');
+          const importedStudents = await db.query(
+            `SELECT id, tenant_id, iuran_bulanan, ransportasi, subsidi, va_number
+             FROM students WHERE id IN (${placeholders})`,
+            newStudentIds
+          );
+
+          // Biaya admin VA global
+          const psResult = await db.query(
+            `SELECT biaya_admin_va FROM payment_admin_settings WHERE subject_type = 'global' AND subject_id = 0 LIMIT 1`
+          );
+          const ps = Array.isArray(psResult) ? psResult[0] : psResult;
+          const globalBiayaAdmin = ps ? (parseFloat(ps.biaya_admin_va) || 0) : 2000;
+
+          let billingCreated = 0;
+          const months = monthList(startMonth, endMonth);
+          for (const s of importedStudents) {
+            const spp = parseFloat(s.iuran_bulanan) || 0;
+            if (spp <= 0) continue;
+            const transport = parseFloat(s.ransportasi) || 0;
+            const subsidi = parseFloat(s.subsidi) || 0;
+            const biayaAdmin = s.va_number ? globalBiayaAdmin : 0;
+            const totalTagihan = Math.max(0, spp + transport - subsidi + biayaAdmin);
+
+            for (const m of months) {
+              // Skip jika bulan sudah lewat dari tahun ajaran (mis. tahun ajaran 2026/2027 mulai Juli 2026)
+              const [my, mm] = m.split('-').map(Number);
+              // Tentukan tahunajaran: jika startMonth Juli 2026, maka bulan 7-12 = 2026, 1-6 = 2027
+              const [sy, sm] = startMonth.split('-').map(Number);
+              const isPast = (my < sy) || (my === sy && mm < sm);
+              if (isPast) continue;
+              // Skip jika bulan > endMonth
+              if (m > endMonth) continue;
+
+              const [existing] = await db.query(
+                'SELECT id FROM billing_payment WHERE student_id = ? AND bulan = ?',
+                [s.id, m]
+              );
+              if (existing) continue;
+              await db.query(
+                `INSERT INTO billing_payment
+                  (tenant_id, student_id, spp_bulanan, ransportasi, subsidi, biaya_admin_va, bulan, transaksi, keterangan_spp, status)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, 'belum')`,
+                [s.tenant_id, s.id, spp, transport, subsidi, biayaAdmin, m, totalTagihan]
+              );
+              billingCreated++;
+            }
+          }
+          billingResult = { created: billingCreated, start_month: startMonth, end_month: endMonth };
         }
-        billingResult = { created: billingCreated, start_month: startMonth, end_month: endMonth };
       } catch (billErr) {
         console.error('[IMPORT] Auto-billing error:', billErr.message);
         billingResult = { error: billErr.message };
@@ -6106,22 +6113,24 @@ router.put('/public/teachers/:teacherId', berkasUpload.fields([
     // Clear existing assignments
     await db.query('DELETE FROM teacher_assignments WHERE teacher_id = ?', [teacherId]);
 
-    // Insert new assignments - only if assignments_json exists and has content
-    if (assignments_json && assignments_json !== '') {
-      try {
-        const assignments = typeof assignments_json === 'string' ? JSON.parse(assignments_json) : assignments_json;
-        if (Array.isArray(assignments)) {
-          for (const a of assignments) {
-            await db.query(
-              'INSERT INTO teacher_assignments (teacher_id, tenant_id, jabatan_di_unit) VALUES (?, ?, ?)',
-              [teacherId, a.tenant_id || null, a.jabatan_di_unit || null]
-            );
+      // Insert new assignments - only if assignments_json exists and has content
+      if (assignments_json && assignments_json !== '') {
+        try {
+          const assignments = typeof assignments_json === 'string' ? JSON.parse(assignments_json) : assignments_json;
+          if (Array.isArray(assignments)) {
+            for (const a of assignments) {
+              await db.query(
+                'INSERT INTO teacher_assignments (teacher_id, tenant_id, jabatan_di_unit) VALUES (?, ?, ?)',
+                [teacherId, a.tenant_id || null, a.jabatan_di_unit || null]
+              );
+            }
           }
+        } catch (parseErr) {
+          console.error('Assignments parse error:', parseErr);
+          // Kirim error response langsung ke client
+          return res.status(400).json({ success: false, message: 'Format data penugasan tidak valid: ' + parseErr.message });
         }
-      } catch (parseErr) {
-        console.error('Assignments parse error:', parseErr);
       }
-    }
 
     // Create user account if not exists
     const existingUser = await db.query('SELECT id FROM users WHERE guru_id = ?', [teacherId]);

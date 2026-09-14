@@ -163,7 +163,7 @@ router.get('/teachers', authenticateOperator, async (req, res) => {
     }
 
     let query = `
-      SELECT t.id, t.nama, t.nik, t.nip, t.no_wa, t.link_foto, t.scan_id, 
+      SELECT t.id, t.nama, t.nik, t.nip, t.no_wa, t.tmt, t.status_kepegawaian, t.link_foto, t.scan_id, 
              GROUP_CONCAT(DISTINCT tn.nama_sekolah SEPARATOR '; ') AS nama_sekolah,
              GROUP_CONCAT(DISTINCT ta.jabatan_di_unit SEPARATOR '; ') AS jabatan_di_unit
       FROM teachers t

@@ -18,6 +18,9 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
+  <!-- Interactive Help System -->
+  <link href="assets/css/interactive-help.css" rel="stylesheet">
+
   <style>
     body {
       background-color: #f1f5f9;
@@ -58,11 +61,11 @@
           <span id="totalCount" class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">Total: 0 guru</span>
         </div>
         <div class="flex flex-wrap gap-2">
-          <button onclick="exportAllPdf()"
+          <button id="exportAllPdfBtn" onclick="exportAllPdf()"
             class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm">
             <i class="fas fa-file-pdf mr-2"></i>Export PDF Semua
           </button>
-          <button onclick="exportSelectedPdf()"
+          <button id="exportSelectedPdfBtn" onclick="exportSelectedPdf()"
             class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm">
             <i class="fas fa-check-square mr-2"></i>Export Terpilih
           </button>
@@ -166,7 +169,7 @@ return `
                     <img src="${foto}" crossorigin="anonymous" class="w-full h-full object-cover" />
                 </div>
                 <div class="flex-1 min-w-0 pt-[8px]">
-                    <div class="bg-sky-100 text-sky-700 px-[8px] h-[16px] rounded-full text-[7px] font-extrabold flex items-center justify-center tracking-widest leading-none whitespace-nowrap w-fit mb-[4px]">
+                    <div class="bg-sky-100 text-sky-700 px-[8px] h-[16px] rounded-full text-[7px] font-extrabold flex items-center justify-center tracking-widest leading-none whitespace-nowrap min-w-[60px] mb-[4px]">
                         ${(teacher.status_kepegawaian || 'GURU').toUpperCase()}
                     </div>
                     <div class="text-[13px] font-extrabold text-slate-900 leading-tight pb-[2px]">${teacher.nama || 'Guru'}</div>
@@ -268,7 +271,8 @@ return `
               nama_sekolah: t.nama_sekolah || 'YPWI LUTIM',
               scan_id: t.scan_id || ('GURU-' + t.id),
               link_foto: t.link_foto || null,
-              jenis_kelamin: t.jenis_kelamin || ''
+              jenis_kelamin: t.jenis_kelamin || '',
+              no_wa: t.no_wa || ''
             }));
             document.getElementById('totalCount').textContent = `Total: ${teachersData.length} guru`;
           } else {
@@ -280,9 +284,9 @@ return `
           console.warn('Gagal load dari API, gunakan data dummy:', err.message);
           // Fallback ke data dummy
           teachersData = [
-            { id: 101, nama: 'Ahmad Dahlan, S.Pd', jabatan_di_unit: 'Guru Matematika', status_kepegawaian: 'Tetap', nip: '198501012010011001', nik: '7325010101850001', tmt: '2030-12-31', nama_sekolah: 'SMA YPWI LUTIM', scan_id: 'GURU-101', jenis_kelamin: 'L' },
-            { id: 102, nama: 'Siti Nurhaliza, S.Si', jabatan_di_unit: 'Guru Fisika', status_kepegawaian: 'Kontrak', nip: '199002022015022002', nik: '7325010202900002', tmt: '2028-06-30', nama_sekolah: 'SMP YPWI LUTIM', scan_id: 'GURU-102', jenis_kelamin: 'P' },
-            { id: 103, nama: 'Budi Santoso, M.Kom', jabatan_di_unit: 'Guru TIK', status_kepegawaian: 'Tetap', nip: '198201012015011003', nik: '7325010101820003', tmt: '2035-01-01', nama_sekolah: 'SMK YPWI LUTIM', scan_id: 'GURU-103', jenis_kelamin: 'L' }
+            { id: 101, nama: 'Ahmad Dahlan, S.Pd', jabatan_di_unit: 'Guru Matematika', status_kepegawaian: 'Tetap', nip: '198501012010011001', nik: '7325010101850001', tmt: '2030-12-31', nama_sekolah: 'SMA YPWI LUTIM', scan_id: 'GURU-101', jenis_kelamin: 'L', no_wa: '081234567890' },
+            { id: 102, nama: 'Siti Nurhaliza, S.Si', jabatan_di_unit: 'Guru Fisika', status_kepegawaian: 'Kontrak', nip: '199002022015022002', nik: '7325010202900002', tmt: '2028-06-30', nama_sekolah: 'SMP YPWI LUTIM', scan_id: 'GURU-102', jenis_kelamin: 'P', no_wa: '081234567891' },
+            { id: 103, nama: 'Budi Santoso, M.Kom', jabatan_di_unit: 'Guru TIK', status_kepegawaian: 'Tetap', nip: '198201012015011003', nik: '7325010101820003', tmt: '2035-01-01', nama_sekolah: 'SMK YPWI LUTIM', scan_id: 'GURU-103', jenis_kelamin: 'L', no_wa: '081234567892' }
           ];
           document.getElementById('totalCount').textContent = `Total: ${teachersData.length} guru`;
           renderCards();
@@ -471,6 +475,59 @@ return `
 
     // Init
     document.addEventListener('DOMContentLoaded', loadTeachers);
+  </script>
+
+  <!-- Interactive Help Guide: ID Card Guru -->
+  <script src="assets/js/interactive-help.js"></script>
+  <script>
+    if (window.initGuide) {
+      window.initGuide({
+        name: 'teacher-idcard',
+        tooltip: 'Buka panduan ID Card Guru',
+        steps: [
+          {
+            title: 'Halaman ID Card Guru',
+            content: 'Di sini Anda dapat melihat daftar guru, menerapkan filter pencarian, memilih satu atau beberapa kartu, dan mengekspornya ke PDF.',
+            target: 'h1'
+          },
+          {
+            title: 'Export PDF Semua',
+            content: 'Klik tombol ini untuk mengekspor semua kartu guru ke PDF dengan ukuran standar CR80 (54 × 85 mm), satu kartu per halaman.',
+            target: '#exportAllPdfBtn'
+          },
+          {
+            title: 'Export Terpilih',
+            content: 'Ekspor hanya kartu yang telah Anda centang. Pilih kartu pakai kotak centang di pojok kiri atas tiap kartu, lalu klik tombol ini.',
+            target: '#exportSelectedPdfBtn'
+          },
+          {
+            title: 'Cari Nama Guru',
+            content: 'Ketik sebagian nama guru untuk menyaring daftar. Hasil pencarian akan ditampilkan di bawah dan tombol di samping akan berubah menjadi "Hasil: N".',
+            target: '#searchInput'
+          },
+          {
+            title: 'Tampilkan Semua',
+            content: 'Jika ada guru yang diseleksi, tombol ini akan menampilkan "Terseleksi: N" dan dapat diklik untuk menghapus semua seleksi. Jika sedang memfilter, tombol ini menampilkan semua guru lagi.',
+            target: '#showAllBtn'
+          },
+          {
+            title: 'Pilih & Unduh per Kartu',
+            content: 'Setiap kartu memiliki kotak centang di kiri atas untuk menyertakan kartu dalam ekspor massal. Ikon PDF di kanan atas kartu mengunduh kartu tunggal langsung.',
+            target: '#cardsContainer'
+          },
+          {
+            title: 'Scan ID & Presensi Digital',
+            content: 'Setiap kartu memuat Scan ID (format: GURU-XXX) dan kode QR di bawah kartu. Scan QR untuk verifikasi presensi dan akses sistem akademik.',
+            target: '.card-preview-wrapper'
+          },
+          {
+            title: 'Butuh Bantuan?',
+            content: 'Klik ikon tanya (⚪) di kanan bawah kapan saja untuk membuka kembali panduan ini.',
+            target: '#ihTombolBantuan'
+          }
+        ]
+      });
+    }
   </script>
 </body>
 

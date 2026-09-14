@@ -1948,8 +1948,50 @@ router.get('/treasurer/bendahara/saldo', authenticateBendahara, async (req, res)
 router.post('/treasurer/bendahara/billing/generate', authenticateBendahara, async (req, res) => {
   try {
     await billing.ensureBillingTables();
-    const { tenant_id } = req.body;
+    const { tenant_id, tahun_ajaran_id } = req.body;
     
+    // If tahun_ajaran_id is provided, generate by TA
+    if (tahun_ajaran_id) {
+      const [ta] = await db.query('SELECT * FROM tahun_ajaran WHERE id = ?', [tahun_ajaran_id]);
+      if (!ta.length) {
+        return res.status(404).json({ success: false, message: 'Tahun ajaran tidak ditemukan' });
+      }
+      if (tenant_id) {
+        const result = await billing.generateBillingByTahunAjaran(tenant_id, tahun_ajaran_id);
+        res.json({
+          success: true,
+          message: `Billing TA ${ta[0].nama}: ${result.created} baris, ${result.skipped} dilewati`,
+          created: result.created,
+          skipped: result.skipped
+        });
+      } else {
+        const tenants = await db.query('SELECT tenant_id, nama_sekolah FROM tenants');
+        let totalCreated = 0;
+        let totalSkipped = 0;
+        const details = [];
+        for (const tenant of tenants) {
+          try {
+            const result = await billing.generateBillingByTahunAjaran(tenant.tenant_id, tahun_ajaran_id);
+            totalCreated += result.created;
+            totalSkipped += result.skipped;
+            details.push({ tenant_id: tenant.tenant_id, nama_sekolah: tenant.nama_sekolah, created: result.created, skipped: result.skipped });
+          } catch (err) {
+            console.error(`[BILLING-TA] Failed for tenant ${tenant.tenant_id}:`, err.message);
+            details.push({ tenant_id: tenant.tenant_id, nama_sekolah: tenant.nama_sekolah, error: err.message });
+          }
+        }
+        res.json({
+          success: true,
+          message: `Billing TA ${ta[0].nama} dibuat untuk ${tenants.length} sekolah`,
+          total_created: totalCreated,
+          total_skipped: totalSkipped,
+          tenants_processed: tenants.length,
+          details: details
+        });
+      }
+      return;
+    }
+
     // If tenant_id is provided, generate for that tenant only
     // Otherwise, generate for all tenants
     if (tenant_id) {
@@ -2000,6 +2042,129 @@ router.post('/treasurer/bendahara/billing/generate', authenticateBendahara, asyn
   } catch (error) {
     console.error('Generate billing error:', error);
     res.status(500).json({ success: false, message: 'Gagal generate billing' });
+  }
+});
+
+// POST /api/treasurer/bendahara/billing/generate-by-tahun-ajaran - Generate billing by Tahun Ajaran
+router.post('/treasurer/bendahara/billing/generate-by-tahun-ajaran', authenticateBendahara, async (req, res) => {
+  try {
+    await billing.ensureBillingTables();
+    const { tenant_id, tahun_ajaran_id } = req.body;
+
+    if (!tahun_ajaran_id) {
+      return res.status(400).json({ success: false, message: 'tahun_ajaran_id wajib diisi' });
+    }
+
+    // Verify TA exists
+    const [ta] = await db.query('SELECT * FROM tahun_ajaran WHERE id = ?', [tahun_ajaran_id]);
+    if (!ta.length) {
+      return res.status(404).json({ success: false, message: 'Tahun ajaran tidak ditemukan' });
+    }
+
+    if (tenant_id) {
+      const result = await billing.generateBillingByTahunAjaran(tenant_id, tahun_ajaran_id);
+      res.json({
+        success: true,
+        message: `Billing TA ${ta[0].nama}: ${result.created} baris, ${result.skipped} dilewati`,
+        tahun_ajaran: result.tahun_ajaran,
+        created: result.created,
+        skipped: result.skipped
+      });
+    } else {
+      // Generate for all tenants
+      const tenants = await db.query('SELECT tenant_id, nama_sekolah FROM tenants');
+      let totalCreated = 0;
+      let totalSkipped = 0;
+      const details = [];
+
+      for (const tenant of tenants) {
+        try {
+          const result = await billing.generateBillingByTahunAjaran(tenant.tenant_id, tahun_ajaran_id);
+          totalCreated += result.created;
+          totalSkipped += result.skipped;
+          details.push({
+            tenant_id: tenant.tenant_id,
+            nama_sekolah: tenant.nama_sekolah,
+            created: result.created,
+            skipped: result.skipped
+          });
+        } catch (err) {
+          console.error(`[BILLING-TA] Failed for tenant ${tenant.tenant_id}:`, err.message);
+          details.push({
+            tenant_id: tenant.tenant_id,
+            nama_sekolah: tenant.nama_sekolah,
+            error: err.message
+          });
+        }
+      }
+
+      res.json({
+        success: true,
+        message: `Billing TA ${ta[0].nama} dibuat untuk ${tenants.length} sekolah`,
+        tahun_ajaran: ta[0].nama,
+        total_created: totalCreated,
+        total_skipped: totalSkipped,
+        tenants_processed: tenants.length,
+        details: details
+      });
+    }
+  } catch (error) {
+    console.error('Generate billing by TA error:', error);
+    res.status(500).json({ success: false, message: 'Gagal generate billing per TA' });
+  }
+});
+
+// GET /api/treasurer/public/billing-by-ta - List billing summary per TA
+router.get('/treasurer/public/billing-by-ta', async (req, res) => {
+  try {
+    let tenantFilter = '';
+    let params = [];
+    if (tenantId && tenantId !== 'GLOBAL') {
+      tenantFilter = ' AND (ta.tenant_id = ? OR ta.tenant_id IS NULL)';
+      params.push(tenantId);
+    }
+
+    const query = `
+      SELECT 
+        ta.nama as ta_nama,
+        ta.tahun_mulai,
+        ta.tahun_selesai,
+        tn.tenant_id,
+        tn.nama_sekolah,
+        COUNT(DISTINCT s.id) as total_siswa,
+        COUNT(DISTINCT bp.bulan) as total_bulan,
+        COALESCE(SUM(bp.keterangan_spp), 0) as total_tagihan,
+        CASE WHEN SUM(CASE WHEN bp.status = 'lunas' THEN 1 ELSE 0 END) = COUNT(DISTINCT bp.bulan) AND COUNT(DISTINCT bp.bulan) > 0 THEN 'lunas' ELSE 'belum' END as status
+      FROM tahun_ajaran ta
+      LEFT JOIN semester s2 ON s2.tahun_ajaran_id = ta.id
+      LEFT JOIN students s ON s.tahun_ajaran_id = ta.id
+      LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id
+      LEFT JOIN billing_payment bp ON bp.student_id = s.id AND bp.tahun_ajaran_id = ta.id
+      WHERE ta.is_active = 1
+        ${tenantFilter}
+      GROUP BY ta.id, tn.tenant_id, ta.nama, ta.tahun_mulai, ta.tahun_selesai
+      ORDER BY ta.tahun_mulai DESC, tn.nama_sekolah ASC
+    `;
+
+    const [rows] = await db.query(query, params);
+
+    res.json({
+      success: true,
+      data: rows.map(r => ({
+        ta_nama: r.ta_nama,
+        tahun_mulai: r.tahun_mulai,
+        tahun_selesai: r.tahun_selesai,
+        tenant_id: r.tenant_id,
+        nama_sekolah: r.nama_sekolah || 'Global',
+        total_siswa: r.total_siswa || 0,
+        total_bulan: r.total_bulan || 0,
+        total_tagihan: parseFloat(r.total_tagihan) || 0,
+        status: r.status || 'belum'
+      }))
+    });
+  } catch (error) {
+    console.error('Billing by TA error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching billing by TA' });
   }
 });
 
@@ -4296,15 +4461,96 @@ router.get('/treasurer/financial/categories', authenticateBendahara, async (req,
       return res.status(403).json({ success: false, message: 'Akses ditolak' });
     }
     const rows = await db.query(
-      `SELECT DISTINCT * FROM financial_categories
-       WHERE (tenant_id = ? OR tenant_id IS NULL)
-       ORDER BY FIELD(jenis, 'beli', 'bayar', 'pemasukan', 'pengeluaran'), urutan`,
+      `SELECT c.id, c.tenant_id, c.jenis, c.nama, c.nomor_akun, c.kelompok_akun, c.urutan
+       FROM financial_categories c
+       INNER JOIN (
+         SELECT MIN(id) AS rid FROM financial_categories
+         WHERE (tenant_id = ? OR tenant_id IS NULL)
+         GROUP BY COALESCE(tenant_id, '__NULL__'), nama, jenis
+       ) AS t ON c.id = t.rid
+       ORDER BY FIELD(c.jenis, 'beli', 'bayar', 'pemasukan', 'pengeluaran'), c.urutan`,
       [tenantId || null]
     );
     res.json({ success: true, data: rows });
-  } catch (e) {
+   } catch (e) {
     console.error('Get financial categories error:', e);
     res.status(500).json({ success: false, message: 'Gagal mengambil kategori' });
+  }
+});
+
+// POST /api/treasurer/financial/categories — create/edit kategori akun (bendahara)
+router.post('/treasurer/financial/categories', authenticateBendahara, async (req, res) => {
+  try {
+    await billing.ensureBillingTables();
+    const { tenant_id, jenis, nama, nomor_akun, kelompok_akun, urutan } = req.body;
+    const tenantId = tenant_id || req.tenant_id || '';
+    if (tenantId && !verifyTenantAccess(req, tenantId)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+    if (!nama) return res.status(400).json({ success: false, message: 'nama kategori wajib' });
+    const j = jenis || 'beli';
+    await db.query(
+      `INSERT INTO financial_categories (tenant_id, jenis, nama, nomor_akun, kelompok_akun, urutan)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE nomor_akun=VALUES(nomor_akun), kelompok_akun=VALUES(kelompok_akun), urutan=VALUES(urutan)`,
+      [tenantId || null, j, nama, nomor_akun || null, kelompok_akun || null, urutan || 0]
+    );
+    res.json({ success: true, message: 'Kategori akun berhasil disimpan' });
+  } catch (e) {
+    console.error('Save financial category error:', e);
+    res.status(500).json({ success: false, message: 'Gagal menyimpan kategori' });
+  }
+});
+
+// PUT /api/treasurer/financial/categories/:id — edit kategori akun (bendahara)
+router.put('/treasurer/financial/categories/:id', authenticateBendahara, async (req, res) => {
+  try {
+    await billing.ensureBillingTables();
+    const { id } = req.params;
+    const { jenis, nama, nomor_akun, kelompok_akun, urutan } = req.body;
+    if (!nama) return res.status(400).json({ success: false, message: 'nama kategori wajib' });
+    const [existing] = await db.query('SELECT tenant_id FROM financial_categories WHERE id = ?', [id]);
+    if (!existing) return res.status(404).json({ success: false, message: 'Kategori tidak ditemukan' });
+    if (existing.tenant_id && !verifyTenantAccess(req, existing.tenant_id)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+    await db.query(
+      `UPDATE financial_categories SET nama = ?, jenis = ?, nomor_akun = ?, kelompok_akun = ?, urutan = ? WHERE id = ?`,
+      [nama, jenis || 'beli', nomor_akun || null, kelompok_akun || null, urutan || 0, id]
+    );
+    res.json({ success: true, message: 'Kategori akun berhasil diperbarui' });
+  } catch (e) {
+    console.error('Update financial category error:', e);
+    res.status(500).json({ success: false, message: 'Gagal memperbarui kategori' });
+  }
+});
+
+// DELETE /api/treasurer/financial/categories?tenant_id=XXX&nama=YYY&jenis=beli
+router.delete('/treasurer/financial/categories', authenticateBendahara, async (req, res) => {
+  try {
+    await billing.ensureBillingTables();
+    const { tenant_id, nama, jenis } = req.query;
+    const tenantId = tenant_id || req.tenant_id || '';
+    if (tenantId && !verifyTenantAccess(req, tenantId)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+    if (!nama) return res.status(400).json({ success: false, message: 'nama wajib' });
+    const j = jenis || '';
+    const params = [nama];
+    let where = 'nama = ?';
+    if (tenantId) {
+      params.unshift(tenantId);
+      where = '(tenant_id = ? OR tenant_id IS NULL) AND nama = ?';
+    }
+    if (j) {
+      where += ' AND jenis = ?';
+      params.push(j);
+    }
+    await db.query(`DELETE FROM financial_categories WHERE ${where}`, params);
+    res.json({ success: true, message: 'Kategori akun berhasil dihapus' });
+  } catch (e) {
+    console.error('Delete financial category error:', e);
+    res.status(500).json({ success: false, message: 'Gagal menghapus kategori' });
   }
 });
 
@@ -4610,25 +4856,15 @@ router.post('/treasurer/financial/ocr/receipt', authenticateBendahara, upload.si
       return res.status(400).json({ success: false, message: 'Upload file gagal: ' + err.message });
     }
     next(err);
-  }, async (req, res) => {
+   }, async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ success: false, message: 'File gambar wajib diupload' });
     }
 
     const mimeType = req.file.mimetype || 'image/jpeg';
-    const result = await extractReceiptFromImage(req.file.buffer, mimeType);
 
-    // Extract line items from receipt
-    let items = [];
-    try {
-      items = await extractReceiptItems(req.file.buffer, mimeType);
-    } catch (e) {
-      console.error('OCR items extraction error:', e.message);
-      items = [];
-    }
-
-    // Save foto struk ke disk
+    // ALWAYS save foto struk ke disk (walau OCR gagal, foto tetap tersimpan agar bisa input manual barang)
     const fs = require('fs');
     const path = require('path');
     const uploadsDir = path.join(__dirname, '../../public/uploads/struk');
@@ -4641,23 +4877,36 @@ router.post('/treasurer/financial/ocr/receipt', authenticateBendahara, upload.si
     fs.writeFileSync(filePath, req.file.buffer);
     const fotoStrukPath = `/uploads/struk/${fileName}`;
 
-    // Auto-calculate total from items
+    // OCR bisa gagal — foto tetap tersedia untuk pengisian manual
+    let result = {};
+    let items = [];
+    let ocrError = null;
+    try {
+      result = await extractReceiptFromImage(req.file.buffer, mimeType);
+      try { items = await extractReceiptItems(req.file.buffer, mimeType); } catch (e) { items = []; }
+    } catch (e) {
+      ocrError = e.message || 'OCR gagal';
+      console.error('OCR receipt error:', e);
+      result = {};
+    }
+
     const autoTotal = Array.isArray(items) && items.length > 0
       ? items.reduce((sum, i) => sum + (parseFloat(i.total) || 0), 0)
-      : result.nominal || 0;
+      : (result.nominal ? parseFloat(result.nominal) : 0);
 
     res.json({
       success: true,
-      message: 'OCR berhasil',
+      message: ocrError ? 'Foto struk tersimpan; OCR gagal, silakan input manual barang' : 'OCR berhasil',
       data: result,
       items: Array.isArray(items) ? items : [],
       foto_struk: fotoStrukPath,
-       auto_total: autoTotal
-     });
-   } catch (error) {
-     console.error('OCR receipt error:', error);
-     res.status(500).json({ success: false, message: error.message || 'OCR gagal' });
-   }
+      auto_total: autoTotal,
+      ocr_error: ocrError
+    });
+  } catch (error) {
+    console.error('OCR receipt error:', error);
+    res.status(500).json({ success: false, message: error.message || 'OCR gagal' });
+  }
 });
 
 // ==================== ISAK 35 FINANCIAL REPORTS ====================

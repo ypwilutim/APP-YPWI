@@ -1,0 +1,193 @@
+/* ===== Interactive Help / Panduan Walkthrough =====
+   Reusable per-page interactive guide. Usage:
+     <link rel="stylesheet" href="assets/css/interactive-help.css">
+     <script src="assets/js/interactive-help.js"></script>
+     <script>
+       window.initGuide({
+         name: 'teacher-idcard',
+         steps: [
+           { title: 'Judul', content: 'Penjelasan singkat.', target: 'h1', position: 'bottom' }
+         ]
+       });
+     </script>
+*/
+.ih-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.75);
+  backdrop-filter: blur(2px);
+  z-index: 995;
+}
+.ih-spot {
+  position: absolute;
+  border-radius: 9999px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.75);
+  transition: box-shadow 0.3s ease, transform 0.3s ease;
+  z-index: 996;
+}
+.ih-modal {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: min(90vw, 384px);
+  max-height: calc(100vh - 120px);
+  background: #ffffff;
+  border-radius: 14px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transform: translateY(40px);
+  opacity: 0;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.ih-modal.ih-show {
+  transform: translateY(0);
+  opacity: 1;
+}
+.ih-modal-header {
+  background: linear-gradient(135deg, #2563eb, #0ea5e0);
+  color: #fff;
+  padding: 14px 18px;
+  font-size: 15px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.ih-modal-header .ih-close {
+  background: rgba(255, 255, 255, 0.18);
+  border: none;
+  color: #fff;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+}
+.ih-modal-body {
+  padding: 16px 18px;
+  font-size: 13px;
+  color: #374151;
+  line-height: 1.5;
+  overflow-y: auto;
+  flex-grow: 1;
+  max-height: calc(100vh - 220px);
+}
+.ih-modal-body.ih-rich {
+  font-size: 13px;
+}
+.ih-modal-body h3.ih-sub {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  margin: 14px 0 6px;
+}
+.ih-modal-body p {
+  margin: 4px 0;
+}
+.ih-modal-body ul {
+  margin: 6px 0 6px 18px;
+  padding: 0;
+}
+.ih-modal-body li {
+  margin: 2px 0;
+}
+.ih-modal-footer {
+  padding: 12px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid #e5e7eb;;
+  background: #f9fafb;
+}
+.ih-dots {
+  display: flex;
+  gap: 6px;
+}
+.ih-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: #d1d5db;
+}
+.ih-dot.ih-active {
+  width: 18px;
+  background: #2563eb;
+}
+.ih-btn {
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+.ih-btn.secondary {
+  background: #f3f4f6;
+  color: #374151;
+}
+.ih-btn.secondary:hover {
+  background: #e5e7eb;
+}
+.ih-btn.primary {
+  background: #2563eb;
+  color: #fff;
+}
+.ih-btn.primary:hover {
+  background: #1d4ed8;
+}
+.ih-tombol-bantuan {
+  position: fixed;
+  bottom: 18px;
+  right: 18px;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2563eb, #0ea5e0);
+  color: #fff;
+  border: none;
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.35);
+  cursor: pointer;
+  z-index: 990;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.ih-tombol-bantuan:hover {
+  transform: scale(1.07);
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.45);
+}
+.ih-tombol-bantuan.ih-active {
+  background: linear-gradient(135deg, #059669, #10b981);
+}
+.ih-tombol-bantuan.ih-active:hover {
+  transform: scale(1.07);
+}
+.ih-tooltip {
+  position: absolute;
+  background: #1e293b;
+  color: #f1f5f9;
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+  z-index: 1001;
+}
+@media (max-width: 640px) {
+  .ih-modal {
+    bottom: 10px;
+    right: 10px;
+    width: 95vw;
+  }
+}

@@ -45,6 +45,41 @@ function currentMonth() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
+async function getActiveTahunAjaran(tenantId = null) {
+  const query = `
+    SELECT * FROM tahun_ajaran 
+    WHERE (tenant_id IS NULL OR tenant_id = ?) 
+    AND is_active = 1 
+    ORDER BY tenant_id DESC LIMIT 1
+  `;
+  const [rows] = await db.query(query, [tenantId]);
+  return rows;
+}
+
+async function getTahunAjaranById(id) {
+  const [rows] = await db.query('SELECT * FROM tahun_ajaran WHERE id = ?', [id]);
+  return rows;
+}
+
+async function getSemesterByTahunAjaran(tahunAjaranId) {
+  const [rows] = await db.query('SELECT * FROM semester WHERE tahun_ajaran_id = ? ORDER BY tanggal_mulai', [tahunAjaranId]);
+  return rows;
+}
+
+function getMonthsInRange(startDate, endDate) {
+  const out = [];
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  let y = start.getFullYear();
+  let m = start.getMonth() + 1;
+  while (y < end.getFullYear() || (y === end.getFullYear() && m <= end.getMonth() + 1)) {
+    out.push(`${y}-${String(m).padStart(2, '0')}`);
+    m++;
+    if (m > 12) { m = 1; y++; }
+  }
+  return out;
+}
+
 function stripDigits(v) {
   return (v || '').replace(/[^0-9]/g, '');
 }
@@ -135,6 +170,10 @@ async function ensureBillingTables() {
     await db.query(`ALTER TABLE billing_payment ADD COLUMN IF NOT EXISTS dibayar_oleh VARCHAR(100) DEFAULT NULL AFTER tanggal_bayar`);
     await db.query(`ALTER TABLE billing_payment ADD COLUMN IF NOT EXISTS catatan_pelunasan TEXT DEFAULT NULL AFTER dibayar_oleh`);
     await db.query(`ALTER TABLE billing_payment ADD COLUMN IF NOT EXISTS biaya_admin_va DECIMAL(12,2) DEFAULT 0 AFTER subsidi`);
+    await db.query(`ALTER TABLE billing_payment ADD COLUMN IF NOT EXISTS tahun_ajaran_id INT(11) DEFAULT NULL AFTER biaya_admin_va`);
+    await db.query(`ALTER TABLE billing_payment ADD COLUMN IF NOT EXISTS semester_id INT(11) DEFAULT NULL AFTER tahun_ajaran_id`);
+    await db.query(`ALTER TABLE billing_payment ADD INDEX IF NOT EXISTS idx_ta (tahun_ajaran_id)`);
+    await db.query(`ALTER TABLE billing_payment ADD INDEX IF NOT EXISTS idx_semester (semester_id)`);
   } catch (e) {
     // Columns might already exist
   }
@@ -275,6 +314,7 @@ async function ensureBillingTables() {
       tenant_id VARCHAR(20) DEFAULT NULL,
       jenis ENUM('beli', 'bayar', 'pemasukan', 'pengeluaran') NOT NULL DEFAULT 'pengeluaran',
       nama VARCHAR(100) NOT NULL,
+      nomor_akun VARCHAR(20) DEFAULT NULL COMMENT 'Nomor akun COA (mis. 1101, 1201, 4001)',
       urutan INT DEFAULT 0,
       kelompok_akun ENUM('aset','aset_tetap','liabilitas','aset_net_terbatas','aset_net_tanpa_batas','pendapatan','beban','modal') DEFAULT NULL,
       UNIQUE KEY uniq_tenant_jenis_nama (tenant_id, jenis, nama),
@@ -284,31 +324,43 @@ async function ensureBillingTables() {
 
   try {
     await db.query(`ALTER TABLE financial_categories ADD COLUMN IF NOT EXISTS kelompok_akun ENUM('aset','aset_tetap','liabilitas','aset_net_terbatas','aset_net_tanpa_batas','pendapatan','beban','modal') DEFAULT NULL`);
+    await db.query(`ALTER TABLE financial_categories ADD COLUMN IF NOT EXISTS nomor_akun VARCHAR(20) DEFAULT NULL`);
   } catch (e) { /* column might already exist */ }
+
+  // Hapus duplicate (jika table lama tanpa unique key) lalu tambahkan constraint
+  // agar INSERT IGNORE di seed tidak bolak-balik bikin duplikat tiap restart server
+  try {
+    await db.query(`ALTER TABLE financial_categories ADD UNIQUE INDEX IF NOT EXISTS uniq_tenant_jenis_nama (tenant_id, jenis, nama)`);
+  } catch (uniqErr) {
+    try {
+      await db.query(`DELETE c1 FROM financial_categories c1 INNER JOIN financial_categories c2 WHERE c1.id > c2.id AND COALESCE(c1.tenant_id,'') = COALESCE(c2.tenant_id,'') AND c1.nama = c2.nama AND c1.jenis = c2.jenis`);
+      await db.query(`ALTER TABLE financial_categories ADD UNIQUE INDEX IF NOT EXISTS uniq_tenant_jenis_nama (tenant_id, jenis, nama)`);
+    } catch (e3) { /* ignore — not critical */ }
+  }
 
   // Seed default categories for yayasan/tenant_id NULL (global defaults)
   try {
     const defaultCategories = [
-      { jenis: 'beli', nama: 'Perlengkapan Sekolah', kelompok: 'aset' },
-      { jenis: 'beli', nama: 'Buku dan Materi', kelompok: 'aset' },
-      { jenis: 'beli', nama: 'Peralatan Elektronik', kelompok: 'aset_tetap' },
-      { jenis: 'beli', nama: 'Perlengkapan Kantin', kelompok: 'aset' },
-      { jenis: 'beli', nama: 'Perlengkapan Taman/Kebun', kelompok: 'aset' },
-      { jenis: 'beli', nama: 'Kendaraan', kelompok: 'aset_tetap' },
-      { jenis: 'bayar', nama: 'Gaji Honor / Servis', kelompok: 'beban' },
-      { jenis: 'bayar', nama: 'Listrik, Air, Telepon', kelompok: 'beban' },
-      { jenis: 'bayar', nama: 'Internet / Langganan', kelompok: 'beban' },
-      { jenis: 'bayar', nama: 'Pajak dan Retribusi', kelompok: 'beban' },
-      { jenis: 'bayar', nama: 'Sewa Tempat', kelompok: 'beban' },
-      { jenis: 'bayar', nama: 'ATK / Kantor', kelompok: 'beban' },
-      { jenis: 'bayar', nama: 'Konsumsi / Catering', kelompok: 'beban' },
-      { jenis: 'bayar', nama: 'Transportasi / Bensin', kelompok: 'beban' },
-      { jenis: 'bayar', nama: 'Lain-lain', kelompok: 'beban' }
+      { jenis: 'beli', nama: 'Perlengkapan Sekolah', kelompok: 'aset', akun: '1401' },
+      { jenis: 'beli', nama: 'Buku dan Materi', kelompok: 'aset', akun: '1402' },
+      { jenis: 'beli', nama: 'Peralatan Elektronik', kelompok: 'aset_tetap', akun: '1501' },
+      { jenis: 'beli', nama: 'Perlengkapan Kantin', kelompok: 'aset', akun: '1403' },
+      { jenis: 'beli', nama: 'Perlengkapan Taman/Kebun', kelompok: 'aset', akun: '1404' },
+      { jenis: 'beli', nama: 'Kendaraan', kelompok: 'aset_tetap', akun: '1502' },
+      { jenis: 'bayar', nama: 'Gaji Honor / Servis', kelompok: 'beban', akun: '5101' },
+      { jenis: 'bayar', nama: 'Listrik, Air, Telepon', kelompok: 'beban', akun: '5201' },
+      { jenis: 'bayar', nama: 'Internet / Langganan', kelompok: 'beban', akun: '5202' },
+      { jenis: 'bayar', nama: 'Pajak dan Retribusi', kelompok: 'beban', akun: '5301' },
+      { jenis: 'bayar', nama: 'Sewa Tempat', kelompok: 'beban', akun: '5401' },
+      { jenis: 'bayar', nama: 'ATK / Kantor', kelompok: 'beban', akun: '5102' },
+      { jenis: 'bayar', nama: 'Konsumsi / Catering', kelompok: 'beban', akun: '5203' },
+      { jenis: 'bayar', nama: 'Transportasi / Bensin', kelompok: 'beban', akun: '5204' },
+      { jenis: 'bayar', nama: 'Lain-lain', kelompok: 'beban', akun: '5501' }
     ];
     for (const cat of defaultCategories) {
       await db.query(
-        `INSERT IGNORE INTO financial_categories (tenant_id, jenis, nama, urutan, kelompok_akun) VALUES (?, ?, ?, ?, ?)`,
-        [null, cat.jenis, cat.nama, 0, cat.kelompok]
+        `INSERT IGNORE INTO financial_categories (tenant_id, jenis, nama, urutan, kelompok_akun, nomor_akun) VALUES (?, ?, ?, ?, ?, ?)`,
+        [null, cat.jenis, cat.nama, 0, cat.kelompok, cat.akun]
       );
     }
   } catch (e) {
@@ -441,7 +493,7 @@ async function insertIncoming(rec) {
 async function generateBilling(tenantId, fallbackStart) {
   const end = currentMonth();
   const students = await db.query(
-    `SELECT s.id, s.tenant_id, s.iuran_bulanan, s.ransportasi, s.tahun_masuk, s.subsidi, s.va_number, s.status
+    `SELECT s.id, s.tenant_id, s.iuran_bulanan, s.ransportasi, s.tahun_masuk, s.subsidi, s.va_number, s.status, s.tahun_ajaran_id
      FROM students s
      WHERE s.tenant_id = ? 
        AND (s.status = 'active' OR s.status = 'aktif' OR s.status IS NULL)
@@ -510,6 +562,137 @@ async function generateBilling(tenantId, fallbackStart) {
     await recalcStudent(s.id);
   }
   return { created, skipped, end };
+}
+
+// Generate billing by Tahun Ajaran (NEW)
+async function generateBillingByTahunAjaran(tenantId, tahunAjaranId) {
+  const ta = await getTahunAjaranById(tahunAjaranId);
+  if (!ta) {
+    throw new Error('Tahun Ajaran tidak ditemukan');
+  }
+
+  // Only process students belonging to this TA
+  const students = await db.query(
+    `SELECT s.id, s.tenant_id, s.iuran_bulanan, s.ransportasi, s.tahun_masuk, s.subsidi, s.va_number, s.status
+     FROM students s
+     WHERE s.tenant_id = ? 
+       AND s.tahun_ajaran_id = ?
+       AND (s.status = 'active' OR s.status = 'aktif' OR s.status IS NULL)
+       AND s.status != 'alumni'
+       AND COALESCE(s.iuran_bulanan, 0) > 0`,
+    [tenantId, tahunAjaranId]
+  );
+
+  const psResult = await db.query(
+    `SELECT biaya_admin_va FROM payment_admin_settings WHERE subject_type = 'global' AND subject_id = 0 LIMIT 1`
+  );
+  const ps = Array.isArray(psResult) ? psResult[0] : psResult;
+  const globalBiayaAdmin = ps ? (parseFloat(ps.biaya_admin_va) || 0) : 2000;
+
+  const months = getMonthsInRange(ta.tanggal_mulai, ta.tanggal_selesai);
+  
+  let created = 0, skipped = 0;
+  for (const s of students) {
+    const spp = parseFloat(s.iuran_bulanan) || 0;
+    const transport = parseFloat(s.ransportasi) || 0;
+    const subsidi = parseFloat(s.subsidi) || 0;
+    const biayaAdmin = s.va_number ? globalBiayaAdmin : 0;
+    const totalTagihan = Math.max(0, spp + transport - subsidi + biayaAdmin);
+
+    for (const m of months) {
+      const existingResult = await db.query('SELECT id, status FROM billing_payment WHERE student_id = ? AND bulan = ?', [s.id, m]);
+      const existing = Array.isArray(existingResult) ? existingResult[0] : existingResult;
+      
+      if (existing) {
+        if (existing.status === 'lunas') {
+          skipped++;
+          continue;
+        }
+        await db.query(
+          'UPDATE billing_payment SET spp_bulanan = ?, ransportasi = ?, subsidi = ?, biaya_admin_va = ?, keterangan_spp = ?, status = "belum" WHERE id = ?',
+          [spp, transport, subsidi, biayaAdmin, totalTagihan, existing.id]
+        );
+        created++;
+      } else {
+        await db.query(
+          'INSERT INTO billing_payment (tenant_id, student_id, spp_bulanan, ransportasi, subsidi, biaya_admin_va, bulan, transaksi, keterangan_spp, status, tahun_ajaran_id) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, "belum", ?)',
+          [s.tenant_id, s.id, spp, transport, subsidi, biayaAdmin, m, totalTagihan, tahunAjaranId]
+        );
+        created++;
+      }
+    }
+
+    await recalcStudent(s.id);
+  }
+  return { created, skipped, tahun_ajaran: ta.nama, months: months.length };
+}
+
+// Generate billing for specific semester
+async function generateBillingBySemester(tenantId, semesterId) {
+  const [semester] = await db.query(`
+    SELECT s.*, ta.nama as ta_nama 
+    FROM semester s
+    JOIN tahun_ajaran ta ON s.tahun_ajaran_id = ta.id
+    WHERE s.id = ?
+  `, [semesterId]);
+  
+  if (!semester) {
+    throw new Error('Semester tidak ditemukan');
+  }
+
+  const students = await db.query(
+    `SELECT s.id, s.tenant_id, s.iuran_bulanan, s.ransportasi, s.tahun_masuk, s.subsidi, s.va_number, s.status
+     FROM students s
+     WHERE s.tenant_id = ? 
+       AND s.tahun_ajaran_id = ?
+       AND (s.status = 'active' OR s.status = 'aktif' OR s.status IS NULL)
+       AND s.status != 'alumni'
+       AND COALESCE(s.iuran_bulanan, 0) > 0`,
+    [tenantId, semester.tahun_ajaran_id]
+  );
+
+  const psResult = await db.query(
+    `SELECT biaya_admin_va FROM payment_admin_settings WHERE subject_type = 'global' AND subject_id = 0 LIMIT 1`
+  );
+  const ps = Array.isArray(psResult) ? psResult[0] : psResult;
+  const globalBiayaAdmin = ps ? (parseFloat(ps.biaya_admin_va) || 0) : 2000;
+
+  const months = getMonthsInRange(semester.tanggal_mulai, semester.tanggal_selesai);
+  
+  let created = 0, skipped = 0;
+  for (const s of students) {
+    const spp = parseFloat(s.iuran_bulanan) || 0;
+    const transport = parseFloat(s.ransportasi) || 0;
+    const subsidi = parseFloat(s.subsidi) || 0;
+    const biayaAdmin = s.va_number ? globalBiayaAdmin : 0;
+    const totalTagihan = Math.max(0, spp + transport - subsidi + biayaAdmin);
+
+    for (const m of months) {
+      const existingResult = await db.query('SELECT id, status FROM billing_payment WHERE student_id = ? AND bulan = ?', [s.id, m]);
+      const existing = Array.isArray(existingResult) ? existingResult[0] : existingResult;
+      
+      if (existing) {
+        if (existing.status === 'lunas') {
+          skipped++;
+          continue;
+        }
+        await db.query(
+          'UPDATE billing_payment SET spp_bulanan = ?, ransportasi = ?, subsidi = ?, biaya_admin_va = ?, keterangan_spp = ?, status = "belum" WHERE id = ?',
+          [spp, transport, subsidi, biayaAdmin, totalTagihan, existing.id]
+        );
+        created++;
+      } else {
+        await db.query(
+          'INSERT INTO billing_payment (tenant_id, student_id, spp_bulanan, ransportasi, subsidi, biaya_admin_va, bulan, transaksi, keterangan_spp, status, tahun_ajaran_id, semester_id) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, "belum", ?, ?)',
+          [s.tenant_id, s.id, spp, transport, subsidi, biayaAdmin, m, totalTagihan, semester.tahun_ajaran_id, semesterId]
+        );
+        created++;
+      }
+    }
+
+    await recalcStudent(s.id);
+  }
+  return { created, skipped, semester: semester.nama, months: months.length };
 }
 
 // Hitung ulang keterangan_spp + saldo untuk 1 siswa
@@ -605,5 +788,8 @@ async function recalcTenant(tenantId) {
 module.exports = {
   MONTHS, parseDateBSI, parsePeriode, monthList, currentMonth,
   ensureBillingTables, stripDigits, extractVA, insertIncoming,
-  generateBilling, recalcStudent, recalcTenant
+  generateBilling, recalcStudent, recalcTenant,
+  getActiveTahunAjaran, getTahunAjaranById, getSemesterByTahunAjaran,
+  generateBillingByTahunAjaran, generateBillingBySemester,
+  getMonthsInRange
 };

@@ -664,6 +664,51 @@ CREATE TABLE IF NOT EXISTS `students` (
 -- --------------------------------------------------------
 
 --
+-- Struktur dari tabel `tahun_ajaran`
+--
+
+CREATE TABLE IF NOT EXISTS `tahun_ajaran` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `nama` varchar(20) NOT NULL COMMENT 'Format: 2024/2025',
+  `tahun_mulai` year NOT NULL COMMENT 'Tahun mulai (2024)',
+  `tahun_selesai` year NOT NULL COMMENT 'Tahun selesai (2025)',
+  `bulan_mulai` tinyint(2) NOT NULL DEFAULT 7 COMMENT 'Bulan mulai TA (default 7 = Juli)',
+  `tanggal_mulai` date NOT NULL COMMENT 'Tanggal mulai TA',
+  `tanggal_selesai` date NOT NULL COMMENT 'Tanggal selesai TA',
+  `is_active` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Hanya 1 yang aktif per tenant/global',
+  `tenant_id` varchar(50) DEFAULT NULL COMMENT 'NULL = global (yayasan), else per sekolah',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_ta_tenant_nama` (`tenant_id`, `nama`),
+  KEY `idx_ta_tenant_active` (`tenant_id`, `is_active`),
+  KEY `idx_ta_date_range` (`tanggal_mulai`, `tanggal_selesai`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `semester`
+--
+
+CREATE TABLE IF NOT EXISTS `semester` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `tahun_ajaran_id` int(11) NOT NULL,
+  `nama` enum('Ganjil','Genap') NOT NULL,
+  `tanggal_mulai` date NOT NULL,
+  `tanggal_selesai` date NOT NULL,
+  `is_active` tinyint(1) NOT NULL DEFAULT 0,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_semester_ta_nama` (`tahun_ajaran_id`, `nama`),
+  KEY `idx_semester_ta` (`tahun_ajaran_id`),
+  KEY `idx_semester_date` (`tanggal_mulai`, `tanggal_selesai`),
+  CONSTRAINT `fk_semester_tahun_ajaran` FOREIGN KEY (`tahun_ajaran_id`) REFERENCES `tahun_ajaran` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Struktur dari tabel `tagihan_siswa`
 --
 
@@ -1738,6 +1783,27 @@ SET @sql_users_ibfk_2 := IF(@fk_exists_users_ibfk_2 = 0, 'ALTER TABLE `users` AD
 PREPARE stmt_users_ibfk_2 FROM @sql_users_ibfk_2;
 EXECUTE stmt_users_ibfk_2;
 DEALLOCATE PREPARE stmt_users_ibfk_2;
+
+-- --------------------------------------------------------
+
+--
+-- Tambahkan kolom tahun_ajaran_id ke tabel yang sudah ada (jika belum ada)
+--
+
+-- classes
+SET @col_exists_classes_ta := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'classes' AND COLUMN_NAME = 'tahun_ajaran_id');
+SET @sql_classes_ta := IF(@col_exists_classes_ta = 0, 'ALTER TABLE `classes` ADD COLUMN `tahun_ajaran_id` int(11) DEFAULT NULL COMMENT "FK ke tahun_ajaran" AFTER `tingkatan`', 'SELECT 1');
+PREPARE stmt_classes_ta FROM @sql_classes_ta;
+EXECUTE stmt_classes_ta;
+DEALLOCATE PREPARE stmt_classes_ta;
+
+-- students
+SET @col_exists_students_ta := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'students' AND COLUMN_NAME = 'tahun_ajaran_id');
+SET @sql_students_ta := IF(@col_exists_students_ta = 0, 'ALTER TABLE `students` ADD COLUMN `tahun_ajaran_id` int(11) DEFAULT NULL COMMENT "TA saat siswa masuk" AFTER `tanggal_masuk`', 'SELECT 1');
+PREPARE stmt_students_ta FROM @sql_students_ta;
+EXECUTE stmt_students_ta;
+DEALLOCATE PREPARE stmt_students_ta;
+
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;

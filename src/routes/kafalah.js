@@ -250,6 +250,18 @@ router.put('/kafalah/settings/tenant', authenticateBendahara, async (req, res) =
   }
 });
 
+// DELETE settings (tenant-specific) - revert to global
+router.delete('/kafalah/settings/tenant', authenticateBendahara, async (req, res) => {
+  try {
+    const tenantId = req.body.tenant_id || req.query.tenant_id;
+    if (!tenantId) return res.status(400).json({ success: false, message: 'tenant_id required' });
+    await db.query('DELETE FROM kafalah_settings WHERE tenant_id = ?', [tenantId]);
+    res.json({ success: true, message: 'Pengaturan sekolah dihapus, menggunakan global' });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
 // GET matrix
 router.get('/kafalah/matrix', authenticateBendahara, async (req, res) => {
   try {

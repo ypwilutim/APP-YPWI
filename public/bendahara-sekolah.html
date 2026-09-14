@@ -671,15 +671,19 @@
               <option value="pengeluaran">Pengeluaran</option>
             </select>
           </div>
-          <div>
-            <label class="block text-xs font-medium text-gray-600 mb-1">Kategori *</label>
-            <select id="finKategoriSk" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
-              <option value="">Pilih kategori...</option>
-            </select>
+          <div class="flex items-end gap-1">
+            <div class="flex-1">
+              <label class="block text-xs font-medium text-gray-600 mb-1">Akun *</label>
+              <select id="finKategoriSk" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+                <option value="">Pilih akun...</option>
+              </select>
+            </div>
+            <button type="button" onclick="addFinancialCategorySk()" class="px-2 py-1.5 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700" title="Tambah akun/kategori"><i class="fas fa-plus"></i></button>
+            <button type="button" onclick="deleteFinancialCategorySk()" class="px-2 py-1.5 text-xs bg-red-600 text-white rounded hover:bg-red-700" title="Hapus akun yang dipilih"><i class="fas fa-trash"></i></button>
           </div>
           <div>
-            <label class="block text-xs font-medium text-gray-600 mb-1">Akun</label>
-            <input type="text" id="finAkunSk" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Kode rekening">
+            <label class="block text-xs font-medium text-gray-600 mb-1">Nomor Rekening</label>
+            <input type="text" id="finAkunSk" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Nama Sekolah - Nomor Rekening" readonly>
           </div>
           <div>
             <label class="block text-xs font-medium text-gray-600 mb-1">No Bukti</label>
@@ -1432,10 +1436,17 @@
     async function resetPayrollSettings() {
       if (!confirm('Hapus pengaturan sekolah dan gunakan global?')) return;
       try {
-        await db.query('DELETE FROM kafalah_settings WHERE tenant_id = ?', [currentTenantId]);
-        showToast('Pengaturan sekolah dihapus, menggunakan global', 'success');
-        document.getElementById('payrollSettingsForm').reset();
-        loadPayrollSettings();
+        const res = await fetch('/api/kafalah/settings/tenant', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+          body: JSON.stringify({ tenant_id: currentTenantId })
+        });
+        const json = await res.json();
+        if (json.success) {
+          showToast('Pengaturan sekolah dihapus, menggunakan global', 'success');
+          document.getElementById('payrollSettingsForm').reset();
+          loadPayrollSettings();
+        } else showToast(json.message || 'Gagal', 'error');
       } catch (e) { showToast('Error: ' + e.message, 'error'); }
     }
 
@@ -2795,10 +2806,10 @@
     }
 
     async function loadFinancialCategoriesSk() {
-      const jenis = document.getElementById('finJenisSk')?.value || 'beli';
+       const jenis = document.getElementById('finJenisSk')?.value || 'beli';
       const sel = document.getElementById('finKategoriSk');
       if (!sel) return;
-      sel.innerHTML = '<option value="">Pilih kategori...</option>';
+      sel.innerHTML = '<option value="">Pilih akun...</option>';
       try {
         const res = await fetch(`/api/treasurer/financial/categories?tenant_id=${currentTenantId || ''}`, { headers: getAuthHeader() });
         const data = await res.json();
@@ -2807,11 +2818,43 @@
           data.data.filter(c => (!c.tenant_id || c.jenis === jenis) && !seen.has((c.tenant_id||'')+'_'+c.nama+'_'+(c.jenis||'')) && seen.add((c.tenant_id||'')+'_'+c.nama+'_'+(c.jenis||''))).forEach(c => {
             const opt = document.createElement('option');
             opt.value = c.nama;
-            opt.textContent = !c.tenant_id ? c.nama + ' (global)' : c.nama;
+            const noAkun = c.nomor_akun || '';
+            opt.textContent = noAkun ? `${noAkun} - ${c.nama}` : c.nama;
+            if (!c.tenant_id) opt.textContent += ' (global)';
             sel.appendChild(opt);
           });
         }
-      } catch (e) { console.error('loadFinancialCategoriesSk', e); }
+       } catch (e) { console.error('loadFinancialCategoriesSk', e); }
+    }
+
+    async function addFinancialCategorySk() {
+      const jenis = document.getElementById('finJenisSk')?.value || 'beli';
+      const nama = prompt('Nama akun/kategori baru:', '');
+      if (!nama) return;
+      try {
+        const res = await fetch(`/api/treasurer/financial/categories?tenant_id=${encodeURIComponent(currentTenantId || '')}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+          body: JSON.stringify({ tenant_id: currentTenantId || undefined, jenis, nama })
+        });
+        const d = await res.json();
+        if (d.success) { loadFinancialCategoriesSk(); } else showToast(d.message || 'Gagal tambah kategori', 'error');
+      } catch (e) { showToast('Gagal: ' + e.message, 'error'); }
+    }
+
+    async function deleteFinancialCategorySk() {
+      const sel = document.getElementById('finKategoriSk');
+      const nama = sel?.value || '';
+      if (!nama) { showToast('Pilih akun/kategori yang akan dihapus', 'error'); return; }
+      const jenis = document.getElementById('finJenisSk')?.value || 'beli';
+      if (!confirm(`Hapus kategori akun "${nama} (${jenis})"?`)) return;
+      try {
+        const res = await fetch(`/api/treasurer/financial/categories?tenant_id=${encodeURIComponent(currentTenantId || '')}&nama=${encodeURIComponent(nama)}&jenis=${encodeURIComponent(jenis)}`, {
+          method: 'DELETE', headers: { ...getAuthHeader() }
+        });
+        const d = await res.json();
+        if (d.success) { loadFinancialCategoriesSk(); } else showToast(d.message || 'Gagal hapus kategori', 'error');
+      } catch (e) { showToast('Gagal: ' + e.message, 'error'); }
     }
 
     async function loadFinancialSummarySk() {
@@ -2946,12 +2989,14 @@
       if (total > 0) document.getElementById('finNominalSk').value = Math.round(total);
     }
 
-    async function loadFinancialAccountInfoSk() {
+     async function loadFinancialAccountInfoSk() {
       try {
         const res = await fetch(`/api/treasurer/financial/account-info?tenant_id=${encodeURIComponent(currentTenantId || '')}`, { headers: getAuthHeader() });
         const d = await res.json();
         if (d.success && d.data) {
-          document.getElementById('finAkunSk').value = d.data.bank_account_number || d.data.nomor_rekening || '';
+          const namaSekolah = d.data.nama_sekolah || '';
+          const noRek = d.data.bank_account_number || d.data.nomor_rekening || '';
+          document.getElementById('finAkunSk').value = noRek ? (namaSekolah ? `${namaSekolah} - ${noRek}` : noRek) : '';
         }
       } catch (e) { /* no account info */ }
     }
@@ -2992,30 +3037,37 @@
           body: formData
         });
         const d = await res.json();
-        if (d.success && d.data) {
-          const data = d.data;
-          finSkFotoStrukPath = d.foto_struk || '';
-          updateProgress(1, 1, 'Berhasil!');
-          finishProgress('OCR selesai');
+        // Foto struk tetap disimpan walau OCR gagal (bisa input manual barang)
+        finSkFotoStrukPath = d.foto_struk || '';
+        updateProgress(1, 1, 'Selesai');
+        finishProgress('Scan selesai');
+
+        if (d.success) {
+          const data = d.data || {};
           if (data.tanggal) document.getElementById('finTanggalSk').value = data.tanggal;
           if (data.jenis) document.getElementById('finJenisSk').value = data.jenis;
           if (data.nominal) document.getElementById('finNominalSk').value = data.nominal;
           if (data.kategori) document.getElementById('finKategoriSk').value = data.kategori;
           if (data.akun && !document.getElementById('finAkunSk').value) document.getElementById('finAkunSk').value = data.akun || '';
           if (data.no_bukti) document.getElementById('finNoBuktiSk').value = data.no_bukti;
-           if (data.keterangan && !document.getElementById('finKeteranganSk').value) document.getElementById('finKeteranganSk').value = data.keterangan;
-           const ocrItems = Array.isArray(d.items) ? d.items : (Array.isArray(data.items) ? data.items : []);
-           if (ocrItems.length > 0) {
-             finSkItems = ocrItems.map(it => ({ ...it, qty: it.qty || 1, harga: it.harga || 0 }));
-             renderFinItemsTableSk();
-           }
-           showToast('Data struk terisi otomatis dari OCR', 'success');
+          if (data.keterangan && !document.getElementById('finKeteranganSk').value) document.getElementById('finKeteranganSk').value = data.keterangan;
+
+          const ocrItems = Array.isArray(d.items) ? d.items : (Array.isArray(data.items) ? data.items : []);
+          if (ocrItems.length > 0) {
+            finSkItems = ocrItems.map(it => ({ ...it, qty: it.qty || 1, harga: it.harga || 0 }));
+            renderFinItemsTableSk();
+          }
+
+          if (d.ocr_error) {
+            showToast('Foto struk tersimpan, tapi OCR gagal. Isi barang secara manual.', 'error');
+          } else {
+            showToast('Data struk terisi otomatis dari OCR', 'success');
+          }
         } else {
-          errorProgress(d.message || 'Gagal OCR');
           showToast(d.message || 'Gagal memindai struk', 'error');
         }
       } catch (e) {
-        errorProgress(e.message);
+        finishProgress('Gagal');
         showToast('Gagal: ' + e.message, 'error');
       }
     }

@@ -232,6 +232,7 @@ const absensiRoutes = require('./src/routes/absensi');
 const authRoutes = require('./src/routes/auth');
 const scannerRoutes = require('./src/routes/scanner');
 const adminRoutes = require('./src/routes/admin');
+const tahunAjaranRoutes = require('./src/routes/tahun-ajaran');
 const idcardRoutes = require('./src/routes/idcard');
 const chatRoutes = require('./src/routes/chat');
 const notificationsRoutes = require('./src/routes/notifications');
@@ -255,6 +256,7 @@ app.use('/api', authRoutes);
 app.use('/api', require('./src/routes/parent'));
 app.use('/api', scannerRoutes);
 app.use('/api', adminRoutes);
+app.use('/api', tahunAjaranRoutes);
 app.use('/api', require('./src/routes/employment-rules'));
 app.use('/api/idcard', idcardRoutes);
 app.use('/api', chatRoutes);
@@ -1346,6 +1348,58 @@ async function startServer() {
       console.log('[MIGRATION] Seeded kafalah_settings');
     } catch (e) {
       console.log('[MIGRATION] kafalah_settings seed:', e.message);
+    }
+
+    // --- Tahun Ajaran tables ---
+    await ensureTable(`
+      CREATE TABLE IF NOT EXISTS tahun_ajaran (
+        id INT(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        nama VARCHAR(20) NOT NULL COMMENT 'Format: 2024/2025',
+        tahun_mulai YEAR NOT NULL COMMENT 'Tahun mulai',
+        tahun_selesai YEAR NOT NULL COMMENT 'Tahun selesai',
+        bulan_mulai TINYINT(2) NOT NULL DEFAULT 7 COMMENT 'Bulan mulai TA',
+        tanggal_mulai DATE NOT NULL COMMENT 'Tanggal mulai TA',
+        tanggal_selesai DATE NOT NULL COMMENT 'Tanggal selesai TA',
+        is_active TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Hanya 1 aktif per tenant/global',
+        tenant_id VARCHAR(50) DEFAULT NULL COMMENT 'NULL = global',
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uk_ta_tenant_nama (tenant_id, nama),
+        KEY idx_ta_tenant_active (tenant_id, is_active),
+        KEY idx_ta_date_range (tanggal_mulai, tanggal_selesai)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `, 'tahun_ajaran');
+
+    await ensureTable(`
+      CREATE TABLE IF NOT EXISTS semester (
+        id INT(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        tahun_ajaran_id INT(11) NOT NULL,
+        nama ENUM('Ganjil','Genap') NOT NULL,
+        tanggal_mulai DATE NOT NULL,
+        tanggal_selesai DATE NOT NULL,
+        is_active TINYINT(1) NOT NULL DEFAULT 0,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uk_semester_ta_nama (tahun_ajaran_id, nama),
+        KEY idx_semester_ta (tahun_ajaran_id),
+        KEY idx_semester_date (tanggal_mulai, tanggal_selesai),
+        CONSTRAINT fk_semester_tahun_ajaran FOREIGN KEY (tahun_ajaran_id) REFERENCES tahun_ajaran (id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `, 'semester');
+
+    // Seed default tahun ajaran if empty
+    try {
+      const [taRows] = await db.query('SELECT COUNT(*) as c FROM tahun_ajaran');
+      if (taRows[0].c === 0) {
+        await db.query(`
+          INSERT INTO tahun_ajaran (nama, tahun_mulai, tahun_selesai, bulan_mulai, tanggal_mulai, tanggal_selesai, is_active, tenant_id) VALUES
+          ('2024/2025', 2024, 2025, 7, '2024-07-01', '2025-06-30', 0, NULL),
+          ('2025/2026', 2025, 2026, 7, '2025-07-01', '2026-06-30', 1, NULL),
+          ('2026/2027', 2026, 2027, 7, '2026-07-01', '2027-06-30', 0, NULL)
+        `);
+        console.log('[MIGRATION] Seeded default tahun_ajaran');
+      }
+    } catch (e) {
+      console.log('[MIGRATION] tahun_ajaran seed:', e.message);
     }
 
     // ============================================

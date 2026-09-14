@@ -941,6 +941,51 @@ CREATE TABLE `tagihan_siswa` (
 -- --------------------------------------------------------
 
 --
+-- Struktur dari tabel `tahun_ajaran`
+--
+
+CREATE TABLE `tahun_ajaran` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `nama` varchar(20) NOT NULL COMMENT 'Format: 2024/2025',
+  `tahun_mulai` year NOT NULL COMMENT 'Tahun mulai (2024)',
+  `tahun_selesai` year NOT NULL COMMENT 'Tahun selesai (2025)',
+  `bulan_mulai` tinyint(2) NOT NULL DEFAULT 7 COMMENT 'Bulan mulai TA (default 7 = Juli)',
+  `tanggal_mulai` date NOT NULL COMMENT 'Tanggal mulai TA (2024-07-01)',
+  `tanggal_selesai` date NOT NULL COMMENT 'Tanggal selesai TA (2025-06-30)',
+  `is_active` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Hanya 1 yang aktif per tenant/global',
+  `tenant_id` varchar(50) DEFAULT NULL COMMENT 'NULL = global (yayasan), else per sekolah',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_ta_tenant_nama` (`tenant_id`, `nama`),
+  KEY `idx_ta_tenant_active` (`tenant_id`, `is_active`),
+  KEY `idx_ta_date_range` (`tanggal_mulai`, `tanggal_selesai`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktur dari tabel `semester`
+--
+
+CREATE TABLE `semester` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `tahun_ajaran_id` int(11) NOT NULL,
+  `nama` enum('Ganjil','Genap') NOT NULL,
+  `tanggal_mulai` date NOT NULL,
+  `tanggal_selesai` date NOT NULL,
+  `is_active` tinyint(1) NOT NULL DEFAULT 0,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_semester_ta_nama` (`tahun_ajaran_id`, `nama`),
+  KEY `idx_semester_ta` (`tahun_ajaran_id`),
+  KEY `idx_semester_date` (`tanggal_mulai`, `tanggal_selesai`),
+  CONSTRAINT `fk_semester_tahun_ajaran` FOREIGN KEY (`tahun_ajaran_id`) REFERENCES `tahun_ajaran` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Struktur dari tabel `teachers`
 --
 
@@ -2301,6 +2346,65 @@ ALTER TABLE `tenant_locations`
 ALTER TABLE `users`
   ADD CONSTRAINT `users_ibfk_1` FOREIGN KEY (`guru_id`) REFERENCES `teachers` (`id`) ON DELETE SET NULL,
   ADD CONSTRAINT `users_ibfk_2` FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`tenant_id`) ON DELETE CASCADE;
+
+-- --------------------------------------------------------
+
+--
+-- Tambahkan kolom tahun_ajaran_id dan semester_id ke tabel yang sudah ada
+--
+
+-- classes
+ALTER TABLE `classes`
+  ADD COLUMN IF NOT EXISTS `tahun_ajaran_id` int(11) DEFAULT NULL COMMENT 'FK ke tahun_ajaran' AFTER `tingkatan`,
+  ADD COLUMN IF NOT EXISTS `semester_id` int(11) DEFAULT NULL COMMENT 'FK ke semester (opsional)' AFTER `tahun_ajaran_id`,
+  ADD KEY IF NOT EXISTS `idx_classes_ta` (`tahun_ajaran_id`),
+  ADD KEY IF NOT EXISTS `idx_classes_semester` (`semester_id`),
+  ADD CONSTRAINT IF NOT EXISTS `fk_classes_tahun_ajaran` FOREIGN KEY (`tahun_ajaran_id`) REFERENCES `tahun_ajaran` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT IF NOT EXISTS `fk_classes_semester` FOREIGN KEY (`semester_id`) REFERENCES `semester` (`id`) ON DELETE SET NULL;
+
+-- students
+ALTER TABLE `students`
+  ADD COLUMN IF NOT EXISTS `tahun_ajaran_id` int(11) DEFAULT NULL COMMENT 'TA saat siswa masuk/terdaftar' AFTER `tanggal_masuk`,
+  ADD KEY IF NOT EXISTS `idx_students_ta` (`tahun_ajaran_id`),
+  ADD CONSTRAINT IF NOT EXISTS `fk_students_tahun_ajaran` FOREIGN KEY (`tahun_ajaran_id`) REFERENCES `tahun_ajaran` (`id`) ON DELETE SET NULL;
+
+-- billing_payment
+ALTER TABLE `billing_payment`
+  ADD COLUMN IF NOT EXISTS `tahun_ajaran_id` int(11) DEFAULT NULL COMMENT 'TA tagihan' AFTER `keterangan_spp`,
+  ADD COLUMN IF NOT EXISTS `semester_id` int(11) DEFAULT NULL COMMENT 'Semester tagihan' AFTER `tahun_ajaran_id`,
+  ADD KEY IF NOT EXISTS `idx_billing_ta` (`tahun_ajaran_id`),
+  ADD KEY IF NOT EXISTS `idx_billing_semester` (`semester_id`),
+  ADD CONSTRAINT IF NOT EXISTS `fk_billing_tahun_ajaran` FOREIGN KEY (`tahun_ajaran_id`) REFERENCES `tahun_ajaran` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT IF NOT EXISTS `fk_billing_semester` FOREIGN KEY (`semester_id`) REFERENCES `semester` (`id`) ON DELETE SET NULL;
+
+-- student_attendance
+ALTER TABLE `student_attendance`
+  ADD COLUMN IF NOT EXISTS `tahun_ajaran_id` int(11) DEFAULT NULL COMMENT 'TA absensi' AFTER `recorded_by`,
+  ADD COLUMN IF NOT EXISTS `semester_id` int(11) DEFAULT NULL COMMENT 'Semester absensi' AFTER `tahun_ajaran_id`,
+  ADD KEY IF NOT EXISTS `idx_student_att_ta` (`tahun_ajaran_id`),
+  ADD KEY IF NOT EXISTS `idx_student_att_semester` (`semester_id`),
+  ADD CONSTRAINT IF NOT EXISTS `fk_student_att_tahun_ajaran` FOREIGN KEY (`tahun_ajaran_id`) REFERENCES `tahun_ajaran` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT IF NOT EXISTS `fk_student_att_semester` FOREIGN KEY (`semester_id`) REFERENCES `semester` (`id`) ON DELETE SET NULL;
+
+-- student_education_history (if exists) - conditional ALTER
+SET @col_exists_seh_ta := (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'student_education_history' AND COLUMN_NAME = 'tahun_ajaran_id');
+SET @sql_seh_ta := IF(@col_exists_seh_ta = 0, 'ALTER TABLE `student_education_history` ADD COLUMN `tahun_ajaran_id` int(11) DEFAULT NULL COMMENT "TA riwayat pendidikan" AFTER `keterangan`, 'SELECT 1');
+PREPARE stmt_seh_ta FROM @sql_seh_ta;
+EXECUTE stmt_seh_ta;
+DEALLOCATE PREPARE stmt_seh_ta;
+
+SET @col_exists_seh_idx := (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'student_education_history' AND INDEX_NAME = 'idx_student_edu_ta');
+SET @sql_seh_idx := IF(@col_exists_seh_idx = 0, 'ALTER TABLE `student_education_history` ADD INDEX `idx_student_edu_ta` (`tahun_ajaran_id`)', 'SELECT 1');
+PREPARE stmt_seh_idx FROM @sql_seh_idx;
+EXECUTE stmt_seh_idx;
+DEALLOCATE PREPARE stmt_seh_idx;
+
+SET @fk_exists_seh_ta := (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'student_education_history' AND CONSTRAINT_NAME = 'fk_student_edu_tahun_ajaran');
+SET @sql_seh_ta_fk := IF(@fk_exists_seh_ta = 0, 'ALTER TABLE `student_education_history` ADD CONSTRAINT `fk_student_edu_tahun_ajaran` FOREIGN KEY (`tahun_ajaran_id`) REFERENCES `tahun_ajaran` (`id`) ON DELETE SET NULL', 'SELECT 1');
+PREPARE stmt_seh_ta_fk FROM @sql_seh_ta_fk;
+EXECUTE stmt_seh_ta_fk;
+DEALLOCATE PREPARE stmt_seh_ta_fk;
+
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;

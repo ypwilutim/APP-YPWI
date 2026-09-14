@@ -3622,19 +3622,435 @@ window.loadStudentPaymentSummary = function () { };
 window.loadEmploymentRules = function () { };
 window.createBackup = function () { };
 window.restoreDatabase = function () { };
+// ============================================================
+// SK GURU FUNCTIONALITY
+// ============================================================
+
+const skGuruAuthHdr = () => ({ 'Authorization': 'Bearer ' + (window.authToken || localStorage.getItem('token') || '') });
+let skGuruTeacherSearchTimeout = null;
+let skGuruCurrentPreviewData = null;
+
 window.showSkGuruModal = function () {
     const modal = document.getElementById('skGuruModal');
     if (modal) { modal.classList.remove('hidden'); modal.classList.add('show'); }
 };
+
 window.hideSkGuruModal = function () {
     const modal = document.getElementById('skGuruModal');
     if (modal) { modal.classList.remove('show'); modal.classList.add('hidden'); }
+    const form = document.getElementById('skGuruForm');
+    if (form) form.reset();
+    const teacherIdInput = document.getElementById('skTeacherId');
+    if (teacherIdInput) teacherIdInput.value = '';
+    const searchInput = document.getElementById('skTeacherSearch');
+    if (searchInput) searchInput.value = '';
+    const suggestionsBox = document.getElementById('skTeacherSuggestions');
+    if (suggestionsBox) { suggestionsBox.innerHTML = ''; suggestionsBox.classList.add('hidden'); }
 };
-window.previewSkGuru = function () { alert('Fitur preview SK Guru belum tersedia'); };
-window.bulkGenerateSkGuru = function () { alert('Fitur bulk generate SK Guru belum tersedia'); };
-window.hideSkPreviewModal = function () { alert('Fitur preview SK Guru belum tersedia'); };
-window.confirmGenerateSk = function () { alert('Fitur generate SK belum tersedia'); };
-window.saveSkAutomationSettings = function () { alert('Fitur pengaturan SK Automation belum tersedia'); };
+
+window.hideSkPreviewModal = function () {
+    const previewModal = document.getElementById('skPreviewModal');
+    if (previewModal) { previewModal.classList.remove('show'); previewModal.classList.add('hidden'); }
+    skGuruCurrentPreviewData = null;
+    window.showSkGuruModal();
+};
+
+window.previewSkGuru = async function () {
+    const teacherId = document.getElementById('skTeacherId')?.value;
+    const tentangType = document.getElementById('skTentangType')?.value;
+    const pt = document.getElementById('skPT')?.value;
+    const tmt = document.getElementById('skTmt')?.value;
+
+    if (!teacherId) {
+        showToast('Pilih guru terlebih dahulu', 'error');
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/preview', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...skGuruAuthHdr() },
+            body: JSON.stringify({ teacher_id: teacherId, tentang_type: tentangType, pt: pt || '', tmt_custom: tmt || '' })
+        });
+        const data = await res.json();
+        if (data.success && data.data) {
+            skGuruCurrentPreviewData = data.data;
+            document.getElementById('previewNoSurat').textContent = data.data.no_surat || '-';
+            document.getElementById('previewTentang').textContent = data.data.tentang || '-';
+            document.getElementById('previewNama').textContent = data.data.nama || '-';
+            document.getElementById('previewTtl').textContent = data.data.ttl || '-';
+            document.getElementById('previewTmt').textContent = data.data.tmt || '-';
+            document.getElementById('previewPt').textContent = data.data.pt || '-';
+            document.getElementById('previewNiy').textContent = data.data.niy || '-';
+            document.getElementById('previewUnit').textContent = data.data.unit || '-';
+            document.getElementById('previewJabatan').textContent = data.data.jabatan || '-';
+            document.getElementById('previewStatus').textContent = data.data.status || '-';
+            document.getElementById('previewBh').textContent = data.data.bh || '-';
+            document.getElementById('previewBm').textContent = data.data.bm || '-';
+            const masa = data.data.tglMulai && data.data.tglSelesai ? data.data.tglMulai + ' - ' + data.data.tglSelesai : '-';
+            document.getElementById('previewMasa').textContent = masa;
+
+            const previewModal = document.getElementById('skPreviewModal');
+            if (previewModal) { previewModal.classList.remove('hidden'); previewModal.classList.add('show'); }
+            const skGuruModal = document.getElementById('skGuruModal');
+            if (skGuruModal) { skGuruModal.classList.remove('show'); skGuruModal.classList.add('hidden'); }
+        } else {
+            showToast(data.message || 'Gagal mempreviu SK', 'error');
+        }
+    } catch (e) {
+        console.error('[SK GURU PREVIEW]', e);
+        showToast('Terjadi kesalahan saat mempreviu', 'error');
+    }
+};
+
+window.confirmGenerateSk = async function () {
+    if (!skGuruCurrentPreviewData) {
+        showToast('Silakan preview SK terlebih dahulu', 'error');
+        return;
+    }
+
+    const teacherId = document.getElementById('skTeacherId')?.value;
+    const tentangType = document.getElementById('skTentangType')?.value;
+    const pt = document.getElementById('skPT')?.value;
+    const tmt = document.getElementById('skTmt')?.value;
+
+    if (!teacherId) {
+        showToast('Pilih guru terlebih dahulu', 'error');
+        return;
+    }
+
+    const downloadBtn = event?.target;
+    if (downloadBtn) {
+        downloadBtn.disabled = true;
+        downloadBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Generating...';
+    }
+
+    try {
+        const res = await fetch('/api/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...skGuruAuthHdr() },
+            body: JSON.stringify({ teacher_id: teacherId, tentang_type: tentangType, pt: pt || '', tmt_custom: tmt || '' })
+        });
+
+        if (!res.ok) {
+            const data = await res.json().catch(() => null);
+            throw new Error(data?.message || 'Gagal generate SK');
+        }
+
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'SK_Guru.docx';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+
+        window.hideSkPreviewModal();
+        window.hideSkGuruModal();
+        showToast('SK Guru berhasil digenerate dan diunduh', 'success');
+    } catch (e) {
+        console.error('[SK GURU GENERATE]', e);
+        showToast(e.message || 'Terjadi kesalahan saat generate SK', 'error');
+    } finally {
+        if (downloadBtn) {
+            downloadBtn.disabled = false;
+            downloadBtn.innerHTML = '<i class="fas fa-download mr-2"></i>Download SK';
+        }
+    }
+};
+
+window.bulkGenerateSkGuru = async function () {
+    const tentangType = document.getElementById('skTentauType')?.value;
+    const pt = document.getElementById('skPT')?.value;
+    const payload = { tentang_type: tentangType, pt: pt || '' };
+
+    try {
+        const result = await Swal.fire({
+            title: 'Bulk Generate SK Guru',
+            html: '<p class="text-sm text-gray-600">Generate SK untuk semua guru yang belum memiliki NIY.</p>',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Generate Sekarang',
+            cancelButtonText: 'Batal',
+            confirmButtonColor: '#16a34a'
+        });
+
+        if (!result.isConfirmed) {
+            return;
+        }
+
+        const bulkBtn = document.getElementById('skGuruForm')?.querySelector('button[onclick="bulkGenerateSkGuru()"]');
+        if (bulkBtn) {
+            bulkBtn.disabled = true;
+            bulkBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Processing...';
+        }
+
+        try {
+            const res = await fetch('/api/bulk-generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...skGuruAuthHdr() },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+
+            if (data.success) {
+                showToast(data.message || 'Bulk generate berhasil', 'success');
+                if (data.skipped && data.skipped.length > 0) {
+                    Swal.fire({
+                        title: 'Guru Dilewati',
+                        html: data.skipped.map(s => '<div class="text-sm py-1">' + (s.nama || '-') + ': ' + (s.reason || '') + '</div>').join(''),
+                        icon: 'info',
+                        confirmButtonColor: '#3b82f6'
+                    });
+                }
+                if (typeof loadSkGuruList === 'function') loadSkGuruList();
+            } else {
+                showToast(data.message || 'Gagal bulk generate', 'error');
+            }
+        } finally {
+            if (bulkBtn) {
+                bulkBtn.disabled = false;
+                bulkBtn.innerHTML = '<i class="fas fa-users mr-2"></i>Bulk Generate';
+            }
+        }
+    } catch (e) {
+        console.error('[SK GURU BULK]', e);
+        showToast('Terjadi kesalahan saat bulk generate', 'error');
+    }
+};
+
+window.saveSkAutomationSettings = async function () {
+    const minServiceYears = document.getElementById('minServiceYears')?.value;
+    const autoGenerateEnabled = document.getElementById('autoGenerateEnabled')?.checked;
+    const autoGenerateDate = document.getElementById('autoGenerateDate')?.value;
+
+    const saveBtn = event?.target;
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Menyimpan...';
+    }
+
+    try {
+        const res = await fetch('/api/save-settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...skGuruAuthHdr() },
+            body: JSON.stringify({
+                min_service_years: minServiceYears,
+                auto_generate_enabled: autoGenerateEnabled,
+                auto_generate_date: autoGenerateDate
+            })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(data.message || 'Pengaturan berhasil disimpan', 'success');
+        } else {
+            showToast(data.message || 'Gagal menyimpan pengaturan', 'error');
+        }
+    } catch (e) {
+        console.error('[SK GURU SETTINGS]', e);
+        showToast('Terjadi kesalahan saat menyimpan pengaturan', 'error');
+    } finally {
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = '<i class="fas fa-save mr-2"></i>Simpan Pengaturan';
+        }
+    }
+};
+
+window.loadSkGuruList = async function () {
+    const tableBody = document.getElementById('skGuruTable');
+    if (!tableBody) return;
+
+    tableBody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>Memuat data SK Guru...</td></tr>';
+
+    try {
+        const res = await fetch('/api/list', { headers: skGuruAuthHdr() });
+        const data = await res.json();
+        if (data.success && data.data && data.data.length > 0) {
+            tableBody.innerHTML = data.data.map(sk => {
+                const createdDate = sk.created_at ? new Date(sk.created_at).toLocaleDateString('id-ID') : '-';
+                const tmtDate = sk.tmt || '-';
+                let actions = '<button onclick="downloadSkGuru(' + sk.id + ')" class="text-blue-600 hover:text-blue-800 mr-2" title="Unduh"><i class="fas fa-download"></i></button>';
+                return '<tr>' +
+                    '<td class="px-4 py-3 text-sm">' + (sk.no_surat || '-') + '</td>' +
+                    '<td class="px-4 py-3 text-sm font-medium">' + (sk.teacher_name || sk.nama || '-') + '</td>' +
+                    '<td class="px-4 py-3 text-sm">' + (sk.tentang || '-') + '</td>' +
+                    '<td class="px-4 py-3 text-sm">' + (sk.niy || '-') + '</td>' +
+                    '<td class="px-4 py-3 text-sm">' + (tmtDate) + '</td>' +
+                    '<td class="px-4 py-3 text-sm">' + (createdDate) + '</td>' +
+                    '<td class="px-4 py-3 text-sm">' + actions + '</td>' +
+                    '</tr>';
+            }).join('');
+        } else {
+            tableBody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-500"><i class="fas fa-file-alt text-3xl mb-2"></i><p>Tidak ada data SK Guru</p></td></tr>';
+        }
+    } catch (e) {
+        console.error('[SK GURU LIST]', e);
+        tableBody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">Gagal memuat data</td></tr>';
+    }
+};
+
+window.downloadSkGuru = async function (skId) {
+    try {
+        const res = await fetch('/api/list', { headers: skGuruAuthHdr() });
+        const data = await res.json();
+        const sk = data.data?.find(s => s.id === skId);
+        if (!sk) {
+            showToast('SK tidak ditemukan', 'error');
+            return;
+        }
+        showToast('No. Surat: ' + (sk.no_surat || '-') + ' | NIY: ' + (sk.niy || '-'), 'info');
+    } catch (e) {
+        console.error('[SK GURU DOWNLOAD]', e);
+    }
+};
+
+async function searchSkTeachers(query) {
+    const suggestionsBox = document.getElementById('skTeacherSuggestions');
+    if (!suggestionsBox || query.length < 2) {
+        if (suggestionsBox) suggestionsBox.classList.add('hidden');
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/admin/teachers?search=' + encodeURIComponent(query) + '&limit=20', {
+            headers: skGuruAuthHdr()
+        });
+        const data = await res.json();
+        if (data.success && data.data && data.data.length > 0) {
+            suggestionsBox.innerHTML = data.data.map(t => {
+                const safeNama = (t.nama || '').replace(/'/g, "\\'");
+                const safeNik = (t.nik || '').replace(/'/g, "\\'");
+                return '<div class="px-4 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-0"' +
+                    "onclick=\"selectSkTeacher(" + t.id + ", '" + safeNama + "', '" + safeNik + "')\">" +
+                    '<div class="font-medium text-gray-900">' + (t.nama || '-') + '</div>' +
+                    '<div class="text-xs text-gray-500">NIK: ' + (t.nik || '-') + ' | ' + (t.status_kepegawaian || '-') + '</div>' +
+                    '</div>';
+            }).join('');
+            suggestionsBox.classList.remove('hidden');
+        } else {
+            suggestionsBox.innerHTML = '<div class="px-4 py-2 text-gray-500">Tidak ada guru ditemukan</div>';
+            suggestionsBox.classList.remove('hidden');
+        }
+    } catch (e) {
+        console.error('[SK GURU SEARCH]', e);
+    }
+}
+
+window.selectSkTeacher = async function (id, nama, nik) {
+    const teacherIdInput = document.getElementById('skTeacherId');
+    const searchInput = document.getElementById('skTeacherSearch');
+    const suggestionsBox = document.getElementById('skTeacherSuggestions');
+    if (teacherIdInput) teacherIdInput.value = id;
+    if (searchInput) searchInput.value = nama + ' (NIK: ' + nik + ')';
+    if (suggestionsBox) { suggestionsBox.innerHTML = ''; suggestionsBox.classList.add('hidden'); }
+
+    try {
+        const res = await fetch('/api/teachers/' + id + '/data', { headers: skGuruAuthHdr() });
+        const data = await res.json();
+        if (data.success && data.data) {
+            const d = data.data;
+            const ptInput = document.getElementById('skPT');
+            if (ptInput && d.pt) ptInput.value = d.pt;
+            const tmtInput = document.getElementById('skTmt');
+            if (tmtInput && d.tmt_formatted) tmtInput.value = d.tmt_formatted;
+        }
+    } catch (e) {
+        console.error('[SK GURU SELECT]', e);
+    }
+};
+
+function initSkGuruModal() {
+    const searchInput = document.getElementById('skTeacherSearch');
+    if (searchInput) {
+        searchInput.addEventListener('input', function () {
+            clearTimeout(skGuruTeacherSearchTimeout);
+            const query = this.value.trim();
+            if (query.length < 2) {
+                const suggestionsBox = document.getElementById('skTeacherSuggestions');
+                if (suggestionsBox) { suggestionsBox.innerHTML = ''; suggestionsBox.classList.add('hidden'); }
+                return;
+            }
+            skGuruTeacherSearchTimeout = setTimeout(() => searchSkTeachers(query), 300);
+        });
+
+        document.addEventListener('click', function (e) {
+            const suggestionsBox = document.getElementById('skTeacherSuggestions');
+            if (suggestionsBox && !searchInput.contains(e.target) && !suggestionsBox.contains(e.target)) {
+                suggestionsBox.classList.add('hidden');
+            }
+        });
+    }
+
+    const form = document.getElementById('skGuruForm');
+    if (form) {
+        form.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            await confirmGenerateSkDirect();
+        });
+    }
+}
+
+async function confirmGenerateSkDirect() {
+    const teacherId = document.getElementById('skTeacherId')?.value;
+    const tentangType = document.getElementById('skTentangType')?.value;
+    const pt = document.getElementById('skPT')?.value;
+    const tmt = document.getElementById('skTmt')?.value;
+
+    if (!teacherId) {
+        showToast('Pilih guru terlebih dahulu', 'error');
+        return;
+    }
+
+    const generateBtn = document.getElementById('skGenerateBtn');
+    let originalHtml = '';
+    if (generateBtn) {
+        originalHtml = generateBtn.innerHTML;
+        generateBtn.disabled = true;
+        generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Generating...';
+    }
+
+    try {
+        const res = await fetch('/api/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...skGuruAuthHdr() },
+            body: JSON.stringify({ teacher_id: teacherId, tentang_type: tentangType, pt: pt || '', tmt_custom: tmt || '' })
+        });
+
+        if (!res.ok) {
+            const data = await res.json().catch(() => null);
+            throw new Error(data?.message || 'Gagal generate SK');
+        }
+
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'SK_Guru.docx';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+
+        window.hideSkGuruModal();
+        showToast('SK Guru berhasil digenerate dan diunduh', 'success');
+    } catch (e) {
+        console.error('[SK GURU GENERATE DIRECT]', e);
+        showToast(e.message || 'Terjadi kesalahan saat generate SK', 'error');
+    } finally {
+        if (generateBtn) {
+            generateBtn.disabled = false;
+            generateBtn.innerHTML = originalHtml;
+        }
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    initSkGuruModal();
+    if (typeof loadSkGuruList === 'function') loadSkGuruList();
+});
 window.refreshBankSettings = function () { };
 window.loadBillSettings = function () { };
 window.saveBillSettings = function () { alert('Fitur pengaturan iuran belum tersedia'); };

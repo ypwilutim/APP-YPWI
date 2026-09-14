@@ -46,8 +46,8 @@ function parseDate(dateStr) {
 router.get('/teachers/:id/data', authenticateOperator, async (req, res) => {
   try {
     const teacherId = req.params.id;
-const [teacher] = await db.query(
-      'SELECT t.id, t.nama, t.nik, t.nip, t.tempat_lahir, t.tanggal_lahir, t.status_kepegawaian, t.tmt, ta.tenant_id, ta.jabatan_di_unit as unit, tn.nama_sekolah, tn.id as tenant_pk FROM teachers t JOIN teacher_assignments ta ON t.id = ta.teacher_id JOIN tenants tn ON ta.tenant_id = tn.tenant_id WHERE t.id = ? AND t.status_aktif = 1',
+ const [teacher] = await db.query(
+      'SELECT t.id, t.nama, t.nik, t.nip, t.tempat_lahir, t.tanggal_lahir, t.status_kepegawaian, t.tmt, t.pendidikan_terakhir as pt, ta.tenant_id, ta.jabatan_di_unit as unit, tn.nama_sekolah, tn.id as tenant_pk FROM teachers t JOIN teacher_assignments ta ON t.id = ta.teacher_id JOIN tenants tn ON ta.tenant_id = tn.tenant_id WHERE t.id = ? AND t.status_aktif = 1',
       [teacherId]
     );
 
@@ -74,21 +74,22 @@ const [teacher] = await db.query(
       tmtFormatted = tmtDate.getFullYear() + '-' + month;
     }
 
-const result = {
-       teacher_id: teacher.id,
-       nama: teacher.nama,
-       nik: teacher.nik,
-       nip: teacher.nip,
-       tenant_id: teacher.tenant_id,
-       tenant_pk: teacher.tenant_pk,
-       nama_sekolah: teacher.nama_sekolah,
-       unit: teacher.unit || teacher.nama_sekolah || 'Guru',
-       tmt_formatted: tmtFormatted,
-       has_existing_sk: hasExistingSk,
-       existing_niy: existingNiy,
-       hijri_month_roman: romanMonth,
-       hijri_year: currentHijri.year
-     };
+ const result = {
+        teacher_id: teacher.id,
+        nama: teacher.nama,
+        nik: teacher.nik,
+        nip: teacher.nip,
+        tenant_id: teacher.tenant_id,
+        tenant_pk: teacher.tenant_pk,
+        nama_sekolah: teacher.nama_sekolah,
+        unit: teacher.unit || teacher.nama_sekolah || 'Guru',
+        pt: teacher.pt || null,
+        tmt_formatted: tmtFormatted,
+        has_existing_sk: hasExistingSk,
+        existing_niy: existingNiy,
+        hijri_month_roman: romanMonth,
+        hijri_year: currentHijri.year
+      };
 
     res.json({ success: true, data: result });
   } catch (error) {
@@ -96,6 +97,18 @@ const result = {
     res.status(500).json({ success: false, message: 'Error fetching teacher data' });
   }
 });
+
+async function peekNextSkNumber(tenantId, hijriYear) {
+  const existing = await db.query(
+    'SELECT last_number FROM sk_sequence WHERE tenant_id = ? AND hijri_year = ?',
+    [tenantId, hijriYear]
+  );
+
+  if (existing.length > 0) {
+    return existing[0].last_number + 1;
+  }
+  return 1;
+}
 
 async function getNextSkNumber(tenantId, hijriYear) {
   const existing = await db.query(
@@ -143,7 +156,18 @@ function buildSkData(teacher, tentang_type, pt, tmt_custom, nomorUrut, hijriYear
   const romanMonth = romanize(hijriMonths.indexOf(hijriToday.month) + 1);
   const noSurat = 'QR.' + String(nomorUrut).padStart(3, '0') + '/02/YPWI-LT/' + romanMonth + '/' + hijriToday.year;
 
-  const tentang = tentang_type === 'kembali' ? 'PENGANGKATAN KEMBALI GURU (' + teacher.nama_sekolah + ')' : 'PENGANGKATAN GURU (' + teacher.nama_sekolah + ')';
+  const tentag_map = {
+    'baru': 'PENGANGKATAN GURU',
+    'kembali': 'PENGANGKATAN KEMBALI GURU',
+    'honorer_guru': 'PENGANGKATAN GURU HONOR',
+    'honorer_pegawai': 'PENGANGKATAN PEGAWAI HONOR',
+    'kontrak_guru': 'PENGANGKATAN GURU KONTRAK',
+    'kontrak_pegawai': 'PENGANGKATAN PEGAWAI KONTRAK',
+    'tetap_guru': 'PENGANGKATAN GURU TETAP',
+    'tetap_pegawai': 'PENGANGKATAN PEGAWAI TETAP'
+  };
+  const tentag_label = tentag_map[tentang_type] || 'PENGANGKATAN GURU';
+  const tentang = tentag_label + ' (' + teacher.nama_sekolah + ')';
 
   const ttl = teacher.tempat_lahir ? teacher.tempat_lahir + ', ' + birthDate.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
 
@@ -192,10 +216,10 @@ router.post('/generate', authenticateOperator, async (req, res) => {
        return res.status(400).json({ success: false, message: 'teacher_id diperlukan' });
      }
 
-     const [teacher] = await db.query(
-       'SELECT t.id, t.nama, t.nik, t.nip, t.tempat_lahir, t.tanggal_lahir, t.status_kepegawaian, t.tmt, ta.tenant_id, ta.jabatan_di_unit as unit, tn.nama_sekolah, tn.id as tenant_pk FROM teachers t JOIN teacher_assignments ta ON t.id = ta.teacher_id JOIN tenants tn ON ta.tenant_id = tn.tenant_id WHERE t.id = ? AND t.status_aktif = 1',
-       [teacher_id]
-     );
+    const [teacher] = await db.query(
+      'SELECT t.id, t.nama, t.nik, t.nip, t.tempat_lahir, t.tanggal_lahir, t.status_kepegawaian, t.tmt, t.pendidikan_terakhir as pt, ta.tenant_id, ta.jabatan_di_unit as unit, tn.nama_sekolah, tn.id as tenant_pk FROM teachers t JOIN teacher_assignments ta ON t.id = ta.teacher_id JOIN tenants tn ON ta.tenant_id = tn.tenant_id WHERE t.id = ? AND t.status_aktif = 1',
+      [teacher_id]
+    );
 
     if (!teacher) {
       return res.status(400).json({ success: false, message: 'Guru tidak ditemukan' });
@@ -218,6 +242,19 @@ router.post('/generate', authenticateOperator, async (req, res) => {
     const nomorUrut = await getNextSkNumber(teacher.tenant_id, hijriToday.year);
 
     const skData = buildSkData(teacher, tentang_type, pt, tmt_custom, nomorUrut, hijriToday.year);
+
+    console.log('[SK GURU PREVIEW DEBUG]', {
+      teacher_nip: teacher.nip,
+      tenant_pk: teacher.tenant_pk,
+      tenant_id: teacher.tenant_id,
+      tanggal_lahir: teacher.tanggal_lahir,
+      tmt: teacher.tmt,
+      tmt_custom: tmt_custom,
+      tentag_type: tentang_type,
+      nomorUrut: nomorUrut,
+      skData_niy: skData.niy,
+      skData_keys: Object.keys(skData)
+    });
     
     // Template uses &lt;&lt;PLACEHOLDER&gt;&gt; format
     let docXml = zip.file('word/document.xml').asText();
@@ -256,10 +293,14 @@ docXml = docXml
       fs.mkdirSync(downloadsDir, { recursive: true });
     }
 
-await db.query(
-       'INSERT INTO sk_guru (teacher_id, tenant_id, no_surat, tentang, ttl, tmt, pt, niy, unit, bh, bm, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())',
-       [teacher_id, teacher.tenant_id, skData.noSurat, skData.tentang, skData.ttl, skData.tmtFormatted, skData.ptFormatted, skData.niy, skData.unit, skData.bhFormatted, skData.bmFormatted]
-     );
+     await db.query(
+        'INSERT INTO sk_guru (teacher_id, tenant_id, no_surat, tentang, ttl, tmt, pt, niy, unit, bh, bm, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())',
+        [teacher_id, teacher.tenant_id, skData.noSurat, skData.tentang, skData.ttl, skData.tmtFormatted, skData.ptFormatted, skData.niy, skData.unit, skData.bhFormatted, skData.bmFormatted]
+      );
+
+        if (!teacher.nip && skData.niy) {
+          await db.query('UPDATE teachers SET nip = ? WHERE id = ?', [skData.niy, teacher_id]);
+        }
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
     res.setHeader('Content-Disposition', 'attachment; filename="SK_Guru.docx"');
@@ -316,12 +357,12 @@ router.post('/preview', authenticateOperator, async (req, res) => {
        return res.status(400).json({ success: false, message: 'teacher_id diperlukan' });
      }
 
-     const [teacher] = await db.query(
-       'SELECT t.id, t.nama, t.nik, t.nip, t.tempat_lahir, t.tanggal_lahir, t.status_kepegawaian, t.tmt, ta.tenant_id, ta.jabatan_di_unit as unit, tn.nama_sekolah, tn.id as tenant_pk FROM teachers t JOIN teacher_assignments ta ON t.id = ta.teacher_id JOIN tenants tn ON ta.tenant_id = tn.tenant_id WHERE t.id = ? AND t.status_aktif = 1',
-       [teacher_id]
-     );
+    const [teacher] = await db.query(
+      'SELECT t.id, t.nama, t.nik, t.nip, t.tempat_lahir, t.tanggal_lahir, t.status_kepegawaian, t.tmt, t.pendidikan_terakhir as pt, ta.tenant_id, ta.jabatan_di_unit as unit, tn.nama_sekolah, tn.id as tenant_pk FROM teachers t JOIN teacher_assignments ta ON t.id = ta.teacher_id JOIN tenants tn ON ta.tenant_id = tn.tenant_id WHERE t.id = ? AND t.status_aktif = 1',
+      [teacher_id]
+    );
 
-    if (!teacher) {
+     if (!teacher) {
       return res.status(400).json({ success: false, message: 'Guru tidak ditemukan' });
     }
 
@@ -331,11 +372,24 @@ router.post('/preview', authenticateOperator, async (req, res) => {
 
     const today = new Date();
     const hijriToday = gregorianToHijri(today);
-    const nomorUrut = await getNextSkNumber(teacher.tenant_id, hijriToday.year);
+    const nomorUrut = await peekNextSkNumber(teacher.tenant_id, hijriToday.year);
 
     const skData = buildSkData(teacher, tentang_type, pt, tmt_custom, nomorUrut, hijriToday.year);
 
-res.json({
+    console.log('[SK GURU PREVIEW DEBUG]', {
+      teacher_nip: teacher.nip,
+      tenant_pk: teacher.tenant_pk,
+      tenant_id: teacher.tenant_id,
+      tanggal_lahir: teacher.tanggal_lahir,
+      tmt: teacher.tmt,
+      tmt_custom: tmt_custom,
+      tentag_type: tentang_type,
+      nomorUrut: nomorUrut,
+      skData_niy: skData.niy,
+      skData_keys: Object.keys(skData)
+    });
+
+    res.json({
        success: true,
        data: {
          no_surat: skData.noSurat,

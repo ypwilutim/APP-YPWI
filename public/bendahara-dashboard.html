@@ -8,6 +8,8 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
   <link rel="stylesheet" href="css/admin-dashboard.css">
+  <!-- Interactive Help System -->
+  <link href="assets/css/interactive-help.css" rel="stylesheet">
   <style>
     body {
       font-family: 'Inter', sans-serif;
@@ -157,6 +159,12 @@
           data-tab="paymentSettings">
           <i class="fas fa-cog"></i>
           <span>Pengaturan Pembayaran</span>
+        </button>
+        <button
+          class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+          data-tab="billingTA">
+          <i class="fas fa-calendar"></i>
+          <span>Billing per TA</span>
         </button>
       </nav>
     </aside>
@@ -732,13 +740,13 @@
                   <label class="block text-xs font-medium text-gray-600 mb-1">Bulan</label>
                   <input type="month" id="financialBulan" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" onchange="loadFinancialTransactions()">
                 </div>
-                <button onclick="showFinancialTransactionModal()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">
+                <button id="catatTransaksiBtn" onclick="showFinancialTransactionModal()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700">
                   <i class="fas fa-plus mr-1"></i>Catat Transaksi
                 </button>
                 <button onclick="loadFinancialTransactions()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-300">
                   <i class="fas fa-sync-alt mr-1"></i>Refresh
                 </button>
-                <button onclick="exportIsak35('xlsx')" class="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-700">
+                <button id="exportIsak35Excel" onclick="exportIsak35('xlsx')" class="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-700">
                   <i class="fas fa-file-excel mr-1"></i>Excel ISAK 35
                 </button>
                 <button onclick="exportIsak35('pdf')" class="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-700">
@@ -833,15 +841,19 @@
                     <option value="pengeluaran">Pengeluaran</option>
                   </select>
                 </div>
+                 <div class="flex items-end gap-1">
+                   <div class="flex-1">
+                     <label class="block text-xs font-medium text-gray-600 mb-1">Akun *</label>
+                     <select id="finKategori" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
+                       <option value="">Pilih akun...</option>
+                     </select>
+                   </div>
+                    <button id="kelolaAkunBtn" type="button" onclick="openFinCategoryModal()" class="px-2 py-1.5 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700" title="Kelola akun/kategori"><i class="fas fa-cog"></i></button>
+                   <button type="button" onclick="deleteFinancialCategory()" class="px-2 py-1.5 text-xs bg-red-600 text-white rounded hover:bg-red-700" title="Hapus akun yang dipilih"><i class="fas fa-trash"></i></button>
+                 </div>
                 <div>
-                  <label class="block text-xs font-medium text-gray-600 mb-1">Kategori *</label>
-                  <select id="finKategori" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
-                    <option value="">Pilih kategori...</option>
-                  </select>
-                </div>
-                <div>
-                  <label class="block text-xs font-medium text-gray-600 mb-1">Akun</label>
-                  <input type="text" id="finAkun" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" placeholder="Kode rekening/akun">
+                  <label class="block text-xs font-medium text-gray-600 mb-1">Nomor Rekening</label>
+                  <input type="text" id="finAkun" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" placeholder="Nama Sekolah - Nomor Rekening" readonly>
                 </div>
                 <div>
                   <label class="block text-xs font-medium text-gray-600 mb-1">No Bukti</label>
@@ -1297,13 +1309,69 @@
                     </tbody>
                   </table>
                 </div>
-              </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Billing per TA Tab -->
+      <div id="billingTATab" class="tab-content hidden">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-4">
+          <h3 class="text-lg font-semibold text-gray-900 mb-4">Billing per Tahun Ajaran</h3>
+          <div class="flex flex-wrap items-end gap-3 mb-6">
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Tahun Ajaran</label>
+              <select id="billingTASelect" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
+                <option value="">Pilih Tahun Ajaran</option>
+              </select>
+            </div>
+            <button onclick="generateBillingByTA()" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm">
+              <i class="fas fa-robot mr-1"></i>Generate Billing
+            </button>
+            <button onclick="loadBillingTAList()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">
+              <i class="fas fa-sync-alt mr-1"></i>Refresh
+            </button>
+          </div>
+          <div id="billingTASummary" class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 hidden">
+            <div class="bg-blue-50 rounded-lg p-4">
+              <p class="text-sm text-blue-600 font-medium">Total Tagihan</p>
+              <p class="text-2xl font-bold text-blue-800" id="billingTATotal">Rp 0</p>
+            </div>
+            <div class="bg-green-50 rounded-lg p-4">
+              <p class="text-sm text-green-600 font-medium">Siswa</p>
+              <p class="text-2xl font-bold text-green-800" id="billingTASiswa">0</p>
+            </div>
+            <div class="bg-yellow-50 rounded-lg p-4">
+              <p class="text-sm text-yellow-600 font-medium">Bulan</p>
+              <p class="text-2xl font-bold text-yellow-800" id="billingTABulan">0</p>
+            </div>
+            <div class="bg-red-50 rounded-lg p-4">
+              <p class="text-sm text-red-600 font-medium">Status</p>
+              <p class="text-2xl font-bold text-red-800" id="billingTAStatus">-</p>
             </div>
           </div>
-        </main>
-     </div>
+          <div class="overflow-x-auto">
+            <table class="w-full">
+              <thead class="bg-gray-50 border-b border-gray-100">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">TA</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Sekolah</th>
+                  <th class="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Total Tagihan</th>
+                  <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Siswa</th>
+                  <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Bulan</th>
+                  <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Status</th>
+                </tr>
+              </thead>
+              <tbody id="billingTATable">
+                <tr><td colspan="6" class="px-4 py-8 text-center text-gray-500">Pilih tahun ajaran lalu klik Generate Billing</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </main>
+   </div>
 
-     <!-- BSI VA Modal -->
+   <!-- BSI VA Modal -->
   <div id="bsiVaModal" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
     <div class="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden">
       <div class="flex justify-between items-center p-4 border-b sticky top-0 bg-white z-10">
@@ -1551,8 +1619,80 @@
             if (tabName === 'customerService') { loadCSContacts(); }
             if (tabName === 'messageHistory') { loadMessageHistory(); }
             if (tabName === 'paymentSettings') { loadPaymentSettings(); loadKafalahSettings(); loadKafalahMatrix(); loadJabatanTunjangan(); loadPendidikanRef(); }
+            if (tabName === 'billingTA') { loadBillingTAList(); loadBillingTATenants(); }
           });
       });
+    }
+
+    async function loadBillingTATenants() {
+      const select = document.getElementById('billingTASelect');
+      if (!select || select.options.length > 1) return;
+      try {
+        const token = localStorage.getItem('token');
+        const res = await fetch('/api/admin/tahun-ajaran', { headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
+        const data = await res.json();
+        if (data.success && data.data) {
+          select.innerHTML = '<option value="">Pilih Tahun Ajaran</option>' + data.data.map(ta =>
+            `<option value="${ta.id}">${ta.nama} (${ta.tahun_mulai}/${ta.tahun_selesai})</option>`
+          ).join('');
+        }
+      } catch (e) { console.error('loadBillingTATenants error:', e); }
+    }
+
+    async function loadBillingTAList() {
+      const tbody = document.getElementById('billingTATable');
+      if (!tbody) return;
+      tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>Memuat...</td></tr>';
+      try {
+        const token = localStorage.getItem('token');
+        const res = await fetch('/api/treasurer/public/billing-by-ta', { headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
+        const data = await res.json();
+        if (data.success && data.data && data.data.length > 0) {
+          tbody.innerHTML = data.data.map(row => `
+            <tr class="hover:bg-gray-50 border-b border-gray-100">
+              <td class="px-4 py-3 text-sm text-gray-900">${row.nama || '-'}</td>
+              <td class="px-4 py-3 text-sm text-gray-600">${row.nama_sekolah || '-'}</td>
+              <td class="px-4 py-3 text-sm text-right text-gray-900">Rp ${(parseFloat(row.total_tagihan) || 0).toLocaleString('id-ID')}</td>
+              <td class="px-4 py-3 text-sm text-center text-gray-600">${row.total_siswa || 0}</td>
+              <td class="px-4 py-3 text-sm text-center text-gray-600">${row.bulan || '-'}</td>
+              <td class="px-4 py-3 text-center">
+                <span class="px-2 py-1 ${row.status === 'lunas' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'} text-xs font-medium rounded-full">${row.status || '-'}</span>
+              </td>
+            </tr>
+          `).join('');
+        } else {
+          tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-gray-500">Belum ada data billing</td></tr>';
+        }
+      } catch (error) {
+        console.error('Load billing TA error:', error);
+        tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-red-500">Error memuat data</td></tr>';
+      }
+    }
+
+    async function generateBillingByTA() {
+      const taId = document.getElementById('billingTASelect')?.value;
+      if (!taId) {
+        if (typeof swal !== 'undefined') swal('Error', 'Pilih tahun ajaran terlebih dahulu', 'error');
+        return;
+      }
+      try {
+        const token = localStorage.getItem('token');
+        const res = await fetch('/api/treasurer/bendahara/billing/generate-by-tahun-ajaran', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': 'Bearer ' + token } : {}) },
+          body: JSON.stringify({ tahun_ajaran_id: taId })
+        });
+        const data = await res.json();
+        if (data.success) {
+          if (typeof swal !== 'undefined') swal('Berhasil', data.message || 'Billing berhasil dibuat', 'success');
+          loadBillingTAList();
+        } else {
+          if (typeof swal !== 'undefined') swal('Error', data.message || 'Gagal generate billing', 'error');
+        }
+      } catch (error) {
+        console.error('Generate billing TA error:', error);
+        if (typeof swal !== 'undefined') swal('Error', 'Terjadi kesalahan', 'error');
+      }
     }
 
     async function loadAttendanceRecap() {
@@ -3758,14 +3898,47 @@ async function openBsiVaModal() {
           filtered.forEach(c => {
             const opt = document.createElement('option');
             opt.value = c.nama;
-            opt.textContent = c.nama;
+            const noAkun = c.nomor_akun || '';
+            opt.textContent = noAkun ? `${noAkun} - ${c.nama}` : c.nama;
             if (!c.tenant_id) opt.textContent += ' (global)';
             sel.appendChild(opt);
           });
         }
-      } catch (e) {
+       } catch (e) {
         console.error('loadFinancialCategories', e);
       }
+    }
+
+    async function addFinancialCategory() {
+      const jenis = document.getElementById('finJenis')?.value || 'beli';
+      const nama = prompt('Nama akun/kategori baru:', '');
+      if (!nama) return;
+      try {
+        const tenantId = document.getElementById('financialTenantFilter')?.value || '';
+        const res = await fetch(`/api/treasurer/financial/categories?tenant_id=${encodeURIComponent(tenantId)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+          body: JSON.stringify({ tenant_id: tenantId || undefined, jenis, nama })
+        });
+        const d = await res.json();
+        if (d.success) { loadFinancialCategories(); } else showToast(d.message || 'Gagal tambah kategori', 'error');
+      } catch (e) { showToast('Gagal: ' + e.message, 'error'); }
+    }
+
+    async function deleteFinancialCategory() {
+      const sel = document.getElementById('finKategori');
+      const nama = sel?.value || '';
+      if (!nama) { showToast('Pilih akun/kategori yang akan dihapus', 'error'); return; }
+      const jenis = document.getElementById('finJenis')?.value || 'beli';
+      if (!confirm(`Hapus kategori akun "${nama} (${jenis})"?`)) return;
+      try {
+        const tenantId = document.getElementById('financialTenantFilter')?.value || '';
+        const res = await fetch(`/api/treasurer/financial/categories?tenant_id=${encodeURIComponent(tenantId)}&nama=${encodeURIComponent(nama)}&jenis=${encodeURIComponent(jenis)}`, {
+          method: 'DELETE', headers: { ...getAuthHeader() }
+        });
+        const d = await res.json();
+        if (d.success) { loadFinancialCategories(); } else showToast(d.message || 'Gagal hapus kategori', 'error');
+      } catch (e) { showToast('Gagal: ' + e.message, 'error'); }
     }
 
     async function loadFinancialSummary() {
@@ -3877,8 +4050,9 @@ async function openBsiVaModal() {
         const res = await fetch(`/api/treasurer/financial/account-info?tenant_id=${encodeURIComponent(tenantId)}`, { headers: getAuthHeader() });
         const d = await res.json();
         if (d.success && d.data) {
-          const akun = d.data.bank_account_number || d.data.nomor_rekening || '';
-          document.getElementById('finAkun').value = akun;
+          const namaSekolah = d.data.nama_sekolah || '';
+          const noRek = d.data.bank_account_number || d.data.nomor_rekening || '';
+          document.getElementById('finAkun').value = noRek ? (namaSekolah ? `${namaSekolah} - ${noRek}` : noRek) : '';
         }
       } catch (e) { /* no account info available, leave blank */       }
     }
@@ -4014,19 +4188,21 @@ async function openBsiVaModal() {
           body: formData
         });
         const d = await res.json();
-        if (d.success && d.data) {
-          const data = d.data;
-          finFotoStrukPath = d.foto_struk || '';
-          updateProgress(1, 1, 'Berhasil!');
-          finishProgress('OCR selesai');
+        // Foto struk tetap disimpan walau OCR gagal (bisa input manual barang)
+        finFotoStrukPath = d.foto_struk || '';
+        updateProgress(1, 1, 'Selesai');
+        finishProgress('Scan selesai');
+
+        if (d.success) {
+          const data = d.data || {};
           if (data.tanggal) document.getElementById('finTanggal').value = data.tanggal;
           if (data.jenis) document.getElementById('finJenis').value = data.jenis;
           if (data.kategori) document.getElementById('finKategori').value = data.kategori;
           if (data.akun && !document.getElementById('finAkun').value) document.getElementById('finAkun').value = data.akun || '';
           if (data.no_bukti) document.getElementById('finNoBukti').value = data.no_bukti;
           if (data.keterangan && !document.getElementById('finKeterangan').value) document.getElementById('finKeterangan').value = data.keterangan;
+          if (data.nominal) document.getElementById('finNominal').value = data.nominal;
 
-          // Populate items table from OCR result
           if (Array.isArray(d.items) && d.items.length > 0) {
             finItems = d.items.map((it, i) => ({
               no: i + 1,
@@ -4036,16 +4212,19 @@ async function openBsiVaModal() {
               total: parseFloat(it.total) || 0
             }));
             renderFinItemsTable();
+            updateFinItemsTotal();
           }
-          updateFinItemsTotal();
 
-          showToast('Data struk terisi otomatis dari OCR', 'success');
+          if (d.ocr_error) {
+            showToast('Foto struk tersimpan, tapi OCR gagal. Isi barang secara manual.', 'error');
+          } else {
+            showToast('Data struk terisi otomatis dari OCR', 'success');
+          }
         } else {
-          errorProgress(d.message || 'Gagal OCR');
           showToast(d.message || 'Gagal memindai struk', 'error');
         }
       } catch (e) {
-        errorProgress(e.message);
+        finishProgress('Gagal');
         showToast('Gagal: ' + e.message, 'error');
       }
     }
@@ -5459,5 +5638,177 @@ async function openBsiVaModal() {
   </div>
 
 </body>
+<!-- Kelola Akun/Kategori (ISAK 35 COA) -->
+<div id="finCategoryModal" class="hidden fixed inset-0 z-[90] bg-black/50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+    <div class="p-4 border-b flex justify-between items-center">
+      <h3 class="font-semibold text-lg" id="finCategoryModalTitle">Kelola Akun/Kategori</h3>
+      <button onclick="closeFinCategoryModal()" class="text-gray-500 hover:text-700 text-xl">&times;</button>
+    </div>
+    <div class="p-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+        <input type="hidden" id="finCatId">
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Nama Akun *</label>
+          <input type="text" id="finCatNama" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Jenis</label>
+          <select id="finCatJenis" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+            <option value="beli">Beli</option><option value="bayar">Bayar</option><option value="pemasukan">Pemasukan</option><option value="pengeluaran">Pengeluaran</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Nomor Akun</label>
+          <input type="text" id="finCatNomor" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="mis. 1401">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Kelompok Akun (ISAK 35)</label>
+          <select id="finCatKelompok" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+            <option value="">- pilih -</option>
+            <option value="aset">Aset</option><option value="aset_tetap">Aset Tetap</option>
+            <option value="aset_net_tanpa_batas">Aset Neto (Tanpa Batas)</option><option value="aset_net_terbatas">Aset Neto (Terbatas)</option>
+            <option value="liabilitas">Liabilitas</option><option value="pendapatan">Pendapatan</option><option value="beban">Beban</option><option value="modal">Modal</option>
+          </select>
+        </div>
+      </div>
+      <div class="mb-4">
+        <button onclick="saveFinCategory()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700"><i class="fas fa-save mr-1"></i>Simpan</button>
+        <button onclick="resetFinCategory()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300"><i class="fas fa-redo mr-1"></i>Batal</button>
+      </div>
+      <div class="overflow-x-auto border rounded-lg max-h-48">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50"><tr class="text-left">
+            <th class="px-3 py-1">No Akun</th><th class="px-3 py-1">Nama</th><th class="px-3 py-1">Jenis</th><th class="px-3 py-1">Kelompok ISAK35</th><th class="px-3 py-1 text-center">Aksi</th>
+          </tr></thead>
+          <tbody id="finCategoryListBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  let finCategoryEditId = null;
+  let finCategoriesCache = [];
+  function openFinCategoryModal() { finCategoryEditId = null; document.getElementById('finCategoryModalTitle').textContent = 'Kelola Akun/Kategori'; resetFinCategory(); loadFinCategoryList(); document.getElementById('finCategoryModal').classList.remove('hidden'); }
+  function closeFinCategoryModal() { document.getElementById('finCategoryModal').classList.add('hidden'); resetFinCategory(); }
+  function resetFinCategory() { finCategoryEditId = null; document.getElementById('finCatId').value = ''; document.getElementById('finCatNama').value = ''; document.getElementById('finCatJenis').value = 'beli'; document.getElementById('finCatNomor').value = ''; document.getElementById('finCatKelompok').value = ''; }
+  async function loadFinCategoryList() {
+    const tbody = document.getElementById('finCategoryListBody'); if (!tbody) return;
+    const tenantId = document.getElementById('financialTenantFilter')?.value || '';
+    try {
+      const res = await fetch(`/api/treasurer/financial/categories?tenant_id=${encodeURIComponent(tenantId)}`, { headers: getAuthHeader() });
+      const d = await res.json();
+      if (d.success) {
+        finCategoriesCache = d.data || [];
+        tbody.innerHTML = finCategoriesCache.map(c => `<tr>
+          <td class="px-3 py-1">${c.nomor_akun||''}</td><td class="px-3 py-1">${c.nama}</td><td class="px-3 py-1">${c.jenis}</td><td class="px-3 py-1">${c.kelompok_akun||''}</td>
+          <td class="px-3 py-1 text-center">
+            <button onclick="editFinCategory(${c.id})" class="px-1 text-blue-600" title="Edit"><i class="fas fa-pen"></i></button>
+            <button onclick="deleteFinCategory(${c.id})" class="px-1 text-red-600" title="Hapus"><i class="fas fa-trash"></i></button>
+          </td></tr>`).join('');
+      }
+    } catch (e) { console.error('loadFinCategoryList', e); }
+  }
+  async function saveFinCategory() {
+    const nama = document.getElementById('finCatNama').value.trim(); if (!nama) { showToast('Nama akun wajib', 'error'); return; }
+    const tenantId = document.getElementById('financialTenantFilter')?.value || '';
+    const body = { tenant_id: tenantId || undefined, jenis: document.getElementById('finCatJenis').value, nama, nomor_akun: document.getElementById('finCatNomor').value.trim()||undefined, kelompok_akun: document.getElementById('finCatKelompok').value||undefined, urutan: 0 };
+    try {
+      let url = '/api/treasurer/financial/categories'; const method = finCategoryEditId ? 'PUT' : 'POST';
+      if (finCategoryEditId) url += '/' + finCategoryEditId;
+      const res = await fetch(url, { method, headers: { 'Content-Type':'application/json', ...getAuthHeader() }, body: JSON.stringify(body) });
+      const d = await res.json();
+      if (d.success) { loadFinancialCategories(); loadFinCategoryList(); }
+      else showToast(d.message||'Gagal menyimpan', 'error');
+    } catch(e) { showToast('Gagal: '+e.message, 'error'); }
+  }
+  function editFinCategory(id) {
+    const c = finCategoriesCache.find(x=>x.id==id); if (!c) return;
+    finCategoryEditId = c.id;
+    document.getElementById('finCatNama').value = c.nama; document.getElementById('finCatJenis').value = c.jenis;
+    document.getElementById('finCatNomor').value = c.nomor_akun||''; document.getElementById('finCatKelompok').value = c.kelompok_akun||'';
+    document.getElementById('finCategoryModalTitle').textContent = 'Edit Akun/Kategori';
+  }
+  async function deleteFinCategory(id) {
+    const c = finCategoriesCache.find(x=>x.id==id); if (!c) return;
+    if (!confirm(`Hapus akun "${c.nama}"?`)) return;
+    const tenantId = document.getElementById('financialTenantFilter')?.value || '';
+    try {
+      const res = await fetch(`/api/treasurer/financial/categories?tenant_id=${encodeURIComponent(tenantId)}&nama=${encodeURIComponent(c.nama)}&jenis=${encodeURIComponent(c.jenis)}`, { method: 'DELETE', headers: getAuthHeader() });
+      const d = await res.json();
+      if (d.success) { loadFinancialCategories(); loadFinCategoryList(); }
+      else showToast(d.message||'Gagal hapus', 'error');
+    } catch(e) { showToast('Gagal: '+e.message, 'error'); }
+  }
+</script>
 
+  <!-- Interactive Help: Panduan Modal Detail — Dashboard Bendahara -->
+  <script src="assets/js/interactive-help.js"></script>
+  <script>
+    if (window.openHelpModal) {
+      window.openHelpModal({
+        name: 'bendahara-dashboard',
+        tooltip: 'Buka panduan lengkap Jurnal Umum & ISAK 35',
+        title: 'Panduan Lengkap — Dashboard Bendahara',
+        html: `<h3 class="ih-sub">1. Navigasi & Ringkasan Dashboard</h3>
+<p>Dashboard Bendahara adalah pusat kelola keuangan sekolah seluruh YPWI Lutim. Kolom navigasi di sebelah kiri membuka fitur: <b>Tagihan SPP</b>, <b>Rekap Absensi</b>, <b>Payroll</b>, <b>Kafalah</b>, <b>Payment Gateway</b>, <b>Customer Service</b>, <b>Riwayat Pesan WA</b>, <b>Pengaturan Pembayaran</b>, dan <b>Jurnal Umum</b> (menu keuangan). Pilih menu <b>Jurnal Umum</b> untuk membuka tab pencatatan transaksi dan laporan keuangan (ISAK 35).</p>
+
+<h3 class="ih-sub">2. Tab Jurnal Umum</h3>
+<p>Setelah membuka menu Jurnal Umum, sistem menampilkan tiga area utama:</p>
+<ul>
+  <li><b>Filter Sekolah & Bulan</b>: pilih satu sekolah (atau "Semua Sekolah") dan bulan (YYYY-MM). Setiap perubahan memicu <i>auto-refresh</i> ringkasan saldo dan tabel transaksi.</li>
+  <li><b>Kartu Ringkasan Saldo</b>: Beli (Debit), Pemasukan, Bayar (Kredit), dan Net — dihitung ulang otomatis.</li>
+  <li><b>Tabel Transaksi</b>: daftar seluruh transaksi periode yang dipilih.</li>
+</ul>
+
+<h3 class="ih-sub">3. Catat Transaksi (Jurnal Umum)</h3>
+<p>Klik tombol <b>Catat Transaksi</b> untuk membuka modal dengan dua mode:</p>
+<ul>
+  <li><b>Dengan Struk</b>: unggah foto struk belanja, lalu klik <b>Proses AI</b>. Sistem pakai Gemini OCR untuk mengekstrak daftar barang (nama, qty, harga) ke tabel item otomatis.</li>
+  <li><b>Tanpa Struk</b> (butuh approval): isi manual, unggah foto barang yang dibeli, lalu Simpan. Transaksi masuk status <b>pending</b> sampai disetujui bendahara di atas.</li>
+</ul>
+<p>Field umum form: <b>Tanggal</b>, <b>Jenis</b> (beli / bayar / pemasukan / pengeluaran), <b>Kategori / Akun</b>, <b>Nomor Rekening</b> (readonly, terisi otomatis dari akun), <b>No Bukti</b>, <b>Keterangan</b>, <b>Foto</b>, dan <b>Item Barang</b>.</p>
+<p>Setelah <b>Simpan</b>, modal tertutup dan tabel transaksi + ringkasan saldo ter-refresh otomatis.</p>
+
+<h3 class="ih-sub">4. Akun & Kategori (Chart of Accounts)</h3>
+<p>Dropdown <b>Akun</b> (readonly) terhubung ke daftar <b>Kategori</b>. Klik ikon roda gigi <b>⚙</b> di samping dropdown untuk membuka modal <b>Kelola Akun/Kategori</b>, di mana Anda dapat:</p>
+<ul>
+  <li>Tambah akun baru (nama, jenis akun: aset / kewajiban / ekuitas / biaya / pendapatan, <b>nomor rekening</b>, <b>kelompok akun ISAK 35</b>).</li>
+  <li>Edit atau hapus akun yang sudah ada.</li>
+</ul>
+<p>Setiap perubahan langsung tersedia di dropdown Akun tanpa perlu refresh manual.</p>
+
+<h3 class="ih-sub">5. Status Transaksi & Persetujuan (Approval)</h3>
+<p>Setiap transaksi memiliki status yang ditunjukkan oleh warna di tabel:</p>
+<ul>
+  <li><span style="color:#16a34a">🟢 Hijau — Approved</span>: transaksi sudah disetujui.</li>
+  <li><span style="color:#ca8a04">🟡 Kuning — Pending</span>: menunggu persetujuan bendahara (khususnya transaksi "<i>Tanpa Struk</i>").</li>
+  <li><span style="color:#dc2626">🔴 Merah — Rejected</span>: transaksi ditolak.</li>
+</ul>
+<p>Status mengubah cara transaksi mempengaruhi ringkasan saldo dan laporan ISAK 35.</p>
+
+<h3 class="ih-sub">6. Export Laporan ISAK 35</h3>
+<p>Dua tombol ekspor tersedia di tab Jurnal Umum:</p>
+<ul>
+  <li><b>Excel ISAK 35</b> → mengunduh file <code>.xlsx</code>.</li>
+  <li><b>PDF ISAK 35</b> → mengunduh file <code>.pdf</code>.</li>
+</ul>
+<p>Kedua format berisi <b>5 laporan standar</b> berdasarkan akun COA dan kelompok akun yang terdaftar:</p>
+<ol>
+  <li><b>Neraca</b> — aset = kewajiban + ekuitas.</li>
+  <li><b>Laporan Laba/Rugi</b>.</li>
+  <li><b>Laporan Perubahan Aset Neto</b>.</li>
+  <li><b>Laporan Arus Kas</b>.</li>
+  <li><b>Catatan Ekonomi</b>.</li>
+</ol>
+
+<h3 class="ih-sub">7. Foto Struk & Berkas Pendukung</h3>
+<p>Foto struk yang diunggah disimpan otomatis di server (<code>public/uploads/struk/</code>) dan ditautkan ke transaksi. Pada tiap transaksi, klik ikon aksi <b>👁</b> untuk melihat foto struk asli dan daftar item barang hasil ekstraksi OCR.</p>
+
+<h3 class="ih-sub">8. Tombol Bantuan</h3>
+<p>Ikon <b>⚪</b> di kanan-bawah layar dapat diklik <b>kapan saja</b> untuk membuka kembali panduan ini. Tutup dengan tombol <b>Tutup</b>, ikon ✕ di judul, atau tekan <b>Esc</b>.</p>`
+      });
+    }
+  </script>
 </html>
