@@ -10,7 +10,7 @@ async function attachAcademicYear(req, res, next) {
       ORDER BY tenant_id DESC LIMIT 1
     `, [tenantId]);
 
-    if (rows.length > 0) {
+    if (Array.isArray(rows) && rows.length > 0) {
       req.activeTahunAjaran = {
         id: rows[0].id,
         nama: rows[0].nama,

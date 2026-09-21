@@ -8,6 +8,30 @@ const { execFileSync } = require('child_process');
 
 const router = express.Router();
 
+let _chromePathCache = null;
+function getChromePath() {
+  if (_chromePathCache !== null) return _chromePathCache;
+  const candidates = process.env.CHROME_PATH || [
+    'google-chrome',
+    'google-chrome-stable',
+    'chromium-browser',
+    'chromium',
+    'chrome',
+    '/usr/bin/google-chrome',
+    '/usr/bin/chromium-browser',
+    '/usr/bin/chromium'
+  ];
+  for (const c of candidates) {
+    try {
+      execFileSync(c, ['--version'], { stdio: 'pipe', timeout: 5000 });
+      _chromePathCache = c;
+      return c;
+    } catch (e) { /* try next */ }
+  }
+  _chromePathCache = false;
+  return false;
+}
+
 const hijriMonths = ['Muharam', 'Safar', 'Rabiul Awal', 'Rabiul Akhir', 'Jumadil Awal', 'Jumadil Akhir', 'Rajab', 'Syaban', 'Ramadhan', 'Syawal', 'Dzul Qaidah', 'Dzul Hijjah'];
 
 const idnMonths = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
@@ -502,16 +526,21 @@ router.post('/generate', authenticateOperator, async (req, res) => {
         const tmpPdf = path.join(skTemplateDir, 'sk_guru_' + Date.now() + '.pdf');
         fs.writeFileSync(tmpHtml, renderedHtml);
 
-        execFileSync('google-chrome', [
-          '--headless',
-          '--disable-gpu',
-          '--no-sandbox',
-          '--disable-dev-shm-usage',
-          '--print-to-pdf=' + tmpPdf,
-          '--default-print-margin-type=NONE',
-          '--virtual-time-budget=5000',
-          'file://' + tmpHtml
-        ], { timeout: 30000, stdio: 'pipe' });
+        const chromePath = getChromePath();
+        if (!chromePath) {
+          console.warn('Chrome/Chromium binary not found, falling back to DOCX');
+        } else {
+          execFileSync(chromePath, [
+            '--headless',
+            '--disable-gpu',
+            '--no-sandbox',
+            '--disable-dev-shm-usage',
+            '--print-to-pdf=' + tmpPdf,
+            '--default-print-margin-type=NONE',
+            '--virtual-time-budget=5000',
+            'file://' + tmpHtml
+          ], { timeout: 30000, stdio: 'pipe' });
+        }
 
         if (fs.existsSync(tmpPdf)) {
           const pdfBuf = fs.readFileSync(tmpPdf);
@@ -700,14 +729,19 @@ router.get('/file/:skId', authenticateOperator, async (req, res) => {
       const tmpPdfPath = path.join(skTemplateDir, 'sk_' + Date.now() + '.pdf');
       fs.writeFileSync(tmpHtmlPath, renderedHtml);
 
-      execFileSync('google-chrome', [
-        '--headless', '--disable-gpu', '--no-sandbox',
-        '--disable-dev-shm-usage',
-        '--print-to-pdf=' + tmpPdfPath,
-        '--default-print-margin-type=NONE',
-        '--virtual-time-budget=5000',
-        'file://' + tmpHtmlPath
-      ], { timeout: 30000, stdio: 'pipe' });
+      const chromePath = getChromePath();
+      if (!chromePath) {
+        console.warn('Chrome/Chromium binary not found, falling back to DOCX');
+      } else {
+        execFileSync(chromePath, [
+          '--headless', '--disable-gpu', '--no-sandbox',
+          '--disable-dev-shm-usage',
+          '--print-to-pdf=' + tmpPdfPath,
+          '--default-print-margin-type=NONE',
+          '--virtual-time-budget=5000',
+          'file://' + tmpHtmlPath
+        ], { timeout: 30000, stdio: 'pipe' });
+      }
 
       if (fs.existsSync(tmpPdfPath)) {
         const pdfBuf = fs.readFileSync(tmpPdfPath);
