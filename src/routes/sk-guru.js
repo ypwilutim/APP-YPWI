@@ -3,6 +3,7 @@ const db = require('../../db');
 const { authenticateOperator, verifyTenantAccess } = require('../middleware/auth');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const PizZip = require('pizzip');
 const { execFileSync } = require('child_process');
 
@@ -11,7 +12,14 @@ const router = express.Router();
 let _chromePathCache = null;
 function getChromePath() {
   if (_chromePathCache !== null) return _chromePathCache;
+  const puppeteerChrome = (() => {
+    try {
+      return require('puppeteer')?.executablePath?.();
+    } catch(e) { return null; }
+  })();
   const candidates = process.env.CHROME_PATH || [
+    puppeteerChrome,
+    path.join(os.homedir(), '.cache/puppeteer/chrome/linux-153.0.8010.36/chrome-linux64/chrome'),
     '/home/ypwh2917/.cache/puppeteer/chrome/linux-153.0.8010.36/chrome-linux64/chrome',
     'google-chrome',
     'google-chrome-stable',
@@ -21,7 +29,14 @@ function getChromePath() {
     '/usr/bin/google-chrome',
     '/usr/bin/chromium-browser',
     '/usr/bin/chromium'
-  ];
+  ].filter(Boolean);
+  for (const c of candidates) {
+    try {
+      execFileSync(c, ['--version'], { stdio: 'pipe', timeout: 5000 });
+      _chromePathCache = c;
+      return c;
+    } catch (e) { /* try next */ }
+  }
   for (const c of candidates) {
     try {
       execFileSync(c, ['--version'], { stdio: 'pipe', timeout: 5000 });

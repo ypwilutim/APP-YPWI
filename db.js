@@ -46,8 +46,9 @@ const getConnection = async () => {
 const query = async (sql, params = []) => {
   const connection = await getConnection();
   try {
-    const [results] = params.length > 0 
-      ? await connection.execute(sql, params) 
+    const safeParams = Array.isArray(params) && params.length > 0 ? params : [];
+    const [results] = safeParams.length > 0
+      ? await connection.execute(sql, safeParams)
       : await connection.query(sql);
     return results;
   } finally {
