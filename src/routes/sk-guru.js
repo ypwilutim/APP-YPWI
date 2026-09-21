@@ -8,10 +8,12 @@ const { execFileSync } = require('child_process');
 
 const router = express.Router();
 
-let _chromePathCache = null;
+llet _chromePathCache = null;
 function getChromePath() {
   if (_chromePathCache !== null) return _chromePathCache;
   const candidates = process.env.CHROME_PATH || [
+    // Tambahkan jalur Chrome lokal Anda di baris paling atas agar diprioritaskan
+    '/home/ypwh2917/.cache/puppeteer/chrome/linux-153.0.8010.36/chrome-linux64/chrome',
     'google-chrome',
     'google-chrome-stable',
     'chromium-browser',
@@ -31,6 +33,7 @@ function getChromePath() {
   _chromePathCache = false;
   return false;
 }
+
 
 const hijriMonths = ['Muharam', 'Safar', 'Rabiul Awal', 'Rabiul Akhir', 'Jumadil Awal', 'Jumadil Akhir', 'Rajab', 'Syaban', 'Ramadhan', 'Syawal', 'Dzul Qaidah', 'Dzul Hijjah'];
 
