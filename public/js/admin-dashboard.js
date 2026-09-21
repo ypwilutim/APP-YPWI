@@ -2207,6 +2207,9 @@ function showSettingsTab(tabName) {
         loadTenantLocations();
     } else if (tabName === 'attendance') {
         fetchRules();
+    } else if (tabName === 'sk-automation') {
+        if (typeof window.loadSkAutomationSettings === 'function') window.loadSkAutomationSettings();
+        if (typeof window.loadSkApprovalList === 'function') window.loadSkApprovalList();
     }
 }
 
@@ -2428,6 +2431,7 @@ function updateCoordinatePreview() {
 }
 
 document.getElementById('teacherForm').addEventListener('submit', async (e) => {
+    if (e.currentTarget.dataset.submitHandler === 'school') return;
     e.preventDefault();
     const formData = new FormData(e.target);
     const data = Object.fromEntries(formData);
@@ -3630,23 +3634,75 @@ const skGuruAuthHdr = () => ({ 'Authorization': 'Bearer ' + (window.authToken ||
 let skGuruTeacherSearchTimeout = null;
 let skGuruCurrentPreviewData = null;
 
-window.showSkGuruModal = function () {
+window.showSkGuruModal = async function () {
     const modal = document.getElementById('skGuruModal');
     if (modal) { modal.classList.remove('hidden'); modal.classList.add('show'); }
+    
+    const hintEl = document.getElementById('skLastNumberHint');
+    if (hintEl) {
+        hintEl.classList.add('hidden');
+        hintEl.textContent = '';
+    }
+    
+    try {
+        const res = await fetch('/api/sk-guru/last-number', { headers: skGuruAuthHdr() });
+        const result = await res.json();
+        if (result.success && result.data && result.data.no_surat) {
+            if (hintEl) {
+                hintEl.textContent = 'Nomor surat terakhir: ' + result.data.no_surat;
+                hintEl.classList.remove('hidden');
+            }
+        }
+    } catch (e) {
+        console.error('[SK GURU] last-number fetch error:', e);
+    }
 };
 
 window.hideSkGuruModal = function () {
-    const modal = document.getElementById('skGuruModal');
-    if (modal) { modal.classList.remove('show'); modal.classList.add('hidden'); }
-    const form = document.getElementById('skGuruForm');
-    if (form) form.reset();
-    const teacherIdInput = document.getElementById('skTeacherId');
-    if (teacherIdInput) teacherIdInput.value = '';
-    const searchInput = document.getElementById('skTeacherSearch');
-    if (searchInput) searchInput.value = '';
-    const suggestionsBox = document.getElementById('skTeacherSuggestions');
-    if (suggestionsBox) { suggestionsBox.innerHTML = ''; suggestionsBox.classList.add('hidden'); }
-};
+     const modal = document.getElementById('skGuruModal');
+     if (modal) { modal.classList.remove('show'); modal.classList.add('hidden'); }
+     const form = document.getElementById('skGuruForm');
+     if (form) form.reset();
+     const teacherIdInput = document.getElementById('skTeacherId');
+     if (teacherIdInput) teacherIdInput.value = '';
+     const searchInput = document.getElementById('skTeacherSearch');
+     if (searchInput) searchInput.value = '';
+     const suggestionsBox = document.getElementById('skTeacherSuggestions');
+     if (suggestionsBox) { suggestionsBox.innerHTML = ''; suggestionsBox.classList.add('hidden'); }
+
+      const tglMulaiInput = document.getElementById('skTglMulai');
+      const useTodayCheckbox = document.getElementById('skUseTodayAsStart');
+      if (tglMulaiInput) tglMulaiInput.value = '';
+      if (useTodayCheckbox) useTodayCheckbox.checked = false;
+      const noSuratHint = document.getElementById('skNoSuratHint');
+      if (noSuratHint) noSuratHint.textContent = '';
+      const lastNumberHint = document.getElementById('skLastNumberHint');
+      if (lastNumberHint) { lastNumberHint.textContent = ''; lastNumberHint.classList.add('hidden'); }
+     
+     setTimeout(() => {
+       window.updateSkAutoDates && window.updateSkAutoDates();
+     }, 100);
+ };
+
+document.addEventListener('DOMContentLoaded', function() {
+    const skTglMulai = document.getElementById('skTglMulai');
+    const skTglSelesai = document.getElementById('skTglSelesai');
+    const skUseTodayAsStart = document.getElementById('skUseTodayAsStart');
+    const skTentangType = document.getElementById('skTentangType');
+    
+    if (skTglMulai) {
+        skTglMulai.addEventListener('change', window.updateSkAutoDates);
+    }
+    if (skTglSelesai) {
+        skTglSelesai.addEventListener('change', window.updateSkAutoDates);
+    }
+    if (skUseTodayAsStart) {
+        skUseTodayAsStart.addEventListener('change', window.updateSkAutoDates);
+    }
+    if (skTentangType) {
+        skTentangType.addEventListener('change', window.updateSkTentangFromType);
+    }
+});
 
 window.hideSkPreviewModal = function () {
     const previewModal = document.getElementById('skPreviewModal');
@@ -3655,11 +3711,95 @@ window.hideSkPreviewModal = function () {
     window.showSkGuruModal();
 };
 
+window.backToSkGuruForm = function () {
+    const previewModal = document.getElementById('skPreviewModal');
+    if (previewModal) { previewModal.classList.remove('show'); previewModal.classList.add('hidden'); }
+    window.showSkGuruModal();
+};
+
+window.updateSkAutoDates = function() {
+    const tglMulaiInput = document.getElementById('skTglMulai');
+    const tglSelesaiInput = document.getElementById('skTglSelesai');
+    const autoDateInput = document.getElementById('skTglMulaiAuto');
+    const useTodayCheckbox = document.getElementById('skUseTodayAsStart');
+
+    const today = new Date();
+    const tglMulaiValue = tglMulaiInput?.value;
+    const tglSelesaiValue = tglSelesaiInput?.value;
+
+    if (autoDateInput) {
+        if (useTodayCheckbox?.checked) {
+            const year = today.getFullYear();
+            const month = String(today.getMonth() + 1).padStart(2, '0');
+            autoDateInput.value = `${year}-${month}`;
+        } else if (tglMulaiValue) {
+            autoDateInput.value = tglMulaiValue;
+        } else {
+            const year = today.getFullYear();
+            const month = String(today.getMonth() + 1).padStart(2, '0');
+            autoDateInput.value = `${year}-${month}`;
+        }
+    }
+};
+
+window.updateSkTentangFromType = function() {
+    const tentangType = document.getElementById('skTentangType')?.value;
+    const tentangInput = document.getElementById('skTentang');
+    const unitInput = document.getElementById('skUnit');
+    const periodHelp = document.getElementById('skPeriodHelp');
+    const tglSelesaiInput = document.getElementById('skTglSelesai');
+    const tglMulaiInput = document.getElementById('skTglMulai');
+    
+    if (!tentangType || !tentangInput) return;
+    
+    const tentag_map = {
+        'baru': 'PENGANGKATAN GURU',
+        'kembali': 'PENGANGKATAN KEMBALI GURU',
+        'honorer_guru': 'PENGANGKATAN GURU HONOR',
+        'honorer_pegawai': 'PENGANGKATAN PEGAWAI HONOR',
+        'kontrak_guru': 'PENGANGKATAN GURU KONTRAK',
+        'kontrak_pegawai': 'PENGANGKATAN PEGAWAI KONTRAK',
+        'tetap_guru': 'PENGANGKATAN GURU TETAP',
+        'tetap_pegawai': 'PENGANGKATAN PEGAWAI TETAP',
+        'pimpinan': 'PENGANGKATAN PIMPINAN'
+    };
+    
+    const tentag_label = tentag_map[tentangType] || 'PENGANGKATAN GURU';
+    const unit = unitInput?.value || '';
+    
+    tentangInput.value = tentag_label + ' (' + unit + ')';
+    
+    if (periodHelp) {
+        if (tentangType === 'pimpinan') {
+            periodHelp.textContent = 'Periode untuk Pimpinan: 4 tahun hingga akhir Desember tahun ke-4.';
+        } else {
+            periodHelp.textContent = 'Periode untuk Guru: 1 tahun hingga akhir Desember tahun ini.';
+        }
+    }
+    
+    if (tglSelesaiInput) {
+        const today = new Date();
+        const currYear = today.getFullYear();
+        const idnMonths = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+        const decMonthIdx = idnMonths.indexOf('Desember');
+        const lastDayDec = new Date(currYear, decMonthIdx + 1, 0).getDate();
+        
+        const isPimpinan = tentangType === 'pimpinan';
+        const periodYears = isPimpinan ? 4 : 1;
+        const endYear = currYear + periodYears - 1;
+        tglSelesaiInput.value = String(endYear) + '-' + String(decMonthIdx + 1).padStart(2, '0');
+    }
+};
+
 window.previewSkGuru = async function () {
     const teacherId = document.getElementById('skTeacherId')?.value;
     const tentangType = document.getElementById('skTentangType')?.value;
     const pt = document.getElementById('skPT')?.value;
     const tmt = document.getElementById('skTmt')?.value;
+    const noSurat = document.getElementById('skNoSurat')?.value;
+    const tglMulai = document.getElementById('skTglMulai')?.value;
+    const tglSelesai = document.getElementById('skTglSelesai')?.value;
+    const tentang = document.getElementById('skTentang')?.value;
 
     if (!teacherId) {
         showToast('Pilih guru terlebih dahulu', 'error');
@@ -3670,13 +3810,15 @@ window.previewSkGuru = async function () {
         const res = await fetch('/api/preview', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...skGuruAuthHdr() },
-            body: JSON.stringify({ teacher_id: teacherId, tentang_type: tentangType, pt: pt || '', tmt_custom: tmt || '' })
+            body: JSON.stringify({ teacher_id: teacherId, tentang_type: tentangType, pt: pt || '', tmt_custom: tmt || '', no_surat: noSurat || '', tgl_mulai_custom: tglMulai || '', tgl_selesai_custom: tglSelesai || '', tentang: tentang || '' })
         });
         const data = await res.json();
         if (data.success && data.data) {
             skGuruCurrentPreviewData = data.data;
             document.getElementById('previewNoSurat').textContent = data.data.no_surat || '-';
             document.getElementById('previewTentang').textContent = data.data.tentang || '-';
+            document.getElementById('previewTglMulai').textContent = data.data.tglMulai || '-';
+            document.getElementById('previewTglSelesai').textContent = data.data.tglSelesai || '-';
             document.getElementById('previewNama').textContent = data.data.nama || '-';
             document.getElementById('previewTtl').textContent = data.data.ttl || '-';
             document.getElementById('previewTmt').textContent = data.data.tmt || '-';
@@ -3713,6 +3855,13 @@ window.confirmGenerateSk = async function () {
     const tentangType = document.getElementById('skTentangType')?.value;
     const pt = document.getElementById('skPT')?.value;
     const tmt = document.getElementById('skTmt')?.value;
+    const format = document.getElementById('skFormat')?.value || 'pdf';
+    const noSurat = document.getElementById('skNoSurat')?.value;
+    console.log('[SK GURU GENERATE OUT]', { noSurat, tglMulai, tglSelesai, tentang });
+
+    const tglMulai = document.getElementById('skTglMulai')?.value;
+    const tglSelesai = document.getElementById('skTglSelesai')?.value;
+    const tentang = document.getElementById('skTentang')?.value;
 
     if (!teacherId) {
         showToast('Pilih guru terlebih dahulu', 'error');
@@ -3729,7 +3878,7 @@ window.confirmGenerateSk = async function () {
         const res = await fetch('/api/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...skGuruAuthHdr() },
-            body: JSON.stringify({ teacher_id: teacherId, tentang_type: tentangType, pt: pt || '', tmt_custom: tmt || '' })
+            body: JSON.stringify({ teacher_id: teacherId, tentang_type: tentangType, pt: pt || '', tmt_custom: tmt || '', format: format, no_surat: noSurat || '', tgl_mulai_custom: tglMulai || '', tgl_selesai_custom: tglSelesai || '', tentang: tentang || '' })
         });
 
         if (!res.ok) {
@@ -3741,7 +3890,7 @@ window.confirmGenerateSk = async function () {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'SK_Guru.docx';
+        a.download = format === 'docx' ? 'SK_Guru.docx' : 'SK_Guru.pdf';
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -3821,6 +3970,157 @@ window.bulkGenerateSkGuru = async function () {
     }
 };
 
+window.loadSkAutomationSettings = async function () {
+    try {
+        const res = await fetch('/api/sk-guru/settings', { headers: skGuruAuthHdr() });
+        const data = await res.json();
+        if (data.success && data.data) {
+            const s = data.data;
+            const minYearsInput = document.getElementById('minServiceYears');
+            if (minYearsInput) minYearsInput.value = s.min_service_years || 2;
+            const enabledCheckbox = document.getElementById('autoGenerateEnabled');
+            if (enabledCheckbox) enabledCheckbox.checked = s.auto_generate_enabled ? true : false;
+            const dateInput = document.getElementById('autoGenerateDate');
+            if (dateInput) dateInput.value = s.auto_generate_date || '01-01';
+
+            const toggleBtn = document.getElementById('toggleAutoGenerateBtn');
+            const toggleLabel = document.getElementById('toggleAutoGenerateLabel');
+            if (toggleBtn) {
+                if (s.auto_generate_enabled) {
+                    toggleBtn.classList.remove('bg-gray-400');
+                    toggleBtn.classList.add('bg-green-600');
+                    toggleBtn.textContent = 'AKTIF';
+                } else {
+                    toggleBtn.classList.remove('bg-green-600');
+                    toggleBtn.classList.add('bg-gray-400');
+                    toggleBtn.textContent = 'MATI';
+                }
+            }
+            if (toggleLabel) {
+                toggleLabel.textContent = s.auto_generate_enabled ? 'Auto-generate: AKTIF' : 'Auto-generate: MATI';
+            }
+        }
+    } catch (e) {
+        console.error('[SK GURU SETTINGS LOAD]', e);
+    }
+};
+
+window.toggleAutoGenerateSk = async function () {
+    try {
+        const res = await fetch('/api/sk-guru/settings', { headers: skGuruAuthHdr() });
+        const data = await res.json();
+        if (data.success && data.data) {
+            const currentlyEnabled = data.data.auto_generate_enabled ? true : false;
+            const res2 = await fetch('/api/save-settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', ...skGuruAuthHdr() },
+                body: JSON.stringify({
+                    min_service_years: data.data.min_service_years || 2,
+                    auto_generate_enabled: !currentlyEnabled,
+                    auto_generate_date: data.data.auto_generate_date || '01-01'
+                })
+            });
+            const result = await res2.json();
+            if (result.success) {
+                showToast(result.message || 'Pengaturan berhasil diperbarui', 'success');
+                window.loadSkAutomationSettings();
+            } else {
+                showToast(result.message || 'Gagal memperbarui pengaturan', 'error');
+            }
+        }
+    } catch (e) {
+        console.error('[SK GURU TOGGLE]', e);
+        showToast('Terjadi kesalahan', 'error');
+    }
+};
+
+window.loadSkApprovalList = async function () {
+    const container = document.getElementById('skApprovalList');
+    if (!container) return;
+
+    container.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>Memuat data...</td></tr>';
+
+    try {
+        const res = await fetch('/api/sk-guru/approval', { headers: skGuruAuthHdr() });
+        const data = await res.json();
+        if (data.success && data.data && data.data.length > 0) {
+            container.innerHTML = data.data.map(t => {
+                const qualifiedClass = t.qualified ? 'text-green-600' : 'text-red-600';
+                const qualifiedText = t.qualified ? '✓ Layak' : '✗ Tidak layak';
+                const alreadyGen = t.already_generated ? '<span class="text-blue-600">Sudah dibuat</span>' : '';
+                const approvedBadge = t.approval_status === 'approved' ? '<span class="text-green-600 font-medium">Disetujui</span>' :
+                    t.approval_status === 'rejected' ? '<span class="text-red-600">Ditolak</span>' :
+                    '<span class="text-yellow-600">Menunggu</span>';
+                const checkbox = (!t.qualified || t.already_generated || t.approval_status === 'approved')
+                    ? '<input type="checkbox" disabled class="ml-2">'
+                    : '<input type="checkbox" name="approval_ids" value="' + t.teacher_id + '" class="ml-2">';
+                return '<tr>' +
+                    '<td class="px-4 py-3 text-sm">' + checkbox + (t.nama || '-') + '</td>' +
+                    '<td class="px-4 py-3 text-sm">' + (t.tenant_name || '-') + '</td>' +
+                    '<td class="px-4 py-3 text-sm">' + (t.unit || '-') + '</td>' +
+                    '<td class="px-4 py-3 text-sm ' + qualifiedClass + '">' + qualifiedText + ' (' + (t.years_of_service || 0) + ' tahun)</td>' +
+                    '<td class="px-4 py-3 text-sm">' + alreadyGen + '</td>' +
+                    '<td class="px-4 py-3 text-sm">' + approvedBadge + '</td>' +
+                    '<td class="px-4 py-3 text-sm">' + (t.approval_status === 'approved' || !t.qualified || t.already_generated
+                        ? '<button disabled class="text-green-600 mr-1" title="Sudah disetujui"><i class="fas fa-check"></i></button>'
+                        : '<button onclick="approveSkGuru(' + t.teacher_id + ')" class="text-blue-600 hover:text-blue-800 mr-1" title="Setujui"><i class="fas fa-check"></i></button>') + '</td>' +
+                    '</tr>';
+            }).join('');
+        } else {
+            container.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-500"><i class="fas fa-file-alt text-3xl mb-2"></i><p>Tidak ada guru yang perlu disetujui</p></td></tr>';
+        }
+    } catch (e) {
+        console.error('[SK GURU APPROVAL LIST]', e);
+        container.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">Gagal memuat data</td></tr>';
+    }
+};
+
+window.approveSkGuru = async function (teacherId) {
+    try {
+        const res = await fetch('/api/sk-guru/approve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...skGuruAuthHdr() },
+            body: JSON.stringify({ teacher_ids: [teacherId] })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(data.message || 'Guru disetujui', 'success');
+            window.loadSkApprovalList();
+        } else {
+            showToast(data.message || 'Gagal menyetujui guru', 'error');
+        }
+    } catch (e) {
+        console.error('[SK GURU APPROVE]', e);
+        showToast('Terjadi kesalahan', 'error');
+    }
+};
+
+window.approveSelectedSkGuru = async function () {
+    const checkboxes = document.querySelectorAll('input[name="approval_ids"]:checked');
+    if (checkboxes.length === 0) {
+        showToast('Pilih setidaknya satu guru', 'warning');
+        return;
+    }
+    const teacherIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
+    try {
+        const res = await fetch('/api/sk-guru/approve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...skGuruAuthHdr() },
+            body: JSON.stringify({ teacher_ids: teacherIds })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast(data.message || 'Guru disetujui', 'success');
+            window.loadSkApprovalList();
+        } else {
+            showToast(data.message || 'Gagal menyetujui guru', 'error');
+        }
+    } catch (e) {
+        console.error('[SK GURU APPROVE SELECTED]', e);
+        showToast('Terjadi kesalahan', 'error');
+    }
+};
+
 window.saveSkAutomationSettings = async function () {
     const minServiceYears = document.getElementById('minServiceYears')?.value;
     const autoGenerateEnabled = document.getElementById('autoGenerateEnabled')?.checked;
@@ -3894,16 +4194,26 @@ window.loadSkGuruList = async function () {
 
 window.downloadSkGuru = async function (skId) {
     try {
-        const res = await fetch('/api/list', { headers: skGuruAuthHdr() });
-        const data = await res.json();
-        const sk = data.data?.find(s => s.id === skId);
-        if (!sk) {
-            showToast('SK tidak ditemukan', 'error');
+        const res = await fetch('/api/file/' + skId + '?format=pdf', {
+            headers: skGuruAuthHdr()
+        });
+        if (!res.ok) {
+            const data = await res.json().catch(() => null);
+            showToast(data?.message || 'Gagal mengunduh SK', 'error');
             return;
         }
-        showToast('No. Surat: ' + (sk.no_surat || '-') + ' | NIY: ' + (sk.niy || '-'), 'info');
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'SK_Guru.pdf';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
     } catch (e) {
         console.error('[SK GURU DOWNLOAD]', e);
+        showToast('Terjadi kesalahan saat mengunduh', 'error');
     }
 };
 
@@ -3940,27 +4250,62 @@ async function searchSkTeachers(query) {
 }
 
 window.selectSkTeacher = async function (id, nama, nik) {
-    const teacherIdInput = document.getElementById('skTeacherId');
-    const searchInput = document.getElementById('skTeacherSearch');
-    const suggestionsBox = document.getElementById('skTeacherSuggestions');
-    if (teacherIdInput) teacherIdInput.value = id;
-    if (searchInput) searchInput.value = nama + ' (NIK: ' + nik + ')';
-    if (suggestionsBox) { suggestionsBox.innerHTML = ''; suggestionsBox.classList.add('hidden'); }
+     const teacherIdInput = document.getElementById('skTeacherId');
+     const searchInput = document.getElementById('skTeacherSearch');
+     const suggestionsBox = document.getElementById('skTeacherSuggestions');
+     if (teacherIdInput) teacherIdInput.value = id;
+     if (searchInput) searchInput.value = nama + ' (NIK: ' + nik + ')';
+     if (suggestionsBox) { suggestionsBox.innerHTML = ''; suggestionsBox.classList.add('hidden'); }
 
-    try {
-        const res = await fetch('/api/teachers/' + id + '/data', { headers: skGuruAuthHdr() });
-        const data = await res.json();
-        if (data.success && data.data) {
-            const d = data.data;
-            const ptInput = document.getElementById('skPT');
-            if (ptInput && d.pt) ptInput.value = d.pt;
-            const tmtInput = document.getElementById('skTmt');
-            if (tmtInput && d.tmt_formatted) tmtInput.value = d.tmt_formatted;
-        }
-    } catch (e) {
-        console.error('[SK GURU SELECT]', e);
-    }
-};
+     try {
+         const res = await fetch('/api/teachers/' + id + '/data', { headers: skGuruAuthHdr() });
+         const data = await res.json();
+         if (data.success && data.data) {
+             const d = data.data;
+             const ptInput = document.getElementById('skPT');
+             if (ptInput && d.pt) ptInput.value = d.pt;
+             const tmtInput = document.getElementById('skTmt');
+             if (tmtInput && d.tmt_formatted) tmtInput.value = d.tmt_formatted;
+             
+              const noSuratInput = document.getElementById('skNoSurat');
+              if (noSuratInput) noSuratInput.value = '';
+              const noSuratHint = document.getElementById('skNoSuratHint');
+              if (noSuratHint) {
+                  noSuratHint.textContent = d.no_surat ? '(Nomor otomatis: ' + d.no_surat + ', ubah jika perlu)' : '';
+              }
+             
+             const tentangInput = document.getElementById('skTentang');
+             if (tentangInput && d.tentang) tentangInput.value = d.tentang;
+             
+             const unitInput = document.getElementById('skUnit');
+             if (unitInput && d.unit) unitInput.value = d.unit;
+             
+             const tglMulaiInput = document.getElementById('skTglMulai');
+             if (tglMulaiInput && d.tgl_mulai) tglMulaiInput.value = d.tgl_mulai;
+             
+             const tglSelesaiInput = document.getElementById('skTglSelesai');
+             if (tglSelesaiInput && d.tgl_selesai) tglSelesaiInput.value = d.tgl_selesai;
+             
+             const autoDateInput = document.getElementById('skTglMulaiAuto');
+             if (autoDateInput && d.tgl_mulai) autoDateInput.value = d.tgl_mulai;
+             
+             const tentangTypeInput = document.getElementById('skTentangType');
+             const unitLower = (d.unit || '').toLowerCase();
+             if (tentangTypeInput && (unitLower.includes('kepala') || unitLower.includes('pimpinan'))) {
+                 tentangTypeInput.value = 'pimpinan';
+             }
+             
+             if (typeof updateSkAutoDates === 'function') {
+                 updateSkAutoDates();
+             }
+             if (typeof updateSkTentangFromType === 'function') {
+                 updateSkTentangFromType();
+             }
+         }
+     } catch (e) {
+         console.error('[SK GURU SELECT]', e);
+     }
+ };
 
 function initSkGuruModal() {
     const searchInput = document.getElementById('skTeacherSearch');
@@ -3998,6 +4343,7 @@ async function confirmGenerateSkDirect() {
     const tentangType = document.getElementById('skTentangType')?.value;
     const pt = document.getElementById('skPT')?.value;
     const tmt = document.getElementById('skTmt')?.value;
+    const format = document.getElementById('skFormat')?.value || 'pdf';
 
     if (!teacherId) {
         showToast('Pilih guru terlebih dahulu', 'error');
@@ -4016,7 +4362,7 @@ async function confirmGenerateSkDirect() {
         const res = await fetch('/api/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...skGuruAuthHdr() },
-            body: JSON.stringify({ teacher_id: teacherId, tentang_type: tentangType, pt: pt || '', tmt_custom: tmt || '' })
+            body: JSON.stringify({ teacher_id: teacherId, tentang_type: tentangType, pt: pt || '', tmt_custom: tmt || '', format: format })
         });
 
         if (!res.ok) {
@@ -4028,7 +4374,7 @@ async function confirmGenerateSkDirect() {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'SK_Guru.docx';
+        a.download = format === 'docx' ? 'SK_Guru.docx' : 'SK_Guru.pdf';
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);

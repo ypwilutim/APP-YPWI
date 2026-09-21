@@ -1204,9 +1204,9 @@
           </div>
 
            <!-- SK Guru Modal -->
-           <div id="skGuruModal"
-             class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
-            <div class="bg-white rounded-xl p-6 w-full max-w-2xl mx-4">
+<div id="skGuruModal"
+              class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden overflow-auto">
+             <div class="bg-white rounded-xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
               <div class="flex justify-between items-center mb-4">
                 <h3 class="text-lg font-semibold text-gray-900" id="skGuruModalTitle">Buat SK Guru</h3>
                 <button onclick="hideSkGuruModal()" class="text-gray-500 hover:text-gray-700">
@@ -1220,6 +1220,7 @@
                     class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     autocomplete="off">
                   <input type="hidden" id="skTeacherId">
+                  <input type="hidden" id="skUnit">
                   <div id="skTeacherSuggestions"
                     class="absolute z-10 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto hidden mt-1">
                   </div>
@@ -1237,36 +1238,94 @@
                     <option value="kontrak_pegawai">PENGANGKATAN PEGAWAI KONTRAK</option>
                     <option value="tetap_guru">PENGANGKATAN GURU TETAP</option>
                     <option value="tetap_pegawai">PENGANGKATAN PEGAWAI TETAP</option>
+                    <option value="pimpinan">PENGANGKATAN PIMPINAN</option>
                   </select>
+</div>
+
+              <div class="space-y-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">No. Surat</label>
+                  <input type="text" id="skNoSurat" placeholder="Nomor surat (kosongkan otomatis)"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                  <p id="skLastNumberHint" class="text-xs text-gray-500 mt-1 hidden"></p>
+                  <p id="skNoSuratHint" class="text-xs text-gray-400 mt-1"></p>
                 </div>
 
                 <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-2">Pendidikan Terakhir</label>
-                  <input type="text" id="skPT" placeholder="Contoh: S1/PEND. SOSIOLOGI/UNM/2019"
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Tentang / Perihal (Opsional)</label>
+                  <input type="text" id="skTentang" placeholder="Misal: untuk pengabdian ke aktivitas X"
                     class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                 </div>
 
                 <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-2">TMT (Tanggal Mulai Tugas)</label>
-                  <input type="month" id="skTmt"
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Periode SK / Masa Kerja</label>
+                  <input type="month" id="skTglMulai"
                     class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                 </div>
 
-                <div class="flex justify-end space-x-3 pt-4">
-                  <button type="button" onclick="hideSkGuruModal()"
-                    class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100">Batal</button>
-                  <button type="button" onclick="previewSkGuru()"
-                    class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700">
-                    <i class="fas fa-eye mr-2"></i>Preview
-                  </button>
-                  <button type="button" onclick="bulkGenerateSkGuru()"
-                    class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
-                    <i class="fas fa-users mr-2"></i>Bulk Generate
-                  </button>
-                   <button type="submit" id="skGenerateBtn" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                    <i class="fas fa-file-word mr-2"></i>Generate SK
-                  </button>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Periode SK Berakhir</label>
+                  <input type="month" id="skTglSelesai"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                 </div>
+
+                <div id="skTglMulaiAutoWrapper">
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Tanggal Mulai Penunjukan (Otomatis)</label>
+                  <input type="month" id="skTglMulaiAuto" readonly
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 cursor-not-allowed">
+                </div>
+
+                <div class="flex items-center space-x-2">
+                  <input type="checkbox" id="skUseTodayAsStart" class="mt-1">
+                  <label class="block text-sm font-medium text-gray-700 mb-0">Gunakan Tanggal Hari Ini untuk Mulai</label>
+                </div>
+
+                <div class="text-xs text-gray-500">
+                  <span id="skPeriodHelp">Periode otomatis: Guru 1 tahun, Pimpinan 4 tahun. Kedua jenis dihitung hingga akhir Desember.</span>
+                </div>
+              </div>
+              
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Pendidikan Terakhir</label>
+                <input type="text" id="skPT" placeholder="Contoh: S1/PEND. SOSIOLOGI/UNM/2019"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+              </div>
+
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">TMT (Tanggal Mulai Tugas)</label>
+                <input type="month" id="skTmt"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+               <div class="mt-1 text-xs text-gray-500">
+                 <span class="tooltip" title="Jika kosong akan gunakan TMT dari data guru<br>Untuk penunjukan baru, isi dengan tanggal KAB (Kerja Alhamdulillah Biaya) atau tanggal berkas">
+                   <i class="fas fa-info-circle"></i> Ketingkan untuk lihat petunjuk
+                 </span>
+               </div>
+              </div>
+              
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Format Output</label>
+                <select id="skFormat"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                  <option value="pdf">PDF (Rekomendasi)</option>
+                  <option value="docx">DOCX (Lebih akurat dari template)</option>
+                </select>
+              </div>
+
+                  <div class="flex justify-end space-x-3 pt-4">
+                   <button type="button" onclick="hideSkGuruModal()"
+                     class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100">Batal</button>
+                   <button type="button" onclick="previewSkGuru()"
+                     class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700">
+                     <i class="fas fa-eye mr-2"></i>Preview
+                   </button>
+                   <button type="button" onclick="bulkGenerateSkGuru()"
+                     class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                     <i class="fas fa-users mr-2"></i>Bulk Generate
+                   </button>
+                    <button type="submit" id="skGenerateBtn" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                     <i class="fas fa-file-word mr-2"></i>Generate SK
+                   </button>
+                 </div>
               </form>
             </div>
           </div>
@@ -1276,8 +1335,8 @@
 
       <!-- SK Preview Modal -->
       <div id="skPreviewModal"
-        class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
-        <div class="bg-white rounded-xl p-6 w-full max-w-lg mx-4">
+        class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden overflow-auto">
+        <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
           <div class="flex justify-between items-center mb-4">
             <h3 class="text-lg font-semibold text-gray-900">Preview SK Guru</h3>
             <button onclick="hideSkPreviewModal()" class="text-gray-500 hover:text-gray-700">
@@ -1290,6 +1349,10 @@
               <div id="previewNoSurat">-</div>
               <div class="font-medium">Perihal:</div>
               <div id="previewTentang" class="text-xs">-</div>
+              <div class="font-medium">Tgl. Mulai:</div>
+              <div id="previewTglMulai">-</div>
+              <div class="font-medium">Tgl. Selesai:</div>
+              <div id="previewTglSelesai">-</div>
               <div class="font-medium">Nama:</div>
               <div id="previewNama">-</div>
               <div class="font-medium">TTL:</div>
@@ -1317,6 +1380,10 @@
           <div class="flex justify-end space-x-3 pt-4 mt-4 border-t">
             <button type="button" onclick="hideSkPreviewModal()"
               class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100">Tutup</button>
+            <button type="button" onclick="backToSkGuruForm()"
+              class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 text-sm">
+              <i class="fas fa-edit mr-2"></i>Edit
+            </button>
             <button type="button" onclick="confirmGenerateSk()"
               class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
               <i class="fas fa-download mr-2"></i>Download SK
@@ -1836,6 +1903,21 @@
                 <h4 class="text-lg font-semibold text-gray-900">Pengaturan SK Otomatis</h4>
                 <p class="text-gray-600 text-sm">Konfigurasi otomatisasi pembuatan Surat Keputusan Guru</p>
               </div>
+
+              <!-- Toggle Button -->
+              <div class="mb-6 flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <div>
+                  <h5 class="font-medium text-gray-900" id="toggleAutoGenerateLabel">Auto-generate: AKTIF</h5>
+                  <p class="text-sm text-gray-600 mt-1">
+                    Toggle untuk mengaktifkan/menonaktifkan pembuatan SK otomatis pada 1 Januari
+                  </p>
+                </div>
+                <button type="button" onclick="toggleAutoGenerateSk()" id="toggleAutoGenerateBtn"
+                  class="relative inline-flex h-10 px-4 py-2 rounded-lg font-medium text-white transition-colors">
+                  <span class="bg-green-600">AKTIF</span>
+                </button>
+              </div>
+
               <div class="space-y-4">
                 <div>
                   <label class="block text-sm font-medium text-gray-700 mb-2">Batas Minimal SK Boleh Terbit (Tahun
@@ -1860,6 +1942,43 @@
                   class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
                   <i class="fas fa-save mr-2"></i>Simpan Pengaturan
                 </button>
+              </div>
+
+              <!-- Approval Section -->
+              <div class="mt-8">
+                <h5 class="text-md font-semibold text-gray-900 mb-3">Persetujuan SK Guru (Desember)</h5>
+                <p class="text-sm text-gray-600 mb-4">
+                  Daftar guru yang akan menerima SK otomatis pada 1 Januari. Setujui guru yang akan mendapatkan SK.
+                </p>
+                <div class="mb-4">
+                  <button type="button" onclick="approveSelectedSkGuru()"
+                    class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                    <i class="fas fa-check mr-2"></i>Setujui yang Dipilih
+                  </button>
+                </div>
+                <div class="overflow-x-auto">
+                  <table class="w-full text-sm text-left border-collapse">
+                    <thead class="bg-gray-100">
+                      <tr>
+                        <th class="px-4 py-3 text-gray-700 font-medium">Nama Guru</th>
+                        <th class="px-4 py-3 text-gray-700 font-medium">Tenant</th>
+                        <th class="px-4 py-3 text-gray-700 font-medium">Unit/Jabatan</th>
+                        <th class="px-4 py-3 text-gray-700 font-medium">Status Kelayakan</th>
+                        <th class="px-4 py-3 text-gray-700 font-medium">Status SK</th>
+                        <th class="px-4 py-3 text-gray-700 font-medium">Persetujuan</th>
+                        <th class="px-4 py-3 text-gray-700 font-medium">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody id="skApprovalList" class="divide-y divide-gray-100">
+                    </tbody>
+                  </table>
+                </div>
+                <div class="mt-4">
+                  <button type="button" onclick="loadSkApprovalList()"
+                    class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">
+                    <i class="fas fa-redo mr-2"></i>Refresh
+                  </button>
+                </div>
               </div>
             </div>
 

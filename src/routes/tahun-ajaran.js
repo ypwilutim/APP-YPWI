@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('../../db');
 const { authenticateToken, authenticateOperator } = require('../middleware/auth');
+const { requireAcademicYear } = require('../middlewares/attachAcademicYear');
 
 const router = express.Router();
 
@@ -24,7 +25,7 @@ router.get('/admin/tahun-ajaran', authenticateOperator, async (req, res) => {
 });
 
 // GET /api/admin/tahun-ajaran/:id - Get detail
-router.get('/admin/tahun-ajaran/:id', authenticateOperator, async (req, res) => {
+router.get('/admin/tahun-ajaran/:id', authenticateOperator, requireAcademicYear, async (req, res) => {
   try {
     const [rows] = await db.query('SELECT * FROM tahun_ajaran WHERE id = ?', [req.params.id]);
     if (!rows.length) return res.status(404).json({ success: false, message: 'Tahun ajaran tidak ditemukan' });
@@ -39,7 +40,7 @@ router.get('/admin/tahun-ajaran/:id', authenticateOperator, async (req, res) => 
 });
 
 // POST /api/admin/tahun-ajaran - Create
-router.post('/admin/tahun-ajaran', authenticateOperator, async (req, res) => {
+router.post('/admin/tahun-ajaran', authenticateOperator, requireAcademicYear, async (req, res) => {
   try {
     const { nama, tahun_mulai, tahun_selesai, bulan_mulai, tanggal_mulai, tanggal_selesai, tenant_id } = req.body;
 
@@ -63,7 +64,7 @@ router.post('/admin/tahun-ajaran', authenticateOperator, async (req, res) => {
 });
 
 // PUT /api/admin/tahun-ajaran/:id - Update
-router.put('/admin/tahun-ajaran/:id', authenticateOperator, async (req, res) => {
+router.put('/admin/tahun-ajaran/:id', authenticateOperator, requireAcademicYear, async (req, res) => {
   try {
     const { nama, tahun_mulai, tahun_selesai, bulan_mulai, tanggal_mulai, tanggal_selesai, is_active } = req.body;
 
@@ -95,7 +96,7 @@ router.put('/admin/tahun-ajaran/:id', authenticateOperator, async (req, res) => 
 });
 
 // DELETE /api/admin/tahun-ajaran/:id - Delete
-router.delete('/admin/tahun-ajaran/:id', authenticateOperator, async (req, res) => {
+router.delete('/admin/tahun-ajaran/:id', authenticateOperator, requireAcademicYear, async (req, res) => {
   try {
     const [existing] = await db.query('SELECT * FROM tahun_ajaran WHERE id = ?', [req.params.id]);
     if (!existing.length) return res.status(404).json({ success: false, message: 'Tahun ajaran tidak ditemukan' });
@@ -122,7 +123,7 @@ router.delete('/admin/tahun-ajaran/:id', authenticateOperator, async (req, res) 
 });
 
 // POST /api/admin/tahun-ajaran/semester - Create semester
-router.post('/admin/tahun-ajaran/semester', authenticateOperator, async (req, res) => {
+router.post('/admin/tahun-ajaran/semester', authenticateOperator, requireAcademicYear, async (req, res) => {
   try {
     const { tahun_ajaran_id, nama, tanggal_mulai, tanggal_selesai } = req.body;
 
@@ -146,7 +147,7 @@ router.post('/admin/tahun-ajaran/semester', authenticateOperator, async (req, re
 });
 
 // DELETE /api/admin/semester/:id - Delete semester
-router.delete('/admin/semester/:id', authenticateOperator, async (req, res) => {
+router.delete('/admin/semester/:id', authenticateOperator, requireAcademicYear, async (req, res) => {
   try {
     const [existing] = await db.query('SELECT * FROM semester WHERE id = ?', [req.params.id]);
     if (!existing.length) return res.status(404).json({ success: false, message: 'Semester tidak ditemukan' });
@@ -165,7 +166,7 @@ router.delete('/admin/semester/:id', authenticateOperator, async (req, res) => {
 });
 
 // POST /api/admin/tahun-ajaran/:id/transition - Transisi siswa dari TA sebelumnya ke TA baru
-router.post('/admin/tahun-ajaran/:id/transition', authenticateOperator, async (req, res) => {
+router.post('/admin/tahun-ajaran/:id/transition', authenticateOperator, requireAcademicYear, async (req, res) => {
   try {
     const taId = req.params.id;
     const { previous_ta_id } = req.body;

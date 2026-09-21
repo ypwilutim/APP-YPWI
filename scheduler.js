@@ -505,7 +505,6 @@ cron.schedule('0 0 * * *', runAutoBillGeneration);
 cron.schedule('0 7 * * *', runAutoBillReminder);
 
 module.exports = { runAutoSkGeneration, runAutoBillGeneration, runAutoBillReminder, runAutoMonthlyInvoiceGeneration };
-
 async function runAutoSkGeneration() {
   try {
     const settings = await db.query('SELECT auto_generate_date, auto_generate_enabled, min_service_years FROM sk_automation_settings LIMIT 1');
@@ -520,14 +519,18 @@ async function runAutoSkGeneration() {
     if (settings[0].auto_generate_date && settings[0].auto_generate_date === todayMM) {
       console.log('Running auto SK generation...');
       
-      const allTenants = await db.query('SELECT tenant_id FROM tenants');
-      const placeholders = allTenants.map(() => '?').join(',');
-      const teachers = await db.query(
-        `SELECT t.id as teacher_id, t.nama, t.nik, t.nip, t.tempat_lahir, t.tanggal_lahir, t.status_kepegawaian, t.tmt, t.pendidikan_terakhir, ta.jabatan_di_unit as unit, tn.nama_sekolah, tn.id as tenant_pk FROM teachers t JOIN teacher_assignments ta ON t.id = ta.teacher_id JOIN tenants tn ON ta.tenant_id = tn.tenant_id WHERE (t.status_aktif = 1 OR t.status_aktif IS NULL) AND t.nip IS NULL AND tn.tenant_id IN (${placeholders})`,
-        allTenants.map(t => t.tenant_id)
+      const approvedTeachers = await db.query(
+        `SELECT t.id as teacher_id, t.nama, t.nik, t.nip, t.tempat_lahir, t.tanggal_lahir, t.status_kepegawaian, t.tmt, t.pendidikan_terakhir, ta.jabatan_di_unit as unit, tn.nama_sekolah, tn.id as tenant_pk, aq.tentang_type
+         FROM sk_approval_queue aq
+         JOIN teachers t ON aq.teacher_id = t.id
+         JOIN teacher_assignments ta ON t.id = ta.teacher_id
+         JOIN tenants tn ON ta.tenant_id = tn.tenant_id
+         WHERE aq.status = 'approved'
+         ORDER BY tn.nama_sekolah, t.nama`
       );
-      
+
       const hijriMonths = ['Muharam', 'Safar', 'Rabiul Awal', 'Rabiul Akhir', 'Jumadil Awal', 'Jumadil Akhir', 'Rajab', 'Syaban', 'Ramadhan', 'Syawal', 'Dzul Qaidah', 'Dzul Hijjah'];
+      const idnMonths = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
       
       function gregorianToHijri(gregorianDate) {
         const hijriYear = gregorianDate.getFullYear() - 622;
@@ -545,37 +548,82 @@ async function runAutoSkGeneration() {
         return null;
       }
       
+      function romanize(num) {
+        const romans = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
+        return romans[num - 1] || String(num);
+      }
+
+      function formatJabatan(jabatanDiUnit) {
+        if (!jabatanDiUnit) return 'GURU';
+        const lower = (jabatanDiUnit || '').toLowerCase();
+        const guruKeywords = ['walikelas', 'guru mapel', 'guru', 'wakasek'];
+        if (guruKeywords.some(kw => lower.includes(kw))) {
+          return 'GURU';
+        }
+        return jabatanDiUnit;
+      }
+      
+      function getStatusKepegawaian(status) {
+        const statusMap = {
+          'Guru Tetap Yayasan': 'GTY',
+          'Guru Tidak Tetap Yayasan': 'GTTY',
+          'Guru Kontrak Yayasan': 'GKY',
+          'Tetap': 'GTY',
+          'Tidak Tetap': 'GTTY',
+          'Kontrak': 'GKY',
+          'GTY': 'GTY',
+          'GTTY': 'GTTY',
+          'GKY': 'GKY'
+        };
+        return statusMap[status] || (status || 'GTY');
+      }
+      
       function buildSkData(teacher, tentangType, pt, hijriYear) {
         const now = new Date();
         const hijriToday = gregorianToHijri(now);
         const tmtDate = parseDate(teacher.tmt);
+        
+        const romanMonth = romanize(hijriMonths.indexOf(hijriToday.month) + 1);
+        const noSurat = `QR.${String(hijriYear * 1000 + now.getDate()).padStart(3, '0')}/02/YPWI-LT/${romanMonth}/${hijriYear}`;
         
         let tentang = 'PENGANGKATAN GURU';
         if (tentangType === 'kembali') {
           tentang = 'PENGANGKATAN KEMBALI GURU';
         }
         
-        const nomorUrut = hijriToday.year * 100 + now.getDate();
-        const nomorUrutFormatted = String(nomorUrut).padStart(3, '0');
-        const noSurat = `QR.${nomorUrutFormatted}/02/YPWI-LT/${hijriMonths[now.getMonth()]}/${hijriYear}`;
+        const bhFormatted = hijriToday.day + ' ' + hijriToday.month + ' ' + hijriToday.year + ' H';
+        const bmFormatted = now.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) + ' M';
         
-        const tmtFormatted = tmtDate ? `${String(tmtDate.getDate()).padStart(2, '0')}-${String(tmtDate.getMonth() + 1).padStart(2, '0')}-${tmtDate.getFullYear()}` : '';
+        const currMonthIdx = now.getMonth();
+        const currYear = now.getFullYear();
+        const lastDayDec = new Date(currYear, idnMonths.indexOf('Desember') + 1, 0).getDate();
+        const tglSelesai = lastDayDec + ' ' + idnMonths[idnMonths.indexOf('Desember')] + ' ' + currYear + ' M';
+        const tglMulai = (currMonthIdx === 0)
+          ? '1 ' + idnMonths[0] + ' ' + currYear + ' M'
+          : now.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) + ' M';
         
-        const ttlFormatted = teacher.tempat_lahir ? (teacher.tanggal_lahir ? `${teacher.tempat_lahir}, ${teacher.tanggal_lahir}` : teacher.tempat_lahir) : '-';
-        const pendidikanFormatted = teacher.pendidikan_terakhir || '-';
-        
-        const tmtMonth = tmtDate ? tmtDate.getMonth() + 1 : now.getMonth() + 1;
-        const tmtYear = tmtDate ? String(tmtDate.getFullYear()).slice(-2) : String(now.getFullYear()).slice(-2);
-        const tenantPkFormatted = String(teacher.tenant_pk).padStart(2, '0');
-        const niy = `${teacher.tanggal_lahir ? String(teacher.tanggal_lahir).replace(/-/g, '').slice(-8) : '20240101'}${String(tmtMonth).padStart(2, '0')}${tmtYear}${teacher.nik ? String(teacher.nik).slice(-4) : '2024'}${tenantPkFormatted}${String(nomorUrut).padStart(4, '0')}`;
-        
-        const masaKerjaMonths = tmtDate ? (now.getFullYear() - tmtDate.getFullYear()) * 12 + now.getMonth() - tmtDate.getMonth() : 0;
-        const masaKerjaYears = Math.floor(masaKerjaMonths / 12);
-        const masaKerjaRemainingMonths = masaKerjaMonths % 12;
+        const birthDay = String(tmtDate ? tmtDate.getDate() : now.getDate()).padStart(2, '0');
+        const birthMonth = String(tmtDate ? tmtDate.getMonth() + 1 : now.getMonth() + 1).padStart(2, '0');
+        const birthYear = String(tmtDate ? tmtDate.getFullYear() : now.getFullYear());
+        const tmtMonth = tmtDate ? String(tmtDate.getMonth() + 1).padStart(2, '0') : '01';
+        const tmtYear = tmtDate ? tmtDate.getFullYear() : now.getFullYear();
+        const tmtYear2digit = tmtDate ? String(tmtYear).slice(-2) : String(now.getFullYear()).slice(-2);
+        const tenantId2digit = teacher.tenant_pk ? String(teacher.tenant_pk).padStart(2, '0') : (teacher.tenant_id || '').slice(-2);
+        const seq = '001';
+        const niy = teacher.nip || (birthDay + birthMonth + birthYear + tmtMonth + tmtYear2digit + tenantId2digit + seq);
         
         return {
-          noSurat, tentang, ttl: ttlFormatted, tmtFormatted, niy,
-          unit: teacher.nama_sekolah || '-', bhFormatted: `${masaKerjaYears} Tahun`, bmFormatted: `${masaKerjaRemainingMonths} Bulan`
+          noSurat, tentang, 
+          ttl: teacher.tempat_lahir + ', ' + birthDate.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
+          tmtFormatted: tmtDate ? tmtDate.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' }).toUpperCase() : '',
+          niy,
+          unit: teacher.nama_sekolah || '-',
+          bhFormatted,
+          bmFormatted,
+          tglMulai,
+          tglSelesai,
+          jabatan: formatJabatan(teacher.unit),
+          status: getStatusKepegawaian(teacher.status_kepegawaian)
         };
       }
       
@@ -584,7 +632,7 @@ async function runAutoSkGeneration() {
       const results = [];
       const skipped = [];
       
-      for (const teacher of teachers) {
+      for (const teacher of approvedTeachers) {
         const tmtDate = parseDate(teacher.tmt);
         const yearsOfService = tmtDate ? (today.getFullYear() - tmtDate.getFullYear()) : 0;
         
@@ -592,13 +640,23 @@ async function runAutoSkGeneration() {
           skipped.push({ teacher_id: teacher.teacher_id, nama: teacher.nama, reason: 'Belum mencapai ' + minYears + ' tahun pengabdian' });
           continue;
         }
+
+        let nomorUrut = 0;
+        try {
+          const seqRows = await db.query('SELECT last_number FROM sk_sequence WHERE tenant_id = ? AND hijri_year = ? AND hijri_month = ?',
+            [teacher.tenant_id || teacher.tenant_id, hijriToday.year, hijriMonths[0]]);
+          nomorUrut = seqRows.length ? seqRows[0].last_number + 1 : 1;
+        } catch(e) { nomorUrut = 1; }
         
-        const skData = buildSkData(teacher, 'baru', 'Ya', hijriToday.year);
+        const skData = buildSkData(teacher, teacher.tentang_type || 'baru', 'Ya', hijriToday.year);
         
         await db.query(
-          'INSERT INTO sk_guru (teacher_id, no_surat, tentang, ttl, tmt, niy, unit, bh, bm, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())',
-          [teacher.teacher_id, skData.noSurat, skData.tentang, skData.ttl, skData.tmtFormatted, skData.niy, skData.unit, skData.bhFormatted, skData.bmFormatted]
+          'INSERT INTO sk_guru (teacher_id, tenant_id, no_surat, tentang, ttl, tmt, pt, niy, unit, bh, bm, jabatan, status, tentag_type, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())',
+          [teacher.teacher_id, teacher.tenant_id || teacher.tenant_id, skData.noSurat, skData.tentang, skData.ttl, skData.tmtFormatted, teacher.pendidikan_terakhir, skData.niy, skData.unit, skData.bhFormatted, skData.bmFormatted, skData.jabatan, skData.status, teacher.tentang_type || 'baru']
         );
+        
+        await db.query('UPDATE sk_approval_queue SET status = ? WHERE teacher_id = ? AND tentang_type = ?',
+          ['generated', teacher.teacher_id, teacher.tentang_type || 'baru']);
         
         await db.query('UPDATE teachers SET nip = ? WHERE id = ?', [skData.niy, teacher.teacher_id]);
         results.push({ teacher_id: teacher.teacher_id, nama: teacher.nama, niy: skData.niy });

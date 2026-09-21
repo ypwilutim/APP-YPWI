@@ -18,6 +18,7 @@ const nodemailer = require('nodemailer');
 const QRCode = require('qrcode');
 const db = require('./db');
 const { requestLogger } = require('./src/middlewares/logger');
+const { attachAcademicYear } = require('./src/middlewares/attachAcademicYear');
 const validator = require('validator');
 
 // Native fetch is available in modern Node.js, no import needed
@@ -56,6 +57,7 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(requestLogger); // Robust logging - MUST after body parsers
+app.use(attachAcademicYear);
 const PORT = process.env.PORT || 3000;
 const SECRET_KEY = process.env.JWT_SECRET || 'ypwi-secret-key-2026';
 

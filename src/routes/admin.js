@@ -10,6 +10,7 @@ const multer = require('multer');
 const db = require('../../db');
 const { authenticateToken, authenticateOperator, verifyTenantAccess } = require('../middleware/auth');
 const { logToFile } = require('../middlewares/logger');
+const { getActiveTahunAjaran } = require('../utils/billing');
 const { fetchMetaTemplates } = require('../utils/whatsappTemplate');
 const { extractKTPFromImage } = require('../utils/geminiOcr');
 
@@ -984,6 +985,7 @@ router.post('/admin/scanner-devices', authenticateOperator, async (req, res) => 
 router.get('/admin/teachers', authenticateOperator, async (req, res) => {
   try {
     let tenantId = req.query.tenant_id;
+    const activeTa = req.activeTahunAjaran;
 
     if (req.user.role !== 'admin' && !tenantId) {
       const adminAssignments = (req.user.assignments || []).filter(a => {
@@ -997,7 +999,6 @@ router.get('/admin/teachers', authenticateOperator, async (req, res) => {
       }
     }
 
-    // For 'guru' role, use their assigned tenant from assignments or user's primary tenant
     if (req.user.role === 'guru' && !tenantId) {
       tenantId = req.user.tenant_id || (req.user.assignments?.[0]?.tenant_id);
     }
@@ -1015,6 +1016,11 @@ router.get('/admin/teachers', authenticateOperator, async (req, res) => {
     if (tenantId) {
       query += ' AND EXISTS (SELECT 1 FROM teacher_assignments ta2 WHERE ta2.teacher_id = t.id AND ta2.tenant_id = ?)';
       params.push(tenantId);
+    }
+
+    if (activeTa?.id) {
+      query += ' AND EXISTS (SELECT 1 FROM teacher_assignments ta3 WHERE ta3.teacher_id = t.id AND ta3.tahun_ajaran_id = ?)';
+      params.push(activeTa.id);
     }
 
     const statusKepegawaian = req.query.status_kepegawaian;
@@ -1038,7 +1044,7 @@ router.get('/admin/teachers', authenticateOperator, async (req, res) => {
         return { tenant_id, jabatan_di_unit: jabatan, nama_sekolah };
       }) : []
     }));
-    res.json({ success: true, data: formattedTeachers });
+    res.json({ success: true, data: formattedTeachers, activeTahunAjaran: activeTa });
   } catch (error) {
     console.error('Admin teachers error:', error);
     res.status(500).json({ success: false, message: 'Error fetching teachers' });
@@ -2891,6 +2897,7 @@ router.post('/admin/send-email-no-account', authenticateOperator, async (req, re
 router.get('/admin/students', authenticateOperator, async (req, res) => {
   try {
     let tenantId = req.query.tenant_id;
+    const activeTa = req.activeTahunAjaran;
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 25;
     const offset = (page - 1) * limit;
@@ -2907,7 +2914,6 @@ router.get('/admin/students', authenticateOperator, async (req, res) => {
       }
     }
 
-    // Fallback to user's primary tenant or first assignment
     if (!tenantId && req.user.role === 'guru') {
       tenantId = req.user.tenant_id || (req.user.assignments?.[0]?.tenant_id);
     }
@@ -2924,6 +2930,11 @@ router.get('/admin/students', authenticateOperator, async (req, res) => {
     if (tenantId) {
       countQuery += ' AND s.tenant_id = ?';
       countParams.push(tenantId);
+    }
+
+    if (activeTa?.id) {
+      countQuery += ' AND s.tahun_ajaran_id = ?';
+      countParams.push(activeTa.id);
     }
 
     const search = req.query.search;
@@ -2947,7 +2958,7 @@ router.get('/admin/students', authenticateOperator, async (req, res) => {
 
     let query = `
   SELECT s.id, s.nama_siswa, s.nisn, s.nis, s.jenis_kelamin, s.iuran_bulanan,
-         s.class_id, s.tenant_id, s.tahun_masuk,
+         s.class_id, s.tenant_id, s.tahun_masuk, s.tahun_ajaran_id,
          c.nama_kelas, c.tingkatan, tn.nama_sekolah, p.nama_orang_tua, p.no_wa as no_wa_ortu,
          (SELECT tn2.nama_sekolah FROM mutasi_students ms2 JOIN tenants tn2 ON ms2.new_tenant_id = tn2.tenant_id WHERE ms2.student_id = s.id ORDER BY ms2.id DESC LIMIT 1) as sekolah_tujuan
          FROM students s
@@ -2961,6 +2972,11 @@ router.get('/admin/students', authenticateOperator, async (req, res) => {
     if (tenantId) {
       query += ' AND s.tenant_id = ?';
       params.push(tenantId);
+    }
+
+    if (activeTa?.id) {
+      query += ' AND s.tahun_ajaran_id = ?';
+      params.push(activeTa.id);
     }
 
     if (search) {
@@ -3004,7 +3020,8 @@ router.get('/admin/students', authenticateOperator, async (req, res) => {
         limit,
         total,
         totalPages: Math.ceil(total / limit)
-      }
+      },
+      activeTahunAjaran: activeTa
     });
   } catch (error) {
     console.error('Admin students error:', error);
