@@ -537,6 +537,9 @@ router.post('/generate', authenticateOperator, async (req, res) => {
             '--disable-gpu',
             '--no-sandbox',
             '--disable-dev-shm-usage',
+            '--disable-extensions',
+            '--no-first-run',
+            '--disable-software-rasterizer',
             '--print-to-pdf=' + tmpPdf,
             '--default-print-margin-type=NONE',
             '--virtual-time-budget=5000',
@@ -546,10 +549,13 @@ router.post('/generate', authenticateOperator, async (req, res) => {
 
         if (fs.existsSync(tmpPdf)) {
           const pdfBuf = fs.readFileSync(tmpPdf);
-          res.setHeader('Content-Length', pdfBuf.length);
+          const sendBuf = Buffer.from(pdfBuf);
+          res.setHeader('Content-Length', sendBuf.length);
           fs.unlinkSync(tmpHtml);
           fs.unlinkSync(tmpPdf);
-          return res.send(pdfBuf);
+          res.flushHeaders();
+          res.end(sendBuf);
+          return;
         } else {
           console.warn('PDF conversion failed, falling back to DOCX');
         }
@@ -738,6 +744,9 @@ router.get('/file/:skId', authenticateOperator, async (req, res) => {
         execFileSync(chromePath, [
           '--headless', '--disable-gpu', '--no-sandbox',
           '--disable-dev-shm-usage',
+          '--disable-extensions',
+          '--no-first-run',
+          '--disable-software-rasterizer',
           '--print-to-pdf=' + tmpPdfPath,
           '--default-print-margin-type=NONE',
           '--virtual-time-budget=5000',
@@ -747,10 +756,13 @@ router.get('/file/:skId', authenticateOperator, async (req, res) => {
 
       if (fs.existsSync(tmpPdfPath)) {
         const pdfBuf = fs.readFileSync(tmpPdfPath);
-        res.setHeader('Content-Length', pdfBuf.length);
+        const sendBuf = Buffer.from(pdfBuf);
+        res.setHeader('Content-Length', sendBuf.length);
         fs.unlinkSync(tmpHtmlPath);
         fs.unlinkSync(tmpPdfPath);
-        return res.send(pdfBuf);
+        res.flushHeaders();
+        res.end(sendBuf);
+        return;
       }
       console.warn('PDF conversion failed for download');
       fs.unlinkSync(tmpHtmlPath);
