@@ -2836,8 +2836,8 @@ function initAllUI() {
 
     fetchDashboardData();
 
-    // Load access requests for admin
-    if (window.authToken || localStorage.getItem('token')) {
+    // Load access requests for admin only
+    if ((window.authToken || localStorage.getItem('token')) && window.currentUser?.role === 'admin') {
       loadAccessRequests();
     }
 
