@@ -3670,16 +3670,9 @@ if (d.success) {
               document.getElementById('teacherModalTitle').textContent = 'Edit Guru';
               const f = document.getElementById('teacherForm');
               if (f) {
-                f.nama.value = t.nama || ''; f.nik.value = t.nik || ''; f.nip.value = t.nip || '';
-                f.status_kepegawaian.value = t.status_kepegawaian || '';
-                f.email.value = t.email || ''; f.tempat_lahir.value = t.tempat_lahir || '';
-                f.tanggal_lahir.value = t.tanggal_lahir || ''; f.jenis_kelamin.value = t.jenis_kelamin || '';
-                f.alamat.value = t.alamat || ''; f.no_wa.value = t.no_wa || '';
-                f.status_perkawinan.value = t.status_perkawinan || ''; f.jumlah_anak.value = t.jumlah_anak || 0;
-                f.pendidikan_terakhir.value = t.pendidikan_terakhir || ''; f.tmt.value = t.tmt || '';
-                f.BANK.value = t.BANK || ''; f.nomor_rekening.value = t.nomor_rekening || '';
-                f.gaji_pokok.value = t.gaji_pokok || 0; f.tunj_kinerja.value = t.tunj_kinerja || 0;
-                f.tunj_kehadiran.value = t.tunj_kehadiran || 0;
+                f.nama.value = t.nama || '';
+                f.nik.value = t.nik || '';
+                f.no_wa.value = t.no_wa || '';
                 if (t.assignments && t.assignments.length > 0) {
                   f.jabatan_di_unit.value = t.assignments[0].jabatan_di_unit || '';
                   f.dataset.tenantId = t.assignments[0].tenant_id || '';
@@ -4910,7 +4903,6 @@ console.log('[ATTENDANCE] Fetching:', url);
           <div class="p-6">
             <h3 class="text-lg font-semibold mb-4" id="teacherModalTitle">Tambah Guru</h3>
             <form id="teacherForm" data-submit-handler="school">
-              <!-- Identitas Utama -->
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <div>
                   <label class="block text-sm font-medium text-gray-700 mb-1">Nama <span class="text-red-500">*</span></label>
@@ -4924,24 +4916,10 @@ console.log('[ATTENDANCE] Fetching:', url);
                     class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                 </div>
                 <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-1">NIP</label>
-                  <input type="text" name="nip" id="teacherNip" maxlength="50"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                </div>
-                <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-1">Status Kepegawaian</label>
-                  <select name="status_kepegawaian" id="teacherStatusKepegawaian"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                    <option value="">Pilih</option>
-                    <option value="GTY">GTY (Guru Tetap Yayasan)</option>
-                    <option value="GTTY">GTTY (Guru Tidak Tetap Yayasan)</option>
-                    <option value="GTT">GTT (Guru Tidak Tetap)</option>
-                    <option value="PTY">PTY (Pegawai Tetap Yayasan)</option>
-                    <option value="PTT">PTT (Pegawai Tidak Tetap)</option>
-                    <option value="PTTY">PTTY (Pegawai Tidak Tetap Yayasan)</option>
-                    <option value="PKY">PKY (Pegawai Kontrak Yayasan)</option>
-                    <option value="Honorer">Honorer</option>
-                  </select>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Nomor Telepon <span class="text-red-500">*</span></label>
+                  <input type="text" name="no_wa" id="teacherNoWa" maxlength="20" required
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="08xxx atau 628xxx">
                 </div>
                 <div>
                   <label class="block text-sm font-medium text-gray-700 mb-1">Jabatan <span class="text-red-500">*</span></label>
@@ -4972,122 +4950,7 @@ console.log('[ATTENDANCE] Fetching:', url);
                     <option value="Bag. Kantin">Bag. Kantin</option>
                   </select>
                 </div>
-                <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-1">Pendidikan Terakhir</label>
-                  <select name="pendidikan_terakhir" id="teacherPendidikan"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                    <option value="">Pilih</option>
-                    <option value="SMA/SMK">SMA/SMK</option>
-                    <option value="D1">D1</option>
-                    <option value="D2">D2</option>
-                    <option value="D3">D3</option>
-                    <option value="D4/S1">D4/S1</option>
-                    <option value="S2">S2</option>
-                    <option value="S3">S3</option>
-                  </select>
-                </div>
               </div>
-
-              <!-- Data Pribadi -->
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-1">Tempat Lahir</label>
-                  <input type="text" name="tempat_lahir" id="teacherTempatLahir"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                </div>
-                <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-1">Tanggal Lahir</label>
-                  <input type="date" name="tanggal_lahir" id="teacherTanggalLahir"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                </div>
-                <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-1">Jenis Kelamin</label>
-                  <select name="jenis_kelamin" id="teacherJenisKelamin"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                    <option value="">Pilih</option>
-                    <option value="L">Laki-laki</option>
-                    <option value="P">Perempuan</option>
-                  </select>
-                </div>
-                <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-1">Status Perkawinan</label>
-                  <select name="status_perkawinan" id="teacherStatusPerkawinan"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                    <option value="">Pilih</option>
-                    <option value="Belum Menikah">Belum Menikah</option>
-                    <option value="Menikah">Menikah</option>
-                    <option value="Cerai">Cerai</option>
-                  </select>
-                </div>
-                <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-1">Jumlah Anak</label>
-                  <input type="number" name="jumlah_anak" id="teacherJumlahAnak" min="0" value="0"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                </div>
-                <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-1">TMT (Terhitung Mulai Tugas)</label>
-                  <input type="date" name="tmt" id="teacherTmt"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                </div>
-              </div>
-
-              <!-- Kontak -->
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                  <input type="email" name="email" id="teacherEmail"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="nama@email.com">
-                </div>
-                <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-1">No. WhatsApp</label>
-                  <input type="text" name="no_wa" id="teacherNoWa" maxlength="20"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="08xxx atau 628xxx">
-                </div>
-              </div>
-              <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-700 mb-1">Alamat</label>
-                <textarea name="alamat" id="teacherAlamat" rows="2"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"></textarea>
-              </div>
-
-              <!-- Bank -->
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-1">Bank</label>
-                  <input type="text" name="BANK" id="teacherBank" maxlength="50"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="BCA, BRI, BNI, dll">
-                </div>
-                <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-1">Nomor Rekening</label>
-                  <input type="text" name="nomor_rekening" id="teacherNoRekening" maxlength="50"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                </div>
-              </div>
-
-              <!-- Gaji -->
-              <details class="mb-4">
-                <summary class="cursor-pointer text-sm font-medium text-gray-700">Komponen Gaji (opsional)</summary>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
-                  <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Gaji Pokok</label>
-                    <input type="number" name="gaji_pokok" id="teacherGajiPokok" min="0" step="0.01" value="0"
-                      class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                  </div>
-                  <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Tunj. Kinerja</label>
-                    <input type="number" name="tunj_kinerja" id="teacherTunjKinerja" min="0" step="0.01" value="0"
-                      class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                  </div>
-                  <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Tunj. Kehadiran</label>
-                    <input type="number" name="tunj_kehadiran" id="teacherTunjKehadiran" min="0" step="0.01" value="0"
-                      class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                  </div>
-                </div>
-              </details>
 
               <p id="teacherFormError" role="alert" class="mb-4 text-sm text-red-600"></p>
               <div class="flex justify-end space-x-3 pt-4 border-t border-gray-200">

@@ -2898,8 +2898,10 @@ router.get('/admin/students', authenticateOperator, async (req, res) => {
   try {
     let tenantId = req.query.tenant_id;
     const activeTa = req.activeTahunAjaran;
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 25;
+    
+    // 1. Sanitasi parameter pagination (Pastikan angka integer valid)
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.max(1, parseInt(req.query.limit, 10) || 25);
     const offset = (page - 1) * limit;
 
     if (req.user.role !== 'admin' && !tenantId) {
@@ -2918,6 +2920,7 @@ router.get('/admin/students', authenticateOperator, async (req, res) => {
       tenantId = req.user.tenant_id || (req.user.assignments?.[0]?.tenant_id);
     }
 
+    // 2. Query Count Total Data
     let countQuery = `
       SELECT COUNT(*) as total
       FROM students s
@@ -2932,14 +2935,10 @@ router.get('/admin/students', authenticateOperator, async (req, res) => {
       countParams.push(tenantId);
     }
 
-    if (activeTa?.id) {
-      countQuery += ' AND s.tahun_ajaran_id = ?';
-      countParams.push(activeTa.id);
-    }
-
     const search = req.query.search;
     const classId = req.query.class_id;
     const jenisKelamin = req.query.jenis_kelamin;
+
     if (search) {
       countQuery += ' AND (s.nama_siswa LIKE ? OR s.nisn LIKE ? OR s.nis LIKE ?)';
       countParams.push(`%${search}%`, `%${search}%`, `%${search}%`);
@@ -2953,30 +2952,26 @@ router.get('/admin/students', authenticateOperator, async (req, res) => {
       countParams.push(jenisKelamin);
     }
 
-    const [totalResult] = await db.query(countQuery, countParams);
-    const total = totalResult.total;
+    const totalResult = await db.query(countQuery, countParams);
+    const total = (Array.isArray(totalResult) ? totalResult[0]?.total : totalResult?.total) || 0;
 
+    // 3. Query Utama Data Siswa
     let query = `
-  SELECT s.id, s.nama_siswa, s.nisn, s.nis, s.jenis_kelamin, s.iuran_bulanan,
-         s.class_id, s.tenant_id, s.tahun_masuk, s.tahun_ajaran_id,
-         c.nama_kelas, c.tingkatan, tn.nama_sekolah, p.nama_orang_tua, p.no_wa as no_wa_ortu,
-         (SELECT tn2.nama_sekolah FROM mutasi_students ms2 JOIN tenants tn2 ON ms2.new_tenant_id = tn2.tenant_id WHERE ms2.student_id = s.id ORDER BY ms2.id DESC LIMIT 1) as sekolah_tujuan
-         FROM students s
-         LEFT JOIN classes c ON s.class_id = c.id
-         LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id
-         LEFT JOIN parents p ON s.parent_id = p.id
-         WHERE s.status != 'alumni'
-     `;
+      SELECT s.id, s.nama_siswa, s.nisn, s.nis, s.jenis_kelamin, s.iuran_bulanan,
+             s.class_id, s.tenant_id, s.tahun_masuk,
+             c.nama_kelas, c.tingkatan, tn.nama_sekolah, p.nama_orang_tua, p.no_wa as no_wa_ortu,
+             (SELECT tn2.nama_sekolah FROM mutasi_students ms2 JOIN tenants tn2 ON ms2.new_tenant_id = tn2.tenant_id WHERE ms2.student_id = s.id ORDER BY ms2.id DESC LIMIT 1) as sekolah_tujuan
+      FROM students s
+      LEFT JOIN classes c ON s.class_id = c.id
+      LEFT JOIN tenants tn ON s.tenant_id = tn.tenant_id
+      LEFT JOIN parents p ON s.parent_id = p.id
+      WHERE s.status != 'alumni'
+    `;
     let params = [];
 
     if (tenantId) {
       query += ' AND s.tenant_id = ?';
       params.push(tenantId);
-    }
-
-    if (activeTa?.id) {
-      query += ' AND s.tahun_ajaran_id = ?';
-      params.push(activeTa.id);
     }
 
     if (search) {
@@ -3007,8 +3002,8 @@ router.get('/admin/students', authenticateOperator, async (req, res) => {
     };
     const sortField = allowedSortFields[sortBy] || 's.nama_siswa';
 
-    query += ` ORDER BY (s.class_id IS NULL) DESC, ${sortField} ${sortDir} LIMIT ? OFFSET ?`;
-    params.push(limit, offset);
+    // 4. Langsung gabungkan limit & offset ke query string (SOLUSI ERROR 1210)
+    query += ` ORDER BY (s.class_id IS NULL) DESC, ${sortField} ${sortDir} LIMIT ${limit} OFFSET ${offset}`;
 
     const students = await db.query(query, params);
 
