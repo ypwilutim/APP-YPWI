@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard SPMB</title>
+  <link rel="stylesheet" href="/SPMB/css/tailwind.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-slate-50 text-slate-900 antialiased">
+  <div class="min-h-screen flex flex-col">
+    <header class="bg-white/80 backdrop-blur border-b border-slate-200 sticky top-0 z-50">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
+        <div>
+          <h1 class="text-xl font-semibold text-slate-900">Dashboard SPMB</h1>
+          <p id="userName" class="text-sm text-slate-500 mt-1">Memuat data...</p>
+        </div>
+        <button onclick="logout()" class="inline-flex items-center px-4 py-2 bg-white text-slate-700 border border-slate-200 rounded-xl hover:border-red-500 hover:text-red-600 transition text-sm">
+          <i class="fas fa-sign-out-alt mr-2"></i>Logout
+        </button>
+      </div>
+    </header>
+
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div class="bg-white rounded-2xl border border-slate-200 p-6">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm text-slate-500">Panitia Aktif</p>
+              <p id="activeCommittees" class="text-3xl font-bold text-slate-900 mt-2">-</p>
+            </div>
+            <i class="fas fa-users text-blue-600 text-2xl"></i>
+          </div>
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200 p-6">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm text-slate-500">Total Pendaftar</p>
+              <p class="text-3xl font-bold text-slate-900 mt-2">-</p>
+            </div>
+            <i class="fas fa-user-plus text-green-600 text-2xl"></i>
+          </div>
+        </div>
+        <div class="bg-white rounded-2xl border border-slate-200 p-6">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm text-slate-500">Gelombang Aktif</p>
+              <p id="activeWave" class="text-3xl font-bold text-slate-900 mt-2">-</p>
+            </div>
+            <i class="fas fa-wave-square text-indigo-600 text-2xl"></i>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-2xl border border-slate-200 p-6">
+        <p class="text-slate-600">Dashboard SPMB - Fitur dalam pengembangan.</p>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const token = localStorage.getItem('spmb_token');
+    const user = JSON.parse(localStorage.getItem('spmb_user') || '{}');
+
+    if (!token) {
+      window.location.href = '/SPMB/spmb-login.html';
+    }
+
+    document.getElementById('userName').textContent = user.nama || 'Pengguna SPMB';
+
+    async function loadDashboard() {
+      if (!token) return;
+
+      try {
+        const res = await fetch('/api/spmb/committees/active?teacher_id=' + user.id, {
+          headers: { 'Authorization': 'Bearer ' + token },
+        });
+        const data = await res.json();
+        if (data.success) {
+          document.getElementById('activeCommittees').textContent = data.data.length || 0;
+        }
+      } catch (e) {
+        console.error('[SPMB DASHBOARD]', e);
+      }
+    }
+
+    function logout() {
+      localStorage.removeItem('spmb_token');
+      localStorage.removeItem('spmb_user');
+      window.location.href = '/SPMB/spmb-login.html';
+    }
+
+    loadDashboard();
+  </script>
+</body>
+</html>

@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pundi Sedekah - YPWI Lutim</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .nav-active { background-color: #3b82f6; color: white; }
+    .hidden { display: none; }
+    .badge-success { background-color: #d1fae5; color: #065f46; padding: 4px 8px; border-radius: 10px; font-size: 0.75rem; }
+    .badge-error { background-color: #fee2e2; color: #991b1b; padding: 4px 8px; border-radius: 10px; font-size: 0.75rem; }
+    .badge-info { background-color: #dbeafe; color: #1e40af; padding: 4px 8px; border-radius: 10px; font-size: 0.75rem; }
+    .badge-warning { background-color: #fef3c7; color: #92400e; padding: 4px 8px; border-radius: 10px; font-size: 0.75rem; }
+    .badge-gray { background-color: #f3f4f6; color: #374151; padding: 4px 8px; border-radius: 10px; font-size: 0.75rem; }
+    .wa-bubble { background: #dcf8c6; border-radius: 8px; padding: 10px 12px; max-width: 100%; }
+    .toast-enter { animation: toastIn .25s ease; }
+    @keyframes toastIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    .recipient-row:hover { background-color: #f9fafb; }
+  </style>
+</head>
+<body class="min-h-screen bg-gray-50">
+<div class="flex h-screen">
+  <!-- Sidebar -->
+  <aside class="w-64 bg-white shadow-lg border-r h-screen overflow-y-auto flex flex-col flex-shrink-0">
+    <div class="p-6 border-b">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+          <i class="fas fa-hand-holding-dollar text-white"></i>
+        </div>
+        <div>
+          <h1 class="text-xl font-bold text-gray-900">YPWI Lutim Admin</h1>
+          <p class="text-sm text-gray-500">Pundi Sedekah</p>
+        </div>
+      </div>
+    </div>
+
+    <nav class="p-4 space-y-2">
+      <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="donatur">
+        <i class="fas fa-users w-5"></i><span>Donatur</span>
+      </button>
+      <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="calon-donatur">
+        <i class="fas fa-user-plus w-5"></i><span>Calon Donatur</span>
+      </button>
+      <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="whatsapp">
+        <i class="fab fa-whatsapp w-5"></i><span>Pesan WhatsApp</span>
+      </button>
+      <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="riwayat">
+        <i class="fas fa-history w-5"></i><span>Riwayat Kirim</span>
+      </button>
+      <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="csv">
+        <i class="fas fa-file-import w-5"></i><span>Import CSV</span>
+      </button>
+    </nav>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="flex-1 overflow-y-auto">
+    <header class="bg-white border-b px-8 py-5 flex items-center justify-between">
+      <div>
+        <h2 class="text-2xl font-bold text-gray-900" id="pageTitle">Daftar Donatur</h2>
+        <p class="text-sm text-gray-500" id="pageSubtitle">Kelola data donatur Pundi Sedekah</p>
+      </div>
+      <div class="flex items-center space-x-3">
+        <span id="waStatusBadge" class="badge-gray"><i class="fas fa-spinner fa-spin mr-1"></i>Cek status WhatsApp...</span>
+        <button id="refreshStatusBtn" class="px-3 py-1.5 text-sm border rounded-lg hover:bg-gray-50"><i class="fas fa-sync-alt mr-1"></i>Refresh</button>
+      </div>
+    </header>
+
+    <div class="p-8">
+      <!-- TAB: DONATUR -->
+      <section id="tab-donatur" class="tab-content">
+        <div class="bg-white rounded-lg shadow-sm border p-6">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-semibold text-gray-900">Daftar Donatur</h3>
+            <div class="flex space-x-2">
+              <button id="refreshDonaturBtn" class="px-3 py-2 text-sm border rounded-lg hover:bg-gray-50"><i class="fas fa-sync-alt mr-1"></i>Refresh</button>
+            </div>
+          </div>
+          <div id="donaturEmpty" class="hidden py-8 text-center text-gray-500">
+            <i class="fas fa-inbox text-4xl text-gray-300 mb-3 block"></i>
+            <p>Belum ada donatur. Calon donatur yang mengonfirmasi tautan Pundi Ceria akan muncul di sini.</p>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nama Donatur</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">No. WhatsApp</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nama Siswa</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kelas</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sekolah</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                </tr>
+              </thead>
+              <tbody id="donaturTableBody" class="bg-white divide-y divide-gray-200"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB: CALON DONATUR -->
+      <section id="tab-calon-donatur" class="tab-content hidden">
+        <div class="bg-white rounded-lg shadow-sm border p-6">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h3 class="text-lg font-semibold text-gray-900">Daftar Calon Donatur (Prospek)</h3>
+              <p class="text-sm text-gray-500">Daftar prospek yang akan atau sedang dihubungi untuk program Pundi Sedekah.</p>
+            </div>
+            <div class="flex space-x-2">
+              <button id="refreshCalonBtn" class="px-3 py-2 text-sm border rounded-lg hover:bg-gray-50"><i class="fas fa-sync-alt mr-1"></i>Refresh</button>
+              <button id="addCalonBtn" class="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700"><i class="fas fa-plus mr-1"></i>Tambah Calon Donatur</button>
+            </div>
+          </div>
+          <div id="calonLoading" class="hidden py-8 text-center text-gray-500"><i class="fas fa-spinner fa-spin mr-1"></i>Memuat data calon donatur...</div>
+          <div id="calonEmpty" class="hidden py-8 text-center text-gray-500">
+            <i class="fas fa-user-plus text-4xl text-gray-300 mb-3 block"></i>
+            <p>Belum ada calon donatur. Tambahkan prospek untuk mulai menghubungi mereka.</p>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    <input type="checkbox" id="calonCheckAll" class="rounded border-gray-300">
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nama Calon Donatur</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">No. WhatsApp</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nama Siswa</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kelas</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Keterangan</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="calonTableBody" class="bg-white divide-y divide-gray-200"></tbody>
+            </table>
+          </div>
+          <div id="bulkBar" class="hidden mt-4 flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <span class="text-sm text-blue-800"><span id="selectedCount">0</span> calon donatur dipilih</span>
+            <button id="bulkSendBtn" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700">
+              <i class="fab fa-whatsapp mr-1"></i>Kirim Template ke Terpilih
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB: PESAN WHATSAPP -->
+      <section id="tab-whatsapp" class="tab-content hidden">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <!-- FORM -->
+          <div class="lg:col-span-2 space-y-6">
+          <div class="bg-white rounded-lg shadow-sm border p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4"><i class="fab fa-whatsapp text-green-600 mr-2"></i>Kirim Pesan ke Calon Donatur</h3>
+
+            <div id="tplWarning" class="hidden mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <p class="text-sm font-medium text-amber-900 mb-1"><i class="fas fa-triangle-exclamation mr-1"></i>Template WhatsApp perlu diperbaiki</p>
+              <p id="tplWarningText" class="text-xs text-amber-800 whitespace-pre-wrap"></p>
+            </div>
+
+            <div class="space-y-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Tujuan Pesan</label>
+                  <select id="waTujuan" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:outline-none">
+                    <option value="calon_donatur">Pilih Calon Donatur</option>
+                    <option value="manual">Nomor Manual</option>
+                    <option value="donatur">Pilih Donatur Aktif</option>
+                  </select>
+                </div>
+
+                <div id="waPilihCalonWrapper">
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Pilih Calon Donatur</label>
+                  <select id="waCalonSelect" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:outline-none">
+                    <option value="">-- Pilih calon donatur --</option>
+                  </select>
+                  <p class="text-xs text-gray-500 mt-1">Data diambil dari daftar Calon Donatur (status "calon").</p>
+                </div>
+
+                <div id="waPilihDonaturWrapper" class="hidden">
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Pilih Donatur Aktif</label>
+                  <select id="waDonaturSelect" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:outline-none">
+                    <option value="">-- Pilih donatur --</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Nomor WhatsApp</label>
+                  <input type="text" id="waNomor" placeholder="Contoh: 081234567890" maxlength="20"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:outline-none">
+                  <p class="text-xs text-gray-500 mt-1">Format nomor Indonesia (08xx atau 62xx), otomatis dinormalisasi menjadi 628xx.</p>
+                </div>
+
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Template WhatsApp</label>
+                  <select id="waTemplate" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:outline-none">
+                    <option value="pundi_ceria">Pundi Ceria - Sedekah Anak Sholeh</option>
+                    <option value="kustom">Pesan Kustom (teks bebas)</option>
+                  </select>
+                  <p class="text-xs text-gray-500 mt-1">Template diambil dari Meta WhatsApp Business API yang sudah APPROVED.</p>
+                </div>
+
+                <div id="waKustomWrapper" class="hidden">
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Isi Pesan Kustom</label>
+                  <textarea id="waPesan" rows="5" placeholder="Tulis isi pesan di sini..."
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:outline-none resize-y"></textarea>
+                  <p class="text-xs text-amber-600 mt-1">
+                    <i class="fas fa-triangle-exclamation mr-1"></i>
+                    Pesan teks bebas hanya bisa dikirim ke nomor yang pernah membalas pesan dalam 24 jam terakhir (aturan Meta).
+                  </p>
+                </div>
+
+                <div id="waError" class="hidden p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700"></div>
+
+                <button id="waKirimBtn" class="w-full bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed">
+                  <i class="fab fa-whatsapp mr-2"></i>Kirim Pesan WhatsApp
+                </button>
+              </div>
+            </div>
+
+            <!-- Info template -->
+            <div class="bg-white rounded-lg shadow-sm border p-6">
+              <h4 class="text-sm font-semibold text-gray-700 mb-2">Isi Template Pundi Ceria</h4>
+              <p class="text-xs text-gray-500 mb-3">Variabel <code class="bg-gray-100 px-1 rounded">{{nama_siswa}}</code>, <code class="bg-gray-100 px-1 rounded">{{nama_sekolah_atau_yayasan}}</code>, <code class="bg-gray-100 px-1 rounded">{{nama_siswa_copy}}</code>, dan <code class="bg-gray-100 px-1 rounded">{{link_konfirmasi}}</code> diisi otomatis dari data calon donatur.</p>
+              <pre id="tplRaw" class="text-xs text-gray-600 whitespace-pre-wrap bg-gray-50 border rounded-lg p-3 max-h-64 overflow-y-auto">Memuat template dari Meta...</pre>
+            </div>
+          </div>
+
+          <!-- PREVIEW + HISTORY -->
+          <div class="space-y-6">
+            <div class="bg-white rounded-lg shadow-sm border p-6">
+              <h4 class="text-sm font-semibold text-gray-700 mb-3">Preview Pesan</h4>
+              <div class="bg-gray-100 rounded-lg p-3 min-h-[180px]">
+                <div id="waBubble" class="wa-bubble text-sm text-gray-800 whitespace-pre-wrap break-words hidden"></div>
+                <p id="waPreviewEmpty" class="text-sm text-gray-400 text-center py-12">Pilih calon donatur untuk melihat preview pesan.</p>
+              </div>
+              <div id="waLinkInfo" class="hidden mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p class="text-xs text-blue-800 font-medium mb-1">Tautan konfirmasi yang dikirim:</p>
+                <a id="waLinkHref" href="#" target="_blank" class="text-xs text-blue-600 underline break-all"></a>
+              </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow-sm border p-6">
+              <div class="flex items-center justify-between mb-3">
+                <h4 class="text-sm font-semibold text-gray-700">Riwayat Pengiriman</h4>
+                <button id="waClearHistoryBtn" class="text-xs text-red-600 hover:text-red-700">Hapus</button>
+              </div>
+              <div id="waHistoryList" class="space-y-2 max-h-80 overflow-y-auto">
+                <p class="text-sm text-gray-400 text-center py-6">Belum ada riwayat pengiriman.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB: RIWAYAT -->
+      <section id="tab-riwayat" class="tab-content hidden">
+        <div class="bg-white rounded-lg shadow-sm border p-6">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-semibold text-gray-900">Riwayat Pengiriman WhatsApp</h3>
+            <div class="flex space-x-2">
+              <button id="refreshHistoryBtn" class="px-3 py-2 text-sm border rounded-lg hover:bg-gray-50"><i class="fas fa-sync-alt mr-1"></i>Refresh</button>
+              <button id="clearHistoryBtn2" class="px-3 py-2 text-sm border border-red-300 text-red-600 rounded-lg hover:bg-red-50"><i class="fas fa-trash mr-1"></i>Hapus Semua</button>
+            </div>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Waktu</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Penerima</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nomor</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tujuan</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Template</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                  <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Keterangan</th>
+                </tr>
+              </thead>
+              <tbody id="historyTableBody" class="bg-white divide-y divide-gray-200"></tbody>
+            </table>
+            <div id="historyEmpty" class="hidden py-8 text-center text-gray-500 text-sm">Belum ada riwayat pengiriman.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB: CSV -->
+      <section id="tab-csv" class="tab-content hidden">
+        <div class="bg-white rounded-lg shadow-sm border p-6 max-w-xl">
+          <h3 class="text-lg font-semibold text-gray-900 mb-4">Import Calon Donatur via CSV</h3>
+          <p class="text-sm text-gray-500 mb-3">Format kolom: <code class="bg-gray-100 px-1 rounded">nama_calon_donatur, no_wa, nama_siswa, kelas, sekolah_yayasan, keterangan</code></p>
+          <div class="space-y-3">
+            <input type="file" id="csvFile" accept=".csv" class="w-full text-sm border rounded-lg px-3 py-2">
+            <button id="processCsvBtn" class="w-full bg-purple-600 text-white py-2.5 rounded-lg hover:bg-purple-700 font-medium"><i class="fas fa-file-import mr-2"></i>Proses CSV</button>
+            <div id="csvResult" class="hidden p-3 rounded-lg text-sm"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<!-- MODAL CALON DONATUR -->
+<div id="calonModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+  <div class="bg-white rounded-lg shadow-xl w-full max-w-md">
+    <div class="flex items-center justify-between px-6 py-4 border-b">
+      <h4 class="text-lg font-semibold text-gray-900" id="calonModalTitle">Tambah Calon Donatur</h4>
+      <button class="closeCalonModal text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+    </div>
+    <form id="calonForm" class="p-6 space-y-4">
+      <input type="hidden" id="calonId">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Nama Calon Donatur *</label>
+        <input type="text" id="calonNama" required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:outline-none">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">No. WhatsApp *</label>
+        <input type="text" id="calonHp" required placeholder="081234567890" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:outline-none">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Nama Siswa</label>
+        <input type="text" id="calonNamaSiswa" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:outline-none">
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Kelas</label>
+          <input type="text" id="calonKelas" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:outline-none">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Sekolah</label>
+          <input type="text" id="calonSekolah" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:outline-none">
+        </div>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Keterangan</label>
+        <input type="text" id="calonKeterangan" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 focus:outline-none">
+      </div>
+      <div class="flex justify-end space-x-2 pt-2">
+        <button type="button" class="closeCalonModal px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">Batal</button>
+        <button type="submit" class="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">Simpan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toastWrap" class="fixed bottom-6 right-6 z-50 space-y-2"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  var API = {
+    donatur: '/api/pundi-sedekah',
+    calon: '/api/pundi-sedekah/calon-donatur',
+    waStatus: '/api/pundi-sedekah/whatsapp-status',
+    waTemplates: '/api/pundi-sedekah/whatsapp-templates',
+    waSend: '/api/pundi-sedekah/whatsapp-send',
+    waSendBulk: '/api/pundi-sedekah/whatsapp-send-bulk',
+    waHistory: '/api/pundi-sedekah/whatsapp-history'
+  };
+
+  var state = {
+    calonList: [],
+    donaturList: [],
+    selectedIds: [],
+    templates: [],
+    templateBody: '',
+    waConnected: false,
+    pundiCeriaReady: false
+  };
+
+  // ---------- UTIL ----------
+  function $(id) { return document.getElementById(id); }
+
+  function esc(text) {
+    return String(text == null ? '' : text)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+  }
+
+  function toast(message, type) {
+    type = type || 'info';
+    var colors = { success: 'bg-green-600', error: 'bg-red-600', info: 'bg-blue-600', warning: 'bg-amber-500' };
+    var el = document.createElement('div');
+    el.className = 'toast-enter text-white px-4 py-3 rounded-lg shadow-lg text-sm max-w-xs ' + (colors[type] || colors.info);
+    el.textContent = message;
+    $('toastWrap').appendChild(el);
+    setTimeout(function () {
+      el.style.transition = 'opacity .3s';
+      el.style.opacity = '0';
+      setTimeout(function () { el.remove(); }, 300);
+    }, 4000);
+  }
+
+  function formatWaktu(value) {
+    if (!value) return '-';
+    var d = new Date(String(value).replace(' ', 'T'));
+    if (isNaN(d.getTime())) return String(value);
+    return d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) + ' ' +
+      d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function statusBadge(status) {
+    var s = String(status || '').toLowerCase();
+    if (s === 'aktif') return '<span class="badge-success">Aktif</span>';
+    if (s === 'calon') return '<span class="badge-warning">Calon</span>';
+    if (s === 'menjadi_donatur') return '<span class="badge-info">Menjadi Donatur</span>';
+    if (s === 'non-aktif') return '<span class="badge-error">Non-Aktif</span>';
+    return '<span class="badge-gray">' + esc(status) + '</span>';
+  }
+
+  async function apiGet(url) {
+    var res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    var json = null;
+    try { json = await res.json(); } catch (e) { json = null; }
+    return { ok: res.ok, status: res.status, data: json };
+  }
+
+  async function apiSend(url, method, body) {
+    var res = await fetch(url, {
+      method: method,
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined
+    });
+    var json = null;
+    try { json = await res.json(); } catch (e) { json = null; }
+    return { ok: res.ok, status: res.status, data: json };
+  }
+
+  // ---------- TABS ----------
+  var tabMeta = {
+    'donatur': { title: 'Daftar Donatur', subtitle: 'Kelola data donatur Pundi Sedekah' },
+    'calon-donatur': { title: 'Calon Donatur (Prospek)', subtitle: 'Kelola prospek yang akan atau sedang dihubungi' },
+    'whatsapp': { title: 'Pesan WhatsApp', subtitle: 'Kirim template Pundi Ceria ke calon donatur' },
+    'riwayat': { title: 'Riwayat Pengiriman', subtitle: 'Log pengiriman template WhatsApp' },
+    'csv': { title: 'Import CSV', subtitle: 'Tambah calon donatur secara massal' }
+  };
+
+  function switchTab(tab) {
+    document.querySelectorAll('.tab-content').forEach(function (t) { t.classList.add('hidden'); });
+    document.querySelectorAll('.nav-item').forEach(function (n) { n.classList.remove('nav-active'); });
+    var panel = $('tab-' + tab);
+    if (panel) panel.classList.remove('hidden');
+    var nav = document.querySelector('.nav-item[data-tab="' + tab + '"]');
+    if (nav) nav.classList.add('nav-active');
+    var meta = tabMeta[tab];
+    if (meta) {
+      $('pageTitle').textContent = meta.title;
+      $('pageSubtitle').textContent = meta.subtitle;
+    }
+    if (tab === 'whatsapp') { loadTemplates(); updatePreview(); }
+    if (tab === 'riwayat') { loadHistory(); }
+  }
+
+  document.querySelectorAll('.nav-item[data-tab]').forEach(function (btn) {
+    btn.addEventListener('click', function () { switchTab(btn.dataset.tab); });
+  });
+
+  // ---------- DONATUR ----------
+  async function loadDonatur() {
+    try {
+      var r = await apiGet(API.donatur);
+      var list = (r.ok && r.data && r.data.success) ? (r.data.data || []) : [];
+      state.donaturList = list;
+      renderDonatur(list);
+      fillDonaturSelect(list);
+    } catch (e) {
+      toast('Gagal memuat data donatur: ' + e.message, 'error');
+    }
+  }
+
+  function renderDonatur(list) {
+    var tbody = $('donaturTableBody');
+    tbody.innerHTML = '';
+    if (!list.length) { $('donaturEmpty').classList.remove('hidden'); return; }
+    $('donaturEmpty').classList.add('hidden');
+    list.forEach(function (d) {
+      var tr = document.createElement('tr');
+      tr.className = 'hover:bg-gray-50';
+      tr.innerHTML =
+        '<td class="px-4 py-3 text-sm font-medium text-gray-900">' + esc(d.nama_donatur || '-') + '</td>' +
+        '<td class="px-4 py-3 text-sm text-gray-700">' + esc(d.no_wa || '-') + '</td>' +
+        '<td class="px-4 py-3 text-sm text-gray-700">' + esc(d.nama_siswa || '-') + '</td>' +
+        '<td class="px-4 py-3 text-sm text-gray-700">' + esc(d.kelas || '-') + '</td>' +
+        '<td class="px-4 py-3 text-sm text-gray-700">' + esc(d.sekolah_yayasan || '-') + '</td>' +
+        '<td class="px-4 py-3 text-sm">' + statusBadge(d.status) + '</td>';
+      tbody.appendChild(tr);
+    });
+  }
+
+  function fillDonaturSelect(list) {
+    var sel = $('waDonaturSelect');
+    sel.innerHTML = '<option value="">-- Pilih donatur --</option>';
+    list.filter(function (d) { return d.status === 'aktif'; }).forEach(function (d) {
+      var opt = document.createElement('option');
+      opt.value = d.no_wa;
+      opt.textContent = (d.nama_donatur || d.nama_siswa || '-') + ' - ' + d.no_wa;
+      opt.dataset.nama = d.nama_donatur || d.nama_siswa || '';
+      opt.dataset.siswa = d.nama_siswa || '';
+      opt.dataset.sekolah = d.sekolah_yayasan || '';
+      sel.appendChild(opt);
+    });
+  }
+
+  $('refreshDonaturBtn').addEventListener('click', loadDonatur);
+
+  // ---------- CALON DONATUR ----------
+  async function loadCalon() {
+    $('calonLoading').classList.remove('hidden');
+    $('calonEmpty').classList.add('hidden');
+    try {
+      var r = await apiGet(API.calon);
+      var list = (r.ok && r.data && r.data.success) ? (r.data.data || []) : [];
+      state.calonList = list;
+      renderCalon(list);
+      fillCalonSelect(list);
+    } catch (e) {
+      toast('Gagal memuat calon donatur: ' + e.message, 'error');
+    } finally {
+      $('calonLoading').classList.add('hidden');
+    }
+  }
+
+  function renderCalon(list) {
+    var tbody = $('calonTableBody');
+    tbody.innerHTML = '';
+    if (!list.length) { $('calonEmpty').classList.remove('hidden'); return; }
+    $('calonEmpty').classList.add('hidden');
+    list.forEach(function (c) {
+      var tr = document.createElement('tr');
+      tr.className = 'hover:bg-gray-50';
+      tr.innerHTML =
+        '<td class="px-4 py-3"><input type="checkbox" class="calonCheck rounded border-gray-300" data-id="' + c.id + '"' + (c.status === 'calon' ? '' : ' disabled') + '></td>' +
+        '<td class="px-4 py-3 text-sm font-medium text-gray-900">' + esc(c.nama_calon_donatur) + '</td>' +
+        '<td class="px-4 py-3 text-sm text-gray-700">' + esc(c.no_wa) + '</td>' +
+        '<td class="px-4 py-3 text-sm text-gray-700">' + esc(c.nama_siswa || '-') + '</td>' +
+        '<td class="px-4 py-3 text-sm text-gray-700">' + esc(c.kelas || '-') + '</td>' +
+        '<td class="px-4 py-3 text-sm text-gray-700">' + esc(c.keterangan || '-') + '</td>' +
+        '<td class="px-4 py-3 text-sm">' + statusBadge(c.status) + '</td>' +
+        '<td class="px-4 py-3 text-sm whitespace-nowrap">' +
+          '<button class="text-green-600 hover:text-green-800 mr-2" data-act="wa" data-id="' + c.id + '" title="Kirim Pesan"><i class="fas fa-paper-plane"></i></button>' +
+          '<button class="text-gray-600 hover:text-gray-800 mr-2" data-act="edit" data-id="' + c.id + '" title="Edit"><i class="fas fa-edit"></i></button>' +
+          '<button class="text-red-600 hover:text-red-800" data-act="del" data-id="' + c.id + '" title="Hapus"><i class="fas fa-trash"></i></button>' +
+        '</td>';
+      tbody.appendChild(tr);
+    });
+    bindCalonChecks();
+  }
+
+  function fillCalonSelect(list) {
+    var sel = $('waCalonSelect');
+    sel.innerHTML = '<option value="">-- Pilih calon donatur --</option>';
+    list.filter(function (c) { return c.status === 'calon'; }).forEach(function (c) {
+      var opt = document.createElement('option');
+      opt.value = c.no_wa;
+      opt.textContent = c.nama_calon_donatur + ' - ' + c.no_wa;
+      opt.dataset.nama = c.nama_calon_donatur;
+      opt.dataset.siswa = c.nama_siswa || '';
+      opt.dataset.sekolah = c.sekolah_yayasan || '';
+      sel.appendChild(opt);
+    });
+  }
+
+  $('refreshCalonBtn').addEventListener('click', loadCalon);
+
+  // Checkbox seleksi massal
+  function bindCalonChecks() {
+    var all = $('calonCheckAll');
+    if (all) {
+      all.checked = false;
+      all.onchange = function () {
+        document.querySelectorAll('.calonCheck:not(:disabled)').forEach(function (cb) { cb.checked = all.checked; });
+        updateBulkBar();
+      };
+    }
+    document.querySelectorAll('.calonCheck').forEach(function (cb) {
+      cb.onchange = updateBulkBar;
+    });
+    updateBulkBar();
+  }
+
+  function getSelectedIds() {
+    return Array.prototype.slice.call(document.querySelectorAll('.calonCheck:checked'))
+      .map(function (cb) { return parseInt(cb.dataset.id, 10); });
+  }
+
+  function updateBulkBar() {
+    var ids = getSelectedIds();
+    state.selectedIds = ids;
+    $('selectedCount').textContent = ids.length;
+    $('bulkBar').classList.toggle('hidden', ids.length === 0);
+  }
+
+  $('bulkSendBtn').addEventListener('click', async function () {
+    var ids = getSelectedIds();
+    if (ids.length === 0) { toast('Pilih minimal satu calon donatur', 'warning'); return; }
+
+    var konfirm = confirm('Kirim template Pundi Ceria ke ' + ids.length + ' calon donatur terpilih?');
+    if (!konfirm) return;
+
+    var btn = this;
+    var original = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Mengirim...';
+
+    try {
+      var r = await apiSend(API.waSendBulk, 'POST', { calon_donatur_ids: ids, template: 'pundi_ceria' });
+      if (r.ok && r.data && r.data.success) {
+        toast('Selesai: ' + r.data.successCount + ' terkirim, ' + r.data.failCount + ' gagal', r.data.failCount > 0 ? 'warning' : 'success');
+        if (r.data.failCount > 0 && r.data.results) {
+          var errs = r.data.results.filter(function (x) { return !x.success; }).slice(0, 3);
+          errs.forEach(function (x) { toast(x.nama + ': ' + x.error, 'error'); });
+        }
+        loadHistory();
+        loadCalon();
+      } else {
+        toast((r.data && r.data.message) || 'Gagal mengirim broadcast', 'error');
+      }
+    } catch (e) {
+      toast('Terjadi kesalahan: ' + e.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = original;
+    }
+  });
+
+  // Aksi per baris
+  $('calonTableBody').addEventListener('click', async function (e) {
+    var btn = e.target.closest('button[data-act]');
+    if (!btn) return;
+    var id = btn.dataset.id;
+    var item = state.calonList.find(function (c) { return String(c.id) === String(id); });
+    if (!item) return;
+    var act = btn.dataset.act;
+
+    if (act === 'wa') {
+      switchTab('whatsapp');
+      $('waTujuan').value = 'calon_donatur';
+      handleTujuanChange();
+      $('waCalonSelect').value = item.no_wa;
+      handleCalonChange();
+      $('waKirimBtn').focus();
+    } else if (act === 'edit') {
+      openCalonModal(item);
+    } else if (act === 'del') {
+      if (!confirm('Hapus calon donatur "' + item.nama_calon_donatur + '"?')) return;
+      var r = await apiSend(API.calon + '/' + id, 'DELETE');
+      if (r.ok && r.data && r.data.success) { toast('Calon donatur dihapus', 'success'); loadCalon(); }
+      else toast((r.data && r.data.message) || 'Gagal menghapus', 'error');
+    }
+  });
+
+  // Modal calon donatur
+  function openCalonModal(item) {
+    $('calonId').value = item ? item.id : '';
+    $('calonModalTitle').textContent = item ? 'Edit Calon Donatur' : 'Tambah Calon Donatur';
+    $('calonNama').value = item ? item.nama_calon_donatur : '';
+    $('calonHp').value = item ? item.no_wa : '';
+    $('calonNamaSiswa').value = item ? (item.nama_siswa || '') : '';
+    $('calonKelas').value = item ? (item.kelas || '') : '';
+    $('calonSekolah').value = item ? (item.sekolah_yayasan || '') : '';
+    $('calonKeterangan').value = item ? (item.keterangan || '') : '';
+    $('calonModal').classList.remove('hidden');
+  }
+
+  function closeCalonModal() {
+    $('calonModal').classList.add('hidden');
+    $('calonForm').reset();
+  }
+
+  $('addCalonBtn').addEventListener('click', function () { openCalonModal(null); });
+  document.querySelectorAll('.closeCalonModal').forEach(function (el) { el.addEventListener('click', closeCalonModal); });
+  $('calonModal').addEventListener('click', function (e) { if (e.target === $('calonModal')) closeCalonModal(); });
+
+  $('calonForm').addEventListener('submit', async function (e) {
+    e.preventDefault();
+    var id = $('calonId').value;
+    var payload = {
+      nama_calon_donatur: $('calonNama').value.trim(),
+      no_wa: $('calonHp').value.trim(),
+      nama_siswa: $('calonNamaSiswa').value.trim(),
+      kelas: $('calonKelas').value.trim(),
+      sekolah_yayasan: $('calonSekolah').value.trim(),
+      keterangan: $('calonKeterangan').value.trim()
+    };
+    if (!payload.nama_calon_donatur || !payload.no_wa) {
+      toast('Nama dan nomor WhatsApp wajib diisi', 'warning');
+      return;
+    }
+    var r = id ? await apiSend(API.calon + '/' + id, 'PUT', payload) : await apiSend(API.calon, 'POST', payload);
+    if (r.ok && r.data && r.data.success) {
+      toast(r.data.message || 'Data calon donatur tersimpan', 'success');
+      closeCalonModal();
+      loadCalon();
+    } else {
+      toast((r.data && r.data.message) || 'Gagal menyimpan data', 'error');
+    }
+  });
+
+  // ---------- TEMPLATE & STATUS META ----------
+  async function loadTemplates() {
+    try {
+      var r = await apiGet(API.waTemplates);
+      var list = (r.ok && r.data && r.data.success) ? (r.data.data || []) : [];
+      state.templates = list;
+
+      var sel = $('waTemplate');
+      var current = sel.value;
+      sel.innerHTML = '';
+      var approved = list.filter(function (t) { return String(t.status).toUpperCase() === 'APPROVED'; });
+      var source = approved.length > 0 ? approved : list;
+      if (source.length === 0) {
+        sel.innerHTML = '<option value="pundi_ceria">Pundi Ceria - Sedekah Anak Sholeh</option>';
+      } else {
+        source.forEach(function (t) {
+          var opt = document.createElement('option');
+          opt.value = t.name;
+          opt.textContent = t.name + (t.status !== 'APPROVED' ? ' (' + t.status + ')' : '') + ' - ' + (t.category || '');
+          sel.appendChild(opt);
+        });
+      }
+      if (current && sel.querySelector('option[value="' + current + '"]')) sel.value = current;
+      else sel.value = 'pundi_ceria';
+
+      // Ambil teks body template pundi_ceria untuk ditampilkan & preview
+      var tpl = list.find(function (t) { return t.name === 'pundi_ceria'; });
+      if (tpl) {
+        var body = (tpl.components || []).find(function (c) { return String(c.type).toUpperCase() === 'BODY'; });
+        state.templateBody = body && body.text ? body.text : '';
+      }
+      $('tplRaw').textContent = state.templateBody || 'Template pundi_ceria tidak ditemukan / belum APPROVED di Meta.';
+    } catch (e) {
+      $('tplRaw').textContent = 'Gagal memuat template dari Meta: ' + e.message;
+    }
+  }
+
+  $('waTemplate').addEventListener('change', function () {
+    var tpl = state.templates.find(function (t) { return t.name === $('waTemplate').value; });
+    if (tpl) {
+      var body = (tpl.components || []).find(function (c) { return String(c.type).toUpperCase() === 'BODY'; });
+      state.templateBody = body && body.text ? body.text : '';
+      $('tplRaw').textContent = state.templateBody;
+    }
+    updatePreview();
+  });
+
+  async function checkWaStatus() {
+    var badge = $('waStatusBadge');
+    badge.className = 'badge-gray';
+    badge.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Mengecek...';
+    try {
+      var r = await apiGet(API.waStatus);
+      var d = r.ok && r.data ? r.data : null;
+      state.waConnected = !!(d && d.connected);
+      state.pundiCeriaReady = !!(d && d.pundi_ceria_ready);
+
+      // Peringatan bila template pundi_ceria tidak bisa dikirim lewat Cloud API
+      if (d && d.template_error) {
+        $('tplWarningText').textContent = d.template_error;
+        $('tplWarning').classList.remove('hidden');
+      } else {
+        $('tplWarning').classList.add('hidden');
+      }
+
+      if (state.waConnected) {
+        badge.className = state.pundiCeriaReady && !(d && d.template_error) ? 'badge-success' : 'badge-warning';
+        badge.innerHTML = '<i class="fab fa-whatsapp mr-1"></i>' +
+          esc(state.pundiCeriaReady && !(d && d.template_error)
+            ? 'Meta Terhubung · pundi_ceria siap'
+            : (state.pundiCeriaReady ? 'Meta Terhubung · template perlu dicek' : 'Meta Terhubung · pundi_ceria belum siap'));
+      } else {
+        $('tplWarning').classList.add('hidden');
+        badge.className = 'badge-error';
+        badge.innerHTML = '<i class="fas fa-triangle-exclamation mr-1"></i>Meta Tidak Terhubung';
+      }
+    } catch (e) {
+      badge.className = 'badge-error';
+      badge.innerHTML = '<i class="fas fa-triangle-exclamation mr-1"></i>Status Tidak Diketahui';
+    }
+  }
+
+  $('refreshStatusBtn').addEventListener('click', function () { checkWaStatus(); loadTemplates(); });
+
+  // ---------- FORM WHATSAPP ----------
+  function getCurrentRecipient() {
+    var tujuan = $('waTujuan').value;
+    if (tujuan === 'calon_donatur') {
+      var sel = $('waCalonSelect');
+      var opt = sel.options[sel.selectedIndex];
+      if (!opt || !opt.value) return null;
+      return {
+        nomor: opt.value,
+        nama: opt.dataset.nama || '',
+        siswa: opt.dataset.siswa || '',
+        sekolah: opt.dataset.sekolah || ''
+      };
+    }
+    if (tujuan === 'donatur') {
+      var sel2 = $('waDonaturSelect');
+      var opt2 = sel2.options[sel2.selectedIndex];
+      if (!opt2 || !opt2.value) return null;
+      return {
+        nomor: opt2.value,
+        nama: opt2.dataset.nama || '',
+        siswa: opt2.dataset.siswa || '',
+        sekolah: opt2.dataset.sekolah || ''
+      };
+    }
+    return { nomor: $('waNomor').value.trim(), nama: 'Bapak/Ibu', siswa: 'Ananda', sekolah: '' };
+  }
+
+  function handleTujuanChange() {
+    var val = $('waTujuan').value;
+    $('waPilihCalonWrapper').classList.toggle('hidden', val !== 'calon_donatur');
+    $('waPilihDonaturWrapper').classList.toggle('hidden', val !== 'donatur');
+    $('waNomor').value = '';
+    $('waKustomWrapper').classList.add('hidden');
+    updatePreview();
+  }
+
+  function handleCalonChange() {
+    var sel = $('waCalonSelect');
+    $('waNomor').value = sel.value;
+    updatePreview();
+  }
+
+  function handleDonaturChange() {
+    var sel = $('waDonaturSelect');
+    $('waNomor').value = sel.value;
+    updatePreview();
+  }
+
+  $('waTujuan').addEventListener('change', handleTujuanChange);
+  $('waCalonSelect').addEventListener('change', handleCalonChange);
+  $('waDonaturSelect').addEventListener('change', handleDonaturChange);
+
+  $('waNomor').addEventListener('input', function (e) {
+    e.target.value = e.target.value.replace(/[^0-9+]/g, '');
+    updatePreview();
+  });
+
+  $('waPesan').addEventListener('input', updatePreview);
+
+  function renderTemplate(body, data) {
+    var text = body || '';
+    return text
+      .replace(/\{\{nama_siswa\}\}/g, data.siswa || data.nama || 'Ananda')
+      .replace(/\{\{nama_sekolah_atau_yayasan\}\}/g, data.sekolah || 'YPWI Lutim')
+      .replace(/\{\{nama_siswa_copy\}\}/g, data.siswa || data.nama || 'Ananda')
+      .replace(/\{\{link_konfirmasi\}\}/g, data.link || '');
+  }
+
+  function buildLinkPreview(nomor) {
+    if (!nomor) return '';
+    var normalized = nomor.replace(/[^0-9]/g, '');
+    if (normalized.indexOf('62') !== 0 && normalized.indexOf('0') === 0) normalized = '62' + normalized.substring(1);
+    return 'https://app.ypwilutim.com/konfirmasi-pundi.html?no_wa=' + encodeURIComponent(normalized);
+  }
+
+  function updatePreview() {
+    var tujuan = $('waTujuan').value;
+    var nomor = tujuan === 'manual' ? $('waNomor').value.trim() : $('waNomor').value;
+    var recipient = getCurrentRecipient();
+    var isKustom = $('waTemplate').value === 'kustom';
+
+    $('waKustomWrapper').classList.toggle('hidden', !isKustom);
+    $('tplRaw').parentElement.classList.toggle('hidden', isKustom);
+
+    var link = recipient ? buildLinkPreview(recipient.nomor) : '';
+    if (isKustom) {
+      var pesan = $('waPesan').value;
+      if (pesan.trim()) {
+        $('waBubble').textContent = pesan;
+        $('waBubble').classList.remove('hidden');
+        $('waPreviewEmpty').classList.add('hidden');
+      } else {
+        $('waBubble').classList.add('hidden');
+        $('waPreviewEmpty').classList.remove('hidden');
+      }
+    } else if (state.templateBody && recipient) {
+      $('waBubble').textContent = renderTemplate(state.templateBody, {
+        nama: recipient.nama,
+        siswa: recipient.siswa || recipient.nama,
+        sekolah: recipient.sekolah,
+        link: link
+      });
+      $('waBubble').classList.remove('hidden');
+      $('waPreviewEmpty').classList.add('hidden');
+    } else {
+      $('waBubble').classList.add('hidden');
+      $('waPreviewEmpty').classList.remove('hidden');
+    }
+
+    if (link && !isKustom && recipient) {
+      $('waLinkInfo').classList.remove('hidden');
+      $('waLinkHref').textContent = link;
+      $('waLinkHref').href = link;
+    } else {
+      $('waLinkInfo').classList.add('hidden');
+    }
+  }
+
+  function showWaError(msg) {
+    var box = $('waError');
+    if (msg) { box.textContent = msg; box.classList.remove('hidden'); }
+    else { box.classList.add('hidden'); box.textContent = ''; }
+  }
+
+  $('waKirimBtn').addEventListener('click', async function () {
+    showWaError(null);
+    var tujuan = $('waTujuan').value;
+    var nomor = $('waNomor').value.trim();
+    var template = $('waTemplate').value;
+    var pesan = $('waPesan').value;
+
+    if (!nomor) { showWaError('Nomor WhatsApp wajib diisi.'); $('waNomor').focus(); return; }
+    if (nomor.replace(/[^0-9]/g, '').length < 10) { showWaError('Nomor WhatsApp tidak valid (minimal 10 angka).'); return; }
+    if (template === 'kustom' && !pesan.trim()) { showWaError('Isi pesan kustom wajib diisi.'); $('waPesan').focus(); return; }
+
+    var btn = this;
+    var original = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Mengirim...';
+
+    try {
+      var r = await apiSend(API.waSend, 'POST', { tujuan: tujuan, nomor: nomor, template: template, pesan: pesan });
+      if (r.ok && r.data && r.data.success) {
+        toast('Pesan berhasil dikirim' + (r.data.data && r.data.data.nama_penerima ? ' ke ' + r.data.data.nama_penerima : ''), 'success');
+        showWaError(null);
+        loadHistory();
+        if (tujuan === 'calon_donatur') {
+          if (confirm('Apakah calon donatur ini sudah bersedia menjadi donatur?\n\nKlik OK untuk mengubah status menjadi "Menjadi Donatur".')) {
+            await markCalonAsDonatur(nomor);
+          }
+        }
+      } else {
+        showWaError((r.data && r.data.message) || 'Gagal mengirim pesan');
+        toast((r.data && r.data.message) || 'Gagal mengirim pesan', 'error');
+      }
+    } catch (e) {
+      showWaError('Terjadi kesalahan: ' + e.message);
+      toast('Terjadi kesalahan saat mengirim', 'error');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = original;
+    }
+  });
+
+  async function markCalonAsDonatur(nomor) {
+    var normalized = nomor.replace(/[^0-9]/g, '');
+    var item = state.calonList.find(function (c) { return c.no_wa === normalized; });
+    if (!item) return;
+    var r = await apiSend(API.calon + '/' + item.id, 'PUT', { status: 'menjadi_donatur' });
+    if (r.ok && r.data && r.data.success) { toast('Status calon donatur diperbarui', 'success'); loadCalon(); }
+    else toast('Gagal memperbarui status: ' + ((r.data && r.data.message) || ''), 'error');
+  }
+
+  // ---------- HISTORY ----------
+  async function loadHistory() {
+    try {
+      var r = await apiGet(API.waHistory + '?limit=100');
+      var list = (r.ok && r.data && r.data.success) ? (r.data.data || []) : [];
+      renderHistory(list);
+      renderHistoryTable(list);
+    } catch (e) { /* abaikan agar tidak ganggu UX */ }
+  }
+
+  function renderHistory(list) {
+    var wrap = $('waHistoryList');
+    if (!list.length) {
+      wrap.innerHTML = '<p class="text-sm text-gray-400 text-center py-6">Belum ada riwayat pengiriman.</p>';
+      return;
+    }
+    wrap.innerHTML = list.slice(0, 30).map(function (h) {
+      var isOk = h.status === 'terkirim';
+      return '<div class="border-b border-gray-100 pb-2 last:border-0">' +
+        '<div class="flex items-start justify-between">' +
+          '<div class="min-w-0 flex-1">' +
+            '<p class="text-sm font-medium text-gray-800 truncate">' + esc(h.nama_penerima || h.nomor) + '</p>' +
+            '<p class="text-xs text-gray-500">' + esc(h.nomor) + ' &middot; ' + esc(h.tujuan || '-') + '</p>' +
+          '</div>' +
+          '<div class="ml-2">' + (isOk ? '<span class="badge-success">Terkirim</span>' : '<span class="badge-error" title="' + esc(h.error_message || '') + '">Gagal</span>') + '</div>' +
+        '</div>' +
+        '<p class="text-xs text-gray-600 mt-1" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">' + esc(h.pesan) + '</p>' +
+        '<p class="text-xs text-gray-400 mt-1">' + formatWaktu(h.created_at) + '</p>' +
+      '</div>';
+    }).join('');
+  }
+
+  function renderHistoryTable(list) {
+    var tbody = $('historyTableBody');
+    tbody.innerHTML = '';
+    if (!list.length) { $('historyEmpty').classList.remove('hidden'); return; }
+    $('historyEmpty').classList.add('hidden');
+    list.forEach(function (h) {
+      var tr = document.createElement('tr');
+      tr.className = 'hover:bg-gray-50';
+      tr.innerHTML =
+        '<td class="px-4 py-3 text-sm text-gray-600 whitespace-nowrap">' + formatWaktu(h.created_at) + '</td>' +
+        '<td class="px-4 py-3 text-sm text-gray-900">' + esc(h.nama_penerima || '-') + '</td>' +
+        '<td class="px-4 py-3 text-sm text-gray-600">' + esc(h.nomor) + '</td>' +
+        '<td class="px-4 py-3 text-sm text-gray-600">' + esc(h.tujuan || '-') + '</td>' +
+        '<td class="px-4 py-3 text-sm text-gray-600">' + esc(h.template || '-') + '</td>' +
+        '<td class="px-4 py-3 text-sm">' + (h.status === 'terkirim' ? '<span class="badge-success">Terkirim</span>' : '<span class="badge-error">Gagal</span>') + '</td>' +
+        '<td class="px-4 py-3 text-sm text-gray-500 max-w-xs truncate" title="' + esc(h.error_message || '') + '">' + esc(h.error_message || '-') + '</td>';
+      tbody.appendChild(tr);
+    });
+  }
+
+  $('refreshHistoryBtn').addEventListener('click', loadHistory);
+  $('clearHistoryBtn2').addEventListener('click', clearHistory);
+
+  function clearHistory() {
+    if (!confirm('Hapus semua riwayat pengiriman WhatsApp?')) return;
+    apiSend(API.waHistory, 'DELETE').then(function (r) {
+      if (r.ok && r.data && r.data.success) { toast('Riwayat dihapus', 'success'); loadHistory(); }
+      else toast('Gagal menghapus riwayat', 'error');
+    });
+  }
+
+  $('waClearHistoryBtn').addEventListener('click', clearHistory);
+
+  // ---------- CSV IMPORT ----------
+  $('processCsvBtn').addEventListener('click', async function () {
+    var fileInput = $('csvFile');
+    var box = $('csvResult');
+    box.classList.add('hidden');
+    if (!fileInput.files || !fileInput.files[0]) { toast('Pilih file CSV terlebih dahulu', 'warning'); return; }
+
+    var fd = new FormData();
+    fd.append('file', fileInput.files[0]);
+    box.className = 'p-3 rounded-lg text-sm bg-gray-50 text-gray-700';
+    box.textContent = 'Memproses file...';
+    box.classList.remove('hidden');
+
+    try {
+      var res = await fetch(API.calon + '/csv-import', { method: 'POST', body: fd });
+      var json = null;
+      try { json = await res.json(); } catch (e) { json = null; }
+      if (res.ok && json && json.success) {
+        box.className = 'p-3 rounded-lg text-sm bg-green-50 text-green-700';
+        box.textContent = json.message || (json.imported + ' calon donatur berhasil diimport');
+        loadCalon();
+      } else {
+        box.className = 'p-3 rounded-lg text-sm bg-red-50 text-red-700';
+        box.textContent = (json && json.message) || 'Gagal memproses CSV';
+      }
+    } catch (e) {
+      box.className = 'p-3 rounded-lg text-sm bg-red-50 text-red-700';
+      box.textContent = 'Gagal memproses CSV: ' + e.message;
+    }
+  });
+
+  // ---------- INIT ----------
+  var params = new URLSearchParams(window.location.search);
+  var initialTab = params.get('tab') || 'calon-donatur';
+  if (!$('tab-' + initialTab)) initialTab = 'calon-donatur';
+  switchTab(initialTab);
+  loadDonatur();
+  loadCalon();
+  loadTemplates();
+  checkWaStatus();
+  loadHistory();
+  setInterval(checkWaStatus, 60000);
+})();
+</script>
+</body>
+</html>

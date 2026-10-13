@@ -1672,12 +1672,6 @@ router.get('/public/teacher-profile-summary', async (req, res) => {
 });
 
 async function getTeacherProfileSummary() {
-  const teachers = await db.query(`
-    SELECT t.id, t.nama, t.pendidikan_terakhir, t.status_perkawinan, t.jumlah_anak
-    FROM teachers t
-    WHERE t.status_aktif = 1
-  `);
-
   const requiredFields = ['nama', 'nik', 'nip', 'email', 'tempat_lahir', 'tanggal_lahir', 'jenis_kelamin', 'alamat', 'no_wa', 'status_kepegawaian', 'tmt', 'pendidikan_terakhir', 'status_perkawinan'];
   const teacherDetails = await db.query(`
     SELECT t.id, t.nama, t.nik, t.nip, t.email, t.tempat_lahir, t.tanggal_lahir,
@@ -5676,6 +5670,48 @@ router.put('/admin/leave-requests/:id/status', authenticateOperator, async (req,
     ).then(rows => rows[0] || null);
 
     if (leaveRequest) {
+      if (status === 'approved') {
+        try {
+          const startParts = String(leaveRequest.tanggal_mulai || '').split('-').map(Number);
+          const endParts = String(leaveRequest.tanggal_selesai || leaveRequest.tanggal_mulai || '').split('-').map(Number);
+          const startDate = startParts.length === 3 ? new Date(startParts[0], startParts[1] - 1, startParts[2]) : null;
+          const endDate = endParts.length === 3 ? new Date(endParts[0], endParts[1] - 1, endParts[2]) : startDate;
+          if (startDate && endDate) {
+            const mapKeterangan = {izin:'Izin',sakit:'Sakit',cuti:'Cuti',dinas_luar:'Dinas Luar'};
+            const note = (mapKeterangan[leaveRequest.jenis] || leaveRequest.jenis) + ': ' + (leaveRequest.keterangan || '');
+            for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+              const y = d.getFullYear();
+              const m = String(d.getMonth() + 1).padStart(2, '0');
+              const dd = String(d.getDate()).padStart(2, '0');
+              const dateStr = y + '-' + m + '-' + dd;
+              const waktuScan = dateStr + ' 00:00:00';
+              const exists = await db.query(
+                'SELECT id FROM attendance_logs WHERE teacher_id = ? AND tenant_id = ? AND DATE(waktu_scan) = ? AND metode = ? AND keterangan = ?',
+                [leaveRequest.teacher_id, leaveRequest.tenant_id, dateStr, 'manual', note]
+              );
+              if (!exists.length) {
+                await db.query(
+                  'INSERT INTO attendance_logs (teacher_id, tenant_id, waktu_scan, waktu_absen, jenis, metode, status, keterangan, dinas_luar) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                  [
+                    leaveRequest.teacher_id,
+                    leaveRequest.tenant_id,
+                    waktuScan,
+                    waktuScan,
+                    'masuk',
+                    'manual',
+                    'tepat_waktu',
+                    note,
+                    leaveRequest.jenis === 'dinas_luar' ? 1 : 0
+                  ]
+                );
+              }
+            }
+          }
+        } catch (e) {
+          console.error('Gagal membuat attendance_logs dari izin:', e.message);
+        }
+      }
+
       const [teacher] = await db.query(
         'SELECT nama, email, no_wa FROM teachers WHERE id = ?',
         [leaveRequest.teacher_id]
@@ -6635,15 +6671,21 @@ router.get('/admin/attendance-monthly', authenticateOperator, async (req, res) =
     const bulan = parseInt(req.query.bulan || new Date().getMonth() + 1);
     const tahun = parseInt(req.query.tahun || new Date().getFullYear());
     if (!tenantId && req.user.role !== 'admin') {
+      const adminRoles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin', 'bendahara', 'ketua', 'kepala', 'pimpinan', 'kepalasekolah'];
       const assignments = (req.user.assignments || []).filter(a =>
-        ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin'].includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''))
+        adminRoles.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''))
       );
       if (assignments.length >= 1) tenantId = assignments[0].tenant_id;
+    }
+    // YPWILUTIM bendahara/ketua boleh akses semua tenant
+    if (!tenantId && req.user.role === 'bendahara') {
+      const hasYPWILUTIM = (req.user.assignments || []).some(a => a.tenant_id === 'YPWILUTIM');
+      if (hasYPWILUTIM) tenantId = 'YPWILUTIM';
     }
     if (!tenantId) return res.json({ success: false, message: 'tenant_id diperlukan' });
     
     const teachers = await db.query(
-      'SELECT t.id, t.nama FROM teachers t WHERE t.id IN (SELECT teacher_id FROM teacher_assignments WHERE tenant_id = ?)',
+      'SELECT t.id, t.nama FROM teachers t WHERE t.id IN (SELECT teacher_id FROM teacher_assignments WHERE tenant_id = ?) AND t.status_aktif = 1',
       [tenantId]
     );
     
@@ -6651,58 +6693,159 @@ router.get('/admin/attendance-monthly', authenticateOperator, async (req, res) =
       'SELECT al.teacher_id, DAY(al.waktu_scan) as hari, al.status, al.dinas_luar, al.keterangan, al.waktu_scan FROM attendance_logs al WHERE MONTH(al.waktu_scan) = ? AND YEAR(al.waktu_scan) = ? AND al.teacher_id IN (SELECT teacher_id FROM teacher_assignments WHERE tenant_id = ?)',
       [bulan, tahun, tenantId]
     );
-     
-     const daysInMonth = new Date(tahun, bulan, 0).getDate();
+
+    const daysInMonth = new Date(tahun, bulan, 0).getDate();
+    
+    // Get leave_requests (izin, sakit, cuti, dinas_luar) for the month
+    // Use string dates in YYYY-MM-DD format for MySQL comparison
+    const firstDayOfMonth = String(tahun).padStart(4, '0') + '-' + String(bulan).padStart(2, '0') + '-01';
+    const lastDayOfMonth = String(tahun).padStart(4, '0') + '-' + String(bulan).padStart(2, '0') + '-' + String(daysInMonth).padStart(2, '0');
+    
+const leaveLogs = await db.query(
+      'SELECT lr.teacher_id, lr.jenis, lr.keterangan, lr.tanggal_mulai, lr.tanggal_selesai FROM leave_requests lr WHERE lr.status = ? AND lr.teacher_id IN (SELECT teacher_id FROM teacher_assignments WHERE tenant_id = ?) AND ((MONTH(lr.tanggal_mulai) = ? AND YEAR(lr.tanggal_mulai) = ?) OR (MONTH(lr.tanggal_selesai) = ? AND YEAR(lr.tanggal_selesai) = ?) OR (lr.tanggal_mulai <= ? AND lr.tanggal_selesai >= ?))',
+      ['approved', tenantId, bulan, tahun, bulan, tahun, firstDayOfMonth, lastDayOfMonth]
+    );
+
+    // Debug: log leaveLogs for troubleshooting
+    console.log('DEBUG: Leave logs for tenant', tenantId, 'month', bulan, 'year', tahun, ':', leaveLogs.length, 'records');
+    if (leaveLogs.length > 0) {
+      console.log('DEBUG: First leave log:', leaveLogs[0]);
+    }
      const weekendDays = [];
      for (let d = 1; d <= daysInMonth; d++) {
        const date = new Date(tahun, bulan - 1, d);
        if (date.getDay() === 0 || date.getDay() === 6) weekendDays.push(d);
      }
      
-     const activeWeekdays = new Set();
-     logs.forEach(l => {
-       const day = parseInt(l.hari);
-       const date = new Date(tahun, bulan - 1, day);
-       if (date.getDay() !== 0 && date.getDay() !== 6) activeWeekdays.add(day);
-     });
-     
-     const result = teachers.map(t => {
-       const row = { id: t.id, nama: t.nama };
-       for (let d = 1; d <= daysInMonth; d++) row['tgl_' + d] = '';
-       let hadir = 0, terlambat = 0, izin = 0, cuti = 0, dinas_luar = 0, sakit = 0;
-       logs.filter(l => l.teacher_id === t.id).forEach(l => {
-         const day = parseInt(l.hari);
-         if (day >= 1 && day <= daysInMonth) {
-           const date = new Date(tahun, bulan - 1, day);
-           const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-           if (l.status === 'tepat_waktu') { row['tgl_' + day] = '<span class="text-green-600 font-bold">H</span>'; hadir++; }
-           else if (l.status === 'terlambat') { row['tgl_' + day] = '<span class="text-yellow-600 font-bold">T</span>'; terlambat++; }
-           else if (l.dinas_luar) { row['tgl_' + day] = '<span class="text-blue-600 font-bold">DL</span>'; dinas_luar++; }
-           else if (l.keterangan && l.keterangan.toLowerCase().includes('izin')) { row['tgl_' + day] = '<span class="text-purple-600 font-bold">I</span>'; izin++; }
-           else if (l.keterangan && l.keterangan.toLowerCase().includes('cuti')) { row['tgl_' + day] = '<span class="text-gray-600 font-bold">C</span>'; cuti++; }
-           else if (l.keterangan && l.keterangan.toLowerCase().includes('sakit')) { row['tgl_' + day] = '<span class="text-red-600 font-bold">S</span>'; sakit++; }
-         }
-       });
-       for (let d = 1; d <= daysInMonth; d++) {
-         if (!row['tgl_' + d]) {
-           const date = new Date(tahun, bulan - 1, d);
-           const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-           if (isWeekend) {
-             row['tgl_' + d] = '<span class="text-gray-400">-</span>';
-           } else if (activeWeekdays.has(d)) {
-             row['tgl_' + d] = '<span class="text-red-600 font-bold">TK</span>';
-           } else {
-             row['tgl_' + d] = '<span class="text-gray-400">-</span>';
-           }
-         }
-       }
-       row.hadir = hadir; row.terlambat = terlambat; row.izin = izin; row.cuti = cuti; row.dinas_luar = dinas_luar; row.sakit = sakit;
-       row.weekendDays = weekendDays;
-       row.holidayWeekdays = Array.from({length: daysInMonth}, (_, i) => i + 1).filter(d => !activeWeekdays.has(d) && (new Date(tahun, bulan - 1, d).getDay() !== 0 && new Date(tahun, bulan - 1, d).getDay() !== 6));
-       const totalActiveDays = activeWeekdays.size;
-       row.tanpa_keterangan = totalActiveDays - (hadir + terlambat + izin + cuti + dinas_luar + sakit);
-       return row;
-     });
+const totalWeekdaysInMonth = [];
+      for (let d = 1; d <= daysInMonth; d++) {
+        const date = new Date(tahun, bulan - 1, d);
+        if (date.getDay() !== 0 && date.getDay() !== 6) {
+          totalWeekdaysInMonth.push(d);
+        }
+      }
+      
+      // Calculate total records per day across all teachers
+      const allLogsForDayCount = [
+        ...logs.map(l => ({
+          hari: l.hari
+        })),
+        ...leaveLogs.filter(l => l.teacher_id).map(l => {
+          const entries = [];
+          const startDate = new Date(l.tanggal_mulai);
+          const endDate = new Date(l.tanggal_selesai);
+          if (startDate.getMonth() === bulan - 1 && startDate.getFullYear() === tahun ||
+              endDate.getMonth() === bulan - 1 && endDate.getFullYear() === tahun ||
+              (startDate.getMonth() < bulan - 1 && endDate.getMonth() > bulan - 1)) {
+            let current = new Date(startDate);
+            while (current <= endDate) {
+              if (current.getMonth() === bulan - 1 && current.getFullYear() === tahun) {
+                entries.push({ hari: current.getDate() });
+              }
+              current = new Date(current.getTime() + 24 * 60 * 60 * 1000);
+            }
+          }
+          return entries;
+        }).flat()
+      ];
+      
+      const dayRecordCount = {};
+      allLogsForDayCount.forEach(l => {
+        const day = parseInt(l.hari);
+        if (day >= 1 && day <= daysInMonth) {
+          dayRecordCount[day] = (dayRecordCount[day] || 0) + 1;
+        }
+      });
+      
+      const activeDays = Object.keys(dayRecordCount).filter(d => dayRecordCount[d] > 0).map(d => parseInt(d));
+      
+      const result = teachers.map(t => {
+        const row = { id: t.id, nama: t.nama };
+        for (let d = 1; d <= daysInMonth; d++) row['tgl_' + d] = '';
+        const seen = new Set();
+        let hadir = 0, terlambat = 0, izin = 0, cuti = 0, dinas_luar = 0, sakit = 0;
+        
+        // Combine attendance logs and leave logs for this teacher
+        const allLogs = [
+          ...logs.filter(l => l.teacher_id === t.id).map(l => ({
+            teacher_id: l.teacher_id,
+            hari: l.hari,
+            status: l.status,
+            dinas_luar: l.dinas_luar,
+            keterangan: l.keterangan,
+            waktu_scan: l.waktu_scan
+          })),
+           ...leaveLogs.filter(l => l.teacher_id === t.id).map(l => {
+             // For leave requests, we need to create entries for each day in the range
+             const entries = [];
+             
+             // Parse the actual dates from the database
+             const startDate = new Date(l.tanggal_mulai);
+             const endDate = new Date(l.tanggal_selesai);
+             
+             // Check if leave request overlaps with current month
+             if (startDate.getMonth() === bulan - 1 && startDate.getFullYear() === tahun ||
+                 endDate.getMonth() === bulan - 1 && endDate.getFullYear() === tahun ||
+                 (startDate.getMonth() < bulan - 1 && endDate.getMonth() > bulan - 1)) {
+               
+               let current = new Date(startDate);
+               while (current <= endDate) {
+                 if (current.getMonth() === bulan - 1 && current.getFullYear() === tahun) {
+                   entries.push({
+                     teacher_id: l.teacher_id,
+                     hari: current.getDate(),
+                     status: l.jenis,
+                     dinas_luar: l.jenis === 'dinas_luar' ? 1 : 0,
+                     keterangan: l.keterangan,
+                     waktu_scan: current
+                   });
+                 }
+                 current = new Date(current.getTime() + 24 * 60 * 60 * 1000); // Add 1 day
+               }
+             }
+             return entries;
+           }).flat()
+        ];
+        
+        allLogs.forEach(l => {
+          const day = parseInt(l.hari);
+          if (day >= 1 && day <= daysInMonth && !seen.has(day)) {
+            const date = new Date(tahun, bulan - 1, day);
+            const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+            if (isWeekend) {
+              seen.add(day);
+              return;
+            }
+            seen.add(day);
+            if (l.status === 'tepat_waktu') { row['tgl_' + day] = '<span class="text-green-600 font-bold">H</span>'; hadir++; }
+            else if (l.status === 'terlambat') { row['tgl_' + day] = '<span class="text-yellow-600 font-bold">T</span>'; terlambat++; }
+            else if (l.dinas_luar) { row['tgl_' + day] = '<span class="text-blue-600 font-bold">DL</span>'; dinas_luar++; }
+            else if (l.status === 'izin' || (l.keterangan && l.keterangan.toLowerCase().includes('izin'))) { row['tgl_' + day] = '<span class="text-purple-600 font-bold">I</span>'; izin++; }
+            else if (l.status === 'cuti' || (l.keterangan && l.keterangan.toLowerCase().includes('cuti'))) { row['tgl_' + day] = '<span class="text-gray-600 font-bold">C</span>'; cuti++; }
+            else if (l.status === 'sakit' || (l.keterangan && l.keterangan.toLowerCase().includes('sakit'))) { row['tgl_' + day] = '<span class="text-red-600 font-bold">S</span>'; sakit++; }
+            else { row['tgl_' + day] = ''; }
+          }
+        });
+        for (let d = 1; d <= daysInMonth; d++) {
+          if (!row['tgl_' + d]) {
+            const date = new Date(tahun, bulan - 1, d);
+            const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+            if (isWeekend) {
+              row['tgl_' + d] = '<span class="text-gray-400">-</span>';
+            } else if (activeDays.includes(d)) {
+              row['tgl_' + d] = '<span class="text-red-600 font-bold">TK</span>';
+            } else {
+              row['tgl_' + d] = '';
+            }
+          }
+        }
+        row.hadir = hadir; row.terlambat = terlambat; row.izin = izin; row.cuti = cuti; row.dinas_luar = dinas_luar; row.sakit = sakit;
+        row.weekendDays = weekendDays;
+        const totalActiveDays = activeDays.length;
+        const used = hadir + terlambat + izin + cuti + dinas_luar + sakit;
+        row.tanpa_keterangan = Math.max(0, totalActiveDays - used);
+        return row;
+      });
     
     res.json({ success: true, data: result, daysInMonth });
   } catch (error) {
@@ -6718,10 +6861,16 @@ router.get('/admin/monthly-report/html', authenticateOperator, async (req, res) 
     const bulan = parseInt(req.query.bulan || new Date().getMonth() + 1);
     const tahun = parseInt(req.query.tahun || new Date().getFullYear());
     if (!tenantId && req.user.role !== 'admin') {
+      const adminRoles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin', 'bendahara', 'ketua', 'kepala', 'pimpinan', 'kepalasekolah'];
       const assignments = (req.user.assignments || []).filter(a =>
-        ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin'].includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''))
+        adminRoles.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''))
       );
       if (assignments.length >= 1) tenantId = assignments[0].tenant_id;
+    }
+    // YPWILUTIM bendahara/ketua boleh akses semua tenant
+    if (!tenantId && req.user.role === 'bendahara') {
+      const hasYPWILUTIM = (req.user.assignments || []).some(a => a.tenant_id === 'YPWILUTIM');
+      if (hasYPWILUTIM) tenantId = 'YPWILUTIM';
     }
     if (!tenantId) return res.status(400).json({ success: false, message: 'tenant_id diperlukan' });
 
@@ -6729,67 +6878,124 @@ router.get('/admin/monthly-report/html', authenticateOperator, async (req, res) 
     const tenantName = tenant.length > 0 ? tenant[0].nama_sekolah : tenantId;
 
     const teachers = await db.query(
-      'SELECT t.id, t.nama FROM teachers t WHERE t.id IN (SELECT teacher_id FROM teacher_assignments WHERE tenant_id = ?) ORDER BY t.nama ASC',
+      'SELECT t.id, t.nama FROM teachers t WHERE t.id IN (SELECT teacher_id FROM teacher_assignments WHERE tenant_id = ?) AND t.status_aktif = 1 ORDER BY t.nama ASC',
       [tenantId]
     );
 
+    const daysInMonth = new Date(tahun, bulan, 0).getDate();
+    
     const logs = await db.query(
       'SELECT al.teacher_id, DAY(al.waktu_scan) as hari, al.status, al.dinas_luar, al.keterangan, al.waktu_scan FROM attendance_logs al WHERE MONTH(al.waktu_scan) = ? AND YEAR(al.waktu_scan) = ? AND al.teacher_id IN (SELECT teacher_id FROM teacher_assignments WHERE tenant_id = ?)',
       [bulan, tahun, tenantId]
     );
-     
-     const daysInMonth = new Date(tahun, bulan, 0).getDate();
-     const monthNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+    
+    // Get leave_requests (izin, sakit, cuti, dinas_luar) for the month
+    const leaveLogs = await db.query(
+      'SELECT lr.teacher_id, lr.jenis, lr.keterangan, lr.tanggal_mulai, lr.tanggal_selesai FROM leave_requests lr WHERE lr.status = ? AND lr.teacher_id IN (SELECT teacher_id FROM teacher_assignments WHERE tenant_id = ?) AND ((MONTH(lr.tanggal_mulai) = ? AND YEAR(lr.tanggal_mulai) = ?) OR (MONTH(lr.tanggal_selesai) = ? AND YEAR(lr.tanggal_selesai) = ?) OR (lr.tanggal_mulai <= ? AND lr.tanggal_selesai >= ?))',
+      ['approved', tenantId, bulan, tahun, bulan, tahun, new Date(tahun, bulan - 1, 1), new Date(tahun, bulan - 1, daysInMonth)]
+    );
+    const monthNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
 
-     const weekendDays = [];
-     for (let d = 1; d <= daysInMonth; d++) {
-       const date = new Date(tahun, bulan - 1, d);
-       if (date.getDay() === 0 || date.getDay() === 6) weekendDays.push(d);
-     }
+    const weekendDays = [];
+    for (let d = 1; d <= daysInMonth; d++) {
+      const date = new Date(tahun, bulan - 1, d);
+      if (date.getDay() === 0 || date.getDay() === 6) weekendDays.push(d);
+    }
 
-     const activeWeekdays = new Set();
-     logs.forEach(l => {
-       const day = parseInt(l.hari);
-       const date = new Date(tahun, bulan - 1, day);
-       if (date.getDay() !== 0 && date.getDay() !== 6) activeWeekdays.add(day);
-     });
+    const totalWeekdaysInMonth = [];
+    for (let d = 1; d <= daysInMonth; d++) {
+      const date = new Date(tahun, bulan - 1, d);
+      if (date.getDay() !== 0 && date.getDay() !== 6) {
+        totalWeekdaysInMonth.push(d);
+      }
+    }
 
-     const result = teachers.map(t => {
-       const row = { id: t.id, nama: t.nama };
-       for (let d = 1; d <= daysInMonth; d++) row['tgl_' + d] = '';
-       let hadir = 0, terlambat = 0, izin = 0, cuti = 0, dinas_luar = 0, sakit = 0;
-       logs.filter(l => l.teacher_id === t.id).forEach(l => {
-         const day = parseInt(l.hari);
-         if (day >= 1 && day <= daysInMonth) {
-           const date = new Date(tahun, bulan - 1, day);
-           const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-           if (l.status === 'tepat_waktu') { row['tgl_' + day] = '<span class="text-green-600 font-bold">H</span>'; hadir++; }
-           else if (l.status === 'terlambat') { row['tgl_' + day] = '<span class="text-yellow-600 font-bold">T</span>'; terlambat++; }
-           else if (l.dinas_luar) { row['tgl_' + day] = '<span class="text-blue-600 font-bold">DL</span>'; dinas_luar++; }
-           else if (l.keterangan && l.keterangan.toLowerCase().includes('izin')) { row['tgl_' + day] = '<span class="text-purple-600 font-bold">I</span>'; izin++; }
-           else if (l.keterangan && l.keterangan.toLowerCase().includes('cuti')) { row['tgl_' + day] = '<span class="text-gray-600 font-bold">C</span>'; cuti++; }
-           else if (l.keterangan && l.keterangan.toLowerCase().includes('sakit')) { row['tgl_' + day] = '<span class="text-red-600 font-bold">S</span>'; sakit++; }
-         }
-       });
-       for (let d = 1; d <= daysInMonth; d++) {
-         if (!row['tgl_' + d]) {
-           const date = new Date(tahun, bulan - 1, d);
-           const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-           if (isWeekend) {
-             row['tgl_' + d] = '<span class="text-gray-400">-</span>';
-           } else if (activeWeekdays.has(d)) {
-             row['tgl_' + d] = '<span class="text-red-600 font-bold">TK</span>';
-           } else {
-             row['tgl_' + d] = '<span class="text-gray-400">-</span>';
-           }
-         }
-       }
-       row.hadir = hadir; row.terlambat = terlambat; row.izin = izin; row.cuti = cuti; row.dinas_luar = dinas_luar; row.sakit = sakit;
-       row.weekendDays = weekendDays;
-       const totalActiveDays = activeWeekdays.size;
-       row.tanpa_keterangan = totalActiveDays - (hadir + terlambat + izin + cuti + dinas_luar + sakit);
-       return row;
-     });
+    const result = teachers.map(t => {
+        const row = { id: t.id, nama: t.nama };
+        for (let d = 1; d <= daysInMonth; d++) row['tgl_' + d] = '';
+        const seen = new Set();
+        let hadir = 0, terlambat = 0, izin = 0, cuti = 0, dinas_luar = 0, sakit = 0;
+        
+        // Combine attendance logs and leave logs for this teacher
+        const allLogs = [
+          ...logs.filter(l => l.teacher_id === t.id).map(l => ({
+            teacher_id: l.teacher_id,
+            hari: l.hari,
+            status: l.status,
+            dinas_luar: l.dinas_luar,
+            keterangan: l.keterangan,
+            waktu_scan: l.waktu_scan
+          })),
+            ...leaveLogs.filter(l => l.teacher_id === t.id).map(l => {
+                const entries = [];
+                
+                // Parse the actual dates from the database
+                const startDate = new Date(l.tanggal_mulai);
+                const endDate = new Date(l.tanggal_selesai);
+                
+                // Check if leave request overlaps with current month
+                if (startDate.getMonth() === bulan - 1 && startDate.getFullYear() === tahun ||
+                    endDate.getMonth() === bulan - 1 && endDate.getFullYear() === tahun ||
+                    (startDate.getMonth() < bulan - 1 && endDate.getMonth() > bulan - 1)) {
+                  
+                  let current = new Date(startDate);
+                  while (current <= endDate) {
+                    if (current.getMonth() === bulan - 1 && current.getFullYear() === tahun) {
+                      entries.push({
+                        teacher_id: l.teacher_id,
+                        hari: current.getDate(),
+                        status: l.jenis,
+                        dinas_luar: l.jenis === 'dinas_luar' ? 1 : 0,
+                        keterangan: l.keterangan,
+                        waktu_scan: current
+                      });
+                    }
+                    current = new Date(current.getTime() + 24 * 60 * 60 * 1000); // Add 1 day
+                  }
+                }
+                return entries;
+              }).flat()
+        ];
+        
+        allLogs.forEach(l => {
+          const day = parseInt(l.hari);
+          if (day >= 1 && day <= daysInMonth && !seen.has(day)) {
+            const date = new Date(tahun, bulan - 1, day);
+            const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+            if (isWeekend) {
+              seen.add(day);
+              return;
+            }
+            seen.add(day);
+            if (l.status === 'tepat_waktu') { row['tgl_' + day] = '<span class="text-green-600 font-bold">H</span>'; hadir++; }
+            else if (l.status === 'terlambat') { row['tgl_' + day] = '<span class="text-yellow-600 font-bold">T</span>'; terlambat++; }
+            else if (l.dinas_luar) { row['tgl_' + day] = '<span class="text-blue-600 font-bold">DL</span>'; dinas_luar++; }
+            else if (l.status === 'izin' || (l.keterangan && l.keterangan.toLowerCase().includes('izin'))) { row['tgl_' + day] = '<span class="text-purple-600 font-bold">I</span>'; izin++; }
+            else if (l.status === 'cuti' || (l.keterangan && l.keterangan.toLowerCase().includes('cuti'))) { row['tgl_' + day] = '<span class="text-gray-600 font-bold">C</span>'; cuti++; }
+            else if (l.status === 'sakit' || (l.keterangan && l.keterangan.toLowerCase().includes('sakit'))) { row['tgl_' + day] = '<span class="text-red-600 font-bold">S</span>'; sakit++; }
+            else { row['tgl_' + day] = ''; }
+          }
+        });
+        for (let d = 1; d <= daysInMonth; d++) {
+          if (!row['tgl_' + d]) {
+            const date = new Date(tahun, bulan - 1, d);
+            const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+            if (isWeekend) {
+              row['tgl_' + d] = '<span class="text-gray-400">-</span>';
+            } else if (activeDays.includes(d)) {
+              row['tgl_' + d] = '<span class="text-red-600 font-bold">TK</span>';
+            } else {
+              row['tgl_' + d] = '';
+            }
+          }
+        }
+        row.hadir = hadir; row.terlambat = terlambat; row.izin = izin; row.cuti = cuti; row.dinas_luar = dinas_luar; row.sakit = sakit;
+        row.weekendDays = weekendDays;
+        const totalActiveDays = activeDays.length;
+        const used = hadir + terlambat + izin + cuti + dinas_luar + sakit;
+        row.tanpa_keterangan = Math.max(0, totalActiveDays - used);
+        return row;
+      });
 
     let html = `
       <div class="p-4">

@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login SPMB - Penerimaan Siswa</title>
+  <link rel="stylesheet" href="/SPMB/css/tailwind.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    .login-bg {
+      background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #2563eb 100%);
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-50 text-slate-900 antialiased">
+  <div class="min-h-screen flex">
+    <div class="login-bg text-white w-full lg:w-1/2 flex items-center justify-center p-8">
+      <div class="max-w-md">
+        <p class="text-sm font-medium text-blue-200 mb-3">Penerimaan Siswa Baru</p>
+        <h1 class="text-3xl sm:text-4xl font-bold mb-4 leading-tight">Login Panitia SPMB</h1>
+        <p class="text-blue-100 leading-relaxed">Gunakan akun yang telah terdaftar untuk mengelola kegiatan penerimaan siswa baru.</p>
+      </div>
+    </div>
+    <div class="hidden lg:flex lg:w-1/2 items-center justify-center p-10">
+      <div class="max-w-md w-full bg-white rounded-2xl border border-slate-200 shadow-sm p-8">
+        <div class="mb-8">
+          <h2 class="text-2xl font-semibold text-slate-900">Selamat datang</h2>
+          <p class="text-sm text-slate-500 mt-2">Masuk untuk mengelola data SPMB.</p>
+        </div>
+        <form id="spmbLoginForm" class="space-y-5">
+          <div>
+            <label for="email" class="block text-sm font-medium text-slate-700 mb-2">Email</label>
+            <div class="relative">
+              <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <i class="fas fa-user text-slate-400 text-sm"></i>
+              </div>
+              <input type="email" id="email" name="email" required autocomplete="email"
+                class="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition text-sm"
+                placeholder="nama@conto.com">
+            </div>
+            <p class="text-red-500 text-sm mt-1 hidden" id="emailError">Email harus diisi</p>
+          </div>
+          <div>
+            <label for="password" class="block text-sm font-medium text-slate-700 mb-2">Password</label>
+            <div class="relative">
+              <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <i class="fas fa-lock text-slate-400 text-sm"></i>
+              </div>
+              <input type="password" id="password" name="password" required autocomplete="current-password"
+                class="w-full pl-10 pr-12 py-3 rounded-xl border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition text-sm"
+                placeholder="Masukkan password">
+              <button type="button" id="togglePassword"
+                class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 transition">
+                <i class="fas fa-eye text-sm" id="eyeIcon"></i>
+                <i class="fas fa-eye-slash hidden text-sm" id="eyeSlashIcon"></i>
+              </button>
+            </div>
+            <p class="text-red-500 text-sm mt-1 hidden" id="passwordError">Password harus diisi</p>
+          </div>
+          <button type="submit" id="loginBtn"
+            class="w-full bg-blue-600 text-white font-semibold py-3 px-6 rounded-xl hover:bg-blue-700 transition flex items-center justify-center gap-2">
+            <i class="fas fa-sign-in-alt text-sm"></i>
+            Masuk
+          </button>
+          <div id="loadingSpinner" class="hidden text-center py-4">
+            <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-600 border-t-transparent mb-2"></div>
+            <p class="text-slate-600 text-sm">Sedang masuk...</p>
+          </div>
+        </form>
+        <p class="text-sm text-slate-600 mt-6 text-center">
+          Belum punya akun? <a href="/SPMB/spmb-register.html" class="text-blue-600 hover:text-blue-700 font-medium">Daftar di sini</a>
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const loginForm = document.getElementById('spmbLoginForm');
+      const loginBtn = document.getElementById('loginBtn');
+      const loadingSpinner = document.getElementById('loadingSpinner');
+      const emailError = document.getElementById('emailError');
+      const passwordError = document.getElementById('passwordError');
+
+      const togglePassword = document.getElementById('togglePassword');
+      const passwordInput = document.getElementById('password');
+      const eyeIcon = document.getElementById('eyeIcon');
+      const eyeSlashIcon = document.getElementById('eyeSlashIcon');
+
+      if (togglePassword && passwordInput && eyeIcon && eyeSlashIcon) {
+        togglePassword.addEventListener('click', () => {
+          const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+          passwordInput.setAttribute('type', type);
+          eyeIcon.classList.toggle('hidden');
+          eyeSlashIcon.classList.toggle('hidden');
+        });
+      }
+
+      const token = localStorage.getItem('spmb_token');
+      if (token) {
+        window.location.href = '/SPMB/spmb-dashboard.html';
+        return;
+      }
+
+      if (loginForm) {
+        loginForm.addEventListener('submit', async (e) => {
+          try {
+            e.preventDefault();
+            e.stopPropagation();
+            emailError.classList.add('hidden');
+            passwordError.classList.add('hidden');
+
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+            let hasError = false;
+
+            if (!email) {
+              emailError.classList.remove('hidden');
+              hasError = true;
+            }
+            if (!password) {
+              passwordError.classList.remove('hidden');
+              hasError = true;
+            }
+            if (hasError) return;
+
+            loginBtn.classList.add('hidden');
+            loadingSpinner.classList.remove('hidden');
+
+            const response = await fetch('/api/spmb/auth/login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email, password }),
+            });
+
+            if (!response.ok) {
+              throw new Error(`Server error: ${response.status}`);
+            }
+
+            const data = await response.json();
+
+            if (data.success) {
+              localStorage.setItem('spmb_token', data.token);
+              localStorage.setItem('spmb_user', JSON.stringify(data.user));
+
+              Swal.fire({
+                title: 'Login Berhasil!',
+                text: data.message || 'Selamat datang di SPMB',
+                icon: 'success',
+                timer: 1500,
+                showConfirmButton: false
+              }).then(() => {
+                window.location.href = '/SPMB/spmb-dashboard.html';
+              });
+            } else {
+              Swal.fire({
+                title: 'Login Gagal',
+                text: data.message || 'Email atau password salah',
+                icon: 'error',
+                confirmButtonText: 'Coba Lagi',
+              });
+            }
+          } catch (error) {
+            console.error('SPMB Login error:', error);
+            Swal.fire({
+              title: 'Kesalahan Jaringan',
+              text: 'Tidak dapat terhubung ke server. Periksa koneksi Anda.',
+              icon: 'error',
+              confirmButtonText: 'OK',
+            });
+          } finally {
+            loginBtn.classList.remove('hidden');
+            loadingSpinner.classList.add('hidden');
+          }
+        });
+      }
+    });
+  </script>
+</body>
+</html>

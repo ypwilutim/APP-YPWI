@@ -15,6 +15,257 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// ============================================================
+// TEMPLATE DINAMIS (Meta WhatsApp Business API)
+// Struktur template diambil langsung dari Meta agar urutan variabel,
+// header, dan tombol URL selalu sesuai template yang terdaftar.
+// ============================================================
+
+// Cache struktur template agar tidak memanggil Graph API setiap pengiriman
+const templateStructureCache = new Map();
+const TEMPLATE_CACHE_TTL_MS = parseInt(process.env.WHATSAPP_TEMPLATE_CACHE_TTL_MS) || 5 * 60 * 1000;
+
+async function fetchTemplateByName(templateName, forceRefresh = false) {
+  const cached = templateStructureCache.get(templateName);
+  if (!forceRefresh && cached && cached.expiresAt > Date.now()) {
+    return cached.data;
+  }
+  const { data: templates } = await fetchMetaTemplates();
+  const found =
+    templates.find(t => t.name === templateName && String(t.status || '').toUpperCase() === 'APPROVED') ||
+    templates.find(t => t.name === templateName) ||
+    null;
+  templateStructureCache.set(templateName, { data: found, expiresAt: Date.now() + TEMPLATE_CACHE_TTL_MS });
+  return found;
+}
+
+function countTemplatePlaceholders(text) {
+  if (!text) return 0;
+  const matches = String(text).match(/\{\{\s*[A-Za-z0-9_]+\s*\}\}/g);
+  return matches ? matches.length : 0;
+}
+
+// Urutan parameter body per template.
+// Meta sudah mengurutkan variabel bernama pada template (lihat `body_text_named_params`),
+// daftar ini hanya fallback bila contoh parameter tidak tersedia.
+const TEMPLATE_BODY_PARAM_ORDER = {
+  pundi_ceria: ['nama_siswa', 'nama_sekolah_atau_yayasan', 'nama_siswa_copy', 'link_konfirmasi']
+};
+
+// Urutan parameter header bertipe teks (fallback bila Meta tidak memberi contoh).
+// Sengaja kosong: hanya template yang strukturnya tidak bisa dibangun oleh
+// logika lama perlu didaftarkan di sini.
+const TEMPLATE_HEADER_PARAM_ORDER = {};
+
+// Tombol URL dinamis milik template: nilai diambil dari param bernama lalu disesuaikan.
+// mode 'path' -> hanya pathname + query string, karena URL tombol di template sudah
+//                memiliki domain (contoh: https://app.ypwilutim.com/{{1}})
+// mode 'raw'  -> dipakai apa adanya
+const TEMPLATE_BUTTON_PARAM_SPECS = {
+  pundi_ceria: [
+    { index: '0', sub_type: 'url', source: 'link_konfirmasi', mode: 'path' }
+  ]
+};
+
+// Media id header image yang sudah diupload agar tidak upload berulang kali
+const headerMediaIdCache = {};
+
+async function uploadWhatsAppMedia(sourceUrl, filename = 'header.jpg', contentType = 'image/jpeg') {
+  if (!WHATSAPP_BASE_URL || !WHATSAPP_PHONE_NUMBER_ID || !WHATSAPP_GRAPH_API_TOKEN) {
+    throw new Error('Konfigurasi WhatsApp belum lengkap untuk upload media (WHATSAPP_BASE_URL, WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_GRAPH_API_TOKEN)');
+  }
+
+  const FormData = require('form-data');
+  const downloaded = await axios.get(sourceUrl, { responseType: 'arraybuffer', timeout: 30000 });
+  const buffer = Buffer.from(downloaded.data);
+
+  const form = new FormData();
+  form.append('messaging_product', 'whatsapp');
+  form.append('file', buffer, { filename, contentType });
+  form.append('type', contentType);
+
+  const response = await axios.post(
+    `${WHATSAPP_BASE_URL}/${WHATSAPP_PHONE_NUMBER_ID}/media`,
+    form,
+    {
+      headers: { ...form.getHeaders(), Authorization: `Bearer ${WHATSAPP_GRAPH_API_TOKEN}` },
+      timeout: 60000,
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity
+    }
+  );
+
+  return response.data && response.data.id ? response.data.id : null;
+}
+
+async function resolveHeaderImageParam(templateName, headerComponent) {
+  // 1. Override lewat environment (paling cepat, tidak upload ulang)
+  const envOverride =
+    process.env.WHATSAPP_HEADER_MEDIA_ID ||
+    process.env.WHATSAPP_PUNDI_CERIA_HEADER_MEDIA_ID;
+  if (envOverride) {
+    return { type: 'image', image: { id: envOverride } };
+  }
+
+  // 2. Pakai hasil upload sebelumnya
+  if (headerMediaIdCache[templateName]) {
+    return { type: 'image', image: { id: headerMediaIdCache[templateName] } };
+  }
+
+  // 3. Upload gambar contoh milik template (header_handle dari Meta)
+  const handle = headerComponent && headerComponent.example && headerComponent.example.header_handle
+    ? headerComponent.example.header_handle[0]
+    : null;
+  if (!handle) {
+    throw new Error(`Template "${templateName}" membutuhkan header image, tetapi Meta tidak menyediakan contoh gambar. Upload gambar di Meta Business Suite lalu set WHATSAPP_HEADER_MEDIA_ID di .env.`);
+  }
+
+  const mediaId = await uploadWhatsAppMedia(handle);
+  if (!mediaId) {
+    throw new Error('Gagal mengupload header image ke Meta (media id kosong)');
+  }
+  headerMediaIdCache[templateName] = mediaId;
+  return { type: 'image', image: { id: mediaId } };
+}
+
+// Meta membatasi panjang parameter_name maksimal 20 karakter, sementara
+// nama variabel pada template bisa lebih panjang (mis. nama_sekolah_atau_yayasan).
+// Kombinasi ini membuat template tidak bisa dikirim lewat Cloud API, jadi
+// masalahnya harus diperbaiki di Meta Business Manager (rename variabel).
+const META_PARAM_NAME_MAX_LENGTH = 20;
+
+// Mengembalikan pesan error bila ada nama variabel yang terlalu panjang, atau null jika aman.
+function checkParamNamesLimit(templateName, names) {
+  const tooLong = names.filter(n => String(n).length > META_PARAM_NAME_MAX_LENGTH);
+  if (tooLong.length === 0) return null;
+
+  return (
+    `Template "${templateName}" tidak dapat dikirim: nama variabel ` +
+    tooLong.map(n => `"${n}" (${n.length} karakter)`).join(', ') +
+    ` melebihi batas ${META_PARAM_NAME_MAX_LENGTH} karakter dari WhatsApp Cloud API. ` +
+    `Perbaiki di Meta Business Manager: edit template "${templateName}" dan ganti nama variabel tersebut ` +
+    `menjadi maksimal ${META_PARAM_NAME_MAX_LENGTH} karakter (misalnya "nama_yayasan"), lalu submit ulang sampai APPROVED.`
+  );
+}
+
+function validateParamNames(templateName, names) {
+  const message = checkParamNamesLimit(templateName, names);
+  if (message) throw new Error(message);
+}
+
+async function buildDynamicTemplateComponents(templateName, params) {
+  const template = await fetchTemplateByName(templateName);
+  if (!template) {
+    throw new Error(`Template "${templateName}" tidak ditemukan atau belum APPROVED di Meta WhatsApp`);
+  }
+
+  const components = template.components || [];
+  const header = components.find(c => String(c.type || '').toUpperCase() === 'HEADER');
+  const body = components.find(c => String(c.type || '').toUpperCase() === 'BODY');
+  const buttonsComp = components.find(c => String(c.type || '').toUpperCase() === 'BUTTONS');
+
+  const payloadComponents = [];
+
+  // --- HEADER ---
+  if (header) {
+    const format = String(header.format || '').toUpperCase();
+    if (format === 'IMAGE') {
+      payloadComponents.push({
+        type: 'header',
+        parameters: [await resolveHeaderImageParam(templateName, header)]
+      });
+    } else if (format === 'TEXT') {
+      const named = header.example && header.example.header_text_named_params;
+      const placeholderCount = countTemplatePlaceholders(header.text);
+      const order = Array.isArray(named) && named.length > 0
+        ? named.map(p => p.param_name)
+        : (TEMPLATE_HEADER_PARAM_ORDER[templateName] || []);
+      if (placeholderCount > 0) {
+        if (order.length < placeholderCount) {
+          throw new Error(`Header template "${templateName}" butuh ${placeholderCount} parameter, tetapi urutan parameternya belum terdaftar`);
+        }
+        validateParamNames(templateName, order);
+        payloadComponents.push({
+          type: 'header',
+          parameters: order.slice(0, placeholderCount).map(key => ({
+            type: 'text',
+            parameter_name: key,
+            text: String(params[key] != null && params[key] !== '' ? params[key] : '-')
+          }))
+        });
+      }
+    } else if (format === 'DOCUMENT' || format === 'VIDEO') {
+      throw new Error(`Header ${format} untuk template "${templateName}" belum didukung`);
+    }
+  }
+
+  // --- BODY ---
+  const namedBody = body && body.example && body.example.body_text_named_params;
+  let bodyOrder;
+  if (Array.isArray(namedBody) && namedBody.length > 0) {
+    bodyOrder = namedBody.map(p => p.param_name);
+  } else {
+    const placeholderCount = countTemplatePlaceholders(body && body.text);
+    bodyOrder = (TEMPLATE_BODY_PARAM_ORDER[templateName] || []).slice(0, placeholderCount);
+  }
+
+  if (bodyOrder.length > 0) {
+    validateParamNames(templateName, bodyOrder);
+    payloadComponents.push({
+      type: 'body',
+      parameters: bodyOrder.map(key => ({
+        type: 'text',
+        parameter_name: key,
+        text: String(params[key] != null && params[key] !== '' ? params[key] : '-')
+      }))
+    });
+  }
+
+  // --- BUTTONS (URL dinamis) ---
+  const buttonSpecs = TEMPLATE_BUTTON_PARAM_SPECS[templateName] || [];
+  for (const spec of buttonSpecs) {
+    const buttons = (buttonsComp && buttonsComp.buttons) || [];
+    const button = buttons[parseInt(spec.index, 10)];
+    if (!button) continue;
+
+    let value = params[spec.source];
+    if (value === undefined || value === null || value === '') {
+      throw new Error(`Parameter tombol "${spec.source}" untuk template "${templateName}" belum diisi`);
+    }
+
+    if (spec.mode === 'path') {
+      try {
+        const parsed = new URL(value);
+        value = parsed.pathname + parsed.search;
+      } catch (e) {
+        // Bukan URL absolut, pakai apa adanya
+      }
+    }
+
+    payloadComponents.push({
+      type: 'button',
+      sub_type: spec.sub_type || 'url',
+      index: String(spec.index),
+      parameters: [{
+        type: 'text',
+        // Nama variabel hanya dikirim bila tombol pada template memakai
+        // placeholder bernama (bukan {{1}} yang posisional).
+        ...(spec.param_name ? { parameter_name: spec.param_name } : {}),
+        text: String(value)
+      }]
+    });
+  }
+
+  return payloadComponents;
+}
+
+// Daftar template yang komponennya dibangun dinamis dari struktur Meta
+function usesDynamicTemplateComponents(templateName) {
+  return Object.prototype.hasOwnProperty.call(TEMPLATE_BODY_PARAM_ORDER, templateName) ||
+    Object.prototype.hasOwnProperty.call(TEMPLATE_BUTTON_PARAM_SPECS, templateName) ||
+    Object.prototype.hasOwnProperty.call(TEMPLATE_HEADER_PARAM_ORDER, templateName);
+}
+
 // Queue for sequential sending with rate limiting
 let sendQueue = Promise.resolve();
 let lastSendTime = 0;
@@ -157,6 +408,70 @@ async function sendBillTemplate(phoneNumber, params, templateName = 'tagihan_spp
   }
 
   const url = `${WHATSAPP_BASE_URL}/${WHATSAPP_PHONE_NUMBER_ID}/messages`;
+
+  // Template yang strukturnya diambil langsung dari Meta (header image/video,
+  // urutan variabel body, dan tombol URL dinamis mengikuti template terdaftar).
+  if (usesDynamicTemplateComponents(templateName)) {
+    let dynamicComponents;
+    try {
+      dynamicComponents = await buildDynamicTemplateComponents(templateName, params);
+    } catch (error) {
+      throw new Error(error.message);
+    }
+
+    const dynamicPayload = {
+      messaging_product: 'whatsapp',
+      to: formattedPhone,
+      type: 'template',
+      template: {
+        name: templateName,
+        language: { code: 'id' },
+        components: dynamicComponents
+      }
+    };
+
+    try {
+      console.log('[WA TEMPLATE] Sending:', JSON.stringify(dynamicPayload, null, 2));
+      const response = await axios.post(url, dynamicPayload, {
+        headers: {
+          'Authorization': `Bearer ${WHATSAPP_GRAPH_API_TOKEN}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 15000
+      });
+      console.log('[WA TEMPLATE] Response:', JSON.stringify(response.data, null, 2));
+
+      const messageId = response.data && response.data.messages ? response.data.messages[0].id : null;
+
+      const dynamicPreview = params.nama_siswa
+        ? `[${templateName}] ${params.nama_siswa}`
+        : `[Template: ${templateName}]`;
+      await saveOutgoingMessage(formattedPhone, dynamicPreview, 'template', messageId || null, templateName);
+
+      return { success: true, messageId: messageId || null, data: response.data };
+    } catch (error) {
+      const errorData = error.response && error.response.data ? error.response.data : null;
+      const errorMessage = errorData && errorData.error && errorData.error.message ? errorData.error.message : error.message;
+      const errorCode = errorData && errorData.error && errorData.error.code ? errorData.error.code : null;
+      console.error('[WA TEMPLATE] Error response:', JSON.stringify(errorData, null, 2));
+
+      // Batas panjang parameter_name di Meta (20 karakter). Template yang memakai
+      // nama variabel lebih panjang harus diperbaiki di Meta Business Manager.
+      if (/parameter_name must be at most/i.test(errorMessage)) {
+        const template2 = await fetchTemplateByName(templateName).catch(() => null);
+        const body2 = template2 && template2.components
+          ? template2.components.find(c => String(c.type || '').toUpperCase() === 'BODY')
+          : null;
+        const names2 = (body2 && body2.example && Array.isArray(body2.example.body_text_named_params))
+          ? body2.example.body_text_named_params.map(p => p.param_name)
+          : (TEMPLATE_BODY_PARAM_ORDER[templateName] || []);
+        const limitMessage = checkParamNamesLimit(templateName, names2);
+        if (limitMessage) throw new Error(limitMessage);
+      }
+
+      throw new Error(`Gagal mengirim template: ${errorMessage} (code: ${errorCode || 'unknown'})`);
+    }
+  }
 
   const isInvoiceSpp = templateName === 'invoice_spp';
   const isTagihanBsi = templateName === 'tagihan_spp_bsi';
@@ -423,5 +738,10 @@ module.exports = {
   sendFreeMessage,
   formatPhoneNumber,
   fetchMetaTemplates,
+  fetchTemplateByName,
+  buildDynamicTemplateComponents,
+  usesDynamicTemplateComponents,
+  uploadWhatsAppMedia,
+  checkParamNamesLimit,
   sleep
 };

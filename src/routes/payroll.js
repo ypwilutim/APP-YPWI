@@ -458,7 +458,7 @@ router.get('/admin/attendance-export-pdf', authenticateOperator, async (req, res
     const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: 24 });
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="rekap_absensi_${tenantId}_${tahun}${bulan}.pdf"`);
+    res.setHeader('Content-Disposition', `inline; filename="rekap_absensi_${tenantId}_${tahun}${String(bulan).padStart(2, '0')}.pdf"`);
 
     doc.pipe(res);
 

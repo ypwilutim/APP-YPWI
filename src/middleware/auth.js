@@ -149,7 +149,12 @@ const authenticateOperator = (req, res, next) => {
       logToFile(`AUTH_OPERATOR: Admin access granted`);
       return next();
     }
-    // Guru dengan assignment admin/TU/operator: boleh akses
+    // Bendahara (role khusus) boleh akses endpoint operasional
+    if (user.role === 'bendahara') {
+      logToFile(`AUTH_OPERATOR: Bendahara role access granted`);
+      return next();
+    }
+    // Guru dengan assignment admin/TU/operator/bendahara: boleh akses
     if (user.role === 'guru' && user.assignments) {
       const adminRoles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin', 'ketua', 'kepala', 'pimpinan', 'kepalasekolah', 'bendahara'];
       const hasAdminRole = user.assignments.some(a =>
