@@ -23,7 +23,7 @@ async function ensureAssignments(req) {
     const rows = await db.query(
       `SELECT ta.tenant_id, ta.jabatan_di_unit
          FROM teacher_assignments ta
-        WHERE ta.teacher_id = ? AND ta.status_aktif = 1`,
+        WHERE ta.teacher_id = ?`,
       [user.guru_id]
     );
     user.assignments = rows || [];

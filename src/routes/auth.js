@@ -153,10 +153,19 @@ router.post('/auth/login', async (req, res) => {
       (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '') === 'bendahara'
     );
 
-    // Determine redirect: admin -> admin, guru -> dashboard (apapun assignmentnya)
+    // Check if user has SDM role in assignments -> dashboard Direktur SDM
+    const sdmAssignments = (tokenPayload.assignments || []).filter(a =>
+      (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '').includes('sdm')
+    );
+    const hasSdmRole = sdmAssignments.length > 0;
+
+    // Determine redirect: admin -> admin, SDM -> dashboard SDM, guru -> dashboard
     let redirectPage = 'dashboard.html';
     if (user.role === 'admin') {
       redirectPage = 'admin-dashboard.html';
+    } else if (hasSdmRole && user.role !== 'bendahara') {
+      // SDM Pusat & SDM Sekolah diarahkan ke dashboard Direktur SDM
+      redirectPage = 'sdm-dashboard.html';
     } else if (user.role === 'guru') {
       redirectPage = 'dashboard.html';
     } else if (user.role === 'bendahara') {

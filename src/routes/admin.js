@@ -36,6 +36,60 @@ const XLSX = require('xlsx');
 const billing = require('../utils/billing');
 const { monthList } = billing;
 
+// ============================================================
+// ATURAN JABATAN SDM
+// Tenant YPWILUTIM = SDM Pusat (bisa akses semua sekolah).
+// Selain YPWILUTIM = SDM Sekolah (hanya unitnya sendiri).
+// ============================================================
+const TENANT_PUSAT = 'YPWILUTIM';
+const JABATAN_SDM_PUSAT = 'SDM Pusat';
+const JABATAN_SDM_SEKOLAH = 'SDM';
+const SDM_JABATAN_ALLOWED = [JABATAN_SDM_PUSAT, JABATAN_SDM_SEKOLAH];
+
+function normalizeJabatan(jabatan) {
+  return String(jabatan || '').toLowerCase().replace(/[\s_]+/g, '');
+}
+
+function isSdmJabatan(jabatan) {
+  const n = normalizeJabatan(jabatan);
+  return n === 'sdm' || n === 'sdmpusat' || n === 'sdmsekolah';
+}
+
+// Validasi kombinasi tenant + jabatan SDM.
+// Return { valid: boolean, message: string, jabatan: string }
+function validateSdmJabatan(tenantId, jabatan) {
+  const normalized = normalizeJabatan(jabatan);
+
+  // Normalisasi penulisan agar konsisten di database
+  let canonical = jabatan;
+  if (normalized === 'sdmpusat') canonical = JABATAN_SDM_PUSAT;
+  else if (normalized === 'sdm' || normalized === 'sdmsekolah') canonical = JABATAN_SDM_SEKOLAH;
+
+  if (!isSdmJabatan(jabatan)) {
+    return { valid: true, jabatan: jabatan };
+  }
+
+  if (canonical === JABATAN_SDM_PUSAT) {
+    if (tenantId !== TENANT_PUSAT) {
+      return {
+        valid: false,
+        message: `Jabatan "${JABATAN_SDM_PUSAT}" hanya boleh di tenant ${TENANT_PUSAT} (pusat). Untuk sekolah lain gunakan jabatan "${JABATAN_SDM_SEKOLAH}".`,
+        jabatan: canonical
+      };
+    }
+  } else if (canonical === JABATAN_SDM_SEKOLAH) {
+    if (tenantId === TENANT_PUSAT) {
+      return {
+        valid: false,
+        message: `Jabatan "${JABATAN_SDM_SEKOLAH}" tidak boleh di tenant ${TENANT_PUSAT}. Di tenant pusat gunakan jabatan "${JABATAN_SDM_PUSAT}".`,
+        jabatan: canonical
+      };
+    }
+  }
+
+  return { valid: true, jabatan: canonical };
+}
+
 // Ensure students table has required columns (auto-migrate)
 async function ensureStudentColumns() {
   const columns = [
@@ -1003,6 +1057,17 @@ router.get('/admin/teachers', authenticateOperator, async (req, res) => {
       tenantId = req.user.tenant_id || (req.user.assignments?.[0]?.tenant_id);
     }
 
+    // SDM: tanpa filter tenant -> SDM YPWILUTIM melihat semua tenant, SDM sekolah hanya unitnya
+    if (req.user.role !== 'admin' && !tenantId) {
+      const sdmAssignments = (req.user.assignments || []).filter(a =>
+        (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '').includes('sdm')
+      );
+      if (sdmAssignments.length > 0) {
+        const isSdmYpwilutim = sdmAssignments.some(a => a.tenant_id === 'YPWILUTIM');
+        if (!isSdmYpwilutim) tenantId = sdmAssignments[0].tenant_id;
+      }
+    }
+
     let query = `
       SELECT t.id, t.nama, t.nik, t.nip, t.email, t.status_kepegawaian, t.status_aktif, t.no_wa, t.scan_id, t.link_foto, t.link_ktp, t.link_kk, t.link_ijazah,
              GROUP_CONCAT(DISTINCT CONCAT(ta.tenant_id, ':', ta.jabatan_di_unit, ':', tn.nama_sekolah)) as assignments
@@ -1079,6 +1144,12 @@ router.post('/admin/teachers', authenticateOperator, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Nama dan penempatan sekolah wajib diisi' });
     }
 
+    // Validasi aturan jabatan SDM (YPWILUTIM = SDM Pusat, lainnya = SDM Sekolah)
+    const sdmCheck = validateSdmJabatan(tenant_id, jabatan_di_unit);
+    if (!sdmCheck.valid) {
+      return res.status(400).json({ success: false, message: sdmCheck.message });
+    }
+
     // Verify tenant exists
     const [tenant] = await db.query('SELECT tenant_id FROM tenants WHERE tenant_id = ?', [tenant_id]);
     if (!tenant) {
@@ -1096,7 +1167,7 @@ router.post('/admin/teachers', authenticateOperator, async (req, res) => {
     // Create assignment
     await db.query(
       'INSERT INTO teacher_assignments (teacher_id, tenant_id, jabatan_di_unit) VALUES (?, ?, ?)',
-      [teacherId, tenant_id, jabatan_di_unit || 'Guru']
+      [teacherId, tenant_id, sdmCheck.jabatan || 'Guru']
     );
 
     res.json({ success: true, message: 'Guru berhasil ditambahkan', id: teacherId });
@@ -1124,6 +1195,22 @@ router.get('/admin/teachers/:id', authenticateOperator, async (req, res) => {
     const teacher = rows[0];
     const assignmentRows = await db.query('SELECT tenant_id, jabatan_di_unit FROM teacher_assignments WHERE teacher_id = ?', [req.params.id]);
     teacher.assignments = assignmentRows;
+
+    // SDM: batasi akses ke tenant yang diizinkan (SDM sekolah = unitnya saja)
+    if (req.user.role !== 'admin') {
+      const sdmAssignments = (req.user.assignments || []).filter(a =>
+        (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '').includes('sdm')
+      );
+      if (sdmAssignments.length > 0) {
+        const isSdmYpwilutim = sdmAssignments.some(a => a.tenant_id === 'YPWILUTIM');
+        if (!isSdmYpwilutim) {
+          const allowedTenants = sdmAssignments.map(a => a.tenant_id);
+          if (!assignmentRows.some(ar => allowedTenants.includes(ar.tenant_id))) {
+            return res.status(403).json({ success: false, message: 'Akses ditolak. Pegawai tidak berada di unit Anda.' });
+          }
+        }
+      }
+    }
     res.json({ success: true, data: teacher });
   } catch (error) {
     console.error('Get teacher error:', error.message);
@@ -1147,6 +1234,13 @@ router.put('/admin/teachers/:id', authenticateOperator, async (req, res) => {
     if (!nama) {
       return res.status(400).json({ success: false, message: 'Nama wajib diisi' });
     }
+
+    // Validasi aturan jabatan SDM (YPWILUTIM = SDM Pusat, lainnya = SDM Sekolah)
+    const sdmCheck = validateSdmJabatan(tenant_id, jabatan_di_unit);
+    if (!sdmCheck.valid) {
+      return res.status(400).json({ success: false, message: sdmCheck.message });
+    }
+    const jabatanFinal = sdmCheck.jabatan;
 
     // Verify tenant if provided
     if (tenant_id) {
@@ -1210,12 +1304,12 @@ router.put('/admin/teachers/:id', authenticateOperator, async (req, res) => {
       if (existingAssignment.length > 0) {
         await db.query(
           'UPDATE teacher_assignments SET tenant_id = ?, jabatan_di_unit = ? WHERE teacher_id = ?',
-          [tenant_id, jabatan_di_unit || 'Guru', id]
+          [tenant_id, jabatanFinal || 'Guru', id]
         );
       } else {
         await db.query(
           'INSERT INTO teacher_assignments (teacher_id, tenant_id, jabatan_di_unit) VALUES (?, ?, ?)',
-          [id, tenant_id, jabatan_di_unit || 'Guru']
+          [id, tenant_id, jabatanFinal || 'Guru']
         );
       }
     }
@@ -1311,7 +1405,7 @@ router.post('/admin/attendance/manual', authenticateOperator, async (req, res) =
 
     await db.query(
       `INSERT INTO attendance_logs (teacher_id, tenant_id, waktu_scan, jenis, metode, status, keterangan, dinas_luar)
-       VALUES (?, ?, ?, ?, 'manual', ?, ?, 0)`,
+       VALUES (?, ?, ?, ?, 'dashboard', ?, ?, 0)`,
       [teacher_id, tenant_id, waktuScan, jenis, status, 'Absen manual oleh admin']
     );
 
@@ -1551,16 +1645,23 @@ router.post('/admin/teachers/:id/assignments/bulk', authenticateOperator, async 
       return res.status(404).json({ success: false, message: 'Guru tidak ditemukan' });
     }
 
-    // Delete existing assignments for this teacher
-    await db.query('DELETE FROM teacher_assignments WHERE teacher_id = ?', [id]);
-
-    // Insert new assignments
+    // Validasi SELURUH assignment lebih dulu (termasuk aturan jabatan SDM)
+    // sebelum menghapus data lama, agar request ditolak tidak merusak data.
+    const validated = [];
     for (const a of assignments) {
-      const { tenant_id, jabatan_di_unit, class_id } = a;
+      const { tenant_id, class_id } = a;
+      let { jabatan_di_unit } = a;
 
       if (!tenant_id || !jabatan_di_unit) {
         continue;
       }
+
+      // Aturan jabatan SDM: YPWILUTIM = SDM Pusat, tenant lain = SDM Sekolah
+      const sdmCheck = validateSdmJabatan(tenant_id, jabatan_di_unit);
+      if (!sdmCheck.valid) {
+        return res.status(400).json({ success: false, message: sdmCheck.message });
+      }
+      jabatan_di_unit = sdmCheck.jabatan;
 
       // Verify tenant exists
       const [tenant] = await db.query('SELECT tenant_id FROM tenants WHERE tenant_id = ?', [tenant_id]);
@@ -1577,13 +1678,21 @@ router.post('/admin/teachers/:id/assignments/bulk', authenticateOperator, async 
         }
       }
 
+      validated.push({ tenant_id, jabatan_di_unit, class_id: validClassId });
+    }
+
+    // Delete existing assignments for this teacher
+    await db.query('DELETE FROM teacher_assignments WHERE teacher_id = ?', [id]);
+
+    // Insert new assignments
+    for (const a of validated) {
       await db.query(
         'INSERT INTO teacher_assignments (teacher_id, tenant_id, jabatan_di_unit, class_id) VALUES (?, ?, ?, ?)',
-        [id, tenant_id, jabatan_di_unit, validClassId]
+        [id, a.tenant_id, a.jabatan_di_unit, a.class_id]
       );
     }
 
-    res.json({ success: true, message: `${assignments.length} jabatan berhasil disimpan` });
+    res.json({ success: true, message: `${validated.length} jabatan berhasil disimpan` });
   } catch (error) {
     console.error('Bulk save assignments error:', error);
     res.status(500).json({ success: false, message: 'Error saving assignments' });
@@ -1599,6 +1708,13 @@ router.put('/admin/teachers/:id/assignment', authenticateOperator, async (req, r
     if (!tenant_id) {
       return res.status(400).json({ success: false, message: 'Sekolah/tenant wajib diisi' });
     }
+
+    // Validasi aturan jabatan SDM (YPWILUTIM = SDM Pusat, lainnya = SDM Sekolah)
+    const sdmCheck = validateSdmJabatan(tenant_id, jabatan_di_unit);
+    if (!sdmCheck.valid) {
+      return res.status(400).json({ success: false, message: sdmCheck.message });
+    }
+    const jabatanFinal = sdmCheck.jabatan;
 
     // Verify teacher exists
     const [teacher] = await db.query('SELECT id FROM teachers WHERE id = ? AND status_aktif = 1', [id]);
@@ -1623,7 +1739,7 @@ router.put('/admin/teachers/:id/assignment', authenticateOperator, async (req, r
     // Update or create assignment
     const existingAssignment = await db.query(
       'SELECT id FROM teacher_assignments WHERE teacher_id = ? AND tenant_id = ? AND jabatan_di_unit = ?',
-      [id, tenant_id, jabatan_di_unit || 'Guru']
+      [id, tenant_id, jabatanFinal || 'Guru']
     );
     if (existingAssignment.length > 0) {
       await db.query(
@@ -1633,7 +1749,7 @@ router.put('/admin/teachers/:id/assignment', authenticateOperator, async (req, r
     } else {
       await db.query(
         'INSERT INTO teacher_assignments (teacher_id, tenant_id, jabatan_di_unit, class_id) VALUES (?, ?, ?, ?)',
-        [id, tenant_id, jabatan_di_unit || 'Guru', class_id || null]
+        [id, tenant_id, jabatanFinal || 'Guru', class_id || null]
       );
     }
 
@@ -5533,7 +5649,7 @@ router.get('/admin/leave-requests', authenticateOperator, async (req, res) => {
     } else {
       const assignments = req.user.assignments || [];
       const ketuaRoles = ['kepalasekolah', 'pimpinan', 'ketua', 'kepalapondok'];
-      const adminJabatans = ['admin', 'operator', 'media', 'tu', 'tatausaha', 'kepala', 'pimpinan'];
+      const adminJabatans = ['admin', 'operator', 'media', 'tu', 'tatausaha', 'kepala', 'pimpinan', 'sdm'];
       // Admin jabatan di YPWILUTIM -> semua tenant, semua jabatan (sama seperti users.role = admin)
       const isAdminYpwilutim = assignments.some(a => {
         const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
@@ -5687,7 +5803,7 @@ router.put('/admin/leave-requests/:id/status', authenticateOperator, async (req,
               const waktuScan = dateStr + ' 00:00:00';
               const exists = await db.query(
                 'SELECT id FROM attendance_logs WHERE teacher_id = ? AND tenant_id = ? AND DATE(waktu_scan) = ? AND metode = ? AND keterangan = ?',
-                [leaveRequest.teacher_id, leaveRequest.tenant_id, dateStr, 'manual', note]
+                [leaveRequest.teacher_id, leaveRequest.tenant_id, dateStr, 'dashboard', note]
               );
               if (!exists.length) {
                 await db.query(
@@ -5698,7 +5814,7 @@ router.put('/admin/leave-requests/:id/status', authenticateOperator, async (req,
                     waktuScan,
                     waktuScan,
                     'masuk',
-                    'manual',
+                    'dashboard',
                     'tepat_waktu',
                     note,
                     leaveRequest.jenis === 'dinas_luar' ? 1 : 0
@@ -6257,11 +6373,11 @@ router.get('/public/teachers/:teacherId', async (req, res) => {
       selectQuery += ', t.status_perkawinan, t.jumlah_anak';
     } catch (err) { }
     
-    selectQuery += ' FROM teachers t LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id WHERE t.id = ?';
+    selectQuery += ' FROM teachers t LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id WHERE t.id = ? GROUP BY t.id';
     
     const [teacher] = await db.query(selectQuery, selectParams);
 
-    if (!teacher || teacher.length === 0) {
+    if (!teacher) {
       return res.status(404).json({ success: false, message: 'Guru tidak ditemukan' });
     }
 
@@ -6671,7 +6787,7 @@ router.get('/admin/attendance-monthly', authenticateOperator, async (req, res) =
     const bulan = parseInt(req.query.bulan || new Date().getMonth() + 1);
     const tahun = parseInt(req.query.tahun || new Date().getFullYear());
     if (!tenantId && req.user.role !== 'admin') {
-      const adminRoles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin', 'bendahara', 'ketua', 'kepala', 'pimpinan', 'kepalasekolah'];
+      const adminRoles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin', 'bendahara', 'ketua', 'kepala', 'pimpinan', 'kepalasekolah', 'sdm'];
       const assignments = (req.user.assignments || []).filter(a =>
         adminRoles.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''))
       );
@@ -6690,7 +6806,7 @@ router.get('/admin/attendance-monthly', authenticateOperator, async (req, res) =
     );
     
     const logs = await db.query(
-      'SELECT al.teacher_id, DAY(al.waktu_scan) as hari, al.status, al.dinas_luar, al.keterangan, al.waktu_scan FROM attendance_logs al WHERE MONTH(al.waktu_scan) = ? AND YEAR(al.waktu_scan) = ? AND al.teacher_id IN (SELECT teacher_id FROM teacher_assignments WHERE tenant_id = ?)',
+      'SELECT al.teacher_id, DAY(al.waktu_scan) as hari, al.status, al.dinas_luar, al.keterangan, al.waktu_scan, al.jenis FROM attendance_logs al WHERE MONTH(al.waktu_scan) = ? AND YEAR(al.waktu_scan) = ? AND al.teacher_id IN (SELECT teacher_id FROM teacher_assignments WHERE tenant_id = ?)',
       [bulan, tahun, tenantId]
     );
 
@@ -6725,11 +6841,18 @@ const totalWeekdaysInMonth = [];
         }
       }
       
-      // Calculate total records per day across all teachers
+      // Active days: hanya hari dengan catatan absensi (jenis='masuk' atau 'pulang'), bukan izin/cuti
+      const attendanceOnlyLogs = logs.map(l => ({ hari: l.hari }));
+      const attendanceDayCount = {};
+      attendanceOnlyLogs.forEach(l => {
+        const day = parseInt(l.hari);
+        if (day >= 1 && day <= daysInMonth) {
+          attendanceDayCount[day] = (attendanceDayCount[day] || 0) + 1;
+        }
+      });
+      
       const allLogsForDayCount = [
-        ...logs.map(l => ({
-          hari: l.hari
-        })),
+        ...logs.map(l => ({ hari: l.hari })),
         ...leaveLogs.filter(l => l.teacher_id).map(l => {
           const entries = [];
           const startDate = new Date(l.tanggal_mulai);
@@ -6740,7 +6863,7 @@ const totalWeekdaysInMonth = [];
             let current = new Date(startDate);
             while (current <= endDate) {
               if (current.getMonth() === bulan - 1 && current.getFullYear() === tahun) {
-                entries.push({ hari: current.getDate() });
+                entries.push({ hari: current.getDate(), jenis: l.jenis });
               }
               current = new Date(current.getTime() + 24 * 60 * 60 * 1000);
             }
@@ -6759,13 +6882,13 @@ const totalWeekdaysInMonth = [];
       
       const activeDays = Object.keys(dayRecordCount).filter(d => dayRecordCount[d] > 0).map(d => parseInt(d));
       
-      const result = teachers.map(t => {
+const result = teachers.map(t => {
         const row = { id: t.id, nama: t.nama };
-        for (let d = 1; d <= daysInMonth; d++) row['tgl_' + d] = '';
+        for (let d = 1; d <= daysInMonth; d++) { row['tgl_' + d] = ''; row['tgl_' + d + '_masuk'] = ''; row['tgl_' + d + '_pulang'] = ''; }
         const seen = new Set();
-        let hadir = 0, terlambat = 0, izin = 0, cuti = 0, dinas_luar = 0, sakit = 0;
         
         // Combine attendance logs and leave logs for this teacher
+        // Catatan: `seen` memastikan 1 tanggal hanya dihitung sekali (scan ganda tidak dihitung dobel)
         const allLogs = [
           ...logs.filter(l => l.teacher_id === t.id).map(l => ({
             teacher_id: l.teacher_id,
@@ -6773,7 +6896,8 @@ const totalWeekdaysInMonth = [];
             status: l.status,
             dinas_luar: l.dinas_luar,
             keterangan: l.keterangan,
-            waktu_scan: l.waktu_scan
+            waktu_scan: l.waktu_scan,
+            jenis: l.jenis
           })),
            ...leaveLogs.filter(l => l.teacher_id === t.id).map(l => {
              // For leave requests, we need to create entries for each day in the range
@@ -6787,7 +6911,7 @@ const totalWeekdaysInMonth = [];
              if (startDate.getMonth() === bulan - 1 && startDate.getFullYear() === tahun ||
                  endDate.getMonth() === bulan - 1 && endDate.getFullYear() === tahun ||
                  (startDate.getMonth() < bulan - 1 && endDate.getMonth() > bulan - 1)) {
-               
+              
                let current = new Date(startDate);
                while (current <= endDate) {
                  if (current.getMonth() === bulan - 1 && current.getFullYear() === tahun) {
@@ -6805,45 +6929,111 @@ const totalWeekdaysInMonth = [];
              }
              return entries;
            }).flat()
-        ];
+];
         
+        // Sort logs by time ASC for proper first/last selection per day
+        allLogs.sort((a, b) => {
+          const timeA = a.waktu_scan ? new Date(a.waktu_scan).getTime() : 0;
+          const timeB = b.waktu_scan ? new Date(b.waktu_scan).getTime() : 0;
+          return timeA - timeB;
+        });
+        
+        // Group by day to pick best scan: earliest masuk after 04:00, latest pulang
+        const dailyBest = {};
         allLogs.forEach(l => {
           const day = parseInt(l.hari);
-          if (day >= 1 && day <= daysInMonth && !seen.has(day)) {
-            const date = new Date(tahun, bulan - 1, day);
-            const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-            if (isWeekend) {
-              seen.add(day);
-              return;
+          if (day < 1 || day > daysInMonth) return;
+          if (!dailyBest[day]) dailyBest[day] = { masuk: null, pulang: null, masukStatus: null, pulangStatus: null };
+          
+          const waktu = l.waktu_scan ? new Date(l.waktu_scan) : null;
+          const jam = waktu ? waktu.getHours() * 60 + waktu.getMinutes() : -1; // minutes from midnight
+          
+          if (l.jenis === 'masuk') {
+            // Pick earliest masuk AFTER 04:00 (240 min), or first if all before
+            if (!dailyBest[day].masuk || (jam >= 240 && jam < dailyBest[day].masuk) || (dailyBest[day].masuk < 240 && jam >= 240)) {
+              dailyBest[day].masuk = jam;
+              dailyBest[day].masukStatus = l.status;
             }
-            seen.add(day);
-            if (l.status === 'tepat_waktu') { row['tgl_' + day] = '<span class="text-green-600 font-bold">H</span>'; hadir++; }
-            else if (l.status === 'terlambat') { row['tgl_' + day] = '<span class="text-yellow-600 font-bold">T</span>'; terlambat++; }
-            else if (l.dinas_luar) { row['tgl_' + day] = '<span class="text-blue-600 font-bold">DL</span>'; dinas_luar++; }
-            else if (l.status === 'izin' || (l.keterangan && l.keterangan.toLowerCase().includes('izin'))) { row['tgl_' + day] = '<span class="text-purple-600 font-bold">I</span>'; izin++; }
-            else if (l.status === 'cuti' || (l.keterangan && l.keterangan.toLowerCase().includes('cuti'))) { row['tgl_' + day] = '<span class="text-gray-600 font-bold">C</span>'; cuti++; }
-            else if (l.status === 'sakit' || (l.keterangan && l.keterangan.toLowerCase().includes('sakit'))) { row['tgl_' + day] = '<span class="text-red-600 font-bold">S</span>'; sakit++; }
-            else { row['tgl_' + day] = ''; }
+          } else if (l.jenis === 'pulang') {
+            // Pick latest pulang
+            if (!dailyBest[day].pulang || jam > dailyBest[day].pulang) {
+              dailyBest[day].pulang = jam;
+              dailyBest[day].pulangStatus = l.status;
+            }
           }
         });
+        
+        // Now process dailyBest for display and counting
+        let hadir = 0, terlambat = 0, izin = 0, cuti = 0, dinas_luar = 0, sakit = 0, tanpa_keterangan = 0;
+        let pulang_tepat_waktu = 0, pulang_cepat = 0, tidak_absen_pulang = 0;
+        
+        for (let d = 1; d <= daysInMonth; d++) {
+          const best = dailyBest[d];
+          const date = new Date(tahun, bulan - 1, d);
+          const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+          
+          if (isWeekend) continue;
+          
+          if (best && best.masuk !== null) {
+            // Format time for display
+            const h = Math.floor(best.masuk / 60).toString().padStart(2, '0');
+            const m = (best.masuk % 60).toString().padStart(2, '0');
+            row['tgl_' + d + '_masuk'] = h + ':' + m;
+            
+            // Count status
+            if (best.masukStatus === 'tepat_waktu') { row['tgl_' + d] = '<span class="text-green-600 font-bold">H</span>'; hadir++; }
+            else if (best.masukStatus === 'terlambat') { row['tgl_' + d] = '<span class="text-yellow-600 font-bold">T</span>'; terlambat++; }
+            else if (best.masukStatus === 'dinas_luar') { row['tgl_' + d] = '<span class="text-blue-600 font-bold">DL</span>'; dinas_luar++; }
+            else if (best.masukStatus === 'izin') { row['tgl_' + d] = '<span class="text-purple-600 font-bold">I</span>'; izin++; }
+            else if (best.masukStatus === 'cuti') { row['tgl_' + d] = '<span class="text-gray-600 font-bold">C</span>'; cuti++; }
+            else if (best.masukStatus === 'sakit') { row['tgl_' + d] = '<span class="text-red-600 font-bold">S</span>'; sakit++; }
+            else { row['tgl_' + d] = ''; }
+          }
+          
+          if (best && best.pulang !== null) {
+            const h = Math.floor(best.pulang / 60).toString().padStart(2, '0');
+            const m = (best.pulang % 60).toString().padStart(2, '0');
+            row['tgl_' + d + '_pulang'] = h + ':' + m;
+            
+            if (best.pulangStatus === 'tepat_waktu') pulang_tepat_waktu++;
+            else if (best.pulangStatus === 'pulang_cepat') pulang_cepat++;
+            else if (best.pulangStatus === 'terlambat') pulang_tepat_waktu++; // Pulang terlambat = tetap hadir pulang
+          }
+        }
+        
+        // TK for active days without any record
         for (let d = 1; d <= daysInMonth; d++) {
           if (!row['tgl_' + d]) {
             const date = new Date(tahun, bulan - 1, d);
             const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-            if (isWeekend) {
-              row['tgl_' + d] = '<span class="text-gray-400">-</span>';
-            } else if (activeDays.includes(d)) {
-              row['tgl_' + d] = '<span class="text-red-600 font-bold">TK</span>';
-            } else {
+            if (isWeekend || !activeDays.includes(d)) {
               row['tgl_' + d] = '';
+            } else {
+              row['tgl_' + d] = '<span class="text-red-600 font-bold">TK</span>';
+              tanpa_keterangan++;
             }
           }
         }
-        row.hadir = hadir; row.terlambat = terlambat; row.izin = izin; row.cuti = cuti; row.dinas_luar = dinas_luar; row.sakit = sakit;
+        
+        // Calculate tidak_absen_pulang: days with masuk but no pulang
+        for (let d = 1; d <= daysInMonth; d++) {
+          const hasMasuk = row['tgl_' + d + '_masuk'] && row['tgl_' + d + '_masuk'] !== '-';
+          const hasPulang = row['tgl_' + d + '_pulang'] && row['tgl_' + d + '_pulang'] !== '-';
+          if (hasMasuk && !hasPulang) tidak_absen_pulang++;
+        }
+        
+        row.hadir = hadir; 
+        row.terlambat = terlambat; 
+        row.izin = izin; 
+        row.cuti = cuti; 
+        row.dinas_luar = dinas_luar; 
+        row.sakit = sakit;
+        row.pulang_tepat_waktu = pulang_tepat_waktu;
+        row.pulang_cepat = pulang_cepat;
+        row.tidak_absen_pulang = tidak_absen_pulang;
         row.weekendDays = weekendDays;
-        const totalActiveDays = activeDays.length;
-        const used = hadir + terlambat + izin + cuti + dinas_luar + sakit;
-        row.tanpa_keterangan = Math.max(0, totalActiveDays - used);
+        // TK dihitung dari tanda "TK" pada tabel agar konsisten dengan baris guru
+        row.tanpa_keterangan = tanpa_keterangan;
         return row;
       });
     
@@ -6861,7 +7051,7 @@ router.get('/admin/monthly-report/html', authenticateOperator, async (req, res) 
     const bulan = parseInt(req.query.bulan || new Date().getMonth() + 1);
     const tahun = parseInt(req.query.tahun || new Date().getFullYear());
     if (!tenantId && req.user.role !== 'admin') {
-      const adminRoles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin', 'bendahara', 'ketua', 'kepala', 'pimpinan', 'kepalasekolah'];
+      const adminRoles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin', 'bendahara', 'ketua', 'kepala', 'pimpinan', 'kepalasekolah', 'sdm'];
       const assignments = (req.user.assignments || []).filter(a =>
         adminRoles.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''))
       );
@@ -6885,7 +7075,7 @@ router.get('/admin/monthly-report/html', authenticateOperator, async (req, res) 
     const daysInMonth = new Date(tahun, bulan, 0).getDate();
     
     const logs = await db.query(
-      'SELECT al.teacher_id, DAY(al.waktu_scan) as hari, al.status, al.dinas_luar, al.keterangan, al.waktu_scan FROM attendance_logs al WHERE MONTH(al.waktu_scan) = ? AND YEAR(al.waktu_scan) = ? AND al.teacher_id IN (SELECT teacher_id FROM teacher_assignments WHERE tenant_id = ?)',
+      'SELECT al.teacher_id, DAY(al.waktu_scan) as hari, al.status, al.dinas_luar, al.keterangan, al.waktu_scan, al.jenis FROM attendance_logs al WHERE MONTH(al.waktu_scan) = ? AND YEAR(al.waktu_scan) = ? AND al.teacher_id IN (SELECT teacher_id FROM teacher_assignments WHERE tenant_id = ?)',
       [bulan, tahun, tenantId]
     );
     
@@ -6912,10 +7102,10 @@ router.get('/admin/monthly-report/html', authenticateOperator, async (req, res) 
 
     const result = teachers.map(t => {
         const row = { id: t.id, nama: t.nama };
-        for (let d = 1; d <= daysInMonth; d++) row['tgl_' + d] = '';
+        for (let d = 1; d <= daysInMonth; d++) { row['tgl_' + d] = ''; row['tgl_' + d + '_masuk'] = ''; row['tgl_' + d + '_pulang'] = ''; }
         const seen = new Set();
-        let hadir = 0, terlambat = 0, izin = 0, cuti = 0, dinas_luar = 0, sakit = 0;
-        
+        let hadir = 0, terlambat = 0, izin = 0, cuti = 0, dinas_luar = 0, sakit = 0, tanpa_keterangan = 0;
+
         // Combine attendance logs and leave logs for this teacher
         const allLogs = [
           ...logs.filter(l => l.teacher_id === t.id).map(l => ({
@@ -6924,7 +7114,8 @@ router.get('/admin/monthly-report/html', authenticateOperator, async (req, res) 
             status: l.status,
             dinas_luar: l.dinas_luar,
             keterangan: l.keterangan,
-            waktu_scan: l.waktu_scan
+            waktu_scan: l.waktu_scan,
+            jenis: l.jenis
           })),
             ...leaveLogs.filter(l => l.teacher_id === t.id).map(l => {
                 const entries = [];
@@ -6959,6 +7150,17 @@ router.get('/admin/monthly-report/html', authenticateOperator, async (req, res) 
         
         allLogs.forEach(l => {
           const day = parseInt(l.hari);
+          if (day >= 1 && day <= daysInMonth) {
+            // Capture arrival/departure times
+            const waktu = l.waktu_scan ? new Date(l.waktu_scan) : null;
+            const jam = waktu ? String(waktu.getHours()).padStart(2, '0') + ':' + String(waktu.getMinutes()).padStart(2, '0') : '';
+            if (l.jenis === 'masuk' && !row['tgl_' + day + '_masuk']) {
+              row['tgl_' + day + '_masuk'] = jam;
+            }
+            if (l.jenis === 'pulang' && !row['tgl_' + day + '_pulang']) {
+              row['tgl_' + day + '_pulang'] = jam;
+            }
+          }
           if (day >= 1 && day <= daysInMonth && !seen.has(day)) {
             const date = new Date(tahun, bulan - 1, day);
             const isWeekend = date.getDay() === 0 || date.getDay() === 6;
@@ -6980,20 +7182,19 @@ router.get('/admin/monthly-report/html', authenticateOperator, async (req, res) 
           if (!row['tgl_' + d]) {
             const date = new Date(tahun, bulan - 1, d);
             const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-            if (isWeekend) {
-              row['tgl_' + d] = '<span class="text-gray-400">-</span>';
-            } else if (activeDays.includes(d)) {
-              row['tgl_' + d] = '<span class="text-red-600 font-bold">TK</span>';
-            } else {
+            // Hari libur (weekend) atau hari biasa tanpa catatan absen sama sekali → kosongkan (tidak dihitung sebagai kehadiran)
+            if (isWeekend || !activeDays.includes(d)) {
               row['tgl_' + d] = '';
+            } else {
+              row['tgl_' + d] = '<span class="text-red-600 font-bold">TK</span>';
+              tanpa_keterangan++;
             }
           }
         }
         row.hadir = hadir; row.terlambat = terlambat; row.izin = izin; row.cuti = cuti; row.dinas_luar = dinas_luar; row.sakit = sakit;
         row.weekendDays = weekendDays;
-        const totalActiveDays = activeDays.length;
-        const used = hadir + terlambat + izin + cuti + dinas_luar + sakit;
-        row.tanpa_keterangan = Math.max(0, totalActiveDays - used);
+        // TK dihitung dari tanda "TK" pada tabel agar konsisten dengan baris guru
+        row.tanpa_keterangan = tanpa_keterangan;
         return row;
       });
 

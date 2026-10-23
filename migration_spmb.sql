@@ -83,8 +83,15 @@ CREATE TABLE IF NOT EXISTS `spmb_registrations` (
   `jabatan_di_unit` VARCHAR(100) DEFAULT NULL,
   `status` ENUM('pending','approved','rejected') DEFAULT 'pending',
   `password_hash` VARCHAR(255) DEFAULT NULL,
+  `foto_path` VARCHAR(500) DEFAULT NULL,
+  `ktp_path` VARCHAR(500) DEFAULT NULL,
+  `kk_path` VARCHAR(500) DEFAULT NULL,
+  `ijazah_path` VARCHAR(500) DEFAULT NULL,
+  `user_id` INT DEFAULT NULL,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  KEY `idx_spmb_registrations_tenant` (`tenant_id`)
+  KEY `idx_spmb_registrations_tenant` (`tenant_id`),
+  KEY `idx_spmb_registrations_user` (`user_id`),
+  CONSTRAINT `fk_spmb_registrations_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS `spmb_committees` (
@@ -95,5 +102,7 @@ CREATE TABLE IF NOT EXISTS `spmb_committees` (
   `spmb_role` VARCHAR(100) DEFAULT NULL,
   `is_active` TINYINT(1) DEFAULT 1,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  KEY `idx_spmb_committees_tenant` (`tenant_id`)
+  KEY `idx_spmb_committees_tenant` (`tenant_id`),
+  KEY `idx_spmb_committees_teacher` (`teacher_id`),
+  CONSTRAINT `fk_spmb_committees_teacher` FOREIGN KEY (`teacher_id`) REFERENCES `teachers` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Portal Resmi SPMB 2026</title>
+    <title id="pageTitle">Portal Resmi SPMB 2026</title>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
@@ -64,6 +64,10 @@
             font-size: 1.25rem; box-shadow: 0 4px 12px rgba(6, 110, 58, 0.2);
         }
 
+        .logo-img {
+            width: 44px; height: 44px; border-radius: var(--radius-md); object-fit: cover;
+        }
+
         .logo-text h1 { font-size: 1.1rem; font-weight: 800; color: var(--text-main); line-height: 1.2; }
         .logo-text span { font-size: 0.75rem; color: var(--text-muted); font-weight: 500; }
 
@@ -83,6 +87,11 @@
         }
 
         .btn-nav:hover { opacity: 0.92; transform: translateY(-1px); }
+
+        .btn-nav.disabled {
+            background-color: #94a3b8; color: white !important;
+            cursor: not-allowed; pointer-events: none;
+        }
 
         .hero {
             background: linear-gradient(135deg, #044e28 0%, #066e3a 100%);
@@ -124,6 +133,10 @@
 
         .btn-primary:hover { background-color: #d97706; transform: translateY(-2px); }
 
+        .btn-primary.disabled {
+            background-color: #94a3b8; cursor: not-allowed; pointer-events: none;
+        }
+
         .btn-secondary {
             background-color: rgba(255, 255, 255, 0.12); color: #ffffff;
             border: 1px solid rgba(255, 255, 255, 0.25); backdrop-filter: blur(4px);
@@ -157,6 +170,31 @@
 
         .card-link:hover { gap: 12px; }
 
+        .card-link.disabled {
+            color: #94a3b8; cursor: not-allowed; pointer-events: none;
+        }
+
+        .wave-card {
+            background: #ffffff; padding: 24px; border-radius: var(--radius-lg);
+            border: 1px solid var(--border-color); box-shadow: var(--shadow-sm);
+            transition: all 0.3s ease;
+        }
+        .wave-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); }
+        .wave-badge {
+            display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px;
+            border-radius: 20px; font-size: 0.75rem; font-weight: 600; margin-bottom: 12px;
+        }
+        .wave-badge.open { background: #dcfce7; color: #166534; }
+        .wave-badge.upcoming { background: #fef3c7; color: #92400e; }
+        .wave-badge.closed { background: #fee2e2; color: #991b1b; }
+
+        .stat-card {
+            background: #ffffff; padding: 24px; border-radius: var(--radius-lg);
+            border: 1px solid var(--border-color); text-align: center; box-shadow: var(--shadow-sm);
+        }
+        .stat-value { font-size: 2.5rem; font-weight: 800; color: var(--primary); line-height: 1.2; }
+        .stat-label { font-size: 0.95rem; color: var(--text-muted); margin-top: 8px; }
+
         .footer {
             background-color: #0f172a; color: #94a3b8; text-align: center;
             padding: 30px 0; font-size: 0.9rem; border-top: 1px solid #1e293b;
@@ -172,6 +210,11 @@
 
         .wa-float:hover { transform: scale(1.1); }
 
+        .section-divider {
+            height: 1px; background: linear-gradient(90deg, transparent, var(--border-color), transparent);
+            margin: 60px 0;
+        }
+
         @media (max-width: 768px) {
             .container-nav { flex-direction: column; height: auto; padding: 20px 0; gap: 15px; }
             .nav-links { gap: 16px; flex-wrap: wrap; justify-content: center; }
@@ -179,6 +222,7 @@
             .hero h1 { font-size: 2.25rem; }
             .hero-buttons { flex-direction: column; }
             .btn { width: 100%; }
+            .section-padding { padding: 60px 0; }
         }
     </style>
 </head>
@@ -187,7 +231,9 @@
     <header class="navbar">
         <div class="container container-nav">
             <a href="#" class="logo-wrapper">
-                <div class="logo-icon"><i class="fa-solid fa-graduation-cap"></i></div>
+                <div id="logoContainer">
+                    <div class="logo-icon"><i class="fa-solid fa-graduation-cap"></i></div>
+                </div>
                 <div class="logo-text">
                     <h1 id="brandName">SPMB 2026</h1>
                     <span id="brandTagline">Portal Resmi Pendaftaran</span>
@@ -196,6 +242,8 @@
             <nav class="nav-links">
                 <a href="#beranda">Beranda</a>
                 <a href="#jalur">Jalur Pendaftaran</a>
+                <a href="#gelombang">Gelombang</a>
+                <a href="#statistik">Statistik</a>
                 <a href="#faq">FAQ</a>
                 <a id="navCta" href="/SPMB/spmb-register.html" class="btn-nav">Hubungi CS</a>
             </nav>
@@ -226,6 +274,7 @@
         <p class="section-subtitle">Pilih jalur pendaftaran yang sesuai dengan kriteria dan prestasi calon peserta didik.</p>
         
         <div class="grid-jalur" id="programsGrid">
+            <!-- Data default statis (akan diperbarui dinamis jika tenant valid) -->
             <div class="card">
                 <div class="card-icon"><i class="fa-solid fa-map-location-dot"></i></div>
                 <h3>Zonasi / Domisili</h3>
@@ -246,6 +295,24 @@
             </div>
         </div>
     </main>
+
+    <div class="container section-divider"></div>
+
+    <section id="gelombang" class="container section-padding">
+        <h2 class="section-title">Gelombang Pendaftaran</h2>
+        <p class="section-subtitle">Periode pendaftaran per gelombang. Pilih gelombang yang sesuai dengan jadwal Anda.</p>
+        <div class="grid-jalur" id="wavesGrid"></div>
+    </section>
+
+    <div class="container section-divider"></div>
+
+    <section id="statistik" class="container section-padding">
+        <h2 class="section-title">Statistik Sekolah</h2>
+        <p class="section-subtitle">Data dan pencapaian sekolah untuk Tahun Ajaran 2026/2027.</p>
+        <div class="grid-jalur" id="statsGrid"></div>
+    </section>
+
+    <div class="container section-divider"></div>
 
     <section id="faq" class="container section-padding">
         <h2 class="section-title">Pertanyaan Umum</h2>
@@ -269,7 +336,61 @@
 
         if (!tenantId) {
             document.getElementById('heroTitle').textContent = 'Akses Ditolak';
-            document.getElementById('heroDesc').textContent = 'Parameter tenant tidak ditemukan.';
+            document.getElementById('heroDesc').textContent = 'Parameter tenant tidak ditemukan pada URL.';
+            document.getElementById('pageTitle').textContent = 'Akses Ditolak';
+        }
+
+        function applyDynamicColors(primary, accent) {
+            document.documentElement.style.setProperty('--primary', primary);
+            document.documentElement.style.setProperty('--primary-dark', shadeColor(primary, -20));
+            document.documentElement.style.setProperty('--primary-light', shadeColor(primary, 85));
+            document.documentElement.style.setProperty('--accent', accent);
+        }
+
+        function shadeColor(color, percent) {
+            const f = parseInt(color.slice(1), 16);
+            const t = percent < 0 ? 0 : 255;
+            const p = percent < 0 ? percent * -1 : percent;
+            const R = f >> 16;
+            const G = f >> 8 & 0x00FF;
+            const B = f & 0x0000FF;
+            return "#" + (0x1000000 + (Math.round((t - R) * p / 100) + R) * 0x10000 + (Math.round((t - G) * p / 100) + G) * 0x100 + Math.round((t - B) * p / 100) + B).toString(16).slice(1);
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return '-';
+            const date = new Date(dateStr);
+            return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+        }
+
+        function getWaveStatus(wave) {
+            if (wave.status) return wave.status;
+            const now = new Date();
+            const start = wave.start_date ? new Date(wave.start_date) : null;
+            const end = wave.end_date ? new Date(wave.end_date) : null;
+            if (start && end && start <= now && end >= now) return 'open';
+            if (start && start > now) return 'upcoming';
+            return 'closed';
+        }
+
+        function getStatusText(status) {
+            const texts = { open: 'Dibuka', upcoming: 'Akan Datang', closed: 'Ditutup' };
+            return texts[status] || status;
+        }
+
+        function buildRegisterUrl(basePath) {
+            return tenantId ? `${basePath}?tenant=${encodeURIComponent(tenantId)}` : basePath;
+        }
+
+        function setRegisterButtonState(btn, isOpen) {
+            if (!btn) return;
+            if (isOpen) {
+                btn.classList.remove('disabled');
+                btn.removeAttribute('aria-disabled');
+            } else {
+                btn.classList.add('disabled');
+                btn.setAttribute('aria-disabled', 'true');
+            }
         }
 
         async function loadLandingData() {
@@ -288,42 +409,167 @@
                 const faqs = data.data.faqs || [];
                 const stats = data.data.stats || [];
 
+                document.getElementById('pageTitle').textContent = school.name ? `Penerimaan Siswa Baru - ${school.name}` : 'Portal Resmi SPMB 2026';
                 document.getElementById('brandName').textContent = school.name || 'SPMB 2026';
                 document.getElementById('brandTagline').textContent = school.tagline || 'Portal Resmi Pendaftaran';
                 document.getElementById('heroTitle').textContent = school.name ? `Penerimaan Siswa Baru - ${school.name}` : 'Seleksi Penerimaan Murid Baru';
                 document.getElementById('heroDesc').textContent = school.tagline || 'Selamat datang di portal resmi pendaftaran murid baru secara terpadu.';
 
-                if (config.is_open) {
-                    const badge = document.getElementById('heroBadge');
-                    if (badge) badge.textContent = 'Pendaftaran Tahun Ajaran 2026/2027 Resmi Dibuka';
+                // Apply dynamic colors
+                if (school.primary_color || school.accent_color) {
+                    applyDynamicColors(school.primary_color || '#066e3a', school.accent_color || '#f59e0b');
                 }
 
+                // School logo
+                const logoContainer = document.getElementById('logoContainer');
+                if (school.logo_url && logoContainer) {
+                    logoContainer.innerHTML = `<img class="logo-img" src="${school.logo_url}" alt="${school.name || 'Logo Sekolah'}">`;
+                }
+
+                // Registration open/closed state
+                const isOpen = config.is_open === true;
+                const badge = document.getElementById('heroBadge');
+                if (badge) {
+                    badge.innerHTML = isOpen
+                        ? '<i class="fa-solid fa-circle-check text-emerald-400"></i> Pendaftaran Tahun Ajaran 2026/2027 Resmi Dibuka'
+                        : '<i class="fa-solid fa-circle-xmark text-red-400"></i> Pendaftaran Tahun Ajaran 2026/2027 Ditutup';
+                    badge.style.borderColor = isOpen ? 'rgba(255,255,255,0.2)' : 'rgba(255,0,0,0.3)';
+                    badge.style.background = isOpen ? 'rgba(255,255,255,0.1)' : 'rgba(255,0,0,0.1)';
+                }
+
+                // Register buttons with tenant param
+                const registerUrl = buildRegisterUrl('/SPMB/spmb-register.html');
+                const heroRegisterBtn = document.getElementById('heroRegisterBtn');
+                if (heroRegisterBtn) {
+                    heroRegisterBtn.href = registerUrl;
+                    setRegisterButtonState(heroRegisterBtn, isOpen);
+                }
+
+                const navCta = document.getElementById('navCta');
+                if (navCta) {
+                    navCta.href = registerUrl;
+                    setRegisterButtonState(navCta, isOpen);
+                }
+
+                // Programs
                 const programsGrid = document.getElementById('programsGrid');
                 if (programsGrid && programs.length > 0) {
                     programsGrid.innerHTML = programs.map(prog => `
                         <div class="card">
                             <div class="card-icon"><i class="fa-solid fa-graduation-cap"></i></div>
-                            <h3>${prog.name || ''}</h3>
+                            <h3>${prog.name || prog.program_name || ''}</h3>
                             <p>${prog.description || ''}</p>
-                            <a href="/SPMB/spmb-register.html" class="card-link">Daftar Sekarang <i class="fa-solid fa-arrow-right text-xs"></i></a>
+                            <a href="${registerUrl}" class="card-link ${isOpen ? '' : 'disabled'}">
+                                Daftar Sekarang <i class="fa-solid fa-arrow-right text-xs"></i>
+                            </a>
                         </div>
                     `).join('');
+                } else if (programsGrid) {
+                    programsGrid.innerHTML = `
+                        <div class="card" style="grid-column: 1 / -1; text-align: center; padding: 60px 20px;">
+                            <div class="card-icon" style="margin: 0 auto 20px; background: var(--primary-light); color: var(--primary);">
+                                <i class="fa-solid fa-folder-open"></i>
+                            </div>
+                            <h3>Belum Ada Jalur Pendaftaran</h3>
+                            <p class="text-muted">Sekolah belum mengkonfigurasi jalur pendaftaran untuk periode ini.</p>
+                        </div>
+                    `;
                 }
 
+                // Waves
+                const wavesGrid = document.getElementById('wavesGrid');
+                if (wavesGrid) {
+                    if (waves.length > 0) {
+                        wavesGrid.innerHTML = waves.map(wave => {
+                            const status = getWaveStatus(wave);
+                            const statusText = getStatusText(status);
+                            const startDate = formatDate(wave.start_date || wave.registration_start);
+                            const endDate = formatDate(wave.end_date || wave.registration_end);
+                            return `
+                                <div class="wave-card">
+                                    <div class="wave-badge ${status}">${statusText}</div>
+                                    <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 8px;">${wave.name || wave.wave_name || 'Gelombang ' + (wave.wave_number || '')}</h3>
+                                    <p style="color: var(--text-muted); margin-bottom: 16px; font-size: 0.9rem;">
+                                        <i class="fa-solid fa-calendar-days"></i> ${startDate} ${startDate !== endDate ? '- ' + endDate : ''}
+                                    </p>
+                                    ${wave.max_participants ? `<p style="color: var(--text-muted); font-size: 0.85rem;"><i class="fa-solid fa-users"></i> Kuota: ${wave.max_participants.toLocaleString()} peserta</p>` : ''}
+                                    <a href="${registerUrl}" class="card-link ${isOpen && status === 'open' ? '' : 'disabled'}" style="margin-top: 16px;">
+                                        ${isOpen && status === 'open' ? 'Daftar Gelombang Ini' : 'Pendaftaran Belum Dibuka'} <i class="fa-solid fa-arrow-right text-xs"></i>
+                                    </a>
+                                </div>
+                            `;
+                        }).join('');
+                    } else {
+                        wavesGrid.innerHTML = `
+                            <div class="card" style="grid-column: 1 / -1; text-align: center; padding: 60px 20px;">
+                                <div class="card-icon" style="margin: 0 auto 20px; background: var(--primary-light); color: var(--primary);">
+                                    <i class="fa-solid fa-calendar-xmark"></i>
+                                </div>
+                                <h3>Belum Ada Jadwal Gelombang</h3>
+                                <p class="text-muted">Jadwal gelombang pendaftaran belum dipublikasikan.</p>
+                            </div>
+                        `;
+                    }
+                }
+
+                // Stats
+                const statsGrid = document.getElementById('statsGrid');
+                if (statsGrid) {
+                    if (stats.length > 0) {
+                        statsGrid.innerHTML = stats.map(stat => `
+                            <div class="stat-card">
+                                <div class="stat-value">${typeof stat.value === 'number' ? stat.value.toLocaleString() : stat.value}</div>
+                                <div class="stat-label">${stat.label || ''}</div>
+                            </div>
+                        `).join('');
+                    } else {
+                        statsGrid.innerHTML = `
+                            <div class="card" style="grid-column: 1 / -1; text-align: center; padding: 60px 20px;">
+                                <div class="card-icon" style="margin: 0 auto 20px; background: var(--primary-light); color: var(--primary);">
+                                    <i class="fa-solid fa-chart-bar"></i>
+                                </div>
+                                <h3>Belum Ada Data Statistik</h3>
+                                <p class="text-muted">Statistik sekolah akan ditampilkan di sini.</p>
+                            </div>
+                        `;
+                    }
+                }
+
+                // FAQs
                 const faqsList = document.getElementById('faqsList');
                 if (faqsList) {
-                    faqsList.innerHTML = faqs.map(faq => `
-                        <div class="card">
-                            <h3>${faq.question || ''}</h3>
-                            <p>${faq.answer || ''}</p>
-                        </div>
-                    `).join('');
+                    if (faqs.length > 0) {
+                        faqsList.innerHTML = faqs.map(faq => `
+                            <div class="card">
+                                <h3>${faq.question || ''}</h3>
+                                <p>${faq.answer || ''}</p>
+                            </div>
+                        `).join('');
+                    } else {
+                        faqsList.innerHTML = `
+                            <div class="card" style="grid-column: 1 / -1; text-align: center; padding: 60px 20px;">
+                                <div class="card-icon" style="margin: 0 auto 20px; background: var(--primary-light); color: var(--primary);">
+                                    <i class="fa-solid fa-question-circle"></i>
+                                </div>
+                                <h3>Belum Ada Pertanyaan Sering Diajukan</h3>
+                                <p class="text-muted">FAQ akan ditampilkan di sini.</p>
+                            </div>
+                        `;
+                    }
                 }
 
+                // WhatsApp float
                 if (config.no_wa) {
                     const waFloat = document.getElementById('waFloat');
                     if (waFloat) waFloat.href = `https://wa.me/${config.no_wa}`;
                 }
+
+                // Footer
+                const footerText = document.getElementById('footerText');
+                if (footerText && school.name) {
+                    footerText.textContent = `© ${new Date().getFullYear()} ${school.name}. All rights reserved.`;
+                }
+
             } catch (e) {
                 console.error('[SPMB PUBLIC]', e);
             }

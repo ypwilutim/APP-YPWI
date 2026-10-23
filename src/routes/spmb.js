@@ -2,8 +2,10 @@ const express = require('express');
 const db = require('../../db');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { authenticateOperator, authenticateToken } = require('../middleware/auth');
-const { attachAcademicYear } = require('../middlewares/attachAcademicYear');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const { authenticateOperator } = require('../middleware/auth');
 
 const router = express.Router();
 const SPMB_SECRET = process.env.JWT_SECRET || 'ypwi-secret-key-2026';
@@ -37,7 +39,64 @@ async function upsertSettings(tenantId, data) {
   return getSettings(tenantId);
 }
 
-// Public: landing page data
+const spmbStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '../../public/uploads/spmb');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'spmb-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const spmbUpload = multer({
+  storage: spmbStorage,
+  limits: {
+    fileSize: 5 * 1024 * 1024,
+    files: 4
+  },
+  fileFilter: (req, file, cb) => {
+    if (!file.mimetype.startsWith('image/') && file.mimetype !== 'application/pdf') {
+      return cb(new Error('Hanya file gambar (JPG, PNG, GIF) atau PDF yang diperbolehkan'));
+    }
+    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.pdf'];
+    const fileExtension = path.extname(file.originalname).toLowerCase();
+    if (!allowedExtensions.includes(fileExtension)) {
+      return cb(new Error('Format file tidak didukung. Gunakan JPG, PNG, GIF, atau PDF'));
+    }
+    cb(null, true);
+  }
+});
+
+const spmbRegistrationUpload = spmbUpload.fields([
+  { name: 'foto', maxCount: 1 },
+  { name: 'ktp', maxCount: 1 },
+  { name: 'kk', maxCount: 1 },
+  { name: 'ijazah', maxCount: 1 }
+]);
+
+const authenticateSpmbPanitia = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  if (!token) {
+    return res.status(401).json({ success: false, message: 'Token tidak ditemukan' });
+  }
+  jwt.verify(token, SPMB_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ success: false, message: 'Token tidak valid' });
+    }
+    if (user.role !== 'spmb_panitia') {
+      return res.status(403).json({ success: false, message: 'Akses ditolak. Peran panitia SPMB diperlukan.' });
+    }
+    req.user = user;
+    next();
+  });
+};
+
 router.get('/spmb/landing/:tenantId', async (req, res) => {
   try {
     const { tenantId } = req.params;
@@ -45,9 +104,9 @@ router.get('/spmb/landing/:tenantId', async (req, res) => {
     const school = Array.isArray(schoolResult) && schoolResult.length > 0 ? schoolResult : [];
     const settings = await getSettings(tenantId);
 
-    const programsResult = await db.query('SELECT program_name, description, quota, is_active, tanggal_buka, tanggal_tutup FROM spmb_programs WHERE tenant_id = ? AND is_active = 1 ORDER BY id ASC', [tenantId]);
+    const programsResult = await db.query('SELECT program_name as name, program_name, description, quota, is_active, tanggal_buka, tanggal_tutup FROM spmb_programs WHERE tenant_id = ? AND is_active = 1 ORDER BY id ASC', [tenantId]);
     const programs = Array.isArray(programsResult) ? programsResult : [];
-    const wavesResult = await db.query('SELECT wave_number, wave_name, registration_start, registration_end, max_participants, is_active FROM spmb_waves WHERE tenant_id = ? AND is_active = 1 ORDER BY wave_number ASC', [tenantId]);
+    const wavesResult = await db.query('SELECT wave_number, wave_name as name, wave_name, registration_start as start_date, registration_end as end_date, max_participants, is_active, CASE WHEN registration_start <= CURDATE() AND registration_end >= CURDATE() THEN "open" WHEN registration_start > CURDATE() THEN "upcoming" ELSE "closed" END as status FROM spmb_waves WHERE tenant_id = ? AND is_active = 1 ORDER BY wave_number ASC', [tenantId]);
     const waves = Array.isArray(wavesResult) ? wavesResult : [];
 
     const faqsResult = await db.query('SELECT question, answer FROM spmb_faqs WHERE tenant_id = ? ORDER BY sort_order ASC LIMIT 20', [tenantId]);
@@ -87,7 +146,6 @@ router.get('/spmb/landing/:tenantId', async (req, res) => {
   }
 });
 
-// Admin: SPMB summary
 router.get('/admin/spmb/summary', authenticateOperator, async (req, res) => {
   try {
     const tenantId = getTenant(req);
@@ -108,7 +166,6 @@ router.get('/admin/spmb/summary', authenticateOperator, async (req, res) => {
   }
 });
 
-// Admin: active committees
 router.get('/admin/spmb/committees/active', authenticateOperator, async (req, res) => {
   try {
     const tenantId = getTenant(req);
@@ -130,7 +187,6 @@ router.get('/admin/spmb/committees/active', authenticateOperator, async (req, re
   }
 });
 
-// Admin: public info
 router.get('/admin/spmb/public-info', authenticateOperator, async (req, res) => {
   try {
     const tenantId = getTenant(req);
@@ -143,7 +199,6 @@ router.get('/admin/spmb/public-info', authenticateOperator, async (req, res) => 
   }
 });
 
-// Admin: save public info / config
 router.put('/admin/spmb/config/:tenantId', authenticateOperator, async (req, res) => {
   try {
     const { tenantId } = req.params;
@@ -155,7 +210,6 @@ router.put('/admin/spmb/config/:tenantId', authenticateOperator, async (req, res
   }
 });
 
-// Admin: get landing editor data
 router.get('/admin/spmb/landing/:tenantId', authenticateOperator, async (req, res) => {
   try {
     const { tenantId } = req.params;
@@ -193,7 +247,6 @@ router.get('/admin/spmb/landing/:tenantId', authenticateOperator, async (req, re
   }
 });
 
-// Admin: save landing editor data
 router.put('/admin/spmb/landing/:tenantId', authenticateOperator, async (req, res) => {
   try {
     const { tenantId } = req.params;
@@ -245,29 +298,39 @@ router.put('/admin/spmb/landing/:tenantId', authenticateOperator, async (req, re
   }
 });
 
-// Public: registration
-router.post('/api/spmb/register', async (req, res) => {
+router.post('/api/spmb/register', spmbRegistrationUpload, async (req, res) => {
   try {
     const body = req.body || {};
+    const files = req.files || {};
+
     const required = ['nama', 'nik', 'email', 'no_wa', 'tempat_lahir', 'tanggal_lahir', 'jenis_kelamin', 'alamat', 'pendidikan_terakhir', 'jurusan', 'nama_sekolah_pendidikan', 'tahun_angkatan', 'tenant_id', 'jabatan_di_unit'];
     const missing = required.filter(f => !body[f] && body[f] !== 0);
     if (missing.length) return res.status(400).json({ success: false, message: 'Field wajib: ' + missing.join(', ') });
 
+    const requiredFiles = ['foto', 'ktp', 'kk', 'ijazah'];
+    const missingFiles = requiredFiles.filter(f => !files[f] || !files[f][0]);
+    if (missingFiles.length) return res.status(400).json({ success: false, message: 'File wajib diupload: ' + missingFiles.join(', ') });
+
+    const fotoPath = files.foto ? files.foto[0].path.replace(/\\/g, '/') : null;
+    const ktpPath = files.ktp ? files.ktp[0].path.replace(/\\/g, '/') : null;
+    const kkPath = files.kk ? files.kk[0].path.replace(/\\/g, '/') : null;
+    const ijazahPath = files.ijazah ? files.ijazah[0].path.replace(/\\/g, '/') : null;
+
     const passwordHash = body.password ? bcrypt.hashSync(body.password, 10) : null;
 
     await db.query(
-      `INSERT INTO spmb_registrations (tenant_id, nama, nik, email, no_wa, tempat_lahir, tanggal_lahir, jenis_kelamin, alamat, pendidikan_terakhir, jurusan, nama_sekolah_pendidikan, tahun_angkatan, tenant_id_sekolah, jabatan_di_unit, status, password_hash)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
-      [body.tenant_id, body.nama, body.nik, body.email, body.no_wa, body.tempat_lahir, body.tanggal_lahir, body.jenis_kelamin, body.alamat, body.pendidikan_terakhir, body.jurusan, body.nama_sekolah_pendidikan, body.tahun_angkatan, body.tenant_id, body.jabatan_di_unit, passwordHash]
+      `INSERT INTO spmb_registrations (tenant_id, nama, nik, email, no_wa, tempat_lahir, tanggal_lahir, jenis_kelamin, alamat, pendidikan_terakhir, jurusan, nama_sekolah_pendidikan, tahun_angkatan, tenant_id_sekolah, jabatan_di_unit, status, password_hash, foto_path, ktp_path, kk_path, ijazah_path)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)`,
+      [body.tenant_id, body.nama, body.nik, body.email, body.no_wa, body.tempat_lahir, body.tanggal_lahir, body.jenis_kelamin, body.alamat, body.pendidikan_terakhir, body.jurusan, body.nama_sekolah_pendidikan, body.tahun_angkatan, body.tenant_id, body.jabatan_di_unit, passwordHash, fotoPath, ktpPath, kkPath, ijazahPath]
     );
 
     res.json({ success: true, message: 'Pendaftaran panitia berhasil dikirim' });
   } catch (error) {
+    console.error('SPMB register error:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
-// Public: login panitia SPMB
 router.post('/api/spmb/auth/login', async (req, res) => {
   try {
     const { email, password, tenant_id } = req.body || {};
@@ -289,56 +352,63 @@ router.post('/api/spmb/auth/login', async (req, res) => {
       return res.status(401).json({ success: false, message: 'Email atau password salah' });
     }
 
+    const committeeResult = await db.query('SELECT teacher_id FROM spmb_committees WHERE nama = ? AND tenant_id = ? AND is_active = 1 LIMIT 1', [user.nama, user.tenant_id]);
+    const committee = Array.isArray(committeeResult) && committeeResult.length > 0 ? committeeResult[0] : null;
+
     const token = jwt.sign(
-      { id: user.id, email: user.email, nama: user.nama, role: 'spmb_panitia', tenant_id: user.tenant_id },
+      { id: user.id, email: user.email, nama: user.nama, role: 'spmb_panitia', tenant_id: user.tenant_id, teacher_id: committee?.teacher_id || null },
       SPMB_SECRET,
       { expiresIn: '7d' }
     );
 
+    const tenantResult = await db.query('SELECT nama_sekolah FROM tenants WHERE tenant_id = ?', [user.tenant_id]);
+    const tenantName = Array.isArray(tenantResult) && tenantResult.length > 0 ? tenantResult[0].nama_sekolah : null;
+
     res.json({
       success: true,
       token,
-      user: { id: user.id, nama: user.nama, email: user.email, role: 'spmb_panitia', tenant_id: user.tenant_id, tenant_id: user.tenant_id, jabatan_di_unit: user.jabatan_di_unit }
+      user: { id: user.id, nama: user.nama, email: user.email, role: 'spmb_panitia', tenant_id: user.tenant_id, tenant_name: tenantName, jabatan_di_unit: user.jabatan_di_unit, teacher_id: committee?.teacher_id || null }
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
-// Public: get current panitia profile
-router.get('/api/spmb/me', async (req, res) => {
+router.get('/api/spmb/me', authenticateSpmbPanitia, async (req, res) => {
   try {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-    if (!token) return res.status(401).json({ success: false, message: 'Token tidak ditemukan' });
-
-    const decoded = jwt.verify(token, SPMB_SECRET);
-    const meResult = await db.query('SELECT id, nama, email, no_wa, jabatan_di_unit, tenant_id FROM spmb_registrations WHERE id = ? AND status = "approved" LIMIT 1', [decoded.id]);
+    const meResult = await db.query('SELECT id, nama, email, no_wa, jabatan_di_unit, tenant_id FROM spmb_registrations WHERE id = ? AND status = "approved" LIMIT 1', [req.user.id]);
     if (!Array.isArray(meResult) || !meResult.length) return res.status(404).json({ success: false, message: 'Panitia tidak ditemukan' });
 
-    res.json({ success: true, data: meResult[0] });
+    const tenantResult = await db.query('SELECT nama_sekolah FROM tenants WHERE tenant_id = ?', [req.user.tenant_id]);
+    const tenantName = Array.isArray(tenantResult) && tenantResult.length > 0 ? tenantResult[0].nama_sekolah : null;
+
+    res.json({ 
+      success: true, 
+      data: { 
+        ...meResult[0], 
+        teacher_id: req.user.teacher_id,
+        tenant_name: tenantName
+      } 
+    });
   } catch (error) {
     res.status(401).json({ success: false, message: 'Token tidak valid' });
   }
 });
 
-// Public/Admin: active committees with optional token auth
-router.get('/spmb/committees/active', async (req, res) => {
+router.get('/spmb/committees/active', authenticateSpmbPanitia, async (req, res) => {
   try {
-    const tenantId = req.query.tenant_id || req.user?.tenant_id || null;
-    const teacherId = req.query.teacher_id;
+    const tenantId = req.user.tenant_id;
+    const teacherId = req.user.teacher_id;
 
     if (!tenantId) {
-      return res.status(400).json({ success: false, message: 'tenant_id wajib diisi' });
+      return res.status(400).json({ success: false, message: 'tenant_id tidak ditemukan di token' });
+    }
+    if (!teacherId) {
+      return res.status(400).json({ success: false, message: 'teacher_id tidak ditemukan di token. Panitia belum terhubung ke akun user.' });
     }
 
-    let query = 'SELECT sc.*, t.nama as nama_guru FROM spmb_committees sc LEFT JOIN teachers t ON sc.teacher_id = t.id WHERE sc.tenant_id = ?';
-    const params = [tenantId];
-    if (teacherId) {
-      query += ' AND sc.teacher_id = ?';
-      params.push(teacherId);
-    }
-    query += ' ORDER BY sc.is_active DESC, sc.created_at DESC LIMIT 100';
+    const query = 'SELECT sc.*, t.nama as nama_guru FROM spmb_committees sc LEFT JOIN teachers t ON sc.teacher_id = t.id WHERE sc.tenant_id = ? AND sc.teacher_id = ? ORDER BY sc.is_active DESC, sc.created_at DESC LIMIT 100';
+    const params = [tenantId, teacherId];
 
     const committeesResult = await db.query(query, params);
     res.json({ success: true, data: committeesResult });
@@ -347,7 +417,6 @@ router.get('/spmb/committees/active', async (req, res) => {
   }
 });
 
-// Admin: list registrations
 router.get('/admin/spmb/registrations', authenticateOperator, async (req, res) => {
   try {
     const tenantId = getTenant(req);
@@ -359,21 +428,30 @@ router.get('/admin/spmb/registrations', authenticateOperator, async (req, res) =
   }
 });
 
-// Admin: approve registration
 router.post('/admin/spmb/registrations/:id/approve', authenticateOperator, async (req, res) => {
   try {
     const regResult = await db.query('SELECT * FROM spmb_registrations WHERE id = ? LIMIT 1', [req.params.id]);
     const reg = Array.isArray(regResult) && regResult.length > 0 ? regResult[0] : null;
     if (!reg) return res.status(404).json({ success: false, message: 'Pendaftaran tidak ditemukan' });
+
     await db.query("UPDATE spmb_registrations SET status = 'approved' WHERE id = ?", [req.params.id]);
-    await db.query('INSERT INTO spmb_committees (tenant_id, nama, spmb_role, is_active) VALUES (?, ?, ?, 1)', [reg.tenant_id, reg.nama, reg.jabatan_di_unit]);
-    res.json({ success: true, message: 'Pendaftaran disetujui' });
+
+    const userResult = await db.query(
+      'INSERT INTO users (username, email, password, role, guru_id, tenant_id, is_profile_complete, is_default_password) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [reg.email, reg.email, reg.password_hash || bcrypt.hashSync('changeme123', 10), 'spmb_panitia', null, reg.tenant_id, 1, reg.password_hash ? 0 : 1]
+    );
+    const userId = userResult.insertId;
+
+    await db.query('INSERT INTO spmb_committees (tenant_id, teacher_id, nama, spmb_role, is_active) VALUES (?, ?, ?, ?, 1)', [reg.tenant_id, userId, reg.nama, reg.jabatan_di_unit]);
+
+    await db.query('UPDATE spmb_registrations SET user_id = ? WHERE id = ?', [userId, req.params.id]);
+
+    res.json({ success: true, message: 'Pendaftaran disetujui dan akun panitia dibuat' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
-// Admin: reject registration
 router.post('/admin/spmb/registrations/:id/reject', authenticateOperator, async (req, res) => {
   try {
     await db.query("UPDATE spmb_registrations SET status = 'rejected' WHERE id = ?", [req.params.id]);

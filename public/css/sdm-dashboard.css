@@ -1,0 +1,151 @@
+/* ============================================================
+   SDM DASHBOARD CSS - Direktur SDM Dashboard
+   ============================================================ */
+
+/* Base */
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* Sidebar scrollbar */
+aside::-webkit-scrollbar {
+  width: 4px;
+}
+aside::-webkit-scrollbar-track {
+  background: transparent;
+}
+aside::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 2px;
+}
+aside::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Main scrollbar */
+main::-webkit-scrollbar {
+  width: 6px;
+}
+main::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+main::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+/* Tab content transitions */
+.tab-content {
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Cards hover */
+.shadow-sm {
+  transition: box-shadow 0.2s ease;
+}
+
+/* KPI Progress bars */
+.kpi-progress-bar {
+  transition: width 0.6s ease-in-out;
+  border-radius: 9999px;
+}
+
+/* KPI badges */
+.kpi-badge-excellent {
+  background-color: #dcfce7;
+  color: #166534;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+.kpi-badge-good {
+  background-color: #dbeafe;
+  color: #1e40af;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+.kpi-badge-fair {
+  background-color: #fef3c7;
+  color: #92400e;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+.kpi-badge-poor {
+  background-color: #fee2e2;
+  color: #991b1b;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+/* Table styles */
+table thead th {
+  white-space: nowrap;
+}
+
+table tbody tr:hover {
+  background-color: #f8fafc;
+}
+
+/* Input number spinners cleanup */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  opacity: 1;
+}
+
+/* Modal overlay */
+.modal {
+  display: none;
+}
+.modal.show {
+  display: flex;
+}
+
+/* Sticky header shadow on scroll */
+.bg-white.border-b {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+/* Nav divider */
+.border-t {
+  border-top-width: 1px;
+}
+
+/* Gradient banner */
+.bg-gradient-to-r {
+  background-image: linear-gradient(to right, var(--tw-gradient-stops));
+}
+
+/* Chart canvas sizing */
+canvas {
+  max-height: 16rem;
+}
+
+/* Select focus */
+select:focus, input:focus, textarea:focus {
+  outline: none;
+}
+
+/* Responsive sidebar */
+@media (max-width: 768px) {
+  aside {
+    position: fixed;
+    z-index: 50;
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+  }
+  aside.open {
+    transform: translateX(0);
+  }
+}

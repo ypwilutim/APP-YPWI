@@ -767,15 +767,20 @@ async function fetchAttendanceLogs() {
     // ============================================================
     async function openManualAttendanceModal() {
         const modal = document.getElementById('manualAttendanceModal');
-        const teacherSelect = document.getElementById('manualTeacherId');
+        const teacherSearch = document.getElementById('manualTeacherSearch');
+        const teacherIdInput = document.getElementById('manualTeacherId');
+        const teacherResults = document.getElementById('manualTeacherResults');
         const tenantSelect = document.getElementById('manualTenantId');
         const statusPreview = document.getElementById('manualStatusPreview');
         const statusText = document.getElementById('manualStatusText');
         const form = document.getElementById('manualAttendanceForm');
 
-        if (!modal || !teacherSelect || !tenantSelect) return;
+        if (!modal || !teacherSearch || !teacherIdInput || !teacherResults || !tenantSelect) return;
 
-        teacherSelect.innerHTML = '<option value="">-- Pilih Guru --</option>';
+        teacherSearch.value = '';
+        teacherIdInput.value = '';
+        teacherResults.style.display = 'none';
+        teacherResults.innerHTML = '';
         tenantSelect.innerHTML = '<option value="">-- Pilih Sekolah --</option>';
         const qrInput = document.getElementById('qrInput');
         if (qrInput) qrInput.value = '';
@@ -783,6 +788,10 @@ async function fetchAttendanceLogs() {
         if (form) form.reset();
         modal.style.display = 'flex';
         setManualMode('qr');
+
+        // Get tenant_id from URL parameter (set by school-admin.html)
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlTenantId = urlParams.get('tenant');
 
         try {
             const tenantRes = await fetch('/api/admin/tenants', {
@@ -796,26 +805,157 @@ async function fetchAttendanceLogs() {
                     opt.textContent = t.nama_sekolah || t.tenant_id;
                     tenantSelect.appendChild(opt);
                 });
+
+                // Pre-select tenant from URL if available
+                if (urlTenantId) {
+                    tenantSelect.value = urlTenantId;
+                }
             }
         } catch (e) {
             console.error('Failed to load tenants for manual attendance:', e);
         }
 
+        // Load teachers filtered by selected tenant
+        await loadManualTeachers(tenantSelect.value);
+
+        // Add event listener for tenant change
+        tenantSelect.onchange = () => {
+            teacherSearch.value = '';
+            teacherIdInput.value = '';
+            teacherResults.style.display = 'none';
+            teacherResults.innerHTML = '';
+            loadManualTeachers(tenantSelect.value);
+        };
+
+        // Teacher search with debounce
+        let searchDebounce = null;
+        teacherSearch.addEventListener('input', (e) => {
+            clearTimeout(searchDebounce);
+            searchDebounce = setTimeout(() => {
+                const query = e.target.value.trim();
+                if (query.length >= 2) {
+                    searchManualTeachers(query, tenantSelect.value);
+                } else if (query.length === 0) {
+                    teacherResults.style.display = 'none';
+                    teacherResults.innerHTML = '';
+                }
+            }, 300);
+        });
+
+        // Show results when focusing on search input (if there's a value)
+        teacherSearch.addEventListener('focus', () => {
+            if (teacherSearch.value.trim().length >= 2) {
+                teacherResults.style.display = 'block';
+            }
+        });
+    }
+
+    // Click outside handler for teacher search results (added once)
+    if (!window.__manualTeacherClickOutsideHandler) {
+        window.__manualTeacherClickOutsideHandler = (e) => {
+            const teacherSearch = document.getElementById('manualTeacherSearch');
+            const teacherResults = document.getElementById('manualTeacherResults');
+            if (teacherSearch && teacherResults && !teacherSearch.contains(e.target) && !teacherResults.contains(e.target)) {
+                teacherResults.style.display = 'none';
+            }
+        };
+        document.addEventListener('click', window.__manualTeacherClickOutsideHandler);
+    }
+
+    async function loadManualTeachers(tenantId) {
+        const teacherResults = document.getElementById('manualTeacherResults');
+        const teacherIdInput = document.getElementById('manualTeacherId');
+        const teacherSearch = document.getElementById('manualTeacherSearch');
+        
+        if (!tenantId) {
+            teacherResults.style.display = 'none';
+            teacherResults.innerHTML = '';
+            return;
+        }
+
         try {
-            const teacherRes = await fetch('/api/admin/teachers?limit=200&search=', {
+            const params = new URLSearchParams({
+                limit: '50',
+                tenant_id: tenantId
+            });
+            const teacherRes = await fetch(`/api/admin/teachers?${params.toString()}`, {
                 headers: { 'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}` }
             });
             const teacherJson = await teacherRes.json();
-            if (teacherJson.success && Array.isArray(teacherJson.data)) {
-                teacherJson.data.forEach(t => {
-                    const opt = document.createElement('option');
-                    opt.value = t.id;
-                    opt.textContent = t.nama || `Guru #${t.id}`;
-                    teacherSelect.appendChild(opt);
+            if (teacherJson.success && Array.isArray(teacherJson.data) && teacherJson.data.length > 0) {
+                teacherResults.innerHTML = teacherJson.data.map(t => `
+                    <div class="teacher-result-item px-3 py-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0" 
+                         data-teacher-id="${t.id}" 
+                         data-teacher-name="${escapeHtml(t.nama || `Guru #${t.id}`)}"
+                         style="font-size: 0.9rem;">
+                        ${escapeHtml(t.nama || `Guru #${t.id}`)}
+                    </div>
+                `).join('');
+
+                // Add click handlers for each result
+                teacherResults.querySelectorAll('.teacher-result-item').forEach(item => {
+                    item.addEventListener('click', () => {
+                        teacherIdInput.value = item.dataset.teacherId;
+                        if (teacherSearch) teacherSearch.value = item.dataset.teacherName;
+                        teacherResults.style.display = 'none';
+                    });
                 });
+            } else {
+                teacherResults.innerHTML = '<div class="px-3 py-2 text-gray-500 text-sm">Tidak ada guru ditemukan</div>';
             }
         } catch (e) {
             console.error('Failed to load teachers for manual attendance:', e);
+            teacherResults.innerHTML = '<div class="px-3 py-2 text-red-500 text-sm">Error memuat data guru</div>';
+        }
+    }
+
+    async function searchManualTeachers(query, tenantId) {
+        const teacherResults = document.getElementById('manualTeacherResults');
+        const teacherIdInput = document.getElementById('manualTeacherId');
+        const teacherSearch = document.getElementById('manualTeacherSearch');
+        
+        if (!tenantId) {
+            teacherResults.innerHTML = '<div class="px-3 py-2 text-gray-500 text-sm">Pilih sekolah terlebih dahulu</div>';
+            teacherResults.style.display = 'block';
+            return;
+        }
+
+        try {
+            const params = new URLSearchParams({
+                limit: '20',
+                search: query,
+                tenant_id: tenantId
+            });
+            const teacherRes = await fetch(`/api/admin/teachers?${params.toString()}`, {
+                headers: { 'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}` }
+            });
+            const teacherJson = await teacherRes.json();
+            if (teacherJson.success && Array.isArray(teacherJson.data) && teacherJson.data.length > 0) {
+                teacherResults.innerHTML = teacherJson.data.map(t => `
+                    <div class="teacher-result-item px-3 py-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0" 
+                         data-teacher-id="${t.id}" 
+                         data-teacher-name="${escapeHtml(t.nama || `Guru #${t.id}`)}"
+                         style="font-size: 0.9rem;">
+                        ${escapeHtml(t.nama || `Guru #${t.id}`)}
+                    </div>
+                `).join('');
+
+                teacherResults.querySelectorAll('.teacher-result-item').forEach(item => {
+                    item.addEventListener('click', () => {
+                        teacherIdInput.value = item.dataset.teacherId;
+                        if (teacherSearch) teacherSearch.value = item.dataset.teacherName;
+                        teacherResults.style.display = 'none';
+                    });
+                });
+                teacherResults.style.display = 'block';
+            } else {
+                teacherResults.innerHTML = '<div class="px-3 py-2 text-gray-500 text-sm">Tidak ada guru ditemukan</div>';
+                teacherResults.style.display = 'block';
+            }
+        } catch (e) {
+            console.error('Failed to search teachers:', e);
+            teacherResults.innerHTML = '<div class="px-3 py-2 text-red-500 text-sm">Error mencari guru</div>';
+            teacherResults.style.display = 'block';
         }
     }
 
@@ -1751,13 +1891,12 @@ async function openPendingAssignmentModal(id, currentTenant, currentJabatan) {
     const tenantSelect = document.getElementById('pendingTenantId');
     const positionSelect = document.getElementById('pendingJabatan');
     const hiddenId = document.getElementById('pendingTeacherId');
-    
+
     if (!modal || !tenantSelect || !positionSelect || !hiddenId) return;
-    
+
     hiddenId.value = id;
     tenantSelect.innerHTML = '<option value="">Memuat...</option>';
-    positionSelect.value = currentJabatan || 'Guru';
-    
+
     try {
         const r = await fetch('/api/admin/tenants', {
             headers: { 'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}` }
@@ -1777,8 +1916,80 @@ async function openPendingAssignmentModal(id, currentTenant, currentJabatan) {
         console.error('[LOAD TENANTS FOR PENDING ASSIGNMENT]', e);
         tenantSelect.innerHTML = '<option value="">Error</option>';
     }
-    
+
+    // Bangun ulang opsi jabatan sesuai tenant (YPWILUTIM = SDM Pusat, lainnya = SDM)
+    syncJabatanOptions();
+
+    // Set nilai jabatan yang sedang berlaku (jika ada)
+    if (currentJabatan) {
+        const exists = Array.from(positionSelect.options).some(o => o.value === currentJabatan);
+        if (exists) {
+            positionSelect.value = currentJabatan;
+        } else {
+            // Jabatan lama di luar daftar: tetap tampilkan sebagai opsi terpilih
+            const legacy = document.createElement('option');
+            legacy.value = currentJabatan;
+            legacy.textContent = currentJabatan;
+            positionSelect.appendChild(legacy);
+            positionSelect.value = currentJabatan;
+        }
+    }
+
     modal.style.display = 'flex';
+}
+
+// Tenant pusat: YPWILUTIM -> jabatan "SDM Pusat".
+// Tenant lain -> jabatan "SDM" (SDM Sekolah).
+const SDM_PUSAT_TENANT = 'YPWILUTIM';
+const SDM_BASE_JABATAN = [
+    'Ketua', 'Pimpinan', 'Pimpinan Pondok', 'Kepala Sekolah', 'Wakasek',
+    'Guru', 'Guru Mapel', 'Guru Mengaji', 'Wali Kelas', 'Muhaffiz', 'Muhaffizah',
+    'Bendahara', 'TU', 'Tata Usaha', 'Operator', 'Admin', 'Media', 'Security',
+    'Cleaning Service', 'Bag. Dapur', 'Bag. Kantin'
+];
+
+function syncJabatanOptions() {
+    const tenantSelect = document.getElementById('pendingTenantId');
+    const positionSelect = document.getElementById('pendingJabatan');
+    const hint = document.getElementById('sdmJabatanHint');
+    if (!tenantSelect || !positionSelect) return;
+
+    const tenantId = tenantSelect.value;
+    const previous = positionSelect.value;
+
+    // Opsi dasar + opsi SDM sesuai tenant
+    const options = [...SDM_BASE_JABATAN];
+    if (tenantId === SDM_PUSAT_TENANT) {
+        options.push('SDM Pusat');
+    } else if (tenantId) {
+        options.push('SDM');
+    }
+
+    positionSelect.innerHTML = '';
+    options.forEach(j => {
+        const opt = document.createElement('option');
+        opt.value = j;
+        opt.textContent = j;
+        positionSelect.appendChild(opt);
+    });
+
+    // Pertahankan pilihan sebelumnya jika masih tersedia
+    if (previous && options.includes(previous)) {
+        positionSelect.value = previous;
+    }
+
+    if (hint) {
+        if (tenantId === SDM_PUSAT_TENANT) {
+            hint.style.display = 'block';
+            hint.textContent = 'Tenant pusat: hanya bisa diberi jabatan "SDM Pusat" (akses semua sekolah).';
+        } else if (tenantId) {
+            hint.style.display = 'block';
+            hint.textContent = 'Tenant sekolah: hanya bisa diberi jabatan "SDM" (akses terbatas unit ini).';
+        } else {
+            hint.style.display = 'none';
+            hint.textContent = '';
+        }
+    }
 }
 
 async function closePendingAssignmentModal() {
@@ -4836,19 +5047,37 @@ if (typeof window.loadAttendanceLogs !== 'function') {
   };
 }
 
-// ===== Attendance Monthly Recap =====
-window.switchAttendanceView = function(view) {
+// ===== Attendance Monthly Recap (samakan dengan Rekap Absensi di bendahara-dashboard.html) =====
+document.addEventListener('DOMContentLoaded', function () {
+    const monthSelect = document.getElementById('recapMonthSelect');
+    if (monthSelect && !monthSelect.dataset.defaulted) {
+        monthSelect.value = String(new Date().getMonth() + 1);
+        monthSelect.dataset.defaulted = '1';
+    }
+});
+
+window.switchAdminAttendanceView = function(view) {
     const logSection = document.getElementById('logViewSection');
     const monthlySection = document.getElementById('monthlyRecapSection');
     const logBtn = document.getElementById('logViewBtn');
     const monthlyBtn = document.getElementById('monthlyViewBtn');
     if (logSection) logSection.classList.toggle('hidden', view === 'monthly');
     if (monthlySection) monthlySection.classList.toggle('hidden', view !== 'monthly');
-    if (logBtn) { logBtn.classList.toggle('bg-blue-600', view === 'log'); logBtn.classList.toggle('text-white', view === 'log'); }
-    if (monthlyBtn) { monthlyBtn.classList.toggle('bg-blue-600', view === 'monthly'); monthlyBtn.classList.toggle('text-white', view === 'monthly'); }
+    if (logBtn) {
+        logBtn.classList.toggle('bg-blue-600', view === 'log');
+        logBtn.classList.toggle('text-white', view === 'log');
+        logBtn.classList.toggle('bg-gray-200', view !== 'log');
+        logBtn.classList.toggle('text-gray-700', view !== 'log');
+    }
+    if (monthlyBtn) {
+        monthlyBtn.classList.toggle('bg-blue-600', view === 'monthly');
+        monthlyBtn.classList.toggle('text-white', view === 'monthly');
+        monthlyBtn.classList.toggle('bg-gray-200', view !== 'monthly');
+        monthlyBtn.classList.toggle('text-gray-700', view !== 'monthly');
+    }
 };
 
-window.loadMonthlyRecap = async function() {
+window.loadAdminMonthlyRecap = async function() {
     const monthNames = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
     const tenantId = document.getElementById('recapTenantSelect')?.value;
     const month = document.getElementById('recapMonthSelect')?.value;
@@ -4865,80 +5094,79 @@ window.loadMonthlyRecap = async function() {
         if (!json.success) { showToast('Gagal memuat data', 'error'); return; }
         const data = json.data;
         const daysInMonth = json.daysInMonth || 30;
-        const weekendDays = data.length ? data[0].weekendDays || [] : [];
-        let headerHtml = '<tr><th rowspan="2" class="p-1 border border-gray-300">No</th><th rowspan="2" class="p-1 border border-gray-300">Nama</th>';
-        for (let d = 1; d <= daysInMonth; d++) headerHtml += '<th class="p-1 border border-gray-300">' + d + '</th>';
-        headerHtml += '<th colspan="7" class="p-1 border border-gray-300">Keterangan</th></tr><tr>';
-        for (let d = 1; d <= daysInMonth; d++) headerHtml += '<th class="p-1 border border-gray-300"></th>';
-        headerHtml += '<th class="p-1 border border-gray-300">Tepat Waktu</th><th class="p-1 border border-gray-300">Terlambat</th><th class="p-1 border border-gray-300">Izin</th><th class="p-1 border border-gray-300">Sakit</th><th class="p-1 border border-gray-300">Dinas Luar</th><th class="p-1 border border-gray-300">Cuti</th><th class="p-1 border border-gray-300">Tanpa Keterangan</th></tr>';
+        let headerHtml = '<tr><th rowspan="2" class="p-1 border">No</th><th rowspan="2" class="p-1 border">Nama</th><th colspan="' + daysInMonth + '" class="p-1 border">Bulan: ' + monthNames[parseInt(month)] + ' ' + year + '</th><th colspan="7" class="p-1 border">Keterangan</th></tr><tr>';
+        for (let d = 1; d <= daysInMonth; d++) headerHtml += '<th class="p-1 border">' + d + '</th>';
+        headerHtml += '<th class="p-1 border">H</th><th class="p-1 border">T</th><th class="p-1 border">I</th><th class="p-1 border">S</th><th class="p-1 border">D</th><th class="p-1 border">C</th><th class="p-1 border">TK</th></tr>';
         let bodyHtml = '';
         data.forEach((d, i) => {
-            const rowClass = i % 2 === 0 ? 'bg-white' : 'bg-slate-50';
-            bodyHtml += '<tr class="' + rowClass + '"><td class="p-1 text-center border border-gray-300">' + (i + 1) + '</td><td class="p-1 border border-gray-300" style="min-width:120px;">' + (d.nama || '') + '</td>';
-            for (let day = 1; day <= daysInMonth; day++) {
-                const isWeekend = weekendDays.includes(day);
-                bodyHtml += '<td class="p-1 text-center border border-gray-300 ' + (isWeekend ? 'bg-gray-100' : '') + '">' + (d['tgl_' + day] || '') + '</td>';
-            }
-            bodyHtml += '<td class="p-1 text-center border border-gray-300">' + (d.hadir || 0) + '</td><td class="p-1 text-center border border-gray-300">' + (d.terlambat || 0) + '</td><td class="p-1 text-center border border-gray-300">' + (d.izin || 0) + '</td><td class="p-1 text-center border border-gray-300">' + (d.sakit || 0) + '</td><td class="p-1 text-center border border-gray-300">' + (d.dinas_luar || 0) + '</td><td class="p-1 text-center border border-gray-300">' + (d.cuti || 0) + '</td><td class="p-1 text-center border border-gray-300">' + (d.tanpa_keterangan || 0) + '</td></tr>';
+            bodyHtml += '<tr><td class="p-1 text-center border">' + (i + 1) + '</td><td class="p-1 border">' + (d.nama || '') + '</td>';
+            for (let day = 1; day <= daysInMonth; day++) bodyHtml += '<td class="p-1 text-center border">' + (d['tgl_' + day] || '') + '</td>';
+            bodyHtml += '<td class="p-1 text-center border">' + (d.hadir || 0) + '</td><td class="p-1 text-center border">' + (d.terlambat || 0) + '</td><td class="p-1 text-center border">' + (d.izin || 0) + '</td><td class="p-1 text-center border">' + (d.sakit || 0) + '</td><td class="p-1 text-center border">' + (d.dinas_luar || 0) + '</td><td class="p-1 text-center border">' + (d.cuti || 0) + '</td><td class="p-1 text-center border">' + (d.tanpa_keterangan || 0) + '</td></tr>';
         });
-        if (content) content.innerHTML = '<div class="overflow-x-auto"><table class="w-full text-sm border-collapse border border-gray-300"><thead class="bg-slate-100">' + headerHtml + '</thead><tbody>' + bodyHtml + '</tbody></table></div>';
+        if (content) content.innerHTML = '<div class="overflow-x-auto"><table class="w-full text-sm border-collapse"><thead>' + headerHtml + '</thead><tbody>' + bodyHtml + '</tbody></table></div>';
     } catch (e) {
         if (content) content.innerHTML = '<p class="text-red-500 p-4">Error: ' + e.message + '</p>';
     }
 };
 
-window.exportMonthlyPdfFromRecap = function() {
+window.exportAdminMonthlyPdf = async function() {
     const tenantId = document.getElementById('recapTenantSelect')?.value;
     const month = document.getElementById('recapMonthSelect')?.value;
     const year = document.getElementById('recapYearSelect')?.value;
-    const monthNames = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
     const tenantName = document.getElementById('recapTenantSelect')?.selectedOptions[0]?.text || '';
-    let signatory = 'Pimpinan';
-    if (tenantId === 'YPWILUTIM') signatory = 'Ketua';
-    else if (['PPTQMALILI', 'PPTQAMALIA'].includes(tenantId)) signatory = 'Pimpinan Pondok';
-    else if (tenantId.includes('TKIT') || tenantId.includes('SDIT') || tenantId.includes('SMPIT') || tenantId.includes('SMAIT')) signatory = 'Kepala Sekolah';
+    if (!tenantId || !month || !year) { showToast('Pilih sekolah, bulan, dan tahun', 'error'); return; }
+    try {
+        const token = localStorage.getItem('token');
+        const res = await fetch('/api/admin/attendance-export-pdf?tenant_id=' + tenantId + '&bulan=' + month + '&tahun=' + year + '&tenant_name=' + encodeURIComponent(tenantName), {
+            headers: token ? { 'Authorization': 'Bearer ' + token } : {}
+        });
+        if (!res.ok) {
+            const json = await res.json().catch(() => ({ message: 'Gagal export PDF' }));
+            showToast(json.message || 'Gagal export PDF', 'error');
+            return;
+        }
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'rekap_absensi_' + tenantId + '_' + year + String(month).padStart(2, '0') + '.pdf';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    } catch (e) {
+        showToast('Gagal export PDF: ' + e.message, 'error');
+    }
+};
+
+window.exportAdminMonthlyExcel = function() {
+    const monthNames = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+    const tenantId = document.getElementById('recapTenantSelect')?.value;
+    const month = document.getElementById('recapMonthSelect')?.value;
+    const year = document.getElementById('recapYearSelect')?.value;
+    const tenantName = document.getElementById('recapTenantSelect')?.selectedOptions[0]?.text || '';
     const content = document.getElementById('monthlyRecapContent');
     const table = content?.querySelector('table');
     if (!table) { showToast('Data belum dimuat', 'error'); return; }
-    const thead = table.querySelector('thead');
-    const theadHtml = thead ? thead.innerHTML : '';
-    const rows = Array.from(table.querySelectorAll('tbody tr'));
-    const perPage = 25;
-    let pages = [];
-    for (let i = 0; i < rows.length; i += perPage) {
-        const pageRows = rows.slice(i, i + perPage);
-        let pageTable = '<table style="width:100%;border-collapse:collapse;font-size:7pt"><thead>' + theadHtml + '</thead><tbody>';
-        pageRows.forEach(r => pageTable += r.outerHTML);
-        pageTable += '</tbody></table>';
-        if (i === 0) {
-            pages.push('<div style="text-align:center;margin-bottom:10px"><img src="/assets/images/header-yayasan-landscape.png" style="max-width:100%;height:auto"></div><h2 style="text-align:center;margin:5px 0">Rekap Absensi Bulanan</h2><p style="text-align:center;margin:5px 0">Sekolah: ' + tenantName + ' | Periode: ' + monthNames[parseInt(month)] + ' ' + year + '</p>' + pageTable);
-        } else {
-            pages.push('<div style="page-break-before:always"></div><p style="text-align:center">Lanjutan Rekap Absensi</p>' + pageTable);
-        }
+    const headerRows = table.querySelectorAll('thead tr');
+    let daysInMonth = 30;
+    if (headerRows.length > 1) {
+        const thCount = headerRows[1].querySelectorAll('th').length;
+        if (thCount > 7) daysInMonth = thCount - 7;
     }
-    const win = window.open('', '_blank');
-    win.document.write('<!DOCTYPE html><html><head><title>Rekap Absensi Bulanan</title><style>@page{size:A4 landscape;margin:1cm}body{font-family:Arial,sans-serif;font-size:8pt}table{width:100%;border-collapse:collapse}th,td{border:1px solid #000;padding:2px;text-align:center;font-size:7pt}th{background:#f0f0f0}.sign{margin-top:20px;text-align:right}.sign .line{border-top:1px solid #000;width:120px;margin-left:auto;margin-bottom:5px}</style></head><body>' + pages.join('') + '<div class="sign"><p>' + signatory + ',</p><div class="line"></div><p>________________________</p></div><script>window.onload=function(){window.print();}</script></body></html>');
-    win.document.close();
-};
-
-window.exportMonthlyExcel = function() {
-    const tenantId = document.getElementById('recapTenantSelect')?.value;
-    const month = document.getElementById('recapMonthSelect')?.value;
-    const year = document.getElementById('recapYearSelect')?.value;
-    const monthNames = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-    const tenantName = document.getElementById('recapTenantSelect')?.selectedOptions[0]?.text || '';
-    const content = document.getElementById('monthlyRecapContent');
-    const rows = content?.querySelectorAll('tbody tr') || [];
-    let html = '<table border="1" cellspacing="0" cellpadding="4"><tr><th colspan="10">' + tenantName + ' - ' + monthNames[parseInt(month)] + ' ' + year + '</th></tr><tr><th>No</th><th>Nama</th><th>Tanggal</th><th>Tepat Waktu</th><th>Terlambat</th><th>Izin</th><th>Sakit</th><th>Dinas Luar</th><th>Cuti</th><th>Tanpa Keterangan</th></tr><tbody>';
+    const rows = table.querySelectorAll('tbody tr');
+    let html = '<table border="1" cellspacing="0" cellpadding="4"><tr><th colspan="10">' + tenantName + ' - ' + monthNames[parseInt(month)] + ' ' + year + '</th></tr><tr><th>No</th><th>Nama</th><th>Bulan</th><th>H (Tepat Waktu)</th><th>T (Terlambat)</th><th>I (Izin)</th><th>S (Sakit)</th><th>D (Dinas Luar)</th><th>C (Cuti)</th><th>TK (Tanpa Keterangan)</th></tr><tbody>';
     rows.forEach((r, i) => {
         const cells = r.querySelectorAll('td');
-        html += '<tr><td>' + (i + 1) + '</td><td>' + (cells[1]?.textContent || '') + '</td><td>' + monthNames[parseInt(month)] + ' ' + year + '</td><td>' + (cells[3]?.textContent || 0) + '</td><td>' + (cells[4]?.textContent || 0) + '</td><td>' + (cells[5]?.textContent || 0) + '</td><td>' + (cells[6]?.textContent || 0) + '</td><td>' + (cells[7]?.textContent || 0) + '</td><td>' + (cells[8]?.textContent || 0) + '</td><td>' + (cells[9]?.textContent || 0) + '</td></tr>';
+        const base = 2 + daysInMonth;
+        html += '<tr><td>' + (i + 1) + '</td><td>' + (cells[1]?.textContent || '') + '</td><td>' + monthNames[parseInt(month)] + ' ' + year + '</td><td>' + (cells[base]?.textContent || 0) + '</td><td>' + (cells[base + 1]?.textContent || 0) + '</td><td>' + (cells[base + 2]?.textContent || 0) + '</td><td>' + (cells[base + 3]?.textContent || 0) + '</td><td>' + (cells[base + 4]?.textContent || 0) + '</td><td>' + (cells[base + 5]?.textContent || 0) + '</td><td>' + (cells[base + 6]?.textContent || 0) + '</td></tr>';
     });
     html += '</tbody></table>';
     const blob = new Blob(['\ufeff' + html], { type: 'application/vnd.ms-excel' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = 'rekap_absensi_' + tenantId + '_' + year + String(month).padStart(2, '0') + '.xls';
+    a.href = url;
+    a.download = 'rekap_absensi_' + tenantId + '_' + year + String(month).padStart(2, '0') + '.xls';
     a.click();
     URL.revokeObjectURL(url);
 };

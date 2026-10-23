@@ -24,7 +24,7 @@ router.get('/payment-settings', async (req, res) => {
       await db.query(`
         CREATE TABLE IF NOT EXISTS payment_admin_settings (
           id INT(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
-          subject_type ENUM('student', 'teacher') NOT NULL,
+          subject_type VARCHAR(20) NOT NULL,
           subject_id INT(11) NOT NULL,
           tenant_id VARCHAR(20) DEFAULT NULL,
           biaya_admin_va DECIMAL(12,2) NOT NULL DEFAULT 2000.00,

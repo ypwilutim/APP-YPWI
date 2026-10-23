@@ -352,7 +352,7 @@ window.loadPayroll = async function() {
     tbody.innerHTML = '<tr><td colspan="16" class="text-center py-4">Memuat...</td></tr>';
     try {
         const token = localStorage.getItem('token');
-        const res = await fetch('/api/admin/payroll/settings?tenant_id=' + tenantId + '&bulan=' + bulan + '&tahun=' + tahun, { headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
+        const res = await fetch('/treasurer/payroll-unified?tenant_id=' + tenantId + '&bulan=' + bulan + '&tahun=' + tahun, { headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
         const json = await res.json();
         if (!json.success) { showToast('Gagal muat data', 'error'); return; }
         const data = json.data;

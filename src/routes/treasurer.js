@@ -5,7 +5,7 @@ const axios = require('axios');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { authenticateToken, authenticateOperator, authenticateBendahara, verifyTenantAccess } = require('../middleware/auth');
+const { authenticateToken, authenticateOperator, authenticateBendahara, verifyTenantAccess, getAllowedTenants } = require('../middleware/auth');
 const { sendBillTemplate } = require('../utils/whatsappTemplate');
 const { extractReceiptFromImage, extractReceiptItems } = require('../utils/geminiOcr');
 const billing = require('../utils/billing');
@@ -2117,6 +2117,7 @@ router.post('/treasurer/bendahara/billing/generate-by-tahun-ajaran', authenticat
 // GET /api/treasurer/public/billing-by-ta - List billing summary per TA
 router.get('/treasurer/public/billing-by-ta', async (req, res) => {
   try {
+    const tenantId = req.query.tenant_id || '';
     let tenantFilter = '';
     let params = [];
     if (tenantId && tenantId !== 'GLOBAL') {
@@ -5157,5 +5158,385 @@ async function exportIsak35(report, tenantId, bulan, format, res) {
     doc.end();
   }
 }
+
+// ============================================================
+// UNIFIED PAYROLL API - With tenant filtering & 3-tier hierarchy
+// ============================================================
+const SALARY_COMPONENTS = [
+  'kafalah_pokok', 'tunj_keluarga_istri', 'tunj_keluarga_anak', 'tunj_struktural',
+  'tunj_fungsional', 'tunj_transportasi', 'tunj_kedatangan', 'tunj_tidak_pulang_cepat',
+  'tunj_uang_makan', 'kjm', 'tunj_prestasi_kinerja', 'tunj_apresiasi', 'tunj_pembina',
+  'tunj_jam_mengajar', 'pot_luar_tanggungan', 'pot_durasi_simt', 'pot_tawun', 'pot_piutang'
+];
+
+// GET /treasurer/payroll-unified - Unified payroll with tenant filtering
+router.get('/treasurer/payroll-unified', authenticateOperator, async (req, res) => {
+  try {
+    const tenantId = req.query.tenant_id || null;
+    const bulan = parseInt(req.query.bulan) || (new Date().getMonth() + 1);
+    const tahun = parseInt(req.query.tahun) || new Date().getFullYear();
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = (page - 1) * limit;
+
+    // Determine effective tenant filter (YPWILUTIM = all, others = unit only).
+    // Non-central callers are restricted to their assigned units; an explicit
+    // tenant_id is rejected unless the caller is allowed to access it.
+    let effectiveTenantId = tenantId;
+    const allowedTenants = getAllowedTenants(req);
+    if (allowedTenants !== null) {
+      if (tenantId) {
+        if (!allowedTenants.includes(tenantId)) {
+          return res.status(403).json({ success: false, message: 'Akses ditolak untuk tenant ini' });
+        }
+      } else if (allowedTenants.length > 0) {
+        effectiveTenantId = allowedTenants[0];
+      } else {
+        return res.status(403).json({ success: false, message: 'Akses ditolak: tidak ada unit yang ditugaskan' });
+      }
+    }
+
+    // Get central defaults (YPWILUTIM settings)
+    let centralSettings = {};
+    try {
+      const centralRows = await db.query(
+        "SELECT setting_name, setting_value FROM salary_settings WHERE level = 'central' AND tenant_id = 'YPWILUTIM'",
+        []
+      );
+      (centralRows || []).forEach(row => { centralSettings[row.setting_name] = parseFloat(row.setting_value) || 0; });
+    } catch (e) { /* table may not exist yet */ }
+
+    // Get school overrides for non-YPWILUTIM tenants
+    let schoolSettings = {};
+    if (effectiveTenantId && effectiveTenantId !== 'YPWILUTIM') {
+      try {
+        const schoolRows = await db.query(
+          "SELECT setting_name, setting_value FROM salary_settings WHERE level = 'school' AND tenant_id = ? AND is_override = 1",
+          [effectiveTenantId]
+        );
+        (schoolRows || []).forEach(row => { schoolSettings[row.setting_name] = parseFloat(row.setting_value) || 0; });
+      } catch (e) { /* table may not exist yet */ }
+    }
+
+    // Get individual overrides
+    let individualSettingsMap = {};
+    try {
+      const individualRows = await db.query(
+        "SELECT teacher_id, setting_name, setting_value FROM salary_settings WHERE level = 'individual' AND tenant_id = ?",
+        [effectiveTenantId || 'YPWILUTIM']
+      );
+      (individualRows || []).forEach(row => {
+        if (!individualSettingsMap[row.teacher_id]) individualSettingsMap[row.teacher_id] = {};
+        individualSettingsMap[row.teacher_id][row.setting_name] = parseFloat(row.setting_value) || 0;
+      });
+    } catch (e) { /* table may not exist yet */ }
+
+    // Query teachers with tenant filtering
+    let teacherQuery = `
+      SELECT t.id, t.nama, t.nik, t.status_kepegawaian, t.gaji_pokok, t.tunj_kinerja, t.tunj_umum,
+             t.tunj_istri, t.tunj_anak, t.tunj_kepala_sekolah, t.tunj_wali_kelas, t.honor_bendahara,
+             t.tunj_kehadiran, ta.tenant_id, tn.nama_sekolah
+      FROM teachers t
+      JOIN teacher_assignments ta ON t.id = ta.teacher_id
+      JOIN tenants tn ON ta.tenant_id = tn.tenant_id
+      WHERE t.status_aktif = 1
+    `;
+    let teacherParams = [];
+    if (effectiveTenantId) {
+      teacherQuery += ' AND ta.tenant_id = ?';
+      teacherParams.push(effectiveTenantId);
+    }
+    teacherQuery += ' ORDER BY tn.nama_sekolah ASC, t.nama ASC LIMIT ? OFFSET ?';
+    teacherParams.push(limit, offset);
+
+    const teachers = await db.query(teacherQuery, teacherParams);
+
+    // Count query
+    let countQuery = `
+      SELECT COUNT(*) as total FROM teachers t
+      JOIN teacher_assignments ta ON t.id = ta.teacher_id
+      WHERE t.status_aktif = 1
+    `;
+    let countParams = [];
+    if (effectiveTenantId) {
+      countQuery += ' AND ta.tenant_id = ?';
+      countParams.push(effectiveTenantId);
+    }
+    const countResult = await db.query(countQuery, countParams);
+    const total = countResult[0]?.total || 0;
+
+    // Build result with hierarchy applied
+    const result = teachers.map(t => {
+      const individual = individualSettingsMap[t.id] || {};
+      const getVal = (comp, fallback) => {
+        if (individual[comp] !== undefined) return individual[comp];
+        if (schoolSettings[comp] !== undefined) return schoolSettings[comp];
+        if (centralSettings[comp] !== undefined) return centralSettings[comp];
+        return fallback;
+      };
+
+      const gaji_pokok = getVal('gaji_pokok', parseFloat(t.gaji_pokok) || 0);
+      const tunj_kinerja = getVal('tunj_kinerja', parseFloat(t.tunj_kinerja) || 0);
+      const tunj_umum = getVal('tunj_umum', parseFloat(t.tunj_umum) || 0);
+      const tunj_istri = getVal('tunj_istri', parseFloat(t.tunj_istri) || 0);
+      const tunj_anak = getVal('tunj_anak', parseFloat(t.tunj_anak) || 0);
+      const tunj_kepala_sekolah = getVal('tunj_kepala_sekolah', parseFloat(t.tunj_kepala_sekolah) || 0);
+      const tunj_wali_kelas = getVal('tunj_wali_kelas', parseFloat(t.tunj_wali_kelas) || 0);
+      const honor_bendahara = getVal('honor_bendahara', parseFloat(t.honor_bendahara) || 0);
+      const tunj_kehadiran = getVal('tunj_kehadiran', parseFloat(t.tunj_kehadiran) || 0);
+
+      // Additional components from settings
+      const tunj_keluarga_istri = getVal('tunj_keluarga_istri', 0);
+      const tunj_keluarga_anak = getVal('tunj_keluarga_anak', 0);
+      const tunj_struktural = getVal('tunj_struktural', 0);
+      const tunj_fungsional = getVal('tunj_fungsional', 0);
+      const tunj_transportasi = getVal('tunj_transportasi', 0);
+      const tunj_kedatangan = getVal('tunj_kedatangan', 0);
+      const tunj_tidak_pulang_cepat = getVal('tunj_tidak_pulang_cepat', 0);
+      const tunj_uang_makan = getVal('tunj_uang_makan', 0);
+      const kjm = getVal('kjm', 0);
+      const tunj_prestasi_kinerja = getVal('tunj_prestasi_kinerja', 0);
+      const tunj_apresiasi = getVal('tunj_apresiasi', 0);
+      const tunj_pembina = getVal('tunj_pembina', 0);
+      const tunj_jam_mengajar = getVal('tunj_jam_mengajar', 0);
+      const pot_luar_tanggungan = getVal('pot_luar_tanggungan', 0);
+      const pot_durasi_simt = getVal('pot_durasi_simt', 0);
+      const pot_tawun = getVal('pot_tawun', 0);
+      const pot_piutang = getVal('pot_piutang', 0);
+
+      const totalPendapatan = gaji_pokok + tunj_kinerja + tunj_umum + tunj_istri + tunj_anak +
+        tunj_kepala_sekolah + tunj_wali_kelas + honor_bendahara + tunj_kehadiran +
+        tunj_keluarga_istri + tunj_keluarga_anak + tunj_struktural + tunj_fungsional +
+        tunj_transportasi + tunj_kedatangan + tunj_tidak_pulang_cepat + tunj_uang_makan +
+        kjm + tunj_prestasi_kinerja + tunj_apresiasi + tunj_pembina + tunj_jam_mengajar;
+
+      const totalPotongan = pot_luar_tanggungan + pot_durasi_simt + pot_tawun + pot_piutang;
+      const totalGaji = totalPendapatan - totalPotongan;
+
+      return {
+        id: t.id,
+        nama: t.nama,
+        nik: t.nik || '',
+        tenant_id: t.tenant_id,
+        nama_sekolah: t.nama_sekolah,
+        status_kepegawaian: t.status_kepegawaian,
+        // Income components
+        gaji_pokok,
+        tunj_kinerja,
+        tunj_umum,
+        tunj_istri,
+        tunj_anak,
+        tunj_kepala_sekolah,
+        tunj_wali_kelas,
+        honor_bendahara,
+        tunj_kehadiran,
+        tunj_keluarga_istri,
+        tunj_keluarga_anak,
+        tunj_struktural,
+        tunj_fungsional,
+        tunj_transportasi,
+        tunj_kedatangan,
+        tunj_tidak_pulang_cepat,
+        tunj_uang_makan,
+        kjm,
+        tunj_prestasi_kinerja,
+        tunj_apresiasi,
+        tunj_pembina,
+        tunj_jam_mengajar,
+        // Deductions
+        pot_luar_tanggungan,
+        pot_durasi_simt,
+        pot_tawun,
+        pot_piutang,
+        // Totals
+        total_pendapatan: totalPendapatan,
+        total_potongan: totalPotongan,
+        total_gaji: totalGaji,
+        // Override info
+        has_individual_override: !!individualSettingsMap[t.id],
+        has_school_override: Object.keys(schoolSettings).length > 0,
+        has_central_settings: Object.keys(centralSettings).length > 0
+      };
+    });
+
+    res.json({
+      success: true,
+      data: result,
+      total: total,
+      page: page,
+      limit: limit,
+      filters: { tenant_id: effectiveTenantId, bulan, tahun },
+      central_defaults: centralSettings
+    });
+  } catch (e) {
+    console.error('Unified payroll error:', e);
+    res.status(500).json({ success: false, message: 'Error fetching unified payroll: ' + e.message });
+  }
+});
+
+// GET /treasurer/salary-settings - Get salary settings at all levels
+router.get('/treasurer/salary-settings', authenticateOperator, async (req, res) => {
+  try {
+    const tenantId = req.query.tenant_id || '';
+    const teacherId = req.query.teacher_id || null;
+    const level = req.query.level || null;
+
+    // Authorize: non-central callers may only read salary settings for the
+    // units they are assigned to.
+    const allowedTenants = getAllowedTenants(req);
+    if (allowedTenants !== null) {
+      if (tenantId && !allowedTenants.includes(tenantId)) {
+        return res.status(403).json({ success: false, message: 'Akses ditolak untuk tenant ini' });
+      }
+      if (!tenantId && allowedTenants.length === 0) {
+        return res.json({ success: true, data: [] });
+      }
+    }
+
+    let query = 'SELECT * FROM salary_settings WHERE 1=1';
+    let params = [];
+    if (level) { query += ' AND level = ?'; params.push(level); }
+    if (tenantId) { query += ' AND tenant_id = ?'; params.push(tenantId); }
+    else if (allowedTenants !== null) {
+      query += ` AND tenant_id IN (${allowedTenants.map(() => '?').join(',')})`;
+      params.push(...allowedTenants);
+    }
+    if (teacherId) { query += ' AND teacher_id = ?'; params.push(teacherId); }
+    query += ' ORDER BY level, setting_name';
+    const rows = await db.query(query, params);
+    res.json({ success: true, data: rows || [] });
+  } catch (e) {
+    console.error('Salary settings error:', e);
+    res.status(500).json({ success: false, message: 'Error fetching salary settings: ' + e.message });
+  }
+});
+
+// POST /treasurer/salary-settings - Update salary settings
+router.post('/treasurer/salary-settings', authenticateOperator, async (req, res) => {
+  try {
+    const { level, tenant_id, teacher_id, settings } = req.body;
+    if (!level || !tenant_id || !settings) {
+      return res.status(400).json({ success: false, message: 'level, tenant_id, settings required' });
+    }
+
+    // Validate access
+    const isYpwilutim = req.user.assignments?.some(a => a.tenant_id === 'YPWILUTIM');
+    if (level === 'central' && !isYpwilutim) {
+      return res.status(403).json({ success: false, message: 'Hanya admin pusat yang boleh mengatur central settings' });
+    }
+    if (level === 'school' && !isYpwilutim && req.user.assignments?.every(a => a.tenant_id !== tenant_id)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak untuk tenant ini' });
+    }
+    if (level === 'individual' && req.user.assignments?.every(a => a.tenant_id !== tenant_id)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak untuk tenant ini' });
+    }
+
+    // Upsert settings
+    let saved = 0;
+    for (const [name, value] of Object.entries(settings)) {
+      try {
+        await db.query(
+          `INSERT INTO salary_settings (level, tenant_id, teacher_id, setting_name, setting_value, is_override)
+           VALUES (?, ?, ?, ?, ?, 1)
+           ON DUPLICATE KEY UPDATE setting_value = ?, is_override = 1`,
+          [level, tenant_id, teacher_id || null, name, value, value]
+        );
+        saved++;
+      } catch (e) {
+        console.error('Save setting error:', e.message);
+      }
+    }
+    res.json({ success: true, message: `${saved} settings saved`, saved });
+  } catch (e) {
+    console.error('Salary settings save error:', e);
+    res.status(500).json({ success: false, message: 'Error saving salary settings: ' + e.message });
+  }
+});
+
+// GET /treasurer/spmb-transactions - Get SPMB income/expense transactions
+router.get('/treasurer/spmb-transactions', authenticateOperator, async (req, res) => {
+  try {
+    const tenantId = req.query.tenant_id || null;
+    const type = req.query.type || null;
+    const startDate = req.query.start_date || null;
+    const endDate = req.query.end_date || null;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const offset = (page - 1) * limit;
+
+    // Non-central callers are restricted to their assigned units; an explicit
+    // tenant_id is rejected unless the caller is allowed to access it.
+    let effectiveTenantId = tenantId;
+    const allowedTenants = getAllowedTenants(req);
+    if (allowedTenants !== null) {
+      if (tenantId) {
+        if (!allowedTenants.includes(tenantId)) {
+          return res.status(403).json({ success: false, message: 'Akses ditolak untuk tenant ini' });
+        }
+      } else if (allowedTenants.length > 0) {
+        effectiveTenantId = allowedTenants[0];
+      } else {
+        return res.status(403).json({ success: false, message: 'Akses ditolak: tidak ada unit yang ditugaskan' });
+      }
+    }
+
+    let query = 'SELECT * FROM spmb_transactions WHERE 1=1';
+    let params = [];
+    if (effectiveTenantId) { query += ' AND tenant_id = ?'; params.push(effectiveTenantId); }
+    if (type) { query += ' AND transaction_type = ?'; params.push(type); }
+    if (startDate) { query += ' AND transaction_date >= ?'; params.push(startDate); }
+    if (endDate) { query += ' AND transaction_date <= ?'; params.push(endDate); }
+    query += ' ORDER BY transaction_date DESC LIMIT ? OFFSET ?';
+    params.push(limit, offset);
+
+    const rows = await db.query(query, params);
+
+    // Summary
+    let summaryQuery = 'SELECT transaction_type, SUM(amount) as total FROM spmb_transactions WHERE 1=1';
+    let summaryParams = [];
+    if (effectiveTenantId) { summaryQuery += ' AND tenant_id = ?'; summaryParams.push(effectiveTenantId); }
+    if (startDate) { summaryQuery += ' AND transaction_date >= ?'; summaryParams.push(startDate); }
+    if (endDate) { summaryQuery += ' AND transaction_date <= ?'; summaryParams.push(endDate); }
+    summaryQuery += ' GROUP BY transaction_type';
+    const summaryRows = await db.query(summaryQuery, summaryParams);
+
+    const summary = { income: 0, expense: 0 };
+    (summaryRows || []).forEach(r => {
+      if (r.transaction_type === 'income') summary.income = parseFloat(r.total) || 0;
+      if (r.transaction_type === 'expense') summary.expense = parseFloat(r.total) || 0;
+    });
+    summary.balance = summary.income - summary.expense;
+
+    res.json({ success: true, data: rows || [], summary, filters: { tenant_id: effectiveTenantId, type, start_date: startDate, end_date: endDate } });
+  } catch (e) {
+    console.error('SPMB transactions error:', e);
+    res.status(500).json({ success: false, message: 'Error fetching SPMB transactions: ' + e.message });
+  }
+});
+
+// POST /treasurer/spmb-transactions - Create SPMB transaction
+router.post('/treasurer/spmb-transactions', authenticateOperator, async (req, res) => {
+  try {
+    const { tenant_id, transaction_type, category, amount, description, transaction_date } = req.body;
+    if (!tenant_id || !transaction_type || !category || !amount || !transaction_date) {
+      return res.status(400).json({ success: false, message: 'tenant_id, transaction_type, category, amount, transaction_date required' });
+    }
+
+    const isYpwilutim = req.user.assignments?.some(a => a.tenant_id === 'YPWILUTIM');
+    if (!isYpwilutim && req.user.assignments?.every(a => a.tenant_id !== tenant_id)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak untuk tenant ini' });
+    }
+
+    const createdBy = req.user.guru_id || null;
+    await db.query(
+      'INSERT INTO spmb_transactions (tenant_id, transaction_type, category, amount, description, transaction_date, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [tenant_id, transaction_type, category, amount, description || null, transaction_date, createdBy]
+    );
+    res.json({ success: true, message: 'Transaksi SPMB berhasil disimpan' });
+  } catch (e) {
+    console.error('SPMB transaction create error:', e);
+    res.status(500).json({ success: false, message: 'Error creating SPMB transaction: ' + e.message });
+  }
+});
 
 module.exports = router

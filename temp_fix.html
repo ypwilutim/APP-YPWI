@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard Bendahara - YPWI Lutim</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="css/admin-dashboard.css">
+  <!-- Interactive Help System -->
+  <link href="assets/css/interactive-help.css" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+
+    .nav-active {
+      background-color: #059669;
+      color: white;
+    }
+
+    .modal {
+      display: none;
+    }
+
+    .financial-card {
+      transition: transform 0.2s;
+    }
+
+    .financial-card:hover {
+      transform: translateY(-2px);
+    }
+
+    .chart-container {
+      position: relative;
+      height: 200px;
+    }
+  </style>
+</head>
+
+<body class="bg-gray-50 min-h-screen">
+  <!-- Login Overlay -->
+  <div id="loginOverlay" class="fixed inset-0 z-50 flex items-center justify-center bg-gray-50">
+    <div class="bg-white rounded-xl shadow-lg border border-gray-100 p-8 w-full max-w-sm">
+      <div class="flex items-center space-x-3 mb-6">
+        <div class="w-10 h-10 bg-emerald-600 rounded-lg flex items-center justify-center">
+          <i class="fas fa-wallet text-white"></i>
+        </div>
+        <div>
+          <h1 class="text-xl font-bold text-gray-900">YPWI Lutim</h1>
+          <p class="text-sm text-gray-500">Login Bendahara</p>
+        </div>
+      </div>
+      <form onsubmit="doLogin(event)">
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Username</label>
+          <input id="loginUsername" type="text" required autocomplete="username"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
+        </div>
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+          <input id="loginPassword" type="password" required autocomplete="current-password"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
+        </div>
+        <div id="loginError" class="hidden mb-4 text-sm text-red-600 bg-red-50 p-2 rounded"></div>
+        <button id="loginBtn" type="submit"
+          class="w-full px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium">
+          Masuk
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <div class="flex min-h-screen">
+    <!-- Sidebar -->
+    <aside class="w-64 bg-white shadow-lg border-r">
+      <div class="p-6 border-b">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 bg-emerald-600 rounded-lg flex items-center justify-center">
+            <i class="fas fa-wallet text-white"></i>
+          </div>
+          <div>
+            <h1 class="text-xl font-bold text-gray-900">YPWI Lutim</h1>
+            <p class="text-sm text-gray-500">Dashboard Bendahara</p>
+          </div>
+        </div>
+      </div>
+
+      <nav class="p-4 space-y-2">
+        <button
+          class="nav-item nav-active w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg hover:bg-gray-100"
+          data-tab="dashboard">
+          <i class="fas fa-chart-line"></i>
+          <span>Dashboard</span>
+        </button>
+        <button
+          class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+          data-tab="payments">
+          <i class="fas fa-file-invoice-dollar"></i>
+          <span>Pembayaran Siswa</span>
+        </button>
+        <button
+          class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+          data-tab="sppReminder">
+          <i class="fab fa-whatsapp"></i>
+          <span>Pengingat SPP</span>
+        </button>
+        <button
+          class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+          data-tab="autoBilling">
+          <i class="fas fa-robot"></i>
+          <span>Auto Billing</span>
+        </button>
+        <button
+          class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+          data-tab="kafalah">
+          <i class="fas fa-coins"></i>
+          <span>KAFALAH</span>
+        </button>
+        <button
+          class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+          data-tab="attendanceRecap">
+          <i class="fas fa-calendar-check"></i>
+          <span>Rekap Absensi</span>
+        </button>
+        <button
+          class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+          data-tab="financial">
+          <i class="fas fa-book-journal"></i>
+          <span>Jurnal Umum</span>
+        </button>
+        <button
+          class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+          data-tab="spmb">
+          <i class="fas fa-file-alt"></i>
+          <span>SPMB</span>
+        </button>
+        <button
+          class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+          data-tab="payment-gateway">
+          <i class="fas fa-credit-card"></i>
+          <span>Payment Gateway</span>
+        </button>
+        <button
+          class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+          data-tab="customerService">
+          <i class="fas fa-headset"></i>
+          <span>Customer Service</span>
+        </button>
+        <button
+          class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+          data-tab="messageHistory">
+          <i class="fab fa-whatsapp"></i>
+          <span>Riwayat Pesan WA</span>
+        </button>
+        <button
+          class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+          data-tab="paymentSettings">
+          <i class="fas fa-cog"></i>
+          <span>Pengaturan Pembayaran</span>
+        </button>
+        <button
+          class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+          data-tab="billingTA">
+          <i class="fas fa-calendar"></i>
+          <span>Billing per TA</span>
+        </button>
+      </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 p-8">
+      <!-- Header -->
+      <div class="flex justify-between items-center mb-8">
+        <div>
+          <h2 id="pageTitle" class="text-3xl font-bold text-gray-900">Dashboard Bendahara</h2>
+          <p class="text-gray-600 mt-1">Selamat datang, <span id="bendaharaName">Bendahara</span></p>
+        </div>
+        <div class="flex items-center space-x-4">
+          <span class="text-sm text-gray-500" id="currentDate"></span>
+          <div class="flex items-center space-x-2">
+            <div class="w-8 h-8 bg-emerald-500 rounded-full flex items-center justify-center">
+              <i class="fas fa-user text-white text-sm"></i>
+            </div>
+            <span class="text-sm font-medium" id="bendaharaRole">Bendahara</span>
+            <button onclick="logout()" title="Keluar"
+              class="ml-1 w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full flex items-center justify-center text-gray-600">
+              <i class="fas fa-sign-out-alt text-sm"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Dashboard Tab -->
+      <div id="dashboardTab" class="tab-content">
+        <!-- School Filter -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 mb-6">
+          <div class="flex items-center space-x-3">
+            <label class="text-sm font-medium text-gray-700">Filter Sekolah:</label>
+            <select id="dashboardTenantFilter"
+              class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
+              <option value="">Semua Sekolah</option>
+            </select>
+            <button onclick="loadDashboardData()"
+              class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
+              <i class="fas fa-sync-alt mr-2"></i>Refresh
+            </button>
+          </div>
+        </div>
+
+        <!-- Tenant Summary Cards -->
+        <div id="tenantCards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+          <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 text-center">
+            <i class="fas fa-spinner fa-spin text-3xl text-gray-400"></i>
+            <p class="text-gray-500 mt-2">Memuat data...</p>
+          </div>
+        </div>
+
+        <!-- Recent Activity -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
+          <h3 class="text-lg font-semibold text-gray-900 mb-4">Ringkasan Lengkap</h3>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <h4 class="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Pendapatan SPP</h4>
+              <p class="text-3xl font-bold text-emerald-600 mt-2" id="totalIncome">Rp 0</p>
+            </div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <h4 class="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Gaji Guru</h4>
+              <p class="text-3xl font-bold text-red-600 mt-2" id="totalExpense">Rp 0</p>
+            </div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <h4 class="text-sm font-medium text-gray-500 uppercase tracking-wide">Saldo Kas</h4>
+              <p class="text-3xl font-bold text-blue-600 mt-2" id="currentBalance">Rp 0</p>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <h4 class="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Tunggakan</h4>
+              <p class="text-3xl font-bold text-orange-600 mt-2" id="totalTunggakan">Rp 0</p>
+            </div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <h4 class="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Kelebihan</h4>
+              <p class="text-3xl font-bold text-emerald-600 mt-2" id="totalKelebihan">Rp 0</p>
+            </div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <h4 class="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Siswa</h4>
+              <p class="text-3xl font-bold text-gray-900 mt-2" id="totalSiswa">0</p>
+            </div>
+          </div>
+
+          <!-- Daftar Pembayaran Siswa -->
+          <div class="mt-6">
+            <h4 class="font-semibold mb-3">Pembayaran Siswa</h4>
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th class="px-3 py-2 text-left">#</th>
+                    <th class="px-3 py-2 text-left">Nama Siswa</th>
+                    <th class="px-3 py-2 text-left">Sekolah</th>
+                    <th class="px-3 py-2 text-right">Iuran</th>
+                    <th class="px-3 py-2 text-center">Status</th>
+                    <th class="px-3 py-2 text-right">Saldo</th>
+                  </tr>
+                </thead>
+                <tbody id="paymentsSummaryTable">
+                  <tr>
+                    <td colspan="6" class="p-4 text-center">Memuat...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- KAFALAH Tab -->
+      <div id="kafalahTab" class="tab-content hidden">
+        <div class="bg-white rounded-xl shadow-sm border-2 border-yellow-200 p-6 mb-4">
+          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+            <div>
+              <h3 class="text-lg font-semibold text-gray-900"><i class="fas fa-coins mr-2 text-yellow-600"></i>Penggajian KAFALAH</h3>
+              <p class="text-sm text-gray-500">Mengikuti struktur KAFALAH YPWI Luwu Timur (Pokok + Tunjangan + Pemotongan)</p>
+            </div>
+            <div class="flex flex-wrap items-end gap-2">
+              <div><label class="block text-xs font-medium text-gray-600 mb-1">Sekolah</label>
+                <select id="kafalahTenantSelect" onchange="loadKafalahSettings(this.value)" class="px-3 py-2 border border-gray-300 rounded-md text-sm">
+                  <option value="">Pilih sekolah</option>
+                </select>
+              </div>
+              <div><label class="block text-xs font-medium text-gray-600 mb-1">Bulan</label>
+                <input type="month" id="kafalahBulan" class="px-3 py-2 border border-gray-300 rounded-md text-sm" />
+              </div>
+              <button onclick="previewKafalah()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm"><i
+                  class="fas fa-calculator mr-1"></i>Hitung Preview</button>
+              <button onclick="generateKafalah()" class="bg-green-600 text-white px-4 py-2 rounded-lg text-sm"><i
+                  class="fas fa-save mr-1"></i>Simpan Slip</button>
+              <button onclick="sendKafalahWhatsApp('pusat')" class="bg-green-700 text-white px-4 py-2 rounded-lg text-sm"><i
+                  class="fab fa-whatsapp mr-1"></i>Kirim WA (Pusat)</button>
+              <button onclick="sendKafalahWhatsApp('sekolah')" class="bg-teal-600 text-white px-4 py-2 rounded-lg text-sm"><i
+                  class="fab fa-whatsapp mr-1"></i>Kirim WA (Sekolah)</button>
+              <button onclick="exportKafalahExcel()" class="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm"><i
+                  class="fas fa-file-excel mr-1"></i>Excel</button>
+              <button onclick="loadKafalahHistory()" class="bg-gray-600 text-white px-4 py-2 rounded-lg text-sm"><i
+                  class="fas fa-history mr-1"></i>History</button>
+</div>

@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="id" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manager Halaman Publik SPMB - YPWI Lutim</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        :root {
+            --primary: #066e3a;
+            --primary-dark: #044e28;
+            --primary-light: #e8f5e9;
+            --accent: #f59e0b;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --bg-light: #f8fafc;
+            --border-color: #e2e8f0;
+            --card-bg: #ffffff;
+            --modal-bg: rgba(0,0,0,0.5);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-light);
+            color: var(--text-main);
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .container { width: 100%; max-width: 1400px; margin: 0 auto; padding: 0 24px; }
+
+        /* ============================================
+           HEADER
+        ============================================ */
+
+        .page-header {
+            background: var(--card-bg);
+            padding: 32px 24px;
+            border-radius: 1rem;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+            margin-bottom: 24px;
+            border: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            gap: 24px;
+        }
+
+        .page-header .container {
+            display: flex;
+            align-items: center;
+            gap: 32px;
+            flex-wrap: wrap;
+        }
+
+        .page-header .tenant-info {
+            flex: 1;
+            min-width: 280px;
+        }
+
+        .tenant-id {
+            background: var(--bg-light);
+            padding: 8px 16px;
+            border-radius: 0.5rem;
+            font-family: 'Inter', monospace;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        .page-header .branding {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            flex: 1;
+        }
+
+        .logo-preview {
+            width: 56px;
+            height: 56px;
+            border-radius: 0.75rem;
+            object-fit: cover;
+            border: 2px solid var(--primary);
+            transition: border-color 0.2s;
+        }
+
+        .page-header .brand-name {
+            font-weight: 700;
+            font-size: 1.5rem;
+        }
+
+        .page-header .brand-tagline {
+            font-size: 1rem;
+            color: var(--text-muted);
+        }
+
+        /* ============================================
+           TABS NAVIGASI
+        ============================================ */
+
+        .section-tabs {
+            background: var(--card-bg);
+            padding: 0 24px 4px;
+            margin-bottom: 0;
+            border-radius: 0 0 0.75rem 0.75rem;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+            display: flex;
+            gap: 1px;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 16px 20px;
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            border-radius: 0;
+            transition: all 0.2s ease;
+            border-bottom: 2px solid transparent;
+            position: relative;
+        }
+
+        .tab-btn.active {
+            color: var(--primary);
+            background: var(--bg-light);
+            border-bottom: 2px solid var(--primary);
+        }
+
+        .tab-btn:hover:not(.active) {
+            color: var(--text-muted);
+        }
+
+        .tab-btn.active::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--primary);
+            border-radius: 2px 2px 0 0;
+        }
+
+        /* ============================================
+           EDITOR PANEL
+        ============================================ */
+
+        .editor-panel {
+            background: var(--card-bg);
+            border-radius: 1rem;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+            padding: 32px;
+            min-height: 700px;
+            margin-bottom: 32px;
+        }
+
+        .form-group { margin-bottom: 32px; }
+
+        .form-group .label {
+            display: block;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+        }
+
+        .form-group .field {
+            width: 100%;
+            padding: 14px 18px;
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
+            font-size: 0.9rem;
+            transition: all 0.2s ease;
+        }
+
+        .form-group .field:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(6,110,58,0.1);
+        }
+
+        .form-group .field:disabled {
+            background: var(--bg-light);
+            cursor: not-allowed;
+        }
+
+        .form-group .field.inline { width: auto; }
+
+        .color-picker-container { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+
+        .color-preview {
+            width: 32px;
+            height: 32px;
+            border-radius: 0.375rem;
+            flex-shrink: 0;
+            border: 1px solid var(--border-color);
+        }
+
+        .color-input { display: none; }
+
+        .color-preset {
+            width: 24px;
+            height: 24px;
+            border-radius: 0.375rem;
+            flex-shrink: 0;
+            border: 2px solid #fff;
+            cursor: pointer;
+        }
+
+        .program-row { padding: 16px 0; border-bottom: 1px solid var(--border-color); display: flex; gap: 16px; align-items: center; }
+
+        .program-row:last-child { border-bottom: none; }
+
+        .program-field { padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 0.375rem; font-size: 0.875rem; flex: 1; }
+
+        .program-row .action { font-size: 0.8rem; color: var(--text-muted); cursor: pointer; white-space: nowrap; }
+
+        .wave-row { padding: 16px 0; border-bottom: 1px solid var(--border-color); display: flex; gap: 16px; align-items: center; }
+
+        .wave-row .field { padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 0.375rem; font-size: 0.875rem; flex: 1; }
+
+        .wave-row .date-wrapper { display: flex; gap: 12px; align-items: center; flex: 2; }
+
+        .wave-row .date-wrapper input { flex: 1; }
+
+        .wave-status {
+            padding: 6px 12px;
+            border-radius: 0.375rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-open { background: #d1fae5; color: #059669; }
+        .status-upcoming { background: #fcd34d; color: #d97706; }
+        .status-closed { background: #fecaca; color: #b91c1c; }
+
+        .faq-row { padding: 16px 0; border-bottom: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 12px; }
+
+        .faq-row .field { padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 0.375rem; font-size: 0.875rem; }
+
+        .stat-row { padding: 16px 0; border-bottom: 1px solid var(--border-color); display: flex; gap: 16px; align-items: center; }
+
+        .stat-row .field { padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 0.375rem; font-size: 0.875rem; flex: 1; }
+
+        .btn { padding: 12px 24px; border: none; border-radius: 0.5rem; font-size: 0.9rem; font-weight: 500; cursor: pointer; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: var(--primary-dark); }
+        .btn-secondary { background: var(--bg-light); color: var(--text-muted); border: 1px solid var(--border-color); border-radius: 0.5rem; }
+        .btn-secondary:hover { background: #e2e8f0; }
+        .btn-add { padding: 10px 18px; background: var(--primary); color: white; border: none; border-radius: 0.375rem; font-size: 0.875rem; cursor: pointer; margin-right: 8px; }
+        .btn-remove { padding: 6px 12px; background: transparent; color: #ef4444; border: none; font-size: 0.8rem; cursor: pointer; }
+        .btn-cancel { padding: 10px 18px; background: transparent; color: var(--text-muted); border: 1px solid var(--border-color); border-radius: 0.5rem; font-size: 0.875rem; cursor: pointer; margin-left: 12px; }
+
+        .toast { position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%); background: var(--primary); color: white; padding: 16px 28px; border-radius: 0.5rem; box-shadow: 0 6px 20px rgba(0,0,0,0.15); z-index: 1000; display: none; min-width: 320px; }
+        .toast.success { background: var(--success); }
+        .toast.error { background: #ef4444; }
+
+        @media (max-width: 768px) {
+            .page-header .actions { flex-direction: column; align-items: flex-start; gap: 16px; }
+            .page-header .tenant-info { margin-bottom: 20px; }
+            .editor-panel { padding: 24px; }
+            .form-group .field { padding: 10px 14px; font-size: 0.85rem; }
+            .program-row, .wave-row, .stat-row { flex-direction: column; align-items: stretch; }
+            .program-row .action, .wave-row .action { display: none; }
+        }
+
+        /* Reduced motion for accessibility */
+        @media (prefers-reduced-motion: reduce) {
+            * { transition: none !important; }
+        }
+    </style>
+</head>
+
+<body class="min-h-screen">
+
+    <header class="page-header">
+        <div class="container">
+            <div class="page-header .actions">
+                <div class="page-header .tenant-info">
+                    <h2 id="pageTitle" class="font-semibold text-lg">Editor Halaman Publik SPMB</h2>
+                    <p id="tenantInfo" class="text-sm text-gray-500">Tenant ID: <span id="displayTenantId">-</span></p>
+                </div>
+                <div class="page-header .actions-right">
+                    <button id="saveBtn" class="btn-primary w-full sm:w-auto">Simpan Halaman Publik</button>
+                    <button id="closeBtn" class="btn-cancel w-full sm:w-auto">Batal</button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="section-tabs" id="sectionTabs">
+            <button class="tab-btn active" data-tab="branding">Branding</button>
+            <button class="tab-btn" data-tab="programs">Programs</button>
+            <button class="tab-btn" data-tab="waves">Waves</button>
+            <button class="tab-btn" data-tab="faqs">FAQs</button>
+            <button class="tab-btn" data-tab="stats">Stats</button>
+        </div>
+
+        <div class="editor-panel" id="editorPanel">
+
+            <div id="tabBranding" class="form-group">
+                <label class="label">Nama Sekolah</label>
+                <input type="text" id="schoolName" class="field" placeholder="Nama Sekolah">
+                <label class="label mt-4">Tagline</label>
+                <input type="text" id="schoolTagline" class="field" placeholder="Tagline Sekolah">
+                <label class="label mt-4">Logo URL</label>
+                <div class="color-picker-container">
+                    <input type="text" id="logoUrl" class="field" placeholder="https://example.com/logo.png">
+                    <div class="color-preview" id="logoPreview" style="background: #6366f1;"></div>
+                </div>
+                <label class="label mt-4">Warna Utama</label>
+                <div class="color-picker-container">
+                    <input type="color" id="primaryColor" class="field" value="#066e3a">
+                    <div class="color-preset" style="background: #066e3a;" data-value="#066e3a" title="YPWI Primary"></div>
+                    <div class="color-preset" style="background: #2563eb;" data-value="#2563eb" title="YPWI Blue"></div>
+                    <div class="color-preset" style="background: #dc2626;" data-value="#dc2626" title="Red"></div>
+                    <div class="color-preset" style="background: #7c3aed;" data-value="#7c3aed" title="Purple"></div>
+                    <div class="color-preset" style="background: #0891b2;" data-value="#0891b2" title="Cyan"></div>
+                    <div class="color-preset" style="background: #ca8a04;" data-value="#ca8a04" title="Amber"></div>
+                </div>
+                <label class="label mt-4">Warna Aksen</label>
+                <div class="color-picker-container">
+                    <input type="color" id="accentColor" class="field" value="#f59e0b">
+                    <div class="color-preset" style="background: #f59e0b;" data-value="#f59e0b" title="YPWI Amber"></div>
+                    <div class="color-preset" style="background: #10b981;" data-value="#10b981" title="Teal"></div>
+                    <div class="color-preset" style="background: #ec4899;" data-value="#ec4899" title="Pink"></div>
+                    <div class="color-preset" style="background: #f97316;" data-value="#f97316" title="Orange"></div>
+                    <div class="color-preset" style="background: #6366f1;" data-value="#6366f1" title="Violet"></div>
+                    <div class="color-preset" style="background: #84cc16;" data-value="#84cc16" title="Lime"></div>
+                </div>
+            </div>
+
+            <div id="tabPrograms" class="form-group">
+                <div class="mb-4">
+                    <button class="btn-add" onclick="addProgramRow()">Tambah Program</button>
+                </div>
+                <div id="programsList">
+                </div>
+            </div>
+
+            <div id="tabWaves" class="form-group">
+                <div class="mb-4">
+                    <button class="btn-add" onclick="addWaveRow()">Tambah Gelombang</button>
+                </div>
+                <div id="wavesList">
+                </div>
+            </div>
+
+            <div id="tabFAQs" class="form-group">
+                <div class="mb-4">
+                    <button class="btn-add" onclick="addFaqRow()">Tambah FAQ</button>
+                </div>
+                <div id="faqsList">
+                </div>
+            </div>
+
+            <div id="tabStats" class="form-group">
+                <div class="mb-4">
+                    <button class="btn-add" onclick="addStatRow()">Tambah Statistik</button>
+                </div>
+                <div id="statsList">
+                </div>
+            </div>
+
+        </div>
+
+        <div class="preview-panel">
+            <div class="preview-header">
+                <span class="tenant">Tenant: <span id="previewTenant">-</span></span>
+                <span class="status" id="previewStatus">-</span>
+            </div>
+            <div id="previewContent">
+                <p class="text-gray-500 text-sm">Memuat preview...</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="toastContainer"></div>
+
+    <script>
+        // ============================================
+        // CONFIGURATION
+        // ============================================
+
+        const YPWI_COLORS = {
+            primary: ['#066e3a', '#2563eb', '#dc2626', '#7c3aed', '#0891b2', '#ca8a04'],
+            accent: ['#f59e0b', '#10b981', '#ec4899', '#f97316', '#6366f1', '#84cc16']
+        };
+
+        const STATUS_COLORS = {
+            open: { bg: '#d1fae5', color: '#059669' },
+            upcoming: { bg: '#fcd34d', color: '#d97706' },
+            closed: { bg: '#fecaca', color: '#b91c1c' }
+        };
+
+        // ============================================
+        // STATE
+        // ============================================
+
+        let tenantId = getTenantFromURL();
+        let landingData = {
+            school: { name: '', tagline: '', logo_url: '', primary_color: '#2563eb', accent_color: '#10b981' },
+            programs: [],
+            waves: [],
+            faqs: [],
+            stats: []
+        };
+
+        let previewTimeout = null;
+
+        // ============================================
+        // DOM ELEMENTS
+        // ============================================
+
+        const elements = {
+            tenantInfo: document.getElementById('displayTenantId'),
+            schoolName: document.getElementById('schoolName'),
+            schoolTagline: document.getElementById('schoolTagline'),
+            logoUrl: document.getElementById('logoUrl'),
+            logoPreview: document.getElementById('logoPreview'),
+            primaryColor: document.getElementById('primaryColor'),
+            accentColor: document.getElementById('accentColor'),
+            programsList: document.getElementById('programsList'),
+            wavesList: document.getElementById('wavesList'),
+            faqsList: document.getElementById('faqsList'),
+            statsList: document.getElementById('statsList'),
+            saveBtn: document.getElementById('saveBtn'),
+            closeBtn: document.getElementById('closeBtn'),
+            previewContent: document.getElementById('previewContent'),
+            previewTenant: document.getElementById('previewTenant'),
+            previewStatus: document.getElementById('previewStatus')
+        };
+
+        // ============================================
+        // UTILITY FUNCTIONS
+        // ============================================
+
+        function getTenantFromURL() {
+            const params = new URLSearchParams(window.location.search);
+            return params.get('tenant') || 'demo';
+        }
+
+        function $(el) { return document.getElementById(el); }
+
+        function alertToast(message, type = 'success') {
+            const container = document.getElementById('toastContainer');
+            if (!container) {
+                const c = document.createElement('div');
+                container.id = 'toastContainer';
+                document.body.appendChild(container);
+            }
+            const toast = document.createElement('div');
+            toast.id = 'toast' + Date.now();
+            toast.className = 'toast ' + type;
+            toast.innerHTML = `<strong>${type === 'success' ? '✓' : '✗'}</strong> ${message}`;
+            document.getElementById('toastContainer').appendChild(toast);
+            setTimeout(() => document.getElementById('toast' + Date.now()).remove(), 3000);
+        }
+
+        function debounce(fn, wait) {
+            return function(...args) {
+                clearTimeout(landingData.debounceTimer);
+                landingData.debounceTimer = setTimeout(fn, wait);
+            };
+        }
+
+        // ============================================
+        // DATA FUNCTIONS
+        // ============================================
+
+        async function loadLandingData() {
+            if (!tenantId) {
+                showEmptyState('Parameter tenant tidak ditemukan');
+                return;
+            }
+
+            showLoadingState();
+
+            try {
+                const r = await fetch(`/api/spmb/landing/${encodeURIComponent(tenantId)}`, {
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                });
+
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+
+                const d = await r.json();
+                if (!d.success) throw new Error(d.message || 'Gagal memuat data');
+
+                landingData = d.data || landingData;
+                populateForm();
+                renderPreview();
+                hideLoadingState();
+
+            } catch (e) {
+                console.error('[LANDING MANAGER]', e);
+                showErrorState(e.message || 'Gagal memuat data');
+                hideLoadingState();
+            }
+        }
+
+        function showLoadingState() {
+            previewContent.innerHTML = '<p class="text-gray-500 text-sm">Memuat data...</p>';
+            previewStatus.textContent = 'Loading...';
+        }
+
+        function showEmptyState(message) {
+            previewContent.innerHTML = `<p class="text-gray-500 text-center py-12">${message}</p>`;
+            previewStatus.textContent = '';
+        }
+
+        function showErrorState(message) {
+            previewContent.innerHTML = `<p class="text-red-500 text-center py-12">Error: ${message}</p>`;
+            previewStatus.textContent = 'Error';
+        }
+
+        function populateForm() {
+            $('#schoolName').value = landingData.school.name || '';
+            $('#schoolTagline').value = landingData.school.tagline || '';
+            $('#logoUrl').value = landingData.school.logo_url || '';
+            $('#logoPreview').style.background = landingData.school.primary_color || '#2563eb';
+            $('#primaryColor').value = landingData.school.primary_color || '#2563eb';
+            $('#accentColor').value = landingData.school.accent_color || '#10b981';
+
+            renderPrograms();
+            renderWaves();
+            renderFAQs();
+            renderStats();
+        }
+
+        function renderPrograms() {
+            const html = landingData.programs.length > 0
+                ? landingData.programs.map((p, idx) => `
+                    <div class="program-row">
+                        <input type="text" class="program-field" value="${p.name || ''}" data-idx="${idx}" data-field="name" placeholder="Nama program">
+                        <input type="text" class="program-field" value="${p.description || ''}" data-idx="${idx}" data-field="description" placeholder="Deskripsi singkat">
+                        <input type="number" class="program-field" value="${p.quota || ''}" data-idx="${idx}" data-field="quota" placeholder="Kuota">
+                        <button type="button" class="program-row .action text-red-600 text-xs hover:text-red-700" onclick="removeProgramRow(${idx})">Hapus</button>
+                    </div>
+                `).join('')
+                : '<p class="text-gray-500 text-sm center">Belum ada program. Klik <button class="btn-add text-blue-600 text-sm hover:text-blue-800" onclick="addProgramRow()">Tambah Program</button> untuk menambah.</p>';
+            $('#programsList').innerHTML = html;
+        }
+
+        function addProgramRow() {
+            landingData.programs.push({ name: '', description: '', quota: 0, is_active: true, sort_order: landingData.programs.length });
+            renderPrograms();
+        }
+
+        function removeProgramRow(idx) {
+            landingData.programs.splice(idx, 1);
+            renderPrograms();
+        }
+
+        function renderWaves() {
+            const html = landingData.waves.length > 0
+                ? landingData.waves.map((w, idx) => {
+                    const status = computeWaveStatus(w);
+                    return `
+                        <div class="wave-row">
+                            <input type="text" class="field" value="${w.name || ''}" data-idx="${idx}" data-field="name" placeholder="Nama gelombang">
+                            <div class="date-wrapper">
+                                <input type="date" class="field" value="${w.registration_start || ''}" data-idx="${idx}" data-field="start_date">
+                                <input type="date" class="field" value="${w.registration_end || ''}" data-idx="${idx}" data-field="end_date">
+                            </div>
+                            <input type="number" class="field" value="${w.max_participants || ''}" data-idx="${idx}" data-field="max_participants" placeholder="Kuota">
+                            <span class="wave-status ${status.status}">${status.text}</span>
+                            <button type="button" class="program-row .action text-red-600 text-xs hover:text-red-700" onclick="removeWaveRow(${idx})">Hapus</button>
+                        </div>
+                    `;
+                }).join('')
+                : '<p class="text-gray-500 text-sm center">Belum ada gelombang. Klik <button class="btn-add text-blue-600 text-sm hover:text-blue-800" onclick="addWaveRow()">Tambah Gelombang</button> untuk menambah.</p>';
+            $('#wavesList').innerHTML = html;
+        }
+
+        function computeWaveStatus(wave) {
+            if (!wave.registration_start || !wave.registration_end) return { status: 'upcoming', text: 'Akan Datang' };
+            const now = new Date();
+            const start = new Date(wave.registration_start);
+            const end = new Date(wave.registration_end);
+            if (now >= start && now <= end) return { status: 'open', text: 'Dibuka' };
+            if (now < start) return { status: 'upcoming', text: 'Akan Datang' };
+            return { status: 'closed', text: 'Ditutup' };
+        }
+
+        function addWaveRow() {
+            landingData.waves.push({ name: '', registration_start: '', registration_end: '', max_participants: 0, is_active: true, sort_order: landingData.waves.length });
+            renderWaves();
+        }
+
+        function removeWaveRow(idx) {
+            landingData.waves.splice(idx, 1);
+            renderWaves();
+        }
+
+        function renderFAQs() {
+            const html = landingData.faqs.length > 0
+                ? landingData.faqs.map((f, idx) => `
+                    <div class="faq-row">
+                        <input type="text" class="field" value="${f.question || ''}" data-idx="${idx}" data-field="question" placeholder="Pertanyaan umum">
+                        <textarea class="field" rows="3" data-idx="${idx}" data-field="answer">${f.answer || ''}</textarea>
+                        <input type="number" class="field" value="${f.sort_order || ''}" data-idx="${idx}" data-field="sort_order" placeholder="Urutan">
+                        <button type="button" class="text-red-600 text-xs hover:text-red-700" onclick="removeFaqRow(${idx})">Hapus</button>
+                    </div>
+                `).join('')
+                : '<p class="text-gray-500 text-sm center">Belum ada FAQ. Klik <button class="btn-add text-blue-600 text-sm hover:text-blue-800" onclick="addFaqRow()">Tambah FAQ</button> untuk menambah.</p>';
+            $('#faqsList').innerHTML = html;
+        }
+
+        function addFaqRow() {
+            landingData.faqs.push({ question: '', answer: '', sort_order: landingData.faqs.length });
+            renderFAQs();
+        }
+
+        function removeFaqRow(idx) {
+            landingData.faqs.splice(idx, 1);
+            renderFAQs();
+        }
+
+        function renderStats() {
+            const html = landingData.stats.length > 0
+                ? landingData.stats.map((s, idx) => `
+                    <div class="stat-row">
+                        <input type="text" class="field" value="${s.label || ''}" data-idx="${idx}" data-field="label" placeholder="Label statistik">
+                        <input type="number" class="field" value="${s.value || ''}" data-idx="${idx}" data-field="value" placeholder="Nilai">
+                        <input type="number" class="field" value="${s.sort_order || ''}" data-idx="${idx}" data-field="sort_order" placeholder="Urutan">
+                        <button type="button" class="text-red-600 text-xs hover:text-red-700" onclick="removeStatRow(${idx})">Hapus</button>
+                    </div>
+                `).join('')
+                : '<p class="text-gray-500 text-sm center">Belum ada statistik. Klik <button class="btn-add text-blue-600 text-sm hover:text-blue-800" onclick="addStatRow()">Tambah Statistik</button> untuk menambah.</p>';
+            $('#statsList').innerHTML = html;
+        }
+
+        function addStatRow() {
+            landingData.stats.push({ label: '', value: 0, sort_order: landingData.stats.length });
+            renderStats();
+        }
+
+        function removeStatRow(idx) {
+            landingData.stats.splice(idx, 1);
+            renderStats();
+        }
+
+        // ============================================
+        // PREVIEW RENDER
+        // ============================================
+
+        function renderPreview() {
+            const school = landingData.school;
+            const programs = landingData.programs;
+            const waves = landingData.waves;
+            const faqs = landingData.faqs;
+            const stats = landingData.stats;
+
+            const waveStatuses = waves.map(w => {
+                if (!w.registration_start || !w.registration_end) return 'upcoming';
+                const now = new Date();
+                const start = new Date(w.registration_start);
+                const end = new Date(w.registration_end);
+                if (now >= start && now <= end) return 'open';
+                if (now < start) return 'upcoming';
+                return 'closed';
+            });
+
+            let html = '';
+
+            html += `<div class="bg-white rounded-lg p-6 mb-6 shadow-sm">
+                <h3 class="text-lg font-semibold text-gray-900 mb-4">Selamat Datang</h3>
+                <p class="text-xl font-bold" style="color: ${school.primary_color || '#066e3a'}">${school.name || 'SPMB 2026'}</p>
+                <p class="text-base text-gray-600">${school.tagline || 'Portal Resmi Pendaftaran'}</p>
+                ${school.logo_url ? `<img src="${school.logo_url}" alt="Logo" style="width: 80px; margin-top: 12px;">` : ''}
+            </div>`;
+
+            if (programs.length > 0) {
+                html += `<h3 class="text-lg font-semibold text-gray-900 mb-3">Jalur Pendaftaran</h3>`;
+                html += `<div class="grid grid-cols-1 gap-4 md:grid-cols-2">`;
+                programs.forEach(p => {
+                    html += `<div class="card p-4">
+                        <div class="card-icon"><i class="fa-solid fa-graduation-cap"></i></div>
+                        <h3 class="font-medium">${p.name || ''}</h3>
+                        <p class="text-sm text-gray-500">${p.description || ''}</p>
+                    </div>`;
+                });
+                html += `</div>`;
+            }
+
+            if (waves.length > 0) {
+                html += `<h3 class="text-lg font-semibold text-gray-900 mb-3">Gelombang Pendaftaran</h3>`;
+                html += `<div class="grid grid-cols-1 gap-4 md:grid-cols-2">`;
+                waves.forEach((w, i) => {
+                    const status = computeWaveStatus(w);
+                    html += `<div class="card p-4">
+                        <span class="status ${status}">${computeWaveStatus(w).text}</span>
+                        <h3 class="font-medium">${w.name || 'Gelombang ' + (i + 1)}</h3>
+                        <p><i class="fa-solid fa-calendar-days"></i> ${formatDate(w.registration_start)} - ${formatDate(w.registration_end)}</p>
+                        <p><i class="fa-solid fa-users"></i> Kuota: ${w.max_participants || 0}</p>
+                    </div>`;
+                });
+                html += `</div>`;
+            }
+
+            if (faqs.length > 0) {
+                html += `<h3 class="text-lg font-semibold text-gray-900 mb-3">Pertanyaan Umum</h3>`;
+                html += `<div class="grid grid-cols-1 gap-4 md:grid-cols-2">`;
+                faqs.forEach(f => {
+                    html += `<div class="card p-4"><h3 class="font-medium">${f.question || ''}</h3><p>${f.answer || ''}</p></div>`;
+                });
+                html += `</div>`;
+            }
+
+            if (stats.length > 0) {
+                html += `<h3 class="text-lg font-semibold text-gray-900 mb-3">Statistik</h3>`;
+                html += `<div class="grid grid-cols-2 gap-4">`;
+                stats.forEach(s => {
+                    html += `<div class="card p-4">
+                        <div class="font-medium" style="color: var(--primary)">${typeof s.value === 'number' ? s.value.toLocaleString() : s.value}</div>
+                        <div class="text-sm text-gray-500">${s.label || ''}</div>
+                    </div>`;
+                });
+                html += `</div>`;
+            }
+
+            previewContent.innerHTML = html || '<p class="text-gray-500 text-sm">Belum ada data untuk preview.</p>';
+
+            const status = computeWaveStatus(landingData.waves[0]) || 'upcoming';
+            const statusColor = STATUS_COLORS[status];
+            $('#previewStatus').style.background = statusColor.bg;
+            $('#previewStatus').style.color = statusColor.color;
+            $('#previewStatus').textContent = computeWaveStatus(landingData.waves[0]) || 'Akan Datang';
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return '-';
+            const d = new Date(dateStr);
+            return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+        }
+
+        // ============================================
+        // EVENT HANDLERS
+        // ============================================
+
+        document.querySelectorAll('.color-preset').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const color = this.dataset.value;
+                const input = this.closest('.color-picker-container').querySelector('input');
+                if (input) {
+                    input.value = color;
+                    input.dispatchEvent(new Event('input'));
+                }
+                const otherInput = this.closest('.color-picker-container').parentElement.querySelector('input');
+                if (otherInput && otherInput !== input) {
+                    otherInput.value = color;
+                    otherInput.dispatchEvent(new Event('input'));
+                }
+            });
+        });
+
+        const updatePreviewDebounced = debounce(renderPreview, 300);
+
+        $('#schoolName').addEventListener('input', () => { landingData.school.name = $('#schoolName').value; updatePreviewDebounced(); });
+        $('#schoolTagline').addEventListener('input', () => { landingData.school.tagline = $('#schoolTagline').value; updatePreviewDebounced(); });
+        $('#logoUrl').addEventListener('input', () => { landingData.school.logo_url = $('#logoUrl').value; $('#logoPreview').style.background = $('#primaryColor').value; updatePreviewDebounced(); });
+        $('#primaryColor').addEventListener('input', () => { landingData.school.primary_color = $('#primaryColor').value; $('#logoPreview').style.background = $('#primaryColor').value; updatePreviewDebounced(); });
+        $('#accentColor').addEventListener('input', () => { landingData.school.accent_color = $('#accentColor').value; updatePreviewDebounced(); });
+
+        document.querySelectorAll('.program-field').forEach(field => {
+            field.addEventListener('input', (e) => {
+                const idx = e.target.dataset.idx;
+                const field = e.target.dataset.field;
+                if (landingData.programs[idx]) {
+                    landingData.programs[idx][field] = e.target.value;
+                    updatePreviewDebounced();
+                }
+            });
+        });
+
+        document.querySelectorAll('.wave-row').forEach(row => {
+            row.querySelectorAll('.field').forEach(field => {
+                field.addEventListener('input', (e) => {
+                    const idx = e.target.dataset.idx;
+                    const field = e.target.dataset.field;
+                    if (landingData.waves[idx]) {
+                        landingData.waves[idx][field] = e.target.value;
+                        if (field === 'start_date' || field === 'end_date') {
+                            renderPreview();
+                        }
+                    }
+                });
+            });
+        });
+
+        document.querySelectorAll('.faq-row').forEach(row => {
+            row.querySelectorAll('.field').forEach(field => {
+                field.addEventListener('input', (e) => {
+                    const idx = e.target.dataset.idx;
+                    const field = e.target.dataset.field;
+                    if (landingData.faqs[idx]) {
+                        landingData.faqs[idx][field] = e.target.value;
+                        updatePreviewDebounced();
+                    }
+                });
+            });
+        });
+
+        document.querySelectorAll('.stat-row').forEach(row => {
+            row.querySelectorAll('.field').forEach(field => {
+                field.addEventListener('input', (e) => {
+                    const idx = e.target.dataset.idx;
+                    const field = e.target.dataset.field;
+                    if (landingData.stats[idx]) {
+                        landingData.stats[idx][field] = e.target.value;
+                        updatePreviewDebounced();
+                    }
+                });
+            });
+        });
+
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                document.querySelectorAll('.editor-panel > div').forEach(p => p.classList.add('hidden'));
+                if (tab === 'branding') $('#tabBranding').classList.remove('hidden');
+                if (tab === 'programs') $('#tabPrograms').classList.remove('hidden');
+                if (tab === 'waves') $('#tabWaves').classList.remove('hidden');
+                if (tab === 'faqs') $('#tabFAQs').classList.remove('hidden');
+                if (tab === 'stats') $('#tabStats').classList.remove('hidden');
+            });
+        });
+
+        $('#saveBtn').addEventListener('click', async function() {
+            let valid = true;
+
+            if (!$('#schoolName').value.trim()) {
+                showToast('Nama sekolah wajib diisi', 'error');
+                valid = false;
+            }
+            if (!$('#primaryColor').value) {
+                showToast('Warna utama wajib diisi', 'error');
+                valid = false;
+            }
+            if (!$('#accentColor').value) {
+                showToast('Warna aksen wajib diisi', 'error');
+                valid = false;
+            }
+
+            if (!valid) return;
+
+            landingData.school = {
+                name: $('#schoolName').value.trim(),
+                tagline: $('#schoolTagline').value.trim(),
+                logo_url: $('#logoUrl').value.trim() || null,
+                primary_color: $('#primaryColor').value,
+                accent_color: $('#accentColor').value
+            };
+
+            landingData.programs = landingData.programs.filter(p => p.name || p.description);
+            landingData.waves = landingData.waves.filter(w => w.name || w.registration_start);
+            landingData.faqs = landingData.faqs.filter(f => f.question || f.answer);
+            landingData.stats = landingData.stats.filter(s => s.label || s.value);
+
+            $('#saveBtn').disabled = true;
+            $('#saveBtn').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menyimpan...';
+
+            try {
+                const r = await fetch(`/api/spmb/landing/${encodeURIComponent(tenantId)}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+                    body: JSON.stringify(landingData)
+                });
+
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+
+                const d = await r.json();
+                if (d.success) {
+                    showToast('✓ Halaman Publik berhasil disimpan', 'success');
+                    renderPreview();
+                    setTimeout(() => window.close(), 1500);
+                } else {
+                    showToast('❌ ' + (d.message || 'Gagal menyimpan'), 'error');
+                }
+            } catch (e) {
+                showToast('❌ Error: ' + e.message, 'error');
+            } finally {
+                $('#saveBtn').disabled = false;
+                $('#saveBtn').innerHTML = 'Simpan Halaman Publik';
+            }
+        });
+
+        $('#closeBtn').addEventListener('click', () => window.close());
+
+        loadLandingData();
+    </script>
+</body>
+</html>

@@ -1015,45 +1015,73 @@ async function validateLocationRadius(userLat, userLng) {
         const allUnitsResults = [];
 
         for (const unit of unitsData.units) {
-            // Hanya cek unit yang di-assign user
-            if (!assignedTenantIds.includes(unit.tenant_id)) continue;
             if (!unit.latitude || !unit.longitude) continue;
 
             const tLat = parseFloat(unit.latitude);
             const tLng = parseFloat(unit.longitude);
             const dist = calculateDistance(userLat, userLng, tLat, tLng) * 1000;
-            const rad = unit.location_radius || 200;
-            const eff = dist + (acc * 0.3);
+            const rad = unit.location_radius || 100;
+            const eff = dist + (acc * 0.1);
 
-            console.log('[VALIDATE_RADIUS] Multi-tenant check:', unit.nama_sekolah, 'dist:', dist.toFixed(0), 'rad:', rad, 'eff:', eff.toFixed(0));
+            // Prioritize assigned tenant units, but also consider all units as fallback
+            const isAssignedTenant = assignedTenantIds.includes(unit.tenant_id);
+            const pushUnit = isAssignedTenant ? true : (allUnitsResults.length < 3); // Maksimal 3 unit fallback
 
-            allUnitsResults.push({
-                tenantId: unit.tenant_id,
-                schoolName: unit.nama_sekolah,
-                distance: dist,
-                radius: rad,
-                effectiveDist: eff,
-                isHomeUnit: true
-            });
+            if (pushUnit) {
+                allUnitsResults.push({
+                    tenantId: unit.tenant_id,
+                    schoolName: unit.nama_sekolah,
+                    distance: dist,
+                    radius: rad,
+                    effectiveDist: eff,
+                    isHomeUnit: isAssignedTenant
+                });
+            }
         }
 
-        allUnitsResults.sort((a, b) => a.effectiveDist - b.effectiveDist);
+        allUnitsResults.sort((a, b) => {
+            // Prioritize home units (assigned tenant) over fallback units
+            if (a.isHomeUnit && !b.isHomeUnit) return -1;
+            if (!a.isHomeUnit && b.isHomeUnit) return 1;
+            return a.effectiveDist - b.effectiveDist;
+        });
 
+        // Cari unit pertama yang dalam radius (prioritaskan home unit)
         for (const unit of allUnitsResults) {
             if (unit.effectiveDist <= unit.radius) {
                 console.log('[VALIDATE_RADIUS] Unit aktif ditemukan:', unit.schoolName, 'tenant:', unit.tenantId);
                 window.currentNearestTenantId = unit.tenantId;
                 window.currentRulesTenantId = unit.tenantId;
                 window.lastDistanceResult = unit.distance;
-                window.isHomeUnit = true;
+                window.isHomeUnit = unit.isHomeUnit;
                 return {
                     withinRadius: true,
                     distance: unit.distance,
                     radius: unit.radius,
                     schoolName: unit.schoolName,
                     tenant_id: unit.tenantId,
-                    isHomeUnit: true,
-                    isDinasLuarCandidate: false
+                    isHomeUnit: unit.isHomeUnit,
+                    isDinasLuarCandidate: !unit.isHomeUnit
+                };
+            }
+        }
+
+        // Jika tidak ada home unit dalam radius, cek fallback unit terdekat
+        for (const unit of allUnitsResults) {
+            if (unit.effectiveDist <= unit.radius) {
+                console.log('[VALIDATE_RADIUS] Unit fallback ditemukan:', unit.schoolName, 'tenant:', unit.tenantId);
+                window.currentNearestTenantId = unit.tenantId;
+                window.currentRulesTenantId = unit.tenantId;
+                window.lastDistanceResult = unit.distance;
+                window.isHomeUnit = false;
+                return {
+                    withinRadius: true,
+                    distance: unit.distance,
+                    radius: unit.radius,
+                    schoolName: unit.schoolName,
+                    tenant_id: unit.tenantId,
+                    isHomeUnit: false,
+                    isDinasLuarCandidate: true
                 };
             }
         }
@@ -1125,7 +1153,7 @@ async function checkDinasLuar(userLat, userLng) {
             if (!unit.latitude || !unit.longitude) continue;
 
             const distance = calculateDistance(userLat, userLng, parseFloat(unit.latitude), parseFloat(unit.longitude));
-            const radius = unit.location_radius || 200;
+            const radius = unit.location_radius || 100;
 
             if (distance * 1000 <= radius) {
                 // Perbandingan aman: normalisasi tenant_id sebelum dibandingkan
@@ -2589,6 +2617,20 @@ function setupTreasurerNav() {
         if (mobileAdminNav) {
             mobileAdminNav.style.display = 'block';
             mobileAdminNav.onclick = () => { showAdminUnitModal(assignments); };
+        }
+    }
+
+    const hasSdmRole = assignments.some(a => {
+        const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/[\s_]+/g, '');
+        return jabatan === 'sdmpusat' || jabatan === 'sdmsekolah' || jabatan === 'sdm';
+    });
+    const desktopSdmBtn = document.getElementById('desktopSdmBtn');
+    const mobileSdmNav = document.getElementById('mobileSdmNav');
+    if (hasSdmRole) {
+        if (desktopSdmBtn) desktopSdmBtn.style.display = 'block';
+        if (mobileSdmNav) {
+            mobileSdmNav.style.display = 'block';
+            mobileSdmNav.onclick = () => { window.location.href = 'sdm-dashboard.html'; };
         }
     }
 

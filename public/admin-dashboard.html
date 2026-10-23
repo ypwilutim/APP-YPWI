@@ -178,13 +178,19 @@
         <button onclick="openWhatsAppMessenger()"
           class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100">
           <i class="fas fa-comments"></i>
-          <span>WhatsApp Messenger</span></button>
+          <span>WhatsApp Messenger</span>
         </button>
         <button
           class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
           data-tab="payroll">
           <i class="fas fa-wallet"></i>
           <span>Penggajian</span>
+        </button>
+        <button
+          class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
+          data-tab="spmb">
+          <i class="fas fa-file-alt"></i>
+          <span>SPMB</span>
         </button>
         <button
           class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100"
@@ -609,9 +615,10 @@
         <!-- View Toggle -->
         <div class="flex items-center justify-between mb-4">
           <div class="flex space-x-2">
-            <button id="logViewBtn" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium">Log
+            <button id="logViewBtn" onclick="switchAdminAttendanceView('log')"
+              class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium">Log
               Harian</button>
-            <button id="monthlyViewBtn" onclick="switchAttendanceView('monthly')"
+            <button id="monthlyViewBtn" onclick="switchAdminAttendanceView('monthly')"
               class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300">Rekap
               Bulanan</button>
           </div>
@@ -694,26 +701,23 @@
               </select>
               <select id="recapYearSelect"
                 class="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"></select>
-              <button id="searchRecapBtn" onclick="loadMonthlyRecap()"
+              <button id="searchRecapBtn" onclick="loadAdminMonthlyRecap()"
                 class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm flex items-center">
                 <i class="fas fa-search mr-2"></i>Cari
               </button>
             </div>
             <div class="flex justify-between items-center mb-4">
+              <h3 class="text-lg font-semibold text-gray-900">Rekap Absensi Bulanan</h3>
               <div class="flex items-center space-x-2">
-                <h3 class="text-lg font-semibold text-gray-900">Rekap Absensi Bulanan</h3>
-                <select id="pdfTemplateSelect" class="px-2 py-1 border border-gray-300 rounded text-sm">
-                  <option value="">Template Default</option>
-                </select>
+                <button onclick="exportAdminMonthlyPdf()"
+                  class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm flex items-center">
+                  <i class="fas fa-file-pdf mr-2"></i>Export PDF
+                </button>
+                <button onclick="exportAdminMonthlyExcel()"
+                  class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm flex items-center">
+                  <i class="fas fa-file-excel mr-2"></i>Export Excel
+                </button>
               </div>
-              <button onclick="exportMonthlyPdfFromRecap()"
-                class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm flex items-center">
-                <i class="fas fa-file-pdf mr-2"></i>Export PDF
-              </button>
-              <button onclick="exportMonthlyExcel()"
-                class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm flex items-center ml-2">
-                <i class="fas fa-file-excel mr-2"></i>Export Excel
-              </button>
             </div>
             <div id="monthlyRecapContent" class="overflow-x-auto max-h-[600px]">
               <p class="text-center text-gray-500 py-8">Pilih bulan, tahun, dan sekolah untuk menampilkan rekap</p>
@@ -1133,6 +1137,54 @@
               <button onclick="saveSalary()"
                 class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Simpan</button>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SPMB Tab -->
+      <div id="spmbTab" class="tab-content hidden">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-4">
+          <h3 class="text-lg font-semibold text-gray-900 mb-4">
+            <i class="fas fa-file-alt text-indigo-600 mr-2"></i>SPMB - Penerimaan Siswa Baru (Admin Pusat)
+          </h3>
+          <p class="text-sm text-gray-500 mb-4">Admin pusat dapat melihat dan mengatur SPMB untuk semua sekolah.</p>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+              <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Pemasukan SPMB</p>
+              <p class="text-2xl font-bold text-emerald-600 mt-1" id="spmbTotalIncome">Rp 0</p>
+            </div>
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+              <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Pengeluaran SPMB</p>
+              <p class="text-2xl font-bold text-red-600 mt-1" id="spmbTotalExpense">Rp 0</p>
+            </div>
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+              <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Saldo SPMB</p>
+              <p class="text-2xl font-bold text-blue-600 mt-1" id="spmbBalance">Rp 0</p>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50 border-b border-gray-100">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600">#</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600">Tanggal</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600">Sekolah</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600">Jenis</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600">Kategori</th>
+                  <th class="px-4 py-3 text-right text-xs font-semibold text-gray-600">Nominal</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600">Keterangan</th>
+                </tr>
+              </thead>
+              <tbody id="spmbTransactionsTable" class="divide-y divide-gray-100">
+                <tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">Klik Refresh untuk memuat data</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="mt-4">
+            <button onclick="loadSpmbTransactions()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-300">
+              <i class="fas fa-sync-alt mr-1"></i>Refresh
+            </button>
           </div>
         </div>
       </div>
@@ -3093,6 +3145,9 @@
         if (typeof loadPayrollSelectors === 'function') loadPayrollSelectors();
         if (typeof loadPayroll === 'function') loadPayroll();
       }
+      if (tabName === 'spmb') {
+        loadSpmbTransactions();
+      }
       if (tabName === 'akun-guru') {
         if (typeof loadAkunGuru === 'function') loadAkunGuru();
       }
@@ -3107,6 +3162,25 @@
       });
       window.loadDashboard();
     });
+
+    async function loadSpmbTransactions() {
+      const tbody = document.getElementById('spmbTransactionsTable');
+      if (!tbody) return;
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4">Memuat...</td></tr>';
+      try {
+        const token = localStorage.getItem('token');
+        const res = await fetch('/treasurer/spmb-transactions', { headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
+        const json = await res.json();
+        if (!json.success) { showToast('Gagal muat data', 'error'); return; }
+        const data = json.data || [];
+        const summary = json.summary || { income: 0, expense: 0, balance: 0 };
+        document.getElementById('spmbTotalIncome').textContent = 'Rp ' + (summary.income || 0).toLocaleString('id-ID');
+        document.getElementById('spmbTotalExpense').textContent = 'Rp ' + (summary.expense || 0).toLocaleString('id-ID');
+        document.getElementById('spmbBalance').textContent = 'Rp ' + (summary.balance || 0).toLocaleString('id-ID');
+        if (!data.length) { tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4">Tidak ada data transaksi</td></tr>'; return; }
+        tbody.innerHTML = data.map((d, i) => '<tr><td>' + (i + 1) + '</td><td>' + d.transaction_date + '</td><td>' + d.tenant_id + '</td><td>' + (d.transaction_type === 'income' ? 'Pemasukan' : 'Pengeluaran') + '</td><td>' + d.category + '</td><td class="text-right ' + (d.transaction_type === 'income' ? 'text-emerald-600' : 'text-red-600') + '">' + 'Rp ' + (d.amount || 0).toLocaleString('id-ID') + '</td><td>' + (d.description || '-') + '</td></tr>').join('');
+      } catch (e) { tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-red-500">Error: ' + e.message + '</td></tr>'; }
+    }
   </script>
 
   <script src="js/admin-dashboard.js" defer></script>

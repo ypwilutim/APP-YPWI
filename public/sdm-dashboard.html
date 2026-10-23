@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard Direktur SDM - YPWI Lutim</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <link rel="stylesheet" href="css/sdm-dashboard.css">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .nav-active { background-color: #3b82f6; color: white; cursor: pointer; }
+    .hidden { display: none; }
+    .modal { display: none; }
+    .modal.show { display: flex; }
+    .skeleton-loader {
+      background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+      background-size: 200% 100%;
+      animation: loading 1.5s infinite;
+    }
+    @keyframes loading { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+    .skeleton-text-lg { height: 2rem; width: 60%; }
+    .kpi-progress-bar { transition: width 0.5s ease-in-out; }
+    .kpi-badge-excellent { background-color: #dcfce7; color: #166534; }
+    .kpi-badge-good { background-color: #dbeafe; color: #1e40af; }
+    .kpi-badge-fair { background-color: #fef3c7; color: #92400e; }
+    .kpi-badge-poor { background-color: #fee2e2; color: #991b1b; }
+  </style>
+</head>
+
+<body class="bg-gray-50 h-screen overflow-hidden">
+  <div class="flex h-screen">
+    <!-- Sidebar -->
+    <aside class="w-64 bg-white shadow-lg border-r h-screen overflow-y-auto flex flex-col">
+      <div class="p-6 border-b flex-shrink-0">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center">
+            <i class="fas fa-user-tie text-white"></i>
+          </div>
+          <div>
+            <h1 class="text-xl font-bold text-gray-900">Direktur SDM</h1>
+            <p class="text-sm text-gray-500">Human Resource</p>
+          </div>
+        </div>
+      </div>
+
+      <nav class="p-4 space-y-2 flex-1">
+        <button class="nav-item nav-active w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg hover:bg-gray-100" data-tab="dashboard">
+          <i class="fas fa-chart-line"></i><span>Dashboard</span>
+        </button>
+        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="teachers">
+          <i class="fas fa-users"></i><span>Manajemen Guru</span>
+        </button>
+        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="access">
+          <i class="fas fa-user-shield"></i><span>Akses SDM</span>
+        </button>
+        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="kpi">
+          <i class="fas fa-bullseye"></i><span>KPI &amp; Evaluasi</span>
+        </button>
+        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="attendance">
+          <i class="fas fa-clipboard-list"></i><span>Log Kehadiran</span>
+        </button>
+        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="recapAbsensi">
+          <i class="fas fa-calendar-check"></i><span>Rekap Absensi</span>
+        </button>
+        <div class="border-t border-gray-200 my-2"></div>
+        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="payroll">
+          <i class="fas fa-wallet"></i><span>Penggajian</span>
+        </button>
+        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="sk-guru">
+          <i class="fas fa-file-alt"></i><span>Dokumen SK Guru</span>
+        </button>
+        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="rules">
+          <i class="fas fa-user-tag"></i><span>Aturan Kepegawaian</span>
+        </button>
+        <div class="border-t border-gray-200 my-2"></div>
+        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="qr-generator">
+          <i class="fas fa-qrcode"></i><span>QR Scanner</span>
+        </button>
+        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="idcard">
+          <i class="fas fa-id-card"></i><span>Cetak ID Card</span>
+        </button>
+        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="settings">
+          <i class="fas fa-cog"></i><span>Pengaturan</span>
+        </button>
+      </nav>
+
+      <div class="p-4 border-t flex-shrink-0">
+        <div id="userInfo" class="text-sm text-gray-600">
+          <p class="font-medium text-gray-900" id="sdmUserName">Loading...</p>
+          <p class="text-xs" id="sdmUserRole">-</p>
+        </div>
+        <button onclick="logout()" class="mt-3 w-full bg-red-50 text-red-600 px-4 py-2 rounded-lg hover:bg-red-100 text-sm font-medium">
+          <i class="fas fa-sign-out-alt mr-2"></i>Keluar
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 overflow-y-auto">
+      <!-- Header -->
+      <div class="bg-white border-b px-8 py-4 flex justify-between items-center sticky top-0 z-10">
+        <div>
+          <h2 id="pageTitle" class="text-2xl font-bold text-gray-900">Dashboard</h2>
+          <p class="text-gray-600 text-sm mt-0.5" id="pageSubtitle">Ringkasan data SDM &amp; KPI</p>
+        </div>
+        <div class="flex items-center space-x-4">
+          <div id="tenantFilterWrap" class="hidden">
+            <label class="text-xs text-gray-500 block mb-1">Filter Sekolah</label>
+            <select id="tenantSelect" onchange="onTenantChange()" class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 min-w-[200px]">
+              <option value="">Semua Sekolah</option>
+            </select>
+          </div>
+          <span class="text-sm text-gray-500" id="currentDate"></span>
+        </div>
+      </div>
+
+      <div class="p-8">
+        <!-- Tab: Dashboard -->
+        <div id="dashboardTab" class="tab-content">
+          <!-- Stats Cards -->
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <div class="flex items-center justify-between">
+                <div>
+                  <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Total Guru</p>
+                  <p class="text-3xl font-bold text-gray-900 mt-2 skeleton-loader skeleton-text-lg" id="statTotalTeachers">0</p>
+                </div>
+                <div class="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
+                  <i class="fas fa-users text-indigo-600"></i>
+                </div>
+              </div>
+            </div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <div class="flex items-center justify-between">
+                <div>
+                  <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Hadir Hari Ini</p>
+                  <p class="text-3xl font-bold text-green-600 mt-2" id="statTodayPresent">0</p>
+                </div>
+                <div class="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
+                  <i class="fas fa-check-circle text-green-600"></i>
+                </div>
+              </div>
+            </div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <div class="flex items-center justify-between">
+                <div>
+                  <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Terlambat</p>
+                  <p class="text-3xl font-bold text-red-600 mt-2" id="statTodayLate">0</p>
+                </div>
+                <div class="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
+                  <i class="fas fa-clock text-red-600"></i>
+                </div>
+              </div>
+            </div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+              <div class="flex items-center justify-between">
+                <div>
+                  <p class="text-sm font-medium text-gray-500 uppercase tracking-wide">Rata-rata KPI</p>
+                  <p class="text-3xl font-bold text-indigo-600 mt-2" id="statAvgKpi">0</p>
+                </div>
+                <div class="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center">
+                  <i class="fas fa-bullseye text-indigo-600"></i>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- KPI Summary Banner -->
+          <div class="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-xl shadow-sm p-6 mb-8 text-white">
+            <div class="flex flex-wrap items-center justify-between">
+              <div>
+                <p class="text-indigo-100 text-sm">Periode Aktif</p>
+                <p class="text-2xl font-bold mt-1" id="kpiActivePeriod">Belum ada periode</p>
+              </div>
+              <div class="flex space-x-8 mt-4 md:mt-0">
+                <div class="text-center">
+                  <p class="text-indigo-100 text-sm">Completion Rate</p>
+                  <p class="text-2xl font-bold" id="kpiCompletionRate">0%</p>
+                </div>
+                <div class="text-center">
+                  <p class="text-indigo-100 text-sm">Template KPI</p>
+                  <p class="text-2xl font-bold" id="kpiTotalTemplates">0</p>
+                </div>
+                <div class="text-center">
+                  <p class="text-indigo-100 text-sm">Guru Dinilai</p>
+                  <p class="text-2xl font-bold" id="kpiAssessedCount">0</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Charts -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+              <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-gray-900">Statistik Kehadiran</h3>
+                <div class="flex space-x-2">
+                  <button id="chartWeeklyBtn" onclick="switchChart('weekly')" class="px-3 py-1 text-xs font-medium bg-indigo-600 text-white rounded-md">Mingguan</button>
+                  <button id="chartMonthlyBtn" onclick="switchChart('monthly')" class="px-3 py-1 text-xs font-medium bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">Bulanan</button>
+                </div>
+              </div>
+              <canvas id="attendanceChart" class="h-64"></canvas>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+              <h3 class="text-lg font-semibold text-gray-900 mb-4">Rata-rata KPI per Indikator</h3>
+              <canvas id="kpiChart" class="h-64"></canvas>
+            </div>
+          </div>
+
+          <!-- By School -->
+          <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Rekapitulasi per Sekolah</h3>
+            <div class="overflow-x-auto">
+              <table class="w-full">
+                <thead class="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Sekolah</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Jumlah Guru</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Tingkat Kehadiran (7 Hari)</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
+                  </tr>
+                </thead>
+                <tbody id="schoolRecapTable" class="divide-y divide-gray-100">
+                  <tr><td colspan="4" class="px-4 py-8 text-center text-gray-500">Memuat data...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: Manajemen Guru -->
+        <div id="teachersTab" class="tab-content hidden">
+          <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div class="flex justify-between items-center mb-6">
+              <h3 class="text-lg font-semibold text-gray-900">Manajemen Data Guru</h3>
+              <div class="flex space-x-2">
+                <div class="relative">
+                  <input type="text" id="teacherSearch" placeholder="Cari guru..." class="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent w-64" onkeyup="handleTeacherSearch(event)">
+                  <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                </div>
+                <select id="jabatanFilter" onchange="loadTeachers()" class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                  <option value="">Semua Jabatan</option>
+                </select>
+                <select id="statusKepegawaianFilter" onchange="loadTeachers()" class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
+                  <option value="">Semua Status</option>
+                  <option value="PNS">PNS</option>
+                  <option value="Honorer">Honorer</option>
+                  <option value="GTY">GTY</option>
+                  <option value="Kontrak">Kontrak</option>
+                </select>
+              </div>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full">
+                <thead class="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Nama</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">NIK</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">NIP</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Jabatan</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Sekolah</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Hadir Hari Ini</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="sdmTeachersTable" class="divide-y divide-gray-100">
+                  <tr><td colspan="8" class="px-4 py-12 text-center text-gray-500"><i class="fas fa-spinner fa-spin text-xl mb-2"></i><p>Memuat data...</p></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="mt-6 flex items-center justify-between">
+              <div class="flex items-center text-sm text-gray-700">
+                <span id="teacherPaginationInfo">Menampilkan 0 dari 0 data</span>
+              </div>
+              <div class="flex items-center space-x-2">
+                <button id="teacherPrevPageBtn" onclick="changeTeacherPage(teacherCurrentPage - 1)" class="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                  <i class="fas fa-chevron-left mr-1"></i>Sebelumnya
+                </button>
+                <button id="teacherNextPageBtn" onclick="changeTeacherPage(teacherCurrentPage + 1)" class="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                  Selanjutnya<i class="fas fa-chevron-right ml-1"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: Akses SDM -->
+      <div id="accessTab" class="tab-content hidden">
+        <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
+          <div class="flex items-start">
+            <i class="fas fa-info-circle text-blue-600 mt-0.5 mr-3"></i>
+            <div class="text-sm text-blue-800">
+              <p class="font-semibold mb-1">Aturan penempatan SDM</p>
+              <p>Tenant <span class="font-mono font-semibold">YPWILUTIM</span> = <span class="font-semibold">SDM Pusat</span> (dapat mengakses semua sekolah dan seluruh jabatan).</p>
+              <p>Selain <span class="font-mono font-semibold">YPWILUTIM</span> = <span class="font-semibold">SDM Sekolah</span> (hanya dapat mengakses unit sekolahnya sendiri).</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Form pemberian akses (SDM Pusat saja) -->
+        <div id="accessAssignCard" class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
+          <h3 class="text-lg font-semibold text-gray-900 mb-4">
+            <i class="fas fa-user-plus text-indigo-600 mr-2"></i>Berikan Akses SDM
+          </h3>
+          <p class="text-sm text-gray-500 mb-4">Pilih sekolah terlebih dahulu &mdash; jabatan SDM akan otomatis ditentukan: <span class="font-semibold">SDM Pusat</span> untuk YPWILUTIM, <span class="font-semibold">SDM</span> untuk sekolah lain. Guru harus sudah punya penempatan di sekolah tersebut.</p>
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Sekolah</label>
+              <select id="accessTenantSelect" onchange="onAccessTenantChange()" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500">
+                <option value="">Pilih Sekolah</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Jabatan</label>
+              <input type="text" id="accessJabatanPreview" readonly class="w-full px-3 py-2 border border-gray-200 bg-gray-50 rounded-lg text-sm text-gray-600" value="&mdash;">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Cari Guru (nama/NIK)</label>
+              <div class="relative">
+                <input type="text" id="accessTeacherSearch" placeholder="Ketik minimal 2 karakter..." class="pl-9 pr-3 py-2 w-full border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500" onkeyup="handleAccessTeacherSearch(event)">
+                <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-xs"></i>
+              </div>
+            </div>
+            <div>
+              <button onclick="assignSdmAccess()" class="w-full bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 text-sm font-medium">
+                <i class="fas fa-user-shield mr-2"></i>Berikan Akses
+              </button>
+            </div>
+          </div>
+
+          <!-- Hasil pencarian guru -->
+          <div id="accessTeacherResult" class="mt-4 hidden">
+            <p class="text-xs font-medium text-gray-600 mb-2">Pilih guru:</p>
+            <div id="accessTeacherList" class="border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-64 overflow-y-auto"></div>
+          </div>
+        </div>
+
+        <!-- Daftar pemegang akses SDM -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold text-gray-900">
+              <i class="fas fa-users-cog text-indigo-600 mr-2"></i>Pemegang Akses SDM
+            </h3>
+            <button onclick="loadSdmAccessList()" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 text-sm font-medium">
+              <i class="fas fa-sync-alt mr-2"></i>Muat Ulang
+            </button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full">
+              <thead class="bg-gray-50 border-b border-gray-100">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Nama</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">NIK</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Sekolah</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Jabatan SDM</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Level</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="sdmAccessTable" class="divide-y divide-gray-100">
+                <tr><td colspan="6" class="px-4 py-12 text-center text-gray-500"><i class="fas fa-spinner fa-spin text-xl mb-2"></i><p>Memuat data...</p></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: KPI & Evaluasi -->
+        <div id="kpiTab" class="tab-content hidden">
+          <div class="flex space-x-2 mb-6">
+            <button id="kpiOverviewBtn" onclick="switchKpiView('overview')" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium">Overview &amp; Input Nilai</button>
+            <button id="kpiTemplateBtn" onclick="switchKpiView('template')" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300">Template KPI</button>
+            <button id="kpiPeriodBtn" onclick="switchKpiView('period')" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300">Periode Penilaian</button>
+          </div>
+
+          <!-- KPI Overview -->
+          <div id="kpiOverviewSection">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+              <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Periode Penilaian</label>
+                <select id="kpiPeriodSelect" onchange="loadKpiOverview()" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500">
+                  <option value="">Memuat periode...</option>
+                </select>
+              </div>
+              <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Pilih Guru</label>
+                <select id="kpiTeacherSelect" onchange="loadKpiTeacherDetail()" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500">
+                  <option value="">Semua Guru</option>
+                </select>
+              </div>
+              <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Kategori</label>
+                <select id="kpiKategoriSelect" onchange="loadKpiOverview()" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500">
+                  <option value="">Semua Kategori</option>
+                  <option value="guru">Guru</option>
+                  <option value="staf">Staf</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- KPI by Jabatan -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6">
+              <h3 class="text-lg font-semibold text-gray-900 mb-4">Rata-rata KPI per Jabatan</h3>
+              <div class="overflow-x-auto">
+                <table class="w-full">
+                  <thead class="bg-gray-50 border-b border-gray-100">
+                    <tr>
+                      <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Jabatan</th>
+                      <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Jumlah Guru</th>
+                      <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Avg Achievement (%)</th>
+                      <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Avg Score</th>
+                    </tr>
+                  </thead>
+                  <tbody id="kpiByJabatanTable" class="divide-y divide-gray-100">
+                    <tr><td colspan="4" class="px-4 py-8 text-center text-gray-500">Memuat data...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Input Nilai KPI -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+              <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-gray-900">Input Nilai KPI per Indikator</h3>
+                <button onclick="saveKpiScores()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 text-sm font-medium">
+                  <i class="fas fa-save mr-2"></i>Simpan Nilai
+                </button>
+              </div>
+              <p class="text-sm text-gray-500 mb-4">Pilih guru di atas untuk mengisi/melihat nilai KPI per indikator pada periode terpilih. Indikator dengan sumber "kehadiran" dan "evaluasi" terisi otomatis.</p>
+              <div class="overflow-x-auto">
+                <table class="w-full">
+                  <thead class="bg-gray-50 border-b border-gray-100">
+                    <tr>
+                      <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Indikator</th>
+                      <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Kategori</th>
+                      <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Bobot (%)</th>
+                      <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Target</th>
+                      <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Nilai Aktual</th>
+                      <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Pencapaian (%)</th>
+                      <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Skor</th>
+                    </tr>
+                  </thead>
+                  <tbody id="kpiInputTable" class="divide-y divide-gray-100">
+                    <tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">Pilih guru untuk mengisi nilai KPI</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- KPI Template Management -->
+          <div id="kpiTemplateSection" class="hidden">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+              <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-gray-900">Template Indikator KPI</h3>
+                <button onclick="showKpiTemplateModal()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 text-sm font-medium">
+                  <i class="fas fa-plus mr-2"></i>Tambah Template
+                </button>
+              </div>
+              <p class="text-sm text-gray-500 mb-4">Template KPI berlaku untuk semua sekolah. Sumber "kehadiran" terisi otomatis dari absensi, "evaluasi" dari rata-rata skor evaluasi, "manual" diisi SDM.</p>
+              <div class="overflow-x-auto">
+                <table class="w-full">
+                  <thead class="bg-gray-50 border-b border-gray-100">
+                    <tr>
+                      <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Nama Indikator</th>
+                      <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Kategori</th>
+                      <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Bobot (%)</th>
+                      <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Target</th>
+                      <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Sumber</th>
+                      <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody id="kpiTemplateTable" class="divide-y divide-gray-100">
+                    <tr><td colspan="6" class="px-4 py-8 text-center text-gray-500">Memuat data...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- KPI Period Management -->
+          <div id="kpiPeriodSection" class="hidden">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+              <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-gray-900">Periode Penilaian KPI</h3>
+                <button onclick="showKpiPeriodModal()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 text-sm font-medium">
+                  <i class="fas fa-plus mr-2"></i>Tambah Periode
+                </button>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="w-full">
+                  <thead class="bg-gray-50 border-b border-gray-100">
+                    <tr>
+                      <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Nama Periode</th>
+                      <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Jenis</th>
+                      <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Tahun</th>
+                      <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Tgl Mulai</th>
+                      <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Tgl Selesai</th>
+                      <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
+                      <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody id="kpiPeriodTable" class="divide-y divide-gray-100">
+                    <tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">Memuat data...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: Log Kehadiran -->
+        <div id="attendanceTab" class="tab-content hidden">
+          <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div class="flex justify-between items-center mb-6">
+              <h3 class="text-lg font-semibold text-gray-900">Log Kehadiran</h3>
+              <div class="flex space-x-2">
+                <input type="date" id="attendanceDateFilter" class="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500">
+                <select id="attendanceStatusFilter" class="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500">
+                  <option value="">Semua Status</option>
+                  <option value="tepat_waktu">Tepat Waktu</option>
+                  <option value="terlambat">Terlambat</option>
+                </select>
+                <button onclick="loadAttendanceLogs()" class="px-3 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"><i class="fas fa-sync-alt mr-1"></i>Refresh</button>
+              </div>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full">
+                <thead class="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Nama Guru</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Sekolah</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Jenis</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Waktu</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Metode</th>
+                  </tr>
+                </thead>
+              <tbody id="sdmAttendanceTable" class="divide-y divide-gray-100">
+                <tr><td colspan="6" class="px-4 py-12 text-center text-gray-500"><i class="fas fa-spinner fa-spin text-xl mb-2"></i><p>Memuat data...</p></td></tr>
+              </tbody>
+            </table>
+          </div>
+          </div>
+        </div>
+
+        <!-- Tab: Rekap Absensi -->
+        <div id="recapAbsensiTab" class="tab-content hidden">
+          <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Rekap Absensi Bulanan</h3>
+            <div class="flex flex-wrap gap-2 mb-4">
+              <select id="recapTenantSelect" class="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500">
+                <option value="">Memuat sekolah...</option>
+              </select>
+              <select id="recapBulan" class="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500">
+                <option value="1">Januari</option>
+                <option value="2">Februari</option>
+                <option value="3">Maret</option>
+                <option value="4">April</option>
+                <option value="5">Mei</option>
+                <option value="6">Juni</option>
+                <option value="7">Juli</option>
+                <option value="8">Agustus</option>
+                <option value="9">September</option>
+                <option value="10">Oktober</option>
+                <option value="11">November</option>
+                <option value="12">Desember</option>
+              </select>
+              <select id="recapTahun" class="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500"></select>
+              <button onclick="loadMonthlyRecap('hadir')" class="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700"><i class="fas fa-user-check mr-1"></i>Rekap Hadir</button>
+              <button onclick="loadMonthlyRecap('lengkap')" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700"><i class="fas fa-clipboard-check mr-1"></i>Rekap Lengkap</button>
+              <button onclick="exportMonthlyPdfFromRecap()" class="bg-red-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-red-700"><i class="fas fa-file-pdf mr-1"></i>Export PDF</button>
+            </div>
+            <div id="monthlyRecapContent"></div>
+          </div>
+        </div>
+
+        <!-- Tab: Penggajian -->
+        <div id="payrollTab" class="tab-content hidden">
+          <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+              <h3 class="text-lg font-semibold text-gray-900">Sistem Penggajian Guru</h3>
+            <div class="flex flex-wrap items-end gap-2">
+              <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Sekolah</label>
+                <select id="payrollTenantSelect" class="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500">
+                  <option value="">Default</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Bulan</label>
+                  <select id="payrollBulan" class="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500">
+                    <option value="1">Januari</option>
+                    <option value="2">Februari</option>
+                    <option value="3">Maret</option>
+                    <option value="4">April</option>
+                    <option value="5">Mei</option>
+                    <option value="6">Juni</option>
+                    <option value="7" selected>Juli</option>
+                    <option value="8">Agustus</option>
+                    <option value="9">September</option>
+                    <option value="10">Oktober</option>
+                    <option value="11">November</option>
+                    <option value="12">Desember</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-600 mb-1">Tahun</label>
+                  <select id="payrollTahun" class="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500"></select>
+                </div>
+                <button onclick="loadPayroll()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 text-sm">
+                  <i class="fas fa-calculator mr-1"></i>Hitung
+                </button>
+                <button onclick="exportPayrollExcel()" class="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 text-sm">
+                  <i class="fas fa-file-excel mr-1"></i>Excel
+                </button>
+                <button onclick="exportPayrollPDF()" class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 text-sm">
+                  <i class="fas fa-file-pdf mr-1"></i>PDF
+                </button>
+              </div>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full">
+                <thead class="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Nama Guru</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Gaji Pokok</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Tunjangan</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Potongan</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Total Gaji</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Kehadiran</th>
+                  </tr>
+                </thead>
+                <tbody id="sdmPayrollTable" class="divide-y divide-gray-100">
+                  <tr><td colspan="6" class="px-4 py-12 text-center text-gray-500">Pilih bulan &amp; tahun lalu klik Hitung</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: Dokumen SK Guru -->
+        <div id="sk-guruTab" class="tab-content hidden">
+          <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div class="flex justify-between items-center mb-6">
+              <h3 class="text-lg font-semibold text-gray-900">Dokumen SK Guru</h3>
+              <span class="bg-indigo-200 text-indigo-800 px-4 py-2 rounded-lg text-sm font-medium">Modul Terintegrasi</span>
+            </div>
+            <p class="text-gray-500 text-sm">Modul dokumen resmi kepegawaian guru terhubung langsung ke database sistem.</p>
+            <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div class="border border-gray-200 rounded-lg p-4">
+                <h4 class="font-semibold text-gray-900 mb-2"><i class="fas fa-file-signature text-indigo-600 mr-2"></i>SK Pengangkatan</h4>
+                <p class="text-sm text-gray-500 mb-3">Buat surat keputusan pengangkatan guru baru/GTT di unit masing-masing.</p>
+                <span class="text-indigo-600 font-medium text-sm">Modul terhubung ke database SDM</span>
+              </div>
+              <div class="border border-gray-200 rounded-lg p-4">
+                <h4 class="font-semibold text-gray-900 mb-2"><i class="fas fa-file-export text-indigo-600 mr-2"></i>SK Mutasi</h4>
+                <p class="text-sm text-gray-500 mb-3">Proses mutasi guru lintas sekolah melalui modul Manajemen Guru.</p>
+                <span class="text-indigo-600 font-medium text-sm">Modul Manajemen Guru</span>
+              </div>
+              <div class="border border-gray-200 rounded-lg p-4">
+                <h4 class="font-semibold text-gray-900 mb-2"><i class="fas fa-file-alt text-indigo-600 mr-2"></i>SK Peletakan</h4>
+                <p class="text-sm text-gray-500 mb-3">Surat keputusan pemberhentian atau peletakan guru dari jabatan.</p>
+                <span class="text-indigo-600 font-medium text-sm">Modul terhubung ke database SDM</span>
+              </div>
+              <div class="border border-gray-200 rounded-lg p-4">
+                <h4 class="font-semibold text-gray-900 mb-2"><i class="fas fa-file-contract text-indigo-600 mr-2"></i>Pakta Integritas</h4>
+                <p class="text-sm text-gray-500 mb-3">Kelola dokumen pakta integritas guru dan staf.</p>
+                <span class="text-indigo-600 font-medium text-sm">Modul terhubung ke database SDM</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: Aturan Kepegawaian -->
+        <div id="rulesTab" class="tab-content hidden">
+          <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div class="flex justify-between items-center mb-6">
+              <h3 class="text-lg font-semibold text-gray-900">Aturan Kepegawaian</h3>
+              <span class="bg-indigo-200 text-indigo-800 px-4 py-2 rounded-lg text-sm font-medium">Modul Terintegrasi</span>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div class="border border-gray-200 rounded-lg p-4">
+                <h4 class="font-semibold text-gray-900 mb-2"><i class="fas fa-user-tag text-indigo-600 mr-2"></i>Status Kepegawaian</h4>
+                <p class="text-sm text-gray-500">PNS, Honorer, GTY, GTT, dan Kontrak. NIP wajib diisi jika TMT sudah 2 tahun atau lebih.</p>
+              </div>
+              <div class="border border-gray-200 rounded-lg p-4">
+                <h4 class="font-semibold text-gray-900 mb-2"><i class="fas fa-calendar-check text-indigo-600 mr-2"></i>Aturan Absensi</h4>
+                <p class="text-sm text-gray-500">Jam masuk/pulang dan status log kehadiran (tepat waktu, terlambat, lembur) per tenant.</p>
+              </div>
+              <div class="border border-gray-200 rounded-lg p-4">
+                <h4 class="font-semibold text-gray-900 mb-2"><i class="fas fa-percentage text-indigo-600 mr-2"></i>Potongan Absensi</h4>
+                <p class="text-sm text-gray-500">Pengaturan potongan keterlambatan, izin, sakit, dan tanpa keterangan untuk payroll.</p>
+              </div>
+              <div class="border border-gray-200 rounded-lg p-4">
+                <h4 class="font-semibold text-gray-900 mb-2"><i class="fas fa-clock text-indigo-600 mr-2"></i>Tunjangan Kehadiran</h4>
+                <p class="text-sm text-gray-500">Nilai tunjangan kehadiran bulanan yang diberikan kepada guru aktif.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: QR Scanner -->
+        <div id="qr-generatorTab" class="tab-content hidden">
+          <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div class="flex justify-between items-center mb-6">
+              <h3 class="text-lg font-semibold text-gray-900">QR Scanner &amp; Generator</h3>
+              <span class="bg-indigo-200 text-indigo-800 px-4 py-2 rounded-lg text-sm font-medium">Modul QR Terintegrasi</span>
+            </div>
+            <p class="text-gray-500 text-sm">Kelola device scanner, generate token registrasi, dan monitoring scan absensi melalui Admin Dashboard.</p>
+          </div>
+        </div>
+
+        <!-- Tab: ID Card -->
+        <div id="idcardTab" class="tab-content hidden">
+          <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div class="flex justify-between items-center mb-6">
+              <h3 class="text-lg font-semibold text-gray-900">Cetak ID Card</h3>
+              <span class="bg-indigo-200 text-indigo-800 px-4 py-2 rounded-lg text-sm font-medium">Modul ID Card Terintegrasi</span>
+            </div>
+            <p class="text-gray-500 text-sm">Cetak ID Card guru dan staf melalui modul cetak ID Card yang tersedia di Admin Dashboard.</p>
+          </div>
+        </div>
+
+        <!-- Tab: Pengaturan -->
+        <div id="settingsTab" class="tab-content hidden">
+          <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <div class="flex justify-between items-center mb-6">
+              <h3 class="text-lg font-semibold text-gray-900">Pengaturan</h3>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div class="border border-gray-200 rounded-lg p-4">
+                <h4 class="font-semibold text-gray-900 mb-2"><i class="fas fa-sliders-h text-indigo-600 mr-2"></i>Potongan Absensi &amp; Tunjangan Kehadiran</h4>
+                <p class="text-sm text-gray-500 mb-3">Atur nilai potongan keterlambatan, izin, sakit, dan tanpa keterangan.</p>
+                <span class="text-indigo-600 font-medium text-sm">Modul pengaturan SDM</span>
+              </div>
+              <div class="border border-gray-200 rounded-lg p-4">
+                <h4 class="font-semibold text-gray-900 mb-2"><i class="fas fa-map-marker-alt text-indigo-600 mr-2"></i>Lokasi &amp; Geofence</h4>
+                <p class="text-sm text-gray-500 mb-3">Kelola titik lokasi, radius absensi, dan nama lokasi per sekolah.</p>
+                <span class="text-indigo-600 font-medium text-sm">Modul pengaturan SDM</span>
+              </div>
+              <div class="border border-gray-200 rounded-lg p-4">
+                <h4 class="font-semibold text-gray-900 mb-2"><i class="fas fa-calendar-alt text-indigo-600 mr-2"></i>Tahun Ajaran</h4>
+                <p class="text-sm text-gray-500 mb-3">Kelola tahun ajaran aktif dan riwayat tahun ajaran.</p>
+                <a href="tahun-ajaran.html" target="_blank" class="text-indigo-600 hover:underline text-sm font-medium">Buka pengaturan &rarr;</a>
+              </div>
+              <div class="border border-gray-200 rounded-lg p-4">
+                <h4 class="font-semibold text-gray-900 mb-2"><i class="fas fa-user-cog text-indigo-600 mr-2"></i>Unit Sekolah</h4>
+                <p class="text-sm text-gray-500 mb-3">Kelola data sekolah, metode absensi, dan tipe unit.</p>
+                <span class="text-indigo-600 font-medium text-sm">Modul pengaturan SDM</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal: Template KPI -->
+  <div id="kpiTemplateModal" class="modal fixed inset-0 bg-black bg-opacity-50 z-50 items-center justify-center hidden">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4">
+      <div class="p-6 border-b flex justify-between items-center">
+        <h3 class="text-lg font-semibold text-gray-900" id="kpiTemplateModalTitle">Tambah Template KPI</h3>
+        <button onclick="closeKpiTemplateModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="p-6 space-y-4">
+        <input type="hidden" id="kpiTemplateId">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Nama Indikator</label>
+          <input type="text" id="kpiTemplateNama" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Kategori</label>
+          <select id="kpiTemplateKategori" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
+            <option value="guru">Guru</option>
+            <option value="staf">Staf</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Bobot (%) - total seluruh indikator = 100</label>
+          <input type="number" id="kpiTemplateBobot" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" min="0" max="100" step="0.01">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Target Default</label>
+          <input type="number" id="kpiTemplateTarget" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" min="0" step="0.01">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Sumber</label>
+          <select id="kpiTemplateSumber" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
+            <option value="manual">Manual (diisi SDM)</option>
+            <option value="kehadiran">Otomatis dari Kehadiran</option>
+            <option value="evaluasi">Otomatis dari Evaluasi</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Keterangan</label>
+          <textarea id="kpiTemplateKeterangan" rows="2" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"></textarea>
+        </div>
+      </div>
+      <div class="p-6 border-t flex justify-end space-x-2">
+        <button onclick="closeKpiTemplateModal()" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">Batal</button>
+        <button onclick="saveKpiTemplate()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Simpan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Periode KPI -->
+  <div id="kpiPeriodModal" class="modal fixed inset-0 bg-black bg-opacity-50 z-50 items-center justify-center hidden">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4">
+      <div class="p-6 border-b flex justify-between items-center">
+        <h3 class="text-lg font-semibold text-gray-900" id="kpiPeriodModalTitle">Tambah Periode Penilaian</h3>
+        <button onclick="closeKpiPeriodModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="p-6 space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Nama Periode</label>
+          <input type="text" id="kpiPeriodNama" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" placeholder="Contoh: Oktober 2026 / Semester 1 2026/2027">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Jenis</label>
+          <select id="kpiPeriodJenis" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
+            <option value="bulanan">Bulanan</option>
+            <option value="semester">Semester</option>
+            <option value="tahunan">Tahunan</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Tahun</label>
+          <input type="number" id="kpiPeriodTahun" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" min="2020" max="2100" step="1">
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Tanggal Mulai</label>
+            <input type="date" id="kpiPeriodMulai" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Tanggal Selesai</label>
+            <input type="date" id="kpiPeriodSelesai" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500">
+          </div>
+        </div>
+      </div>
+      <div class="p-6 border-t flex justify-end space-x-2">
+        <button onclick="closeKpiPeriodModal()" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">Batal</button>
+        <button onclick="saveKpiPeriod()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Simpan</button>
+      </div>
+    </div>
+  
+
+  <script src="sdm-dashboard.js"></script>
+</body>
+
+</html>

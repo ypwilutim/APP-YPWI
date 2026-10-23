@@ -563,6 +563,12 @@
             <i class="fas fa-sync-alt"></i> Refresh
           </button>
           <div id="adminNavSection" style="margin:0; display: none; gap: 0.5rem;"></div>
+          <div id="desktopSdmBtn" style="display: none; margin-right: 0.5rem;">
+            <button onclick="window.location.href='sdm-dashboard.html'"
+              style="display: inline-flex; align-items: center; gap: 0.5rem; background: #e0e7ff; color: #3730a3; padding: 0.6rem 1.25rem; border-radius: 0.5rem; font-weight: 700; font-size: 0.85rem; border: 1px solid #c7d2fe; cursor: pointer; transition: all 0.2s;">
+              <i class="fas fa-user-tie"></i> SDM
+            </button>
+          </div>
           <div id="desktopTreasurerBtn" style="display: none; margin-right: 0.5rem;">
             <button onclick="window.location.href = (window.userAssignments && window.userAssignments.some(a => a.tenant_id === 'YPWILUTIM')) ? 'bendahara-dashboard.html' : 'bendahara-sekolah.html'"
               style="display: inline-flex; align-items: center; gap: 0.5rem; background: #fef3c7; color: #b45309; padding: 0.6rem 1.25rem; border-radius: 0.5rem; font-weight: 700; font-size: 0.85rem; border: 1px solid #fcd34d; cursor: pointer; transition: all 0.2s;">
@@ -928,6 +934,11 @@ style="font-size: 0.95rem; font-weight: 700; color: #0f172a; margin: 0 0 0.75rem
     <div id="mobileTreasurerNav" style="text-align: center; color: #64748b; cursor: pointer; display: none;">
       <i class="fas fa-wallet" style="font-size: 1.3rem; display: block; margin-bottom: 2px;"></i>
       <span style="font-size: 0.65rem; font-weight: 600;">Bendahara</span>
+    </div>
+
+    <div id="mobileSdmNav" style="text-align: center; color: #3730a3; cursor: pointer; display: none;">
+      <i class="fas fa-user-tie" style="font-size: 1.3rem; display: block; margin-bottom: 2px;"></i>
+      <span style="font-size: 0.65rem; font-weight: 600;">SDM</span>
     </div>
 
     <div id="mobileAdminNav" style="text-align: center; color: #059669; cursor: pointer; display: none;">

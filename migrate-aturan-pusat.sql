@@ -9,26 +9,31 @@ ADD INDEX idx_tipe_unit (tipe_unit);
 -- TKIT (contoh)
 INSERT INTO attendance_rules (tenant_id, tipe_unit, tipe, jam_mulai, jam_selesai, status_log, hari, keterangan) VALUES
 (NULL, 'TKIT', 'Datang', '07:00:00', '08:00:00', 'tepat_waktu', 'senin,selasa,rabu,kamis,jumat', 'Kuliah Pagi'),
+(NULL, 'TKIT', 'Pulang', '11:30:00', '12:00:00', 'pulang_cepat', 'senin,selasa,rabu,kamis,jumat', 'Pulang Cepat'),
 (NULL, 'TKIT', 'Pulang', '12:00:00', '13:00:00', 'tepat_waktu', 'senin,selasa,rabu,kamis,jumat', 'Pulang Siang');
 
 -- SDIT
 INSERT INTO attendance_rules (tenant_id, tipe_unit, tipe, jam_mulai, jam_selesai, status_log, hari, keterangan) VALUES
 (NULL, 'SDIT', 'Datang', '07:30:00', '08:00:00', 'tepat_waktu', 'senin,selasa,rabu,kamis,jumat', 'Masuk'),
+(NULL, 'SDIT', 'Pulang', '11:30:00', '12:00:00', 'pulang_cepat', 'senin,selasa,rabu,kamis,jumat', 'Pulang Cepat'),
 (NULL, 'SDIT', 'Pulang', '12:00:00', '13:00:00', 'tepat_waktu', 'senin,selasa,rabu,kamis,jumat', 'Pulang');
 
 -- SMPIT
 INSERT INTO attendance_rules (tenant_id, tipe_unit, tipe, jam_mulai, jam_selesai, status_log, hari, keterangan) VALUES
 (NULL, 'SMPIT', 'Datang', '07:00:00', '08:00:00', 'tepat_waktu', 'senin,selasa,rabu,kamis,jumat,sabtu', 'Kuliah'),
+(NULL, 'SMPIT', 'Pulang', '12:30:00', '13:00:00', 'pulang_cepat', 'senin,selasa,rabu,kamis,jumat,sabtu', 'Pulang Cepat'),
 (NULL, 'SMPIT', 'Pulang', '13:00:00', '14:00:00', 'tepat_waktu', 'senin,selasa,rabu,kamis,jumat,sabtu', 'Pulang');
 
 -- SMAIT
 INSERT INTO attendance_rules (tenant_id, tipe_unit, tipe, jam_mulai, jam_selesai, status_log, hari, keterangan) VALUES
 (NULL, 'SMAIT', 'Datang', '07:30:00', '08:30:00', 'tepat_waktu', 'senin,selasa,rabu,kamis,jumat,sabtu', 'Masuk'),
+(NULL, 'SMAIT', 'Pulang', '13:30:00', '14:00:00', 'pulang_cepat', 'senin,selasa,rabu,kamis,jumat,sabtu', 'Pulang Cepat'),
 (NULL, 'SMAIT', 'Pulang', '14:00:00', '15:00:00', 'tepat_waktu', 'senin,selasa,rabu,kamis,jumat,sabtu', 'Pulang');
 
 -- Pondok
 INSERT INTO attendance_rules (tenant_id, tipe_unit, tipe, jam_mulai, jam_selesai, status_log, hari, keterangan) VALUES
 (NULL, 'pondok', 'Datang', '04:00:00', '05:00:00', 'tepat_waktu', 'senin,selasa,rabu,kamis,jumat,sabtu,minggu', 'Subuh'),
+(NULL, 'pondok', 'Pulang', '21:30:00', '22:00:00', 'pulang_cepat', 'senin,selasa,rabu,kamis,jumat,sabtu,minggu', 'Pulang Cepat'),
 (NULL, 'pondok', 'Pulang', '22:00:00', '23:00:00', 'tepat_waktu', 'senin,selasa,rabu,kamis,jumat,sabtu,minggu', 'Isya');
 
 -- SELECT DISTINCT tipe_unit FROM attendance_rules WHERE tipe_unit IS NOT NULL;

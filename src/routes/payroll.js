@@ -62,7 +62,8 @@ function resolveTenantId(req) {
   let tenantId = req.query.tenant_id;
   if (req.user.role !== 'admin' && !tenantId) {
     const assignments = (req.user.assignments || []).filter(a =>
-      ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin', 'bendahara'].includes(
+
+      ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin', 'bendahara', 'sdm'].includes(
         (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '')
       )
     );
@@ -144,7 +145,7 @@ async function getPayrollData(tenantId, bulan, tahun) {
       const tunj_kehadiran = num(settings.tunj_kehadiran);
       const row = {
         id: t.id, nama: t.nama, nik: t.nik, nip: t.nip,
-        status_kepegawaian: t.status_kepegawaian, tenant_id,
+        status_kepegawaian: t.status_kepegawaian, tenant_id: tenantId,
         bank: t.bank, nomor_rekening: t.nomor_rekening,
         gaji_pokok: num(resolved.gaji_pokok), tunj_kinerja: num(resolved.tunj_kinerja), tunj_umum: num(resolved.tunj_umum),
         tunj_istri: num(resolved.tunj_istri), tunj_anak: num(resolved.tunj_anak),

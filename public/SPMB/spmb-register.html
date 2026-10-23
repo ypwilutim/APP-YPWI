@@ -136,19 +136,8 @@
             </select>
           </div>
           <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Bank</label>
-            <select id="bank" name="bank" class="w-full px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20">
-              <option value="">Pilih</option>
-              <option value="BCA">BCA</option>
-              <option value="BNI">BNI</option>
-              <option value="BRI">BRI</option>
-              <option value="Mandiri">Mandiri</option>
-              <option value="BSI">BSI</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Nomor Rekening</label>
-            <input type="text" id="nomor_rekening" name="nomor_rekening" class="w-full px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20">
+            <label class="block text-sm font-medium text-slate-700 mb-1">Password *</label>
+            <input type="password" id="password" name="password" required minlength="6" class="w-full px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20" placeholder="Minimal 6 karakter">
           </div>
         </div>
         <div class="flex justify-between mt-6">
@@ -190,34 +179,6 @@
         Sudah punya akun? 
         <a href="/SPMB/spmb-login.html" class="text-blue-600 hover:text-blue-700 font-medium">Login di sini</a>
       </p>
-    </div>
-  </div>
-
-  <!-- Password Setup Modal -->
-  <div id="passwordModal" style="display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.6); backdrop-filter: blur(4px); z-index: 1001; align-items: center; justify-content: center; padding: 1rem;">
-    <div style="max-width: 400px; width: 100%; background: #fff; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);">
-      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem;">
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <i class="fas fa-lock" style="font-size: 1.25rem; color: #2563eb;"></i>
-          <h3 style="margin: 0; font-size: 1.1rem; font-weight: 700; color: #0f172a;">Atur Password</h3>
-        </div>
-      </div>
-      <p style="margin: 0 0 1rem 0; font-size: 0.85rem; color: #64748b;">Buat password untuk akun Anda. Password ini akan digunakan untuk login.</p>
-      <form id="passwordForm" onsubmit="submitPassword(event)">
-        <input type="hidden" id="pendingTeacherId">
-        <div style="margin-bottom: 1rem;">
-          <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #374151; margin-bottom: 0.25rem;">Password Baru</label>
-          <input type="password" id="newPassword" required minlength="6" style="width: 100%; padding: 0.65rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem;" placeholder="Minimal 6 karakter">
-        </div>
-        <div style="margin-bottom: 1rem;">
-          <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #374151; margin-bottom: 0.25rem;">Konfirmasi Password</label>
-          <input type="password" id="confirmPassword" required minlength="6" style="width: 100%; padding: 0.65rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem;" placeholder="Ulangi password">
-        </div>
-        <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
-          <button type="button" onclick="closePasswordModal()" style="padding: 0.65rem 1.25rem; border-radius: 0.5rem; border: 1px solid #cbd5e1; background: #fff; color: #475569; font-weight: 600; cursor: pointer;">Batal</button>
-          <button type="submit" id="passwordSubmitBtn" style="padding: 0.65rem 1.25rem; border-radius: 0.5rem; border: none; background: #2563eb; color: white; font-weight: 700; cursor: pointer;">Simpan Password</button>
-        </div>
-      </form>
     </div>
   </div>
 
@@ -277,6 +238,24 @@
 
     function prevStep(step) { showStep(step); }
 
+    async function loadTenants() {
+      try {
+        const res = await fetch('/api/public/tenants');
+        const data = await res.json();
+        if (data.success && data.data) {
+          const select = document.getElementById('tenant_id');
+          data.data.forEach(t => {
+            const opt = document.createElement('option');
+            opt.value = t.tenant_id;
+            opt.textContent = t.nama_sekolah;
+            select.appendChild(opt);
+          });
+        }
+      } catch (e) {
+        console.error('Failed to load tenants:', e);
+      }
+    }
+
     document.getElementById('spmbRegistrationForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       if (!validateStep(3)) return;
@@ -296,15 +275,14 @@
       formData.append('tahun_angkatan', document.getElementById('tahun_angkatan').value);
       formData.append('tenant_id', document.getElementById('tenant_id').value);
       formData.append('jabatan_di_unit', document.getElementById('jabatan_di_unit').value);
-      formData.append('bank', document.getElementById('bank').value);
-      formData.append('nomor_rekening', document.getElementById('nomor_rekening').value);
+      formData.append('password', document.getElementById('password').value);
       formData.append('foto', document.getElementById('foto').files[0]);
       formData.append('ktp', document.getElementById('ktp').files[0]);
       formData.append('kk', document.getElementById('kk').files[0]);
       formData.append('ijazah', document.getElementById('ijazah').files[0]);
 
       try {
-        const response = await fetch('/api/public/register-guru', {
+        const response = await fetch('/api/spmb/register', {
           method: 'POST',
           body: formData,
         });
@@ -315,8 +293,9 @@
 
         if (data.success) {
           clearDraft();
-          document.getElementById('pendingTeacherId').value = data.teacherId;
-          document.getElementById('passwordModal').style.display = 'flex';
+          Swal.fire({ title: 'Pendaftaran Berhasil!', text: 'Pendaftaran panitia SPMB telah dikirim. Menunggu persetujuan admin.', icon: 'success', timer: 2000, showConfirmButton: false }).then(() => {
+            window.location.href = '/SPMB/spmb-login.html';
+          });
         } else {
           Swal.fire('Pendaftaran Gagal', data.message || 'Terjadi kesalahan', 'error');
         }
@@ -325,40 +304,6 @@
         Swal.fire('Kesalahan', 'Tidak dapat terhubung ke server', 'error');
       }
     });
-
-    async function submitPassword(e) {
-      e.preventDefault();
-      const newPassword = document.getElementById('newPassword').value;
-      const confirmPassword = document.getElementById('confirmPassword').value;
-      const teacherId = document.getElementById('pendingTeacherId').value;
-
-      if (newPassword !== confirmPassword) { Swal.fire('Error', 'Password tidak cocok', 'error'); return; }
-      if (newPassword.length < 6) { Swal.fire('Error', 'Password minimal 6 karakter', 'error'); return; }
-
-      try {
-        const response = await fetch(`/api/public/set-password/${teacherId}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password: newPassword }),
-        });
-
-        const data = await response.json();
-        if (data.success) {
-          Swal.fire({ title: 'Pendaftaran Berhasil!', text: 'Akun Anda telah dibuat. Silakan login.', icon: 'success', timer: 2000, showConfirmButton: false }).then(() => {
-            window.location.href = '/SPMB/spmb-login.html';
-          });
-        } else {
-          Swal.fire('Gagal', data.message || 'Terjadi kesalahan', 'error');
-        }
-      } catch (error) {
-        Swal.fire('Kesalahan', 'Tidak dapat terhubung ke server', 'error');
-      }
-    }
-
-    function closePasswordModal() {
-      document.getElementById('passwordModal').style.display = 'none';
-      clearDraft();
-    }
 
     function validateStep(step) {
       const stepEl = document.querySelector(`.step[data-step="${step}"]`);
@@ -369,7 +314,10 @@
       return valid;
     }
 
-    document.addEventListener('DOMContentLoaded', loadDraft);
+    document.addEventListener('DOMContentLoaded', () => {
+      loadDraft();
+      loadTenants();
+    });
   </script>
 </body>
 </html>

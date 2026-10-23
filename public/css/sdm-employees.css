@@ -1,0 +1,4 @@
+body { font-family: system-ui, -apple-system, sans-serif; background: #f8fafc; color: #334155; }
+.container { max-width: 1280px; }
+table { border-collapse: collapse; }
+th, td { white-space: nowrap; }

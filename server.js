@@ -248,6 +248,11 @@ const waliKelasRoutes = require('./src/routes/wali-kelas');
 const whatsappWebhookRoutes = require('./src/routes/whatsapp-webhook');
 require('./src/notifications');
 
+// SDM Dashboard Routes - Direktur SDM
+const sdmDashboardRoutes = require('./src/routes/sdm-dashboard');
+const sdmKpiRoutes = require('./src/routes/sdm-kpi');
+const sdmRoutes = require('./src/routes/sdm');
+
 // Start Baileys (WhatsApp Web) as the primary sender when WhatsApp is enabled
 if (process.env.WHATSAPP_ENABLED !== 'false') {
   require('./src/utils/whatsappBaileys').initWhatsAppBaileys().catch(err => {
@@ -285,6 +290,9 @@ app.use('/api', require('./src/routes/public'));
 app.use('/api', require('./src/routes/whatsapp-inbound'));
 app.use('/api', whatsappWebhookRoutes);
 app.use('/api/cs', require('./src/routes/whatsapp'));
+app.use('/api', sdmDashboardRoutes);
+app.use('/api', sdmKpiRoutes);
+app.use('/api', sdmRoutes);
 
 const logFilePath = path.join(__dirname, 'logs', 'app.log');
 // Ensure logs directory exists
@@ -967,6 +975,9 @@ async function startServer() {
     await db.initializeDatabase();
     console.log('Database initialized, starting server');
 
+    // Run SQL migration files from migrations/ directory
+    await runSqlMigrations();
+
     // Auto-migrate students table columns
     const db2 = require('./db');
     const columns = [
@@ -1080,6 +1091,76 @@ async function startServer() {
       }
     }
 
+    // Helper: relax a column to NULLable only when it currently is NOT NULL.
+    // Keeps the DDL a no-op on subsequent starts (avoids a table rebuild).
+    async function ensureColumnNullable(table, column, definition) {
+      try {
+        const rows = await db.query(
+          `SELECT IS_NULLABLE FROM information_schema.COLUMNS
+           WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+          [table, column]
+        );
+        if (rows.length && rows[0].IS_NULLABLE === 'NO') {
+          await db.query(`ALTER TABLE \`${table}\` MODIFY COLUMN \`${column}\` ${definition}`);
+          console.log(`[MIGRATION] Made nullable: ${table}.${column}`);
+        }
+      } catch (e) {
+        console.log(`[MIGRATION] Column ${table}.${column}: ${e.message}`);
+      }
+    }
+
+    // Helper: run SQL migration files from migrations/ directory
+    async function runSqlMigrations() {
+      const fs = require('fs');
+      const path = require('path');
+      const migrationsDir = path.join(process.cwd(), 'migrations');
+      
+      // Create migrations history table if not exists
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS migrations_history (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          filename VARCHAR(255) NOT NULL UNIQUE,
+          executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+      `);
+      
+      // Get already executed migrations
+      const executed = await db.query('SELECT filename FROM migrations_history');
+      const executedSet = new Set((executed || []).map(r => r.filename));
+      
+      // Read migration files
+      if (!fs.existsSync(migrationsDir)) {
+        console.log('[MIGRATION] No migrations directory found');
+        return;
+      }
+      
+      const files = fs.readdirSync(migrationsDir)
+        .filter(f => f.endsWith('.sql'))
+        .sort(); // Execute in alphabetical order
+      
+      for (const file of files) {
+        if (executedSet.has(file)) {
+          console.log(`[MIGRATION] Skipping already executed: ${file}`);
+          continue;
+        }
+        
+        const filePath = path.join(migrationsDir, file);
+        const sql = fs.readFileSync(filePath, 'utf8');
+        
+        try {
+          console.log(`[MIGRATION] Executing: ${file}`);
+          // Use runMultiple for multi-statement SQL files
+          await db.runMultiple(sql);
+          // Record as executed
+          await db.query('INSERT INTO migrations_history (filename) VALUES (?)', [file]);
+          console.log(`[MIGRATION] Completed: ${file}`);
+        } catch (e) {
+          console.error(`[MIGRATION] Failed: ${file}`, e.message);
+          // Don't throw - continue with other migrations
+        }
+      }
+    }
+    
     // Helper: create table if not exists
     async function ensureTable(sql, name) {
       try {
@@ -1120,6 +1201,13 @@ async function startServer() {
     await ensureColumn('teacher_assignments', 'tunj_kehadiran', 'DECIMAL(12,2) NOT NULL DEFAULT 0.00');
     await ensureColumn('teacher_assignments', 'potongan', 'DECIMAL(12,2) NOT NULL DEFAULT 0.00');
 
+    // --- SPMB tables ---
+    await ensureColumn('spmb_registrations', 'foto_path', 'VARCHAR(500) DEFAULT NULL');
+    await ensureColumn('spmb_registrations', 'ktp_path', 'VARCHAR(500) DEFAULT NULL');
+    await ensureColumn('spmb_registrations', 'kk_path', 'VARCHAR(500) DEFAULT NULL');
+    await ensureColumn('spmb_registrations', 'ijazah_path', 'VARCHAR(500) DEFAULT NULL');
+    await ensureColumn('spmb_registrations', 'user_id', 'INT DEFAULT NULL');
+
     // --- billing_payment: kolom biaya tambahan ---
     await ensureColumn('billing_payment', 'ransportasi', 'DECIMAL(12,2) DEFAULT 0.00');
     await ensureColumn('billing_payment', 'subsid', 'DECIMAL(12,2) DEFAULT 0.00');
@@ -1152,6 +1240,126 @@ async function startServer() {
     } catch (e) {
       console.log('[MIGRATION] payment_admin_settings seed:', e.message);
     }
+
+    // --- SPMB tables ---
+    await ensureTable(`
+      CREATE TABLE IF NOT EXISTS spmb_settings (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id VARCHAR(50) NOT NULL,
+        is_open TINYINT(1) DEFAULT 0,
+        judul_flyer VARCHAR(255) DEFAULT NULL,
+        keterangan_flyer TEXT DEFAULT NULL,
+        no_wa VARCHAR(20) DEFAULT NULL,
+        primary_color VARCHAR(7) DEFAULT '#066e3a',
+        accent_color VARCHAR(7) DEFAULT '#f59e0b',
+        school_name VARCHAR(255) DEFAULT NULL,
+        school_tagline VARCHAR(255) DEFAULT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uk_spmb_tenant (tenant_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `, 'spmb_settings');
+
+    await ensureTable(`
+      CREATE TABLE IF NOT EXISTS spmb_programs (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id VARCHAR(50) NOT NULL,
+        program_name VARCHAR(255) DEFAULT NULL,
+        description TEXT DEFAULT NULL,
+        quota INT DEFAULT 0,
+        is_active TINYINT(1) DEFAULT 1,
+        tanggal_buka DATE DEFAULT NULL,
+        tanggal_tutup DATE DEFAULT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_spmb_programs_tenant (tenant_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `, 'spmb_programs');
+
+    await ensureTable(`
+      CREATE TABLE IF NOT EXISTS spmb_waves (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id VARCHAR(50) NOT NULL,
+        wave_number INT DEFAULT NULL,
+        wave_name VARCHAR(255) DEFAULT NULL,
+        registration_start DATE DEFAULT NULL,
+        registration_end DATE DEFAULT NULL,
+        max_participants INT DEFAULT 0,
+        is_active TINYINT(1) DEFAULT 1,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_spmb_waves_tenant (tenant_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `, 'spmb_waves');
+
+    await ensureTable(`
+      CREATE TABLE IF NOT EXISTS spmb_faqs (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id VARCHAR(50) NOT NULL,
+        question TEXT DEFAULT NULL,
+        answer TEXT DEFAULT NULL,
+        sort_order INT DEFAULT 0,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_spmb_faqs_tenant (tenant_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `, 'spmb_faqs');
+
+    await ensureTable(`
+      CREATE TABLE IF NOT EXISTS spmb_stats (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id VARCHAR(50) NOT NULL,
+        label VARCHAR(255) DEFAULT NULL,
+        value INT DEFAULT 0,
+        sort_order INT DEFAULT 0,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_spmb_stats_tenant (tenant_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `, 'spmb_stats');
+
+    await ensureTable(`
+      CREATE TABLE IF NOT EXISTS spmb_registrations (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id VARCHAR(50) NOT NULL,
+        nama VARCHAR(255) DEFAULT NULL,
+        nik VARCHAR(20) DEFAULT NULL,
+        email VARCHAR(255) DEFAULT NULL,
+        no_wa VARCHAR(20) DEFAULT NULL,
+        tempat_lahir VARCHAR(255) DEFAULT NULL,
+        tanggal_lahir DATE DEFAULT NULL,
+        jenis_kelamin ENUM('L','P') DEFAULT NULL,
+        alamat TEXT DEFAULT NULL,
+        pendidikan_terakhir VARCHAR(50) DEFAULT NULL,
+        jurusan VARCHAR(255) DEFAULT NULL,
+        nama_sekolah_pendidikan VARCHAR(255) DEFAULT NULL,
+        tahun_angkatan VARCHAR(10) DEFAULT NULL,
+        tenant_id_sekolah VARCHAR(50) DEFAULT NULL,
+        jabatan_di_unit VARCHAR(100) DEFAULT NULL,
+        status ENUM('pending','approved','rejected') DEFAULT 'pending',
+        password_hash VARCHAR(255) DEFAULT NULL,
+        foto_path VARCHAR(500) DEFAULT NULL,
+        ktp_path VARCHAR(500) DEFAULT NULL,
+        kk_path VARCHAR(500) DEFAULT NULL,
+        ijazah_path VARCHAR(500) DEFAULT NULL,
+        user_id INT DEFAULT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_spmb_registrations_tenant (tenant_id),
+        KEY idx_spmb_registrations_user (user_id),
+        CONSTRAINT fk_spmb_registrations_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `, 'spmb_registrations');
+
+    await ensureTable(`
+      CREATE TABLE IF NOT EXISTS spmb_committees (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        tenant_id VARCHAR(50) NOT NULL,
+        teacher_id INT DEFAULT NULL,
+        nama VARCHAR(255) DEFAULT NULL,
+        spmb_role VARCHAR(100) DEFAULT NULL,
+        is_active TINYINT(1) DEFAULT 1,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        KEY idx_spmb_committees_tenant (tenant_id),
+        KEY idx_spmb_committees_teacher (teacher_id),
+        CONSTRAINT fk_spmb_committees_teacher FOREIGN KEY (teacher_id) REFERENCES teachers (id) ON DELETE SET NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `, 'spmb_committees');
 
     // --- Kafalah tables ---
     await ensureTable(`
@@ -1280,15 +1488,54 @@ async function startServer() {
         id INT(11) NOT NULL AUTO_INCREMENT,
         teacher_id INT(11) NOT NULL,
         tenant_id VARCHAR(50) NOT NULL,
-        tunj_struktural DECIMAL(12,2) NOT NULL DEFAULT 0,
-        tunj_pembina DECIMAL(12,2) NOT NULL DEFAULT 0,
-        tunj_pondok DECIMAL(12,2) NOT NULL DEFAULT 0,
-        tunj_apresiasi DECIMAL(12,2) NOT NULL DEFAULT 0,
+        is_active TINYINT(1) NOT NULL DEFAULT 0,
+        tunj_struktural DECIMAL(12,2) DEFAULT NULL,
+        tunj_pembina DECIMAL(12,2) DEFAULT NULL,
+        tunj_pondok DECIMAL(12,2) DEFAULT NULL,
+        tunj_apresiasi DECIMAL(12,2) DEFAULT NULL,
+        tunj_transport DECIMAL(12,2) DEFAULT NULL,
+        tunj_tepat_waktu DECIMAL(12,2) DEFAULT NULL,
+        tunj_tidak_cepat_pulang DECIMAL(12,2) DEFAULT NULL,
+        tunj_uang_makan DECIMAL(12,2) DEFAULT NULL,
+        tunj_fungsional DECIMAL(12,2) DEFAULT NULL,
+        tunj_prestasi_kinerja DECIMAL(12,2) DEFAULT NULL,
+        tunj_jam_mengajar DECIMAL(12,2) DEFAULT NULL,
+        tunj_istri DECIMAL(12,2) DEFAULT NULL,
+        tunj_anak DECIMAL(12,2) DEFAULT NULL,
+        nominal_kjm DECIMAL(12,2) DEFAULT NULL,
+        pot_luar_tanggungan DECIMAL(12,2) DEFAULT NULL,
+        pot_durasi_simt DECIMAL(12,2) DEFAULT NULL,
+        pot_taawun DECIMAL(12,2) DEFAULT NULL,
+        pot_piutang DECIMAL(12,2) DEFAULT NULL,
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY (id),
         UNIQUE KEY uniq_teacher_tenant (teacher_id, tenant_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `, 'kafalah_teacher_overrides');
+
+    // Migration: Add new columns to existing kafalah_teacher_overrides table.
+    // Each column is guarded via information_schema so this is safe to run on
+    // every start and on both MySQL and MariaDB (ADD COLUMN IF NOT EXISTS is
+    // MariaDB-only and would throw silently-failed DDL on MySQL).
+    await ensureColumn('kafalah_teacher_overrides', 'is_active', 'TINYINT(1) NOT NULL DEFAULT 0');
+    await ensureColumn('kafalah_teacher_overrides', 'tunj_transport', 'DECIMAL(12,2) DEFAULT NULL');
+    await ensureColumn('kafalah_teacher_overrides', 'tunj_tepat_waktu', 'DECIMAL(12,2) DEFAULT NULL');
+    await ensureColumn('kafalah_teacher_overrides', 'tunj_tidak_cepat_pulang', 'DECIMAL(12,2) DEFAULT NULL');
+    await ensureColumn('kafalah_teacher_overrides', 'tunj_uang_makan', 'DECIMAL(12,2) DEFAULT NULL');
+    await ensureColumn('kafalah_teacher_overrides', 'tunj_fungsional', 'DECIMAL(12,2) DEFAULT NULL');
+    await ensureColumn('kafalah_teacher_overrides', 'tunj_prestasi_kinerja', 'DECIMAL(12,2) DEFAULT NULL');
+    await ensureColumn('kafalah_teacher_overrides', 'tunj_jam_mengajar', 'DECIMAL(12,2) DEFAULT NULL');
+    await ensureColumn('kafalah_teacher_overrides', 'tunj_istri', 'DECIMAL(12,2) DEFAULT NULL');
+    await ensureColumn('kafalah_teacher_overrides', 'tunj_anak', 'DECIMAL(12,2) DEFAULT NULL');
+    await ensureColumn('kafalah_teacher_overrides', 'nominal_kjm', 'DECIMAL(12,2) DEFAULT NULL');
+    await ensureColumn('kafalah_teacher_overrides', 'pot_luar_tanggungan', 'DECIMAL(12,2) DEFAULT NULL');
+    await ensureColumn('kafalah_teacher_overrides', 'pot_durasi_simt', 'DECIMAL(12,2) DEFAULT NULL');
+    await ensureColumn('kafalah_teacher_overrides', 'pot_taawun', 'DECIMAL(12,2) DEFAULT NULL');
+    await ensureColumn('kafalah_teacher_overrides', 'pot_piutang', 'DECIMAL(12,2) DEFAULT NULL');
+    // Change existing columns to DEFAULT NULL only when still NOT NULL.
+    for (const col of ['tunj_struktural', 'tunj_pembina', 'tunj_pondok', 'tunj_apresiasi']) {
+      await ensureColumnNullable('kafalah_teacher_overrides', col, 'DECIMAL(12,2) DEFAULT NULL');
+    }
 
     await ensureTable(`
       CREATE TABLE IF NOT EXISTS kafalah_payroll (

@@ -285,6 +285,11 @@
         </button>
         <button
           class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-white/50 hover:text-gray-900 text-sm font-medium transition-all"
+          data-tab="kafalah">
+          <i class="fas fa-coins w-5 text-yellow-600"></i><span>Pengaturan KAFALAH</span>
+        </button>
+        <button
+          class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-xl text-gray-600 hover:bg-white/50 hover:text-gray-900 text-sm font-medium transition-all"
           data-tab="whatsapp">
           <i class="fab fa-whatsapp w-5 text-green-600"></i><span>WhatsApp</span>
         </button>
@@ -362,6 +367,11 @@
             <i class="fas fa-clock"
               style="font-size: 1.3rem; display: block; margin-bottom: 2px; color: #f59e0b;"></i><span
               style="font-size: 0.65rem; font-weight: 600;">Aturan</span>
+          </button>
+          <button class="mobile-tab-btn flex-1 py-1 px-1 text-center text-gray-600 rounded-lg" data-tab="kafalah">
+            <i class="fas fa-coins"
+              style="font-size: 1.3rem; display: block; margin-bottom: 2px; color: #f59e0b;"></i><span
+              style="font-size: 0.65rem; font-weight: 600;">KAFALAH</span>
           </button>
           <button class="mobile-tab-btn flex-1 py-1 px-1 text-center text-gray-600 rounded-lg" data-tab="locations">
             <i class="fas fa-map-marker-alt"
@@ -562,7 +572,7 @@
           <div style="display: flex; flex-direction: column; gap: 0.75rem;">
             <div>
               <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #374151; margin-bottom: 0.25rem;">Sekolah (Tenant)</label>
-              <select id="pendingTenantId" style="width: 100%; padding: 0.65rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem; background: #fff;">
+              <select id="pendingTenantId" onchange="syncJabatanOptions()" style="width: 100%; padding: 0.65rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem; background: #fff;">
                 <option value="">Pilih Sekolah</option>
               </select>
             </div>
@@ -591,6 +601,7 @@
                   <option value="Bag. Dapur">Bag. Dapur</option>
                   <option value="Bag. Kantin">Bag. Kantin</option>
                 </select>
+                <p id="sdmJabatanHint" style="display: none; margin: 0.35rem 0 0; font-size: 0.75rem; color: #4338ca;"></p>
             </div>
           </div>
           <div style="display: flex; gap: 0.5rem; margin-top: 1.25rem; justify-content: flex-end;">
@@ -851,7 +862,7 @@
                 <select id="schoolRecapYearSelect"
                   class="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500"></select>
               </div>
-              <button onclick="exportMonthlyPdfFromRecap()"
+              <button onclick="exportSchoolMonthlyPdf()"
                 class="btn-primary text-white px-4 py-1.5 rounded-lg text-sm flex items-center">
                 <i class="fas fa-file-pdf mr-2"></i>Export PDF
               </button>
@@ -998,6 +1009,102 @@
               <div class="text-center py-8 text-gray-400"><i class="fas fa-spinner fa-spin text-xl"></i></div>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- KAFALAH Settings Tab -->
+      <div id="kafalahTab" class="tab-content hidden">
+        <div class="main-card p-6">
+          <div class="flex justify-between items-center mb-6">
+            <h3 class="text-lg font-semibold text-gray-900 flex items-center"><i
+                class="fas fa-coins text-yellow-600 mr-2"></i>Pengaturan KAFALAH Sekolah</h3>
+          </div>
+          <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+            <p class="text-sm text-yellow-800"><i class="fas fa-info-circle mr-1"></i>
+              Pengaturan ini berlaku untuk <b id="kafalahSchoolName">sekolah ini</b>. 
+              Pengaturan individual override per guru dapat diatur oleh Bendahara Pusat.
+            </p>
+          </div>
+          <form id="schoolKafalahSettingsForm" onsubmit="saveSchoolKafalahSettings(event)" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Tunj. Struktural (flat)</label>
+              <input type="number" id="skTunjStruktural" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Tunj. Fungsional (flat)</label>
+              <input type="number" id="skTunjFungsional" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Tunj. Transportasi</label>
+              <input type="number" id="skTunjTransport" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Tunj. Kedatangan (Tepat Waktu)</label>
+              <input type="number" id="skTunjTepatWaktu" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Tunj. Tidak Pulang Cepat</label>
+              <input type="number" id="skTunjTidakCepatPulang" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Tunj. Uang Makan (flat)</label>
+              <input type="number" id="skTunjUangMakan" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Nominal KJM (per jam)</label>
+              <input type="number" id="skNominalKjm" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Tunj. Prestasi Kinerja (flat)</label>
+              <input type="number" id="skTunjPrestasiKinerja" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Tunj. Apresiasi (flat)</label>
+              <input type="number" id="skTunjApresiasi" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Tunj. Pembina (default)</label>
+              <input type="number" id="skTunjPembina" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Tunj. Pondok (default)</label>
+              <input type="number" id="skTunjPondok" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Tunj. Jam Mengajar (per jam)</label>
+              <input type="number" id="skTunjJamMengajar" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Tunj. Istri (flat)</label>
+              <input type="number" id="skTunjIstri" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Tunj. Anak (per anak)</label>
+              <input type="number" id="skTunjAnak" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Pemotongan Luar Tanggungan</label>
+              <input type="number" id="skPotLuarTanggungan" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Durasi SIM-T</label>
+              <input type="number" id="skPotDurasiSimt" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Ta'awun</label>
+              <input type="number" id="skPotTaawun" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Piutang</label>
+              <input type="number" id="skPotPiutang" min="0" step="1000" class="w-full px-3 py-2 border border-gray-300 rounded-lg">
+            </div>
+            <div class="md:col-span-2 flex items-center gap-3">
+              <button type="submit" class="px-5 py-2.5 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 font-medium">
+                <i class="fas fa-save mr-1"></i>Simpan Pengaturan KAFALAH Sekolah
+              </button>
+              <span id="skSavedInfo" class="text-sm text-gray-500"></span>
+            </div>
+          </form>
         </div>
       </div>
 
@@ -1276,6 +1383,7 @@
                 <i class="fas fa-file-alt text-indigo-600 mr-2"></i>SPMB - Penerimaan Siswa Baru
               </h3>
               <a id="spmbViewPublicBtn" href="/SPMB/spmb-public.html?tenant=" target="_blank" class="px-3 py-1.5 bg-indigo-600 text-white text-xs rounded-lg hover:bg-indigo-700 transition">Lihat Halaman Publik</a>
+              <button id="spmbLandingManagerBtn" class="px-3 py-1.5 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 transition">Kelola Landing Page</button>
             </div>
             <div id="spmbContent">
               <p class="text-gray-600">Memuat data SPMB...</p>
@@ -1486,6 +1594,15 @@
           else if (tabName === 'aturan') fetchAturan();
           else if (tabName === 'whatsapp') loadTeachersForWhatsApp();
           else if (tabName === 'spmb') { loadSpmbOverview(); loadSpmbLanding(); }
+
+        // SPMB Landing Manager button
+        document.getElementById('spmbLandingManagerBtn')?.addEventListener('click', function() {
+          if (!tenantId) {
+            alert('Parameter tenant tidak ditemukan');
+            return;
+          }
+          window.open(`/SPMB/spmb-landing-manager.html?tenant=${encodeURIComponent(tenantId)}`, '_blank');
+        });
         }
 
         // Mobile tab handlers
@@ -5088,41 +5205,55 @@ console.log('[ATTENDANCE] Fetching:', url);
         }
 
         async function loadSchoolMonthlyRecap() {
-          const month = document.getElementById('schoolRecapMonthSelect').value;
-          const year = document.getElementById('schoolRecapYearSelect').value;
+          const monthNames = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+          const month = document.getElementById('schoolRecapMonthSelect')?.value;
+          const year = document.getElementById('schoolRecapYearSelect')?.value;
           const container = document.getElementById('schoolMonthlyRecapContent');
-
+          if (!container) return;
           if (!month || !year) return;
 
           container.innerHTML = '<div class="text-center py-8"><i class="fas fa-spinner fa-spin text-xl"></i><p class="mt-2">Memuat rekap...</p></div>';
 
           try {
-            const response = await fetch(`/api/admin/monthly-report/html?tenant_id=${encodeURIComponent(tenantId)}&bulan=${month}&tahun=${year}`, {
+            // Sumber data & tampilan sama dengan Rekap Absensi di dashboard bendahara/admin
+            const response = await fetch(`/api/admin/attendance-monthly?tenant_id=${encodeURIComponent(tenantId)}&bulan=${month}&tahun=${year}`, {
               headers: { 'Authorization': `Bearer ${authToken}` }
             });
-
-            if (response.ok) {
-              container.innerHTML = await response.text();
-            } else {
+            const json = await response.json();
+            if (!json.success) {
               container.innerHTML = `
-            <div class="text-center py-8">
-              <i class="fas fa-file-pdf text-4xl text-gray-300 mb-3"></i>
-              <p class="text-gray-600">Data rekap tidak tersedia</p>
-            </div>
-          `;
+                <div class="text-center py-8">
+                  <i class="fas fa-file-pdf text-4xl text-gray-300 mb-3"></i>
+                  <p class="text-gray-600">${json.message || 'Data rekap tidak tersedia'}</p>
+                </div>
+              `;
+              return;
             }
+            const data = json.data || [];
+            const daysInMonth = json.daysInMonth || 30;
+            let headerHtml = '<tr><th rowspan="2" class="p-1 border">No</th><th rowspan="2" class="p-1 border">Nama</th><th colspan="' + daysInMonth + '" class="p-1 border">Bulan: ' + monthNames[parseInt(month)] + ' ' + year + '</th><th colspan="7" class="p-1 border">Keterangan</th></tr><tr>';
+            for (let d = 1; d <= daysInMonth; d++) headerHtml += '<th class="p-1 border">' + d + '</th>';
+            headerHtml += '<th class="p-1 border">H</th><th class="p-1 border">T</th><th class="p-1 border">I</th><th class="p-1 border">S</th><th class="p-1 border">D</th><th class="p-1 border">C</th><th class="p-1 border">TK</th></tr>';
+            let bodyHtml = '';
+            data.forEach((d, i) => {
+              bodyHtml += '<tr><td class="p-1 text-center border">' + (i + 1) + '</td><td class="p-1 border">' + (d.nama || '') + '</td>';
+              for (let day = 1; day <= daysInMonth; day++) bodyHtml += '<td class="p-1 text-center border">' + (d['tgl_' + day] || '') + '</td>';
+              bodyHtml += '<td class="p-1 text-center border">' + (d.hadir || 0) + '</td><td class="p-1 text-center border">' + (d.terlambat || 0) + '</td><td class="p-1 text-center border">' + (d.izin || 0) + '</td><td class="p-1 text-center border">' + (d.sakit || 0) + '</td><td class="p-1 text-center border">' + (d.dinas_luar || 0) + '</td><td class="p-1 text-center border">' + (d.cuti || 0) + '</td><td class="p-1 text-center border">' + (d.tanpa_keterangan || 0) + '</td></tr>';
+            });
+            container.innerHTML = '<div class="overflow-x-auto"><table class="w-full text-sm border-collapse"><thead>' + headerHtml + '</thead><tbody>' + bodyHtml + '</tbody></table></div>';
           } catch (error) {
             console.error('Monthly recap load error:', error);
             container.innerHTML = '<p class="text-center text-red-500 py-8">Error memuat rekap</p>';
           }
         }
 
-        async function exportMonthlyPdfFromRecap() {
-          const month = document.getElementById('schoolRecapMonthSelect').value;
-          const year = document.getElementById('schoolRecapYearSelect').value;
-          const pdfUrl = `/api/admin/monthly-report/pdf?tenant_id=${encodeURIComponent(tenantId)}&month=${month}&year=${year}`;
-
+        async function exportSchoolMonthlyPdf() {
+          const month = document.getElementById('schoolRecapMonthSelect')?.value;
+          const year = document.getElementById('schoolRecapYearSelect')?.value;
+          if (!month || !year) { showToast('Pilih bulan dan tahun terlebih dahulu', 'error'); return; }
           try {
+            // Endpoint PDF yang sama dengan dashboard bendahara/admin
+            const pdfUrl = `/api/admin/attendance-export-pdf?tenant_id=${encodeURIComponent(tenantId)}&bulan=${month}&tahun=${year}&tenant_name=${encodeURIComponent(schoolName || tenantId)}`;
             const response = await fetch(pdfUrl, {
               headers: { 'Authorization': `Bearer ${authToken}` }
             });
@@ -5134,7 +5265,12 @@ console.log('[ATTENDANCE] Fetching:', url);
 
             const blob = await response.blob();
             const url = window.URL.createObjectURL(blob);
-            window.open(url, '_blank');
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'rekap_absensi_' + tenantId + '_' + year + String(month).padStart(2, '0') + '.pdf';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
             setTimeout(() => window.URL.revokeObjectURL(url), 1000);
           } catch (error) {
             console.error('PDF Export error:', error);
@@ -6121,6 +6257,87 @@ console.log('[ATTENDANCE] Fetching:', url);
         window.showSchoolAddTeacherModal = showSchoolAddTeacherModal;
         window.hideSchoolTeacherModal = hideSchoolTeacherModal;
 
+        // ============================================================
+        // KAFALAH Settings for School Admin
+        // ============================================================
+        
+        async function loadSchoolKafalahSettings() {
+          try {
+            const res = await fetch(apiUrl('/kafalah/settings/tenant?tenant_id=' + encodeURIComponent(tenantId)), {
+              headers: { 'Authorization': 'Bearer ' + authToken }
+            });
+            const json = await res.json();
+            if (!json.success) return;
+            const s = json.data || {};
+            setSchoolKafalahVal('skTunjStruktural', s.tunj_struktural);
+            setSchoolKafalahVal('skTunjFungsional', s.tunj_fungsional);
+            setSchoolKafalahVal('skTunjTransport', s.tunj_transport);
+            setSchoolKafalahVal('skTunjTepatWaktu', s.tunj_tepat_waktu);
+            setSchoolKafalahVal('skTunjTidakCepatPulang', s.tunj_tidak_cepat_pulang);
+            setSchoolKafalahVal('skTunjUangMakan', s.tunj_uang_makan);
+            setSchoolKafalahVal('skNominalKjm', s.nominal_kjm);
+            setSchoolKafalahVal('skTunjPrestasiKinerja', s.tunj_prestasi_kinerja);
+            setSchoolKafalahVal('skTunjApresiasi', s.tunj_apresiasi);
+            setSchoolKafalahVal('skTunjPembina', s.tunj_pembina);
+            setSchoolKafalahVal('skTunjPondok', s.tunj_pondok);
+            setSchoolKafalahVal('skTunjJamMengajar', s.tunj_jam_mengajar);
+            setSchoolKafalahVal('skTunjIstri', s.tunj_istri);
+            setSchoolKafalahVal('skTunjAnak', s.tunj_anak);
+            setSchoolKafalahVal('skPotLuarTanggungan', s.pot_luar_tanggungan);
+            setSchoolKafalahVal('skPotDurasiSimt', s.pot_durasi_simt);
+            setSchoolKafalahVal('skPotTaawun', s.pot_taawun);
+            setSchoolKafalahVal('skPotPiutang', s.pot_piutang);
+            
+            // Update school name in info
+            const nameEl = document.getElementById('kafalahSchoolName');
+            if (nameEl) nameEl.textContent = document.getElementById('schoolName')?.textContent || 'sekolah ini';
+          } catch (e) { console.error(e); }
+        }
+
+        function setSchoolKafalahVal(id, v) { const el = document.getElementById(id); if (el) el.value = v || 0; }
+
+        window.saveSchoolKafalahSettings = async function (e) {
+          e.preventDefault();
+          const fields = ['tunj_struktural','tunj_fungsional','tunj_transport','tunj_tepat_waktu','tunj_tidak_cepat_pulang','tunj_uang_makan','nominal_kjm','tunj_prestasi_kinerja','tunj_apresiasi','tunj_pembina','tunj_pondok','tunj_jam_mengajar','tunj_istri','tunj_anak','pot_luar_tanggungan','pot_durasi_simt','pot_taawun','pot_piutang'];
+          const body = {};
+          fields.forEach(f => {
+            const el = document.getElementById('sk' + f.split('_').map(s => s[0].toUpperCase() + s.slice(1)).join(''));
+            if (el) body[f] = parseFloat(el.value || 0);
+          });
+          body.tenant_id = tenantId;
+          
+          try {
+            const res = await fetch(apiUrl('/kafalah/settings/tenant'), {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+              body: JSON.stringify(body)
+            });
+            const json = await res.json();
+            if (json.success) {
+              showToast('Pengaturan KAFALAH sekolah tersimpan', 'success');
+              document.getElementById('skSavedInfo').textContent = 'Tersimpan ' + new Date().toLocaleTimeString('id-ID');
+            } else showToast(json.message || 'Gagal', 'error');
+          } catch (e) { showToast('Error: ' + e.message, 'error'); }
+        };
+
+        // Load KAFALAH settings when tab is shown
+        const originalShowTab = window.showTab;
+        window.showTab = function(tabName) {
+          originalShowTab(tabName);
+          if (tabName === 'kafalah') {
+            loadSchoolKafalahSettings();
+          }
+        };
+
+        // Auto-load if already on KAFALAH tab
+        if (document.getElementById('kafalahTab') && !document.getElementById('kafalahTab').classList.contains('hidden')) {
+          loadSchoolKafalahSettings();
+        }
+        
+        // ============================================================
+        // End KAFALAH Settings
+        // ============================================================
+
         // Auto-show modal for incomplete student data (esp. parent data)
         autoShowIncompleteStudentsModal();
       </script>
@@ -6436,9 +6653,11 @@ console.log('[ATTENDANCE] Fetching:', url);
             <div style="display: flex; flex-direction: column; gap: 0.75rem;">
               <div>
                 <label style="display: block; font-size: 0.8rem; font-weight: 600; color: #374151; margin-bottom: 0.25rem;">Pilih Guru</label>
-                <select id="manualTeacherId" required style="width: 100%; padding: 0.65rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem; background: #fff;">
-                  <option value="">-- Pilih Guru --</option>
-                </select>
+                <div style="position: relative;">
+                  <input type="text" id="manualTeacherSearch" placeholder="Cari nama guru..." style="width: 100%; padding: 0.65rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; font-size: 0.95rem; background: #fff;" autocomplete="off">
+                  <input type="hidden" id="manualTeacherId" name="manualTeacherId" required>
+                  <div id="manualTeacherResults" style="position: absolute; top: 100%; left: 0; right: 0; background: #fff; border: 1px solid #cbd5e1; border-radius: 0.5rem; margin-top: 0.25rem; max-height: 200px; overflow-y: auto; z-index: 10; display: none; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);"></div>
+                </div>
               </div>
 
               <div>

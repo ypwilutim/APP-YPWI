@@ -11,8 +11,8 @@ router.get('/admin/tahun-ajaran', authenticateOperator, async (req, res) => {
     const { tenant_id } = req.user;
     const [rows] = await db.query(`
       SELECT ta.*, 
-        (SELECT COUNT(*) FROM classes c WHERE c.tahun_ajaran_id = ta.id) as class_count,
-        (SELECT COUNT(*) FROM students s WHERE s.tahun_ajaran_id = ta.id) as student_count
+        (SELECT COUNT(*) FROM students s WHERE s.tahun_ajaran_id = ta.id) as student_count,
+        0 as class_count
       FROM tahun_ajaran ta
       WHERE ta.tenant_id IS NULL OR ta.tenant_id = ?
       ORDER BY ta.tahun_mulai DESC, ta.bulan_mulai DESC

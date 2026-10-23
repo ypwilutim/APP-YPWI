@@ -40,7 +40,7 @@ const authenticateToken = (req, res, next) => {
       try {
         console.log('[AUTH_DEBUG] Loading assignments from DB for guru_id:', user.guru_id);
         const assignments = await db.query(
-          'SELECT ta.tenant_id, ta.jabatan_di_unit, t.nama_sekolah FROM teacher_assignments ta JOIN tenants t ON ta.tenant_id = t.tenant_id WHERE ta.teacher_id = ? AND ta.status_aktif = 1',
+          'SELECT ta.tenant_id, ta.jabatan_di_unit, t.nama_sekolah FROM teacher_assignments ta JOIN tenants t ON ta.tenant_id = t.tenant_id WHERE ta.teacher_id = ?',
           [user.guru_id]
         );
         req.user.assignments = assignments;
@@ -79,7 +79,7 @@ const authenticateAdmin = (req, res, next) => {
       if (user.guru_id) {
         try {
           const assignments = await db.query(
-            'SELECT ta.tenant_id, ta.jabatan_di_unit, t.nama_sekolah FROM teacher_assignments ta JOIN tenants t ON ta.tenant_id = t.tenant_id WHERE ta.teacher_id = ? AND ta.status_aktif = 1',
+            'SELECT ta.tenant_id, ta.jabatan_di_unit, t.nama_sekolah FROM teacher_assignments ta JOIN tenants t ON ta.tenant_id = t.tenant_id WHERE ta.teacher_id = ?',
             [user.guru_id]
           );
           user.assignments = assignments;
@@ -131,7 +131,7 @@ const authenticateOperator = (req, res, next) => {
       if (user.guru_id) {
         try {
           const assignments = await db.query(
-            'SELECT ta.tenant_id, ta.jabatan_di_unit, t.nama_sekolah FROM teacher_assignments ta JOIN tenants t ON ta.tenant_id = t.tenant_id WHERE ta.teacher_id = ? AND ta.status_aktif = 1',
+            'SELECT ta.tenant_id, ta.jabatan_di_unit, t.nama_sekolah FROM teacher_assignments ta JOIN tenants t ON ta.tenant_id = t.tenant_id WHERE ta.teacher_id = ?',
             [user.guru_id]
           );
           user.assignments = assignments;
@@ -154,14 +154,18 @@ const authenticateOperator = (req, res, next) => {
       logToFile(`AUTH_OPERATOR: Bendahara role access granted`);
       return next();
     }
-    // Guru dengan assignment admin/TU/operator/bendahara: boleh akses
+    // Guru dengan assignment admin/TU/operator/bendahara/SDM: boleh akses
     if (user.role === 'guru' && user.assignments) {
-      const adminRoles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin', 'ketua', 'kepala', 'pimpinan', 'kepalasekolah', 'bendahara'];
+      const adminRoles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin', 'ketua', 'kepala', 'pimpinan', 'kepalasekolah', 'bendahara', 'sdm'];
       const hasAdminRole = user.assignments.some(a =>
         adminRoles.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''))
       );
-      if (hasAdminRole) {
-        logToFile(`AUTH_OPERATOR: Guru with admin role access granted`);
+      // SDM Pusat / SDM Sekolah: jabatan mengandung 'sdm' (mis. 'SDM Pusat', 'Kepala SDM', 'Staff SDM')
+      const hasSdmRole = user.assignments.some(a =>
+        (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '').includes('sdm')
+      );
+      if (hasAdminRole || hasSdmRole) {
+        logToFile(`AUTH_OPERATOR: Guru with admin/SDM role access granted`);
         return next();
       }
     }
@@ -181,7 +185,7 @@ const authenticateKetua = (req, res, next) => {
       if (user.guru_id) {
         try {
           user.assignments = await db.query(
-            'SELECT ta.tenant_id, ta.jabatan_di_unit, t.nama_sekolah FROM teacher_assignments ta JOIN tenants t ON ta.tenant_id = t.tenant_id WHERE ta.teacher_id = ? AND ta.status_aktif = 1',
+            'SELECT ta.tenant_id, ta.jabatan_di_unit, t.nama_sekolah FROM teacher_assignments ta JOIN tenants t ON ta.tenant_id = t.tenant_id WHERE ta.teacher_id = ?',
             [user.guru_id]
           );
         } catch (error) {
@@ -230,7 +234,7 @@ const authenticateBendahara = (req, res, next) => {
       if (user.guru_id) {
         try {
           user.assignments = await db.query(
-            'SELECT ta.tenant_id, ta.jabatan_di_unit, t.nama_sekolah FROM teacher_assignments ta JOIN tenants t ON ta.tenant_id = t.tenant_id WHERE ta.teacher_id = ? AND ta.status_aktif = 1',
+            'SELECT ta.tenant_id, ta.jabatan_di_unit, t.nama_sekolah FROM teacher_assignments ta JOIN tenants t ON ta.tenant_id = t.tenant_id WHERE ta.teacher_id = ?',
             [user.guru_id]
           );
         } catch (error) {
@@ -267,6 +271,70 @@ const authenticateBendahara = (req, res, next) => {
   });
 };
 
+// Access for: admin role OR guru dengan jabatan SDM
+// - SDM di tenant YPWILUTIM -> boleh akses lintas tenant (req.sdmAllTenants = true)
+// - SDM di tenant lain -> hanya tenant assignment-nya (req.sdmTenants = [tenant_id])
+const authenticateSDM = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ success: false, message: 'Access denied. Token not found.' });
+  }
+  jwt.verify(token, SECRET_KEY, async (err, user) => {
+    if (err) {
+      return res.status(403).json({ success: false, message: 'Access denied. Token not valid.' });
+    }
+
+    if (!user.assignments || user.assignments.length === 0) {
+      if (user.guru_id) {
+        try {
+          user.assignments = await db.query(
+            'SELECT ta.tenant_id, ta.jabatan_di_unit, t.nama_sekolah FROM teacher_assignments ta JOIN tenants t ON ta.tenant_id = t.tenant_id WHERE ta.teacher_id = ?',
+            [user.guru_id]
+          );
+        } catch (error) {
+          user.assignments = [];
+        }
+      } else {
+        user.assignments = [];
+      }
+    }
+    req.user = user;
+
+    // Admin selalu boleh
+    if (user.role === 'admin') {
+      req.sdmAllTenants = true;
+      req.sdmTenants = null;
+      return next();
+    }
+
+    // Guru dengan jabatan SDM di salah satu unit
+    if (user.role === 'guru' && user.assignments) {
+      const sdmRoles = ['sdm', 'sumberdayamanusia'];
+      const sdmAssignments = (user.assignments || []).filter(a =>
+        sdmRoles.some(r => (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '').includes(r))
+      );
+      if (sdmAssignments.length > 0) {
+        req.sdmAllTenants = sdmAssignments.some(a => a.tenant_id === 'YPWILUTIM');
+        req.sdmTenants = req.sdmAllTenants ? null : [...new Set(sdmAssignments.map(a => a.tenant_id))];
+        return next();
+      }
+    }
+
+    return res.status(403).json({ success: false, message: 'Akses ditolak. Peran SDM diperlukan.' });
+  });
+};
+
+// Cek apakah user SDM boleh mengakses tenant tertentu
+function sdmCanAccessTenant(req, tenantId) {
+  if (!tenantId) return true;
+  if (req.user && req.user.role === 'admin') return true;
+  if (req.sdmAllTenants) return true;
+  const allowed = req.sdmTenants || [];
+  return allowed.includes(tenantId);
+}
+
 function verifyTenantAccess(req, requestedTenantId) {
   if (!requestedTenantId) return true;
   const userRole = req.user?.role;
@@ -275,7 +343,7 @@ function verifyTenantAccess(req, requestedTenantId) {
   if (userRole === 'admin') return true;
 
   if (userRole === 'guru' && assignments.length > 0) {
-    const adminRoles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin', 'ketua', 'kepala', 'pimpinan', 'kepalasekolah', 'bendahara'];
+    const adminRoles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin', 'ketua', 'kepala', 'pimpinan', 'kepalasekolah', 'bendahara', 'sdm'];
     const allowedTenants = assignments
       .filter(a => adminRoles.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '')))
       .map(a => a.tenant_id);
@@ -287,6 +355,22 @@ function verifyTenantAccess(req, requestedTenantId) {
   }
 
   return false;
+}
+
+// Returns the tenant_ids the caller may access, or null when the caller is
+// allowed every tenant (admin, or a central/YPWILUTIM role). Centralizing this
+// keeps tenant authorization consistent across routes.
+function getAllowedTenants(req) {
+  const user = req.user || {};
+  const assignments = user.assignments || [];
+  if (user.role === 'admin') return null;
+  const adminRoles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin', 'ketua', 'kepala', 'pimpinan', 'kepalasekolah', 'bendahara', 'sdm'];
+  const allowed = assignments
+    .filter(a => adminRoles.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '')))
+    .map(a => a.tenant_id);
+  // YPWILUTIM (pusat) roles may access every tenant
+  if (allowed.includes('YPWILUTIM')) return null;
+  return [...new Set(allowed)];
 }
 
 function getTenantFilter(tenantId) {
@@ -346,7 +430,10 @@ module.exports = {
   authenticateOperator,
   authenticateKetua,
   authenticateBendahara,
+  authenticateSDM,
+  sdmCanAccessTenant,
   verifyTenantAccess,
+  getAllowedTenants,
   isDayMatch,
   calculateDistance,
   formatIslamicMessage,

@@ -26,7 +26,7 @@
         <div class="bg-white rounded-2xl border border-slate-200 p-6">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-sm text-slate-500">Panitia Aktif</p>
+              <p class="text-sm text-slate-500">Panitia Saya</p>
               <p id="activeCommittees" class="text-3xl font-bold text-slate-900 mt-2">-</p>
             </div>
             <i class="fas fa-users text-blue-600 text-2xl"></i>
@@ -35,25 +35,39 @@
         <div class="bg-white rounded-2xl border border-slate-200 p-6">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-sm text-slate-500">Total Pendaftar</p>
-              <p class="text-3xl font-bold text-slate-900 mt-2">-</p>
+              <p class="text-sm text-slate-500">Jabatan</p>
+              <p id="userRole" class="text-3xl font-bold text-slate-900 mt-2">-</p>
             </div>
-            <i class="fas fa-user-plus text-green-600 text-2xl"></i>
+            <i class="fas fa-user-tag text-green-600 text-2xl"></i>
           </div>
         </div>
         <div class="bg-white rounded-2xl border border-slate-200 p-6">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-sm text-slate-500">Gelombang Aktif</p>
-              <p id="activeWave" class="text-3xl font-bold text-slate-900 mt-2">-</p>
+              <p class="text-sm text-slate-500">Sekolah</p>
+              <p id="userSchool" class="text-3xl font-bold text-slate-900 mt-2">-</p>
             </div>
-            <i class="fas fa-wave-square text-indigo-600 text-2xl"></i>
+            <i class="fas fa-school text-indigo-600 text-2xl"></i>
           </div>
         </div>
       </div>
 
       <div class="bg-white rounded-2xl border border-slate-200 p-6">
-        <p class="text-slate-600">Dashboard SPMB - Fitur dalam pengembangan.</p>
+        <h3 class="text-lg font-semibold mb-4">Aksi Cepat</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <a href="/SPMB/spmb-public.html" class="bg-blue-50 border border-blue-200 rounded-xl p-4 hover:bg-blue-100 transition text-center">
+            <i class="fas fa-eye text-blue-600 text-2xl mb-2"></i>
+            <p class="font-medium text-blue-800">Lihat Halaman Publik</p>
+          </a>
+          <a href="#" class="bg-green-50 border border-green-200 rounded-xl p-4 hover:bg-green-100 transition text-center">
+            <i class="fas fa-users text-green-600 text-2xl mb-2"></i>
+            <p class="font-medium text-green-800">Kelola Panitia</p>
+          </a>
+          <a href="#" class="bg-purple-50 border border-purple-200 rounded-xl p-4 hover:bg-purple-100 transition text-center">
+            <i class="fas fa-chart-bar text-purple-600 text-2xl mb-2"></i>
+            <p class="font-medium text-purple-800">Statistik Pendaftar</p>
+          </a>
+        </div>
       </div>
     </main>
   </div>
@@ -67,12 +81,14 @@
     }
 
     document.getElementById('userName').textContent = user.nama || 'Pengguna SPMB';
+    document.getElementById('userRole').textContent = user.jabatan_di_unit || '-';
+    document.getElementById('userSchool').textContent = user.tenant_name || user.tenant_id || '-';
 
     async function loadDashboard() {
       if (!token) return;
 
       try {
-        const res = await fetch('/api/spmb/committees/active?teacher_id=' + user.id, {
+        const res = await fetch('/api/spmb/committees/active', {
           headers: { 'Authorization': 'Bearer ' + token },
         });
         const data = await res.json();
