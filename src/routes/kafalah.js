@@ -1052,6 +1052,10 @@ router.post('/kafalah/send-slip-whatsapp', authenticateBendahara, async (req, re
       const gajiPokok = await lookupGajiPokok(status, jenjang, pendidikan, mk);
 
       // Calculate per-day attendance-based allowances
+      // Rule: Transportasi = semua hadir (tepat_waktu + terlambat), ignore pulang
+      // Rule: Tepat Waktu = tepat_waktu count
+      // Rule: Tidak Cepat Pulang = hadir - cepat_pulang
+      // Rule: Uang Makan = hadir (tepat_waktu + terlambat)
       let transportDays = 0;
       let uangMakanDays = 0;
       let tepatWaktuDays = 0;
@@ -1063,10 +1067,10 @@ router.post('/kafalah/send-slip-whatsapp', authenticateBendahara, async (req, re
           const isTepatWaktu = d.status_masuk === 'tepat_waktu';
           const isCepatPulang = d.status_pulang === 'pulang_cepat';
           
-          if (isTepatWaktu && !isCepatPulang) transportDays++;
-          if (isHadir) uangMakanDays++;
-          if (isTepatWaktu) tepatWaktuDays++;
-          if (isHadir && !isCepatPulang) tidakCepatPulangDays++;
+          if (isHadir) transportDays++;          // Semua hadir (tepat + terlambat), ignore pulang
+          if (isHadir) uangMakanDays++;          // Semua hadir
+          if (isTepatWaktu) tepatWaktuDays++;    // Hanya tepat waktu
+          if (isHadir && !isCepatPulang) tidakCepatPulangDays++; // Hadir - cepat pulang
         }
       }
 
@@ -1413,6 +1417,10 @@ async function computeKafalah(tenantId, startDate, endDate, labelPeriode, baseMo
     const adaAbsensi = (hadir + terlambat) > 0; // ada catatan masuk
 
     // Calculate per-day attendance-based allowances
+    // Rule: Transportasi = semua hadir (tepat_waktu + terlambat), ignore pulang
+    // Rule: Tepat Waktu = tepat_waktu count
+    // Rule: Tidak Cepat Pulang = hadir - cepat_pulang
+    // Rule: Uang Makan = hadir (tepat_waktu + terlambat)
     let transportDays = 0;
     let uangMakanDays = 0;
     let tepatWaktuDays = 0;
@@ -1424,10 +1432,10 @@ async function computeKafalah(tenantId, startDate, endDate, labelPeriode, baseMo
         const isTepatWaktu = d.status_masuk === 'tepat_waktu';
         const isCepatPulang = d.status_pulang === 'pulang_cepat';
         
-        if (isTepatWaktu && !isCepatPulang) transportDays++;
-        if (isHadir) uangMakanDays++;
-        if (isTepatWaktu) tepatWaktuDays++;
-        if (isHadir && !isCepatPulang) tidakCepatPulangDays++;
+        if (isHadir) transportDays++;          // Semua hadir (tepat + terlambat), ignore pulang
+        if (isHadir) uangMakanDays++;          // Semua hadir
+        if (isTepatWaktu) tepatWaktuDays++;    // Hanya tepat waktu
+        if (isHadir && !isCepatPulang) tidakCepatPulangDays++; // Hadir - cepat pulang
       }
     }
 

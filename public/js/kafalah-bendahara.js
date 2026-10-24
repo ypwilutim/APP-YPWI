@@ -551,7 +551,7 @@ function renderKafalahTable(rows) {
   const tbody = document.getElementById('kafalahTable');
   if (!rows.length) { tbody.innerHTML = '<tr><td colspan="27" class="text-center py-6">Tidak ada data guru</td></tr>'; return; }
   tbody.innerHTML = rows.map((r, i) => `
-    <tr class="hover:bg-gray-50">
+    <tr class="hover:bg-gray-50 cursor-pointer" onclick="openKafalahDetailModal(${i})">
       <td class="px-2 py-1">${i + 1}</td>
       <td class="px-2 py-1 font-medium">${kafalahEsc(r.nama)}</td>
       <td class="px-2 py-1">${kafalahEsc(r.nik) || '-'}</td>
@@ -579,7 +579,7 @@ function renderKafalahTable(rows) {
       <td class="px-2 py-1 text-right bg-red-50">${fmtRp(r.potong_pinjaman || 0)}</td>
       <td class="px-2 py-1 text-right bg-yellow-50 font-bold">${fmtRp(r.total_pendapatan)}</td>
       <td class="px-2 py-2 text-center">
-        <button onclick="openKafalahEditModal(${i})" class="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"><i class="fas fa-edit mr-1"></i>Edit</button>
+        <button onclick="event.stopPropagation(); openKafalahEditModal(${i})" class="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"><i class="fas fa-edit mr-1"></i>Edit</button>
       </td>
     </tr>
   `).join('');
@@ -1243,6 +1243,182 @@ window.kafalahOnSettingsContextChange = function (explicitTenant) {
   }
   loadKafalahSettings(tenant);
   loadTeacherOverrides();
+};
+
+// ============================================================
+// Detail Slip Modal Functions
+// ============================================================
+
+window.openKafalahDetailModal = async function (index) {
+  const r = kafalahPreviewData[index];
+  if (!r) return;
+  
+  // Fetch settings for rates
+  let settings = {};
+  try {
+    const tenantId = document.getElementById('kafalahTenantSelect')?.value;
+    const baseMode = document.getElementById('kafalahBaseToggle')?.checked ? 'school' : 'global';
+    const url = baseMode === 'global' 
+      ? '/api/kafalah/settings'
+      : '/api/kafalah/settings/tenant?tenant_id=' + encodeURIComponent(tenantId);
+    const res = await fetch(url, { headers: getAuthHeader() });
+    const json = await res.json();
+    if (json.success) settings = json.data || {};
+  } catch (e) { console.error('Failed to load settings for detail modal:', e); }
+  
+  // Format attendance detail
+  let attendanceHtml = '';
+  if (r.dailyDetails && r.dailyDetails.length > 0) {
+    attendanceHtml = r.dailyDetails.map(d => `
+      <tr class="border-b border-gray-100">
+        <td class="px-2 py-1 text-xs">${d.tgl}</td>
+        <td class="px-2 py-1 text-xs text-center">${d.status_masuk || '-'}</td>
+        <td class="px-2 py-1 text-xs text-center">${d.status_pulang || '-'}</td>
+        <td class="px-2 py-1 text-xs text-center">${d.dinas_luar ? '<span class="text-blue-600">Dinas</span>' : '-'}</td>
+      </tr>
+    `).join('');
+  } else {
+    attendanceHtml = '<tr><td colspan="4" class="px-2 py-2 text-center text-gray-500 text-xs">Tidak ada data absensi harian</td></tr>';
+  }
+  
+  const period = getKafalahPeriod();
+  const periodLabel = period ? period.label : 'Periode tidak diketahui';
+  const baseMode = document.getElementById('kafalahBaseToggle')?.checked ? 'Sekolah (Tenant)' : 'Global (Pusat)';
+  
+  // Helper to format calculation
+  const calc = (days, rate) => {
+    const d = days || 0;
+    const r = rate || 0;
+    return d > 0 && r > 0 ? `${d} hari × ${fmtRp(r)} = ${fmtRp(d * r)}` : '-';
+  };
+  
+  // Get rates from settings
+  const tTransport = settings.tunj_transport || 0;
+  const tTepatWaktu = settings.tunj_tepat_waktu || 0;
+  const tTidakCepat = settings.tunj_tidak_cepat_pulang || 0;
+  const tUangMakan = settings.tunj_uang_makan || 0;
+  const tKJM = settings.nominal_kjm || 0;
+  
+  const modalHtml = `
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" id="kafalahDetailModal">
+      <div class="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        <div class="flex justify-between items-center p-4 border-b sticky top-0 bg-white z-10">
+          <h4 class="font-semibold text-lg"><i class="fas fa-file-invoice-dollar mr-2 text-yellow-600"></i>Detail Slip Gaji KAFALAH</h4>
+          <button onclick="closeKafalahDetailModal()" class="text-gray-500 hover:text-gray-700 text-2xl leading-none">&times;</button>
+        </div>
+        <div class="p-4 space-y-4">
+          <!-- Header Info -->
+          <div class="bg-gray-50 p-3 rounded">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+              <span class="text-gray-500">Nama</span> <span class="font-medium">${kafalahEsc(r.nama)}</span>
+              <span class="text-gray-500">NIK</span> <span class="font-medium">${kafalahEsc(r.nik) || '-'}</span>
+              <span class="text-gray-500">Jabatan</span> <span class="font-medium">${kafalahEsc(r.jabatan) || '-'}</span>
+              <span class="text-gray-500">Status</span> <span class="font-medium">${kafalahEsc(r.status_pegawai)}</span>
+              <span class="text-gray-500">Jenjang</span> <span class="font-medium">${kafalahEsc(r.jenjang)}</span>
+              <span class="text-gray-500">Pendidikan</span> <span class="font-medium">${kafalahEsc(r.pendidikan)}</span>
+              <span class="text-gray-500">Masa Kerja</span> <span class="font-medium">${r.masa_kerja_tahun || 0} th</span>
+              <span class="text-gray-500">Jumlah Anak</span> <span class="font-medium">${r.jumlah_anak || 0}</span>
+              <span class="text-gray-500">Periode</span> <span class="font-medium">${getKafalahPeriod()?.label || 'Periode tidak diketahui'}</span>
+              <span class="text-gray-500">Base Mode</span> <span class="font-medium">${document.getElementById('kafalahBaseToggle')?.checked ? 'Sekolah (Tenant)' : 'Global (Pusat)'}</span>
+              <span class="text-gray-500">Hadir</span> <span class="font-medium">${r.hadir || 0}</span>
+              <span class="text-gray-500">Terlambat</span> <span class="font-medium">${r.terlambat || 0}</span>
+              <span class="text-gray-500">Tepat Waktu</span> <span class="font-medium">${r.tepat_waktu || 0}</span>
+              <span class="text-gray-500">Cepat Pulang</span> <span class="font-medium">${r.cepat_pulang || 0}</span>
+              <span class="text-gray-500">KJM</span> <span class="font-medium">${r.kjm || 0}</span>
+            </div>
+          </div>
+          
+          <!-- Attendance Detail -->
+          <div>
+            <h5 class="font-semibold text-sm mb-2 text-gray-700">Detail Absensi Harian</h5>
+            <div class="overflow-x-auto">
+              <table class="w-full text-xs border border-gray-200">
+                <thead class="bg-gray-100">
+                  <tr>
+                    <th class="px-2 py-1 text-left">Tanggal</th>
+                    <th class="px-2 py-1 text-center">Status Masuk</th>
+                    <th class="px-2 py-1 text-center">Status Pulang</th>
+                    <th class="px-2 py-1 text-center">Keterangan</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${(r.dailyDetails || []).map(d => `
+                    <tr class="border-b border-gray-100">
+                      <td class="px-2 py-1 text-xs">${d.tgl}</td>
+                      <td class="px-2 py-1 text-xs text-center">${d.status_masuk || '-'}</td>
+                      <td class="px-2 py-1 text-xs text-center">${d.status_pulang || '-'}</td>
+                      <td class="px-2 py-1 text-xs text-center">${d.dinas_luar ? '<span class="text-blue-600">Dinas</span>' : '-'}</td>
+                    </tr>
+                  `).join('') || '<tr><td colspan="4" class="px-2 py-2 text-center text-gray-500 text-xs">Tidak ada data absensi harian</td></tr>'}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          
+          <!-- Kalkulasi Detail -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="bg-blue-50 p-3 rounded border">
+              <h5 class="font-semibold text-blue-800 mb-2 text-xs">KOMPONEN A (WAJIB)</h5>
+              <div class="grid grid-cols-2 gap-1 text-xs">
+                <span class="text-gray-600">Gaji Pokok</span> <span class="font-medium text-right">${fmtRp(r.kafalah_pokok)}</span>
+                <span class="text-gray-600">T. Istri</span> <span class="font-medium text-right">${fmtRp(r.tunj_keluarga_istri)}</span>
+                <span class="text-gray-600">T. Anak</span> <span class="font-medium text-right">${fmtRp(r.tunj_keluarga_anak)}</span>
+                <span class="font-semibold text-blue-600">Total A</span> <span class="font-bold text-blue-600 text-right">${fmtRp(r.total_a)}</span>
+              </div>
+            </div>
+            <div class="bg-emerald-50 p-3 rounded border">
+              <h5 class="font-semibold text-emerald-800 mb-2 text-xs">KOMPONEN B (INSENTIF)</h5>
+              <div class="grid grid-cols-2 gap-1 text-xs">
+                <span class="text-gray-600">Struktural</span> <span class="font-medium text-right">${fmtRp(r.tunj_struktural)}</span>
+                <span class="text-gray-600">Pengabdian</span> <span class="font-medium text-right">${fmtRp(r.tunj_pengabdian)}</span>
+                <span class="text-gray-600">Fungsional</span> <span class="font-medium text-right">${fmtRp(r.tunj_fungsional)}</span>
+                <span class="text-gray-600">Pembina</span> <span class="font-medium text-right">${fmtRp(r.tunj_pembina)}</span>
+                <span class="text-gray-600">Pondok</span> <span class="font-medium text-right">${fmtRp(r.tunj_pondok)}</span>
+                <span class="text-gray-600">Transport (${r.transportDays || 0}hr)</span> <span class="font-medium text-right">${fmtRp(r.tunj_transport)} <span class="text-green-600 ml-1">(${calc(r.transportDays, tTransport)})</span></span>
+                <span class="text-gray-600">Tepat Waktu (${r.tepatWaktuDays || 0}hr)</span> <span class="font-medium text-right">${fmtRp(r.tunj_tepat_waktu)} <span class="text-green-600 ml-1">(${calc(r.tepatWaktuDays, tTepatWaktu)})</span></span>
+                <span class="text-gray-600">Tdk Cepat Plg (${r.tidakCepatPulangDays || 0}hr)</span> <span class="font-medium text-right">${fmtRp(r.tunj_tidak_cepat_pulang)} <span class="text-green-600 ml-1">(${calc(r.tidakCepatPulangDays, tTidakCepat)})</span></span>
+                <span class="text-gray-600">Uang Makan (${r.uangMakanDays || 0}hr)</span> <span class="font-medium text-right">${fmtRp(r.tunj_uang_makan)} <span class="text-green-600 ml-1">(${calc(r.uangMakanDays, tUangMakan)})</span></span>
+                <span class="text-gray-600">KJM (${r.kjm || 0}hr)</span> <span class="font-medium text-right">${fmtRp(r.tunj_kjm)} <span class="text-green-600 ml-1">(${r.kjm || 0} × ${fmtRp(tKJM)})</span></span>
+                <span class="text-gray-600">Prestasi</span> <span class="font-medium text-right">${fmtRp(r.tunj_prestasi_kinerja)}</span>
+                <span class="text-gray-600">Apresiasi</span> <span class="font-medium text-right">${fmtRp(r.tunj_apresiasi)}</span>
+                <span class="text-gray-600">Jam Mengajar</span> <span class="font-medium text-right">${fmtRp(r.tunj_jam_mengajar)}</span>
+                <span class="font-semibold text-emerald-600">Total B</span> <span class="font-bold text-emerald-600 text-right">${fmtRp(r.total_b)}</span>
+              </div>
+            </div>
+            <div class="bg-red-50 p-3 rounded border md:col-span-2">
+              <h5 class="font-semibold text-red-800 mb-2 text-xs">KOMPONEN C (POTONGAN)</h5>
+              <div class="grid grid-cols-4 gap-1 text-xs">
+                <span class="text-gray-600">Luar Tanggungan</span> <span class="font-medium text-right">${fmtRp(r.potong_cuti_luar_tanggungan)}</span>
+                <span class="text-gray-600">SIM-T</span> <span class="font-medium text-right">${fmtRp(r.potong_simt)}</span>
+                <span class="text-gray-600">Ta'awun</span> <span class="font-medium text-right">${fmtRp(r.potong_taawun)}</span>
+                <span class="text-gray-600">Piutang</span> <span class="font-medium text-right">${fmtRp(r.potong_pinjaman)}</span>
+                <span class="font-semibold text-red-600">Total C</span> <span class="font-bold text-red-600 text-right">${fmtRp(r.total_c)}</span>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Total Keseluruhan -->
+          <div class="bg-yellow-50 p-4 rounded border text-center">
+            <div class="text-lg font-bold text-yellow-800">${fmtRp(r.total_pendapatan)}</div>
+            <div class="text-xs text-gray-500 mt-1">Total Pendapatan KAFALAH (A + B - C)</div>
+          </div>
+          
+          <!-- Action Buttons -->
+          <div class="flex justify-end gap-2 pt-2 border-t">
+            <button onclick="closeKafalahDetailModal()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400">Tutup</button>
+            <button onclick="closeKafalahDetailModal(); openKafalahEditModal(${index})" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"><i class="fas fa-edit mr-1"></i>Edit Manual</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+};
+
+window.closeKafalahDetailModal = function () {
+  const modal = document.getElementById('kafalahDetailModal');
+  if (modal) modal.remove();
 };
 
 // Tab handler hook (legacy map kept for any external callers)
