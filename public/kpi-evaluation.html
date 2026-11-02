@@ -1,0 +1,1267 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Penilaian KPI - SDM YPWI Luwu Timur</title>
+    <!-- Tambahkan Tailwind CSS CDN agar tampilan tidak berantakan -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .custom-scrollbar::-webkit-scrollbar { height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 4px; }
+    </style>
+</head>
+<body class="text-slate-800 antialiased min-h-screen pb-12">
+
+    <!-- ===== CEK AKSES SDM PUSAT ===== -->
+    <div id="accessCheck" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center">
+        <div class="max-w-md mx-auto p-6 text-center">
+            <div id="accessBoxAlert" class="bg-indigo-600 rounded-2xl p-8 mb-4 shadow-xl">
+                <i class="fa-solid fa-shield-exclamation text-4xl text-indigo-200 mb-4"></i>
+                <h2 class="text-xl font-bold text-white">Akses Ditolak</h2>
+                <p class="text-slate-200 text-sm mt-2">Hanya pegawai dengan jabatan SDM Pusat (YPWILUTIM) yang boleh mengakses halaman penilaian KPI.</p>
+            </div>
+            <div id="accessContent" class="hidden"></div>
+        </div>
+    </div>
+
+    <!-- Header App -->
+    <header id="headerApp" class="bg-indigo-700 text-white shadow-md hidden">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <div class="bg-white/10 p-2.5 rounded-xl backdrop-blur-md">
+                    <i class="fa-solid fa-chart-line text-xl text-indigo-200"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight">Sistem Penilaian KPI Sekolah</h1>
+                    <p class="text-xs text-indigo-200">Modul Evaluasi Kinerja Guru & Staf Berbasis Unit</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-3">
+                <button id="btnTemplateTop" onclick="bukaTemplateModal()" class="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition duration-150 flex items-center space-x-2 text-sm">
+                    <i class="fa-solid fa-layer-group"></i>
+                    <span>Kelola Template</span>
+                </button>
+                <button id="btnSaveTop" onclick="simpanData()" class="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition duration-150 flex items-center space-x-2 text-sm">
+                    <i class="fa-solid fa-floppy-disk"></i>
+                    <span>Simpan Semua Nilai</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main id="mainContent" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6 hidden">
+        <!-- Panel Filter -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 mb-6">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                        <i class="fa-solid fa-school text-indigo-600 mr-1"></i> Pilih Sekolah / Unit
+                    </label>
+                    <select id="selectSekolah" onchange="loadData()" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium">
+                        <option value="">Memuat unit sekolah...</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                        <i class="fa-solid fa-calendar-alt text-indigo-600 mr-1"></i> Periode Evaluasi
+                    </label>
+                    <select id="selectPeriode" onchange="loadData()" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium">
+                        <option value="">Memuat periode...</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                        <i class="fa-solid fa-filter text-indigo-600 mr-1"></i> Kategori Pegawai
+                    </label>
+                    <select id="filterKategori" onchange="renderTable()" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium">
+                        <option value="Semua">Semua Kategori (Guru & Staf)</option>
+                        <option value="Guru">Khusus Guru</option>
+                        <option value="Staf">Khusus Staf / Tenaga Kependidikan</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                        <i class="fa-solid fa-magnifying-glass text-indigo-600 mr-1"></i> Cari Nama
+                    </label>
+                    <div class="relative">
+                        <input type="text" id="searchInput" onkeyup="renderTable()" placeholder="Cari nama guru / staf..." class="w-full bg-slate-50 border border-slate-300 rounded-lg pl-9 pr-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <i class="fa-solid fa-search absolute left-3 top-2.5 text-slate-400 text-sm"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Notification Banner -->
+        <div id="guideBanner" class="bg-indigo-50 border-l-4 border-indigo-500 p-4 rounded-r-xl mb-6 flex items-start justify-between">
+            <div class="flex items-start space-x-3">
+                <i class="fa-solid fa-circle-info text-indigo-600 text-lg mt-0.5"></i>
+                <div class="text-xs text-indigo-900 leading-relaxed">
+                    <span class="font-bold">Panduan Penilaian:</span>
+                    <ul class="list-disc list-inside mt-1 space-y-0.5 text-indigo-800">
+                        <li><span class="font-semibold text-indigo-900">Auto KPI:</span> Nilai kehadiran & hasil evaluasi ditarik otomatis dari database.</li>
+                        <li><span class="font-semibold text-indigo-900">Manual KPI:</span> Klik pilihan angka 
+                            <span class="inline-flex items-center px-1.5 py-0.5 rounded bg-indigo-200 font-bold text-indigo-800">1</span> 
+                            <span class="inline-flex items-center px-1.5 py-0.5 rounded bg-indigo-200 font-bold text-indigo-800">2</span> 
+                            <span class="inline-flex items-center px-1.5 py-0.5 rounded bg-indigo-200 font-bold text-indigo-800">3</span> 
+                            <span class="inline-flex items-center px-1.5 py-0.5 rounded bg-indigo-200 font-bold text-indigo-800">4</span> untuk menguji/mengatur skor indikator. Klik <b>Simpan Semua Nilai</b> untuk mengirimkan perubahan ke database.
+                        </li>
+                    </ul>
+                </div>
+            </div>
+            <button onclick="document.getElementById('guideBanner').remove()" class="text-indigo-400 hover:text-indigo-600">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <!-- Main List KPI Table -->
+        <div id="kpiTableContainer" class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+                <h2 class="font-semibold text-slate-700 text-sm flex items-center space-x-2">
+                    <i class="fa-solid fa-users-gear text-indigo-600"></i>
+                    <span>Daftar Guru & Staf Unit: <span id="namaUnitAktif" class="text-indigo-700 font-bold">-</span></span>
+                </h2>
+                <span id="totalItems" class="text-xs bg-slate-200 text-slate-700 px-2.5 py-1 rounded-full font-medium">Memuat data...</span>
+            </div>
+            <div class="overflow-x-auto custom-scrollbar">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-slate-100/70 border-b border-slate-200 text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                            <th class="py-3.5 px-4 w-1/4">Nama Guru / Staf</th>
+                            <th class="py-3.5 px-3 w-32">Kategori</th>
+                            <th class="py-3.5 px-4">Indikator KPI & Penilaian</th>
+                            <th class="py-3.5 px-4 w-36 text-center">Hasil Total KPI</th>
+                        </tr>
+                    </thead>
+                    <tbody id="kpiTableBody" class="divide-y divide-slate-200 text-sm">
+                        <!-- Data dari API akan dirender di sini -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="p-4 bg-slate-50 border-t border-slate-200 flex justify-between items-center text-xs text-slate-500">
+                <div>Memuat data kriteria KPI terintegrasi database MySQL.</div>
+                <div class="flex space-x-2">
+                    <button onclick="simpanData()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition">
+                        <i class="fa-solid fa-save mr-1"></i> Simpan Semua Perubahan
+                    </button>
+                </div>
+            </div>
+        </div>
+     </main>
+
+    <!-- Modal Success / Toast Message -->
+    <div id="modalToast" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm hidden items-center justify-center z-50">
+        <div class="bg-white rounded-2xl p-6 shadow-2xl max-w-sm w-full text-center transform transition-all scale-100">
+            <div id="modalIcon" class="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">
+                <i class="fa-solid fa-check"></i>
+            </div>
+            <h3 id="modalTitle" class="text-lg font-bold text-slate-800 mb-1">Berhasil Disimpan!</h3>
+            <p id="modalDesc" class="text-xs text-slate-500 mb-5">Seluruh nilai KPI guru dan staf pada sekolah ini telah sukses diperbarui ke database.</p>
+            <button onclick="tutupModal()" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-medium py-2 rounded-lg text-sm">Tutup</button>
+        </div>
+    </div>
+
+    <!-- Modal Detail Auto Indicator -->
+    <div id="detailModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm hidden items-center justify-center z-50">
+        <div class="bg-white rounded-2xl p-6 shadow-2xl max-w-5xl w-full mx-4 transform transition-all scale-100">
+            <div class="flex justify-between items-center mb-4">
+                <div>
+                    <h3 id="detailModalTitle" class="text-lg font-bold text-slate-800"></h3>
+                    <p id="detailModalSubtitle" class="text-xs text-slate-500 mt-1"></p>
+                </div>
+                <button onclick="tutupDetailModal()" class="text-slate-400 hover:text-slate-600">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+            <div id="detailModalContent" class="overflow-y-auto max-h-[60vh]">
+                <div class="text-center py-8 text-slate-400">
+                    <i class="fa-solid fa-spinner fa-spin text-2xl mb-2"></i>
+                    <p class="text-xs">Memuat data detail...</p>
+                </div>
+            </div>
+            <div class="flex justify-end mt-4 pt-4 border-t border-slate-200">
+                <button onclick="tutupDetailModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-medium">Tutup</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Kelola Template KPI (hanya SDM Pusat) -->
+    <div id="templateModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm hidden items-center justify-center z-50">
+        <div class="bg-white rounded-2xl p-6 shadow-2xl max-w-2xl w-full mx-4 transform transition-all scale-100">
+            <div class="flex justify-between items-center mb-4">
+                <h3 id="templateModalTitle" class="text-lg font-bold text-slate-800">Kelola Template KPI</h3>
+                <button onclick="tutupTemplateModal()" class="text-slate-400 hover:text-slate-600">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+            <form id="templateForm" class="space-y-4" onsubmit="event.preventDefault(); simpanTemplate();">
+                <input type="hidden" id="templateId" name="id">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">Nama Indikator</label>
+                    <input type="text" id="templateNama" name="nama" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">Kategori</label>
+                        <select id="templateKategori" name="kategori" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="guru">Guru</option>
+                            <option value="staf">Staf</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">Bobot (%)</label>
+                        <input type="number" id="templateBobot" name="bobot" min="0" max="100" step="0.1" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">Satuan</label>
+                        <input type="text" id="templateSatuan" name="satuan" value="%" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">Target Default</label>
+                        <input type="number" id="templateTarget" name="target_default" min="0" max="100" step="0.1" value="100" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">Sumber</label>
+                        <select id="templateSumber" name="sumber" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="manual">Manual</option>
+                            <option value="kehadiran">Kehadiran</option>
+                            <option value="evaluasi">Evaluasi</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">Urutan</label>
+                        <input type="number" id="templateUrutan" name="urutan" min="0" value="0" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">Metode Scoring</label>
+                    <select id="templateScoringMethod" name="scoring_method" onchange="toggleScoringOptions()" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <option value="discrete_1_4">1-4 Diskrit (tombol 1-4 → 25%/50%/75%/100%)</option>
+                        <option value="scale_1_5">Skala 1-5 (tombol 1-5 → 20%/40%/60%/80%/100%)</option>
+                        <option value="percent_0_100">Input 0-100 (angka langsung persen)</option>
+                        <option value="custom">Custom (min/max configurable)</option>
+                    </select>
+                </div>
+                <div id="customScoreOptions" class="hidden grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">Score Min</label>
+                        <input type="number" id="templateScoreMin" name="score_min" step="0.1" value="0" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1">Score Max</label>
+                        <input type="number" id="templateScoreMax" name="score_max" step="0.1" value="100" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">Keterangan</label>
+                    <textarea id="templateKeterangan" name="keterangan" rows="2" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+                </div>
+                <div class="flex justify-end space-x-2 pt-4 border-t border-slate-200">
+                    <button type="button" onclick="tutupTemplateModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-sm font-medium">Batal</button>
+                    <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium">Simpan Template</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- JavaScript Data Logic -->
+    <script>
+        let dataPegawai = [];
+
+        // Frontend: Konversi skor input ke persentase 0-100 berdasarkan scoring_method
+        function convertScoreToPercent(score, method, min, max) {
+            const s = parseFloat(score);
+            if (isNaN(s)) return 0;
+            switch (method) {
+                case 'discrete_1_4':
+                    return Math.min(100, Math.max(0, s * 25));
+                case 'scale_1_5':
+                    return Math.min(100, Math.max(0, s * 20));
+                case 'percent_0_100':
+                    return Math.min(100, Math.max(0, s));
+                case 'custom': {
+                    const mn = parseFloat(min) || 0;
+                    const mx = parseFloat(max) || 100;
+                    const range = mx - mn;
+                    if (range <= 0) return 0;
+                    return Math.min(100, Math.max(0, ((s - mn) / range) * 100));
+                }
+                default:
+                    return Math.min(100, Math.max(0, s * 25));
+            }
+        }
+
+        let authHeader = {};
+
+        let tenantsList = [];
+        let periodsList = [];
+
+        // ===== CEK AKSES SDM PUSAT =====
+        function checkUserAccess() {
+            let isSdmPusat = false;
+            try {
+                // Mensimulasikan pengecekan dari token/localStorage user
+                const rawUser = localStorage.getItem('user');
+                if (rawUser) {
+                    const userData = JSON.parse(rawUser);
+                    const assignments = userData.assignments || [];
+                    
+                    isSdmPusat = assignments.some(function(a) {
+                        const jabatan = (a.jabatan_di_unit || "").trim().toLowerCase();
+                        const tenant = (a.tenant_id || "").trim().toUpperCase();
+                        return jabatan.includes("sdm pusat") && tenant === "YPWILUTIM";
+                    });
+                }
+            } catch(e) {
+                console.error("Gagal membaca data pengguna:", e);
+                isSdmPusat = false;
+            }
+            
+            const accessCheck = document.getElementById('accessCheck');
+            const headerApp = document.getElementById('headerApp');
+            const mainContent = document.getElementById('mainContent');
+            const accessBoxAlert = document.getElementById('accessBoxAlert');
+            const accessContent = document.getElementById('accessContent');
+            
+            if (isSdmPusat) {
+                // Sembunyikan layar akses ditolak sepenuhnya
+                accessCheck.classList.add('hidden');
+                headerApp.classList.remove('hidden');
+                mainContent.classList.remove('hidden');
+                
+                const token = localStorage.getItem('token');
+                authHeader = token ? { 'Authorization': 'Bearer ' + token } : {};
+                
+                initPageData();
+            } else {
+                accessCheck.classList.remove('hidden');
+                accessBoxAlert.style.display = 'block';
+                headerApp.classList.add('hidden');
+                mainContent.classList.add('hidden');
+                accessContent.classList.remove('hidden');
+                accessContent.innerHTML = '<div class="bg-white text-slate-800 p-6 rounded-xl shadow-lg border border-slate-200 text-center"><div class="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-3 text-xl"><i class="fa-solid fa-lock"></i></div><h3 class="font-bold text-slate-800 text-sm mb-1">Akses Dibatasi</h3><p class="text-xs text-slate-500 mb-4">Akun Anda tidak memiliki hak akses aktif sebagai <b>SDM Pusat (YPWILUTIM)</b>.</p><a href="sdm-dashboard.html" class="inline-block bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-xs font-medium transition">Kembali ke Dashboard</a></div>';
+            }
+        }
+
+        async function initPageData() {
+            const selectSekolah = document.getElementById('selectSekolah');
+            const selectPeriode = document.getElementById('selectPeriode');
+
+            if (selectSekolah) {
+                selectSekolah.innerHTML = '<option value="">Memuat unit sekolah...</option>';
+            }
+            if (selectPeriode) {
+                selectPeriode.innerHTML = '<option value="">Memuat periode...</option>';
+            }
+
+            try {
+                const tenantsRes = await fetch('/api/sdm-dashboard/tenants', {
+                    headers: { 'Content-Type': 'application/json', ...authHeader }
+                });
+                const tenantsResult = await tenantsRes.json();
+
+                if (tenantsResult.success && Array.isArray(tenantsResult.data)) {
+                    tenantsList = tenantsResult.data;
+                } else {
+                    tenantsList = [];
+                }
+
+                if (selectSekolah) {
+                    selectSekolah.innerHTML = '';
+                    if (tenantsList.length === 0) {
+                        selectSekolah.innerHTML = '<option value="">Tidak ada sekolah tersedia</option>';
+                    } else {
+                        selectSekolah.innerHTML = '<option value="">Pilih Sekolah</option>' +
+                            tenantsList.map(function(t) {
+                                return '<option value="' + t.tenant_id + '">' +
+                                    t.nama_sekolah + (t.tipe_unit ? ' (' + t.tipe_unit + ')' : '') +
+                                    '</option>';
+                            }).join('');
+                    }
+                }
+            } catch (error) {
+                console.error("Gagal memuat daftar sekolah dari API:", error);
+                if (selectSekolah) {
+                    selectSekolah.innerHTML = '<option value="">Gagal memuat sekolah</option>';
+                }
+            }
+
+            try {
+                const periodsRes = await fetch('/api/sdm/kpi/periods', {
+                    headers: { 'Content-Type': 'application/json', ...authHeader }
+                });
+                const periodsResult = await periodsRes.json();
+
+                if (periodsResult.success && Array.isArray(periodsResult.data)) {
+                    periodsList = periodsResult.data;
+                } else {
+                    periodsList = [];
+                }
+
+                if (selectPeriode) {
+                    selectPeriode.innerHTML = '';
+                    if (periodsList.length === 0) {
+                        selectPeriode.innerHTML = '<option value="">Tidak ada periode tersedia</option>';
+                    } else {
+                        selectPeriode.innerHTML = '<option value="">Pilih Periode</option>' +
+                            periodsList.map(function(p) {
+                                return '<option value="' + p.id + '">' +
+                                    p.nama + (p.tahun ? ' ' + p.tahun : '') +
+                                    '</option>';
+                            }).join('');
+                    }
+                }
+            } catch (error) {
+                console.error("Gagal memuat daftar periode dari API:", error);
+                if (selectPeriode) {
+                    selectPeriode.innerHTML = '<option value="">Gagal memuat periode</option>';
+                }
+            }
+
+            loadData();
+        }
+
+        async function loadData() {
+            const unitSelect = document.getElementById('selectSekolah');
+            const periodSelect = document.getElementById('selectPeriode');
+            
+            const unit = unitSelect ? unitSelect.value : '';
+            const periodId = periodSelect ? periodSelect.value : '';
+            const tableBody = document.getElementById('kpiTableBody');
+
+            if (!unit || !periodId) return;
+
+            tableBody.innerHTML = '<tr><td colspan="4" class="py-12 text-center text-slate-400"><i class="fa-solid fa-spinner fa-spin text-3xl mb-3 text-indigo-600"></i><p class="text-xs font-medium text-slate-600">Memuat data evaluasi dari database...</p></td></tr>';
+
+            try {
+                const response = await fetch('/api/sdm/kpi/assessments?period_id=' + encodeURIComponent(periodId) + '&tenant_id=' + encodeURIComponent(unit) + '&teacher_id=&status=all', {
+                    headers: { 'Content-Type': 'application/json', ...authHeader }
+                });
+                const result = await response.json();
+
+                const assessmentList = (result.success && result.data && Array.isArray(result.data.data))
+                    ? result.data.data
+                    : [];
+
+                 // Always build the full teacher list as the base
+                 dataPegawai = await buildInitialData(unit);
+
+                 // If existing kpi_scores exist, merge their stored values onto the template data
+                 if (assessmentList.length > 0) {
+                     mergeAssessmentScores(assessmentList, unit);
+                 }
+
+                 // Fetch auto-computed values and merge them into auto indicators
+                 try {
+                     const autoRes = await fetch('/api/sdm/kpi/auto-values?tenant_id=' + encodeURIComponent(unit) + '&period_id=' + encodeURIComponent(periodId), {
+                         headers: { 'Content-Type': 'application/json', ...authHeader }
+                     });
+                     const autoResult = await autoRes.json();
+                     if (autoResult.success && autoResult.data) {
+                         mergeAutoValues(autoResult.data);
+                     }
+                 } catch (autoErr) {
+                     console.error("Gagal memuat nilai auto dari API:", autoErr);
+                 }
+
+                 renderTable();
+
+            } catch (error) {
+                console.error("Gagal memuat data dari API backend:", error);
+                tableBody.innerHTML = '<tr><td colspan="4" class="py-12 text-center text-slate-400"><i class="fa-solid fa-triangle-exclamation text-3xl mb-2 text-amber-500"></i><p class="text-sm font-semibold text-slate-700">Gagal Memuat Data dari Database</p><p class="text-xs text-slate-500 mt-1">Pastikan server backend running dan endpoint KPI telah terpasang.</p></td></tr>';
+                document.getElementById('totalItems').innerText = "Menampilkan 0 Orang";
+            }
+        }
+
+        function transformAssessmentData(assessments, unit) {
+            const pegawaiMap = {};
+
+            assessments.forEach(function(asm) {
+                const teacherId = String(asm.teacher_id);
+                if (!pegawaiMap[teacherId]) {
+                     pegawaiMap[teacherId] = {
+                         id: teacherId,
+                         nama: asm.teacher_name || 'Guru ' + teacherId,
+                         nip: asm.nip || '',
+                         kategori: asm.kategori || 'Guru',
+                         jabatan: (asm.jabatan_di_unit || '').split(',')[0].trim() || '',
+                         sekolah: unit,
+                         foto: resolveFotoUrl(asm.link_foto),
+                         indikator: []
+                     };
+                }
+
+                const existingInd = pegawaiMap[teacherId].indikator.find(function(i) { return String(i.id) === String(asm.indicator_id); });
+                if (existingInd) {
+                     existingInd.nama = asm.indicator_name || existingInd.nama;
+                     existingInd.bobot = asm.bobot || existingInd.bobot;
+                     existingInd.jenis = (asm.sumber && asm.sumber !== 'manual') ? 'auto' : 'manual';
+                     existingInd.nilai = (asm.sumber && asm.sumber !== 'manual' && asm.nilai_aktual !== undefined && asm.nilai_aktual !== null) ? parseFloat(asm.nilai_aktual) : 0;
+                     existingInd.skor = asm.skor;
+                     existingInd.target = asm.target || 100;
+                     existingInd.ket = asm.pencapaian || 'Presensi Otomatis';
+                     if (asm.scoring_method) existingInd.scoring_method = asm.scoring_method;
+                     if (asm.score_min !== undefined && asm.score_min !== null) existingInd.score_min = asm.score_min;
+                     if (asm.score_max !== undefined && asm.score_max !== null) existingInd.score_max = asm.score_max;
+                } else {
+                     pegawaiMap[teacherId].indikator.push({
+                         id: String(asm.indicator_id || asm.id),
+                         nama: asm.indicator_name || asm.nama || 'Indikator KPI',
+                         bobot: asm.bobot || 20,
+                         jenis: (asm.sumber && asm.sumber !== 'manual') ? 'auto' : 'manual',
+                         nilai: (asm.sumber && asm.sumber !== 'manual' && asm.nilai_aktual !== undefined && asm.nilai_aktual !== null) ? asm.nilai_aktual : 0,
+                         skor: asm.skor || 0,
+                         target: asm.target || 100,
+                         ket: asm.pencapaian || 'Presensi Otomatis',
+                         scoring_method: asm.scoring_method || 'discrete_1_4',
+                         score_min: asm.score_min,
+                         score_max: asm.score_max
+                     });
+                }
+            });
+
+            const result = Object.values(pegawaiMap);
+
+            return result;
+        }
+
+        function mergeAutoValues(autoValues) {
+            dataPegawai.forEach(function(pegawai) {
+                const teacherKey = String(pegawai.id);
+                const auto = autoValues[teacherKey];
+                if (!auto) return;
+
+                // Store breakdown for use in detail modal
+                pegawai.breakdown = auto.breakdown || {};
+
+                pegawai.indikator.forEach(function(ind) {
+                    if (ind.jenis === 'auto') {
+                        let computed = 0;
+                        if (ind.nama.toLowerCase().includes('kehadiran') || ind.nama.toLowerCase().includes('absen')) {
+                            computed = auto.kehadiran_pct || 0;
+                        } else if (ind.nama.toLowerCase().includes('evaluasi') || ind.nama.toLowerCase().includes('kualitas') || ind.nama.toLowerCase().includes('layanan')) {
+                            computed = auto.evaluasi_pct || 0;
+                        }
+                         // Only overwrite if the existing nilai is 0/null or not yet set
+                        if (!ind.nilai || ind.nilai === 0) {
+                            ind.nilai = parseFloat(computed);
+                        }
+                    }
+                });
+            });
+        }
+
+        function mergeAssessmentScores(assessments, unit) {
+            assessments.forEach(function(asm) {
+                const teacherKey = String(asm.teacher_id);
+                const pegawai = dataPegawai.find(function(p) { return String(p.id) === teacherKey; });
+                if (!pegawai) return;
+
+                const ind = pegawai.indikator.find(function(i) { return String(i.id) === String(asm.indicator_id); });
+                if (!ind) return;
+
+                // Overlay stored values from kpi_scores
+                const method = asm.scoring_method || ind.scoring_method || 'discrete_1_4';
+                let storedSkor = parseFloat(asm.skor) || 0;
+                // Normalisasi data lama: jika skor tersimpan sebagai persentase (bug sebelumnya), konversi kembali ke skor mentah
+                if (method === 'discrete_1_4' && storedSkor > 4) {
+                    storedSkor = Math.round(storedSkor / 25);
+                } else if (method === 'scale_1_5' && storedSkor > 5) {
+                    storedSkor = Math.round(storedSkor / 20);
+                }
+                ind.skor = storedSkor;
+                ind.nilai = (asm.sumber && asm.sumber !== 'manual' && asm.nilai_aktual !== undefined && asm.nilai_aktual !== null)
+                    ? parseFloat(asm.nilai_aktual)
+                    : 0;
+                ind.target = asm.target || ind.target;
+                ind.ket = asm.pencapaian || ind.ket;
+                ind.jenis = (asm.sumber && asm.sumber !== 'manual') ? 'auto' : 'manual';
+                if (asm.scoring_method) ind.scoring_method = asm.scoring_method;
+                if (asm.score_min !== undefined && asm.score_min !== null) ind.score_min = parseFloat(asm.score_min);
+                if (asm.score_max !== undefined && asm.score_max !== null) ind.score_max = parseFloat(asm.score_max);
+            });
+        }
+
+        async function buildInitialData(unit) {
+            try {
+                const teacherRes = await fetch('/api/sdm-dashboard/teacher-list?tenant_id=' + encodeURIComponent(unit) + '&limit=200', {
+                    headers: { 'Content-Type': 'application/json', ...authHeader }
+                });
+                const teacherResult = await teacherRes.json();
+                const teachers = (teacherResult.success && teacherResult.data && Array.isArray(teacherResult.data.data))
+                    ? teacherResult.data.data
+                    : [];
+
+                if (teachers.length === 0) return [];
+
+                const templatesRes = await fetch('/api/sdm/kpi/templates', {
+                    headers: { 'Content-Type': 'application/json', ...authHeader }
+                });
+                const templatesResult = await templatesRes.json();
+                const templates = (templatesResult.success && Array.isArray(templatesResult.data))
+                    ? templatesResult.data.filter(t => t.aktif !== false)
+                    : [];
+
+                const fakeAssessments = [];
+                const guruTemplates = templates.filter(t => t.kategori === 'guru');
+                const stafTemplates = templates.filter(t => t.kategori === 'staf');
+
+                teachers.forEach(function(t) {
+                    let kategori = 'guru';
+                    if (t.kpi_category) {
+                        kategori = t.kpi_category;
+                    } else {
+                        // Infer kategori from jabatan_di_unit when kpi_category is not set
+                        const jab = (t.jabatan_di_unit || '').toLowerCase();
+                        if (jab.includes('tu') || jab.includes('operator') || jab.includes('sdm')) {
+                            kategori = 'staf';
+                        }
+                    }
+                    const teacherTemplates = kategori === 'staf' ? stafTemplates : guruTemplates;
+
+                    if (teacherTemplates.length === 0) return;
+
+                    teacherTemplates.forEach(function(tmpl) {
+                        fakeAssessments.push({
+                            teacher_id: t.id,
+                            teacher_name: t.nama,
+                            nip: t.nip || '',
+                            link_foto: t.link_foto || null,
+                            jabatan_di_unit: (t.jabatan_di_unit || '').split(',')[0].trim(),
+                            indicator_id: tmpl.id,
+                            indicator_name: tmpl.nama,
+                            sumber: tmpl.sumber || 'manual',
+                            kategori: tmpl.kategori.charAt(0).toUpperCase() + tmpl.kategori.slice(1),
+                            bobot: tmpl.bobot,
+                            scoring_method: tmpl.scoring_method || 'discrete_1_4',
+                            score_min: tmpl.score_min,
+                            score_max: tmpl.score_max,
+                            nilai_aktual: null,
+                            target: tmpl.target_default || 100,
+                            pencapaian: null,
+                            skor: null
+                        });
+                    });
+                });
+
+                return transformAssessmentData(fakeAssessments, unit);
+            } catch (error) {
+                console.error("Gagal memuat data guru untuk penilaian awal:", error);
+                return [];
+            }
+        }
+
+        function getTenantName(tenantId) {
+            const found = tenantsList.find(t => t.tenant_id === tenantId);
+            return found ? found.nama_sekolah : null;
+        }
+
+        function resolveFotoUrl(linkFoto) {
+            if (!linkFoto) return 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80';
+            if (linkFoto.startsWith('http')) return linkFoto;
+            return (window.location.origin || '') + '/' + linkFoto.replace(/^\//, '');
+        }
+
+        function renderTable() {
+            const unitSelect = document.getElementById('selectSekolah').value;
+            const kategoriSelect = document.getElementById('filterKategori').value;
+            const searchKeyword = document.getElementById('searchInput').value.toLowerCase();
+            const tableBody = document.getElementById('kpiTableBody');
+            document.getElementById('namaUnitAktif').innerText = getTenantName(unitSelect) || unitSelect;
+
+            const filteredData = dataPegawai.filter(function(item) {
+                const matchSekolah = item.sekolah === unitSelect;
+                const matchKategori = kategoriSelect === 'Semua' || item.kategori === kategoriSelect;
+                const matchSearch = item.nama.toLowerCase().includes(searchKeyword) || (item.nip || '').toLowerCase().includes(searchKeyword);
+                return matchSekolah && matchKategori && matchSearch;
+            });
+
+            document.getElementById('totalItems').innerText = 'Menampilkan ' + filteredData.length + ' Orang';
+
+            if (filteredData.length === 0) { 
+                tableBody.innerHTML = '<tr><td colspan="4" class="py-12 text-center text-slate-400"><i class="fa-solid fa-folder-open text-4xl mb-2"></i><p class="text-sm">Tidak ada data pegawai yang cocok dengan filter pilihan.</p></td></tr>'; 
+                return; 
+            }
+
+            let html = ''; 
+            filteredData.forEach(function(pegawai) { 
+                let totalNilaiWeighted = 0; 
+                pegawai.indikator.forEach(function(ind) { 
+                    if (ind.jenis === 'auto') { 
+                        totalNilaiWeighted += (ind.nilai * (ind.bobot / 100)); 
+                    } else { 
+                        const method = ind.scoring_method || 'discrete_1_4';
+                        const nilaiPersen = convertScoreToPercent(ind.skor || 0, method, ind.score_min, ind.score_max);
+                        totalNilaiWeighted += (nilaiPersen * (ind.bobot / 100));
+                    } 
+                }); 
+                const totalSkorAkhir = totalNilaiWeighted.toFixed(2); 
+                let badgeGrade = ''; 
+                if (totalSkorAkhir >= 90) { 
+                    badgeGrade = '<span class="px-2.5 py-1 bg-emerald-100 text-emerald-800 font-bold rounded-full text-xs">Sangat Baik (A)</span>'; 
+                } else if (totalSkorAkhir >= 75) { 
+                    badgeGrade = '<span class="px-2.5 py-1 bg-blue-100 text-blue-800 font-bold rounded-full text-xs">Baik (B)</span>'; 
+                } else { 
+                    badgeGrade = '<span class="px-2.5 py-1 bg-amber-100 text-amber-800 font-bold rounded-full text-xs">Cukup (C)</span>'; 
+                } 
+                 
+                let indicatorHTML = '';
+                pegawai.indikator.forEach(function(ind) {
+                    if (ind.jenis === 'auto') {
+                        indicatorHTML += '<div class="flex flex-col sm:flex-row sm:items-center justify-between p-2.5 bg-slate-50 rounded-lg border border-slate-200 text-xs gap-2"><div class="flex-1"><div class="flex items-center space-x-1.5"><span class="font-medium text-slate-700">' + ind.nama + '</span><span class="text-[10px] text-slate-400">(' + ind.bobot + '%)</span></div><span class="text-[10px] text-slate-400 block">' + ind.ket + '</span></div><div class="flex items-center space-x-2 self-end sm:self-center"><button type="button" onclick="showDetailModal(' + pegawai.id + ', \'' + ind.nama + '\', \'' + ind.jenis + '\')" class="inline-flex items-center px-2 py-1 rounded bg-blue-50 text-blue-700 border border-blue-200 font-semibold font-mono text-xs hover:bg-blue-100 transition"><i class="fa-solid fa-bolt mr-1 text-blue-500 text-[10px]"></i>' + ind.nilai.toFixed(2) + ' (Auto)</button></div></div>';
+                    } else {
+                        const method = ind.scoring_method || 'discrete_1_4';
+                        const minVal = ind.score_min || 0;
+                        const maxVal = ind.score_max || 100;
+                        const currentPct = convertScoreToPercent(ind.skor || 0, method, minVal, maxVal);
+                        let inputHTML = '';
+                        
+                        if (method === 'discrete_1_4') {
+                            let scoreButtons = '';
+                            for (let score = 1; score <= 4; score++) {
+                                const isSelected = ind.skor === score;
+                                const btnClass = isSelected 
+                                    ? 'w-7 h-7 rounded-md text-xs flex items-center justify-center transition-all bg-indigo-600 text-white font-bold ring-2 ring-indigo-400 shadow-sm scale-105' 
+                                    : 'w-7 h-7 rounded-md text-xs bg-slate-100 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 font-medium border border-slate-200';
+                                scoreButtons += '<button type="button" onclick="setRating(' + pegawai.id + ', \'' + ind.id + '\', ' + score + ')" class="' + btnClass + '" title="Skor ' + score + ' (' + (score * 25) + '%)">' + score + '</button>';
+                            }
+                            inputHTML = '<div class="flex items-center space-x-1 self-end sm:self-center"><span class="text-[10px] text-slate-400 mr-1 hidden sm:inline">Pilih Skor:</span>' + scoreButtons + '</div>';
+                        } else if (method === 'scale_1_5') {
+                            let scoreButtons = '';
+                            for (let score = 1; score <= 5; score++) {
+                                const isSelected = ind.skor === score;
+                                const btnClass = isSelected 
+                                    ? 'w-7 h-7 rounded-md text-xs flex items-center justify-center transition-all bg-indigo-600 text-white font-bold ring-2 ring-indigo-400 shadow-sm scale-105' 
+                                    : 'w-7 h-7 rounded-md text-xs bg-slate-100 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 font-medium border border-slate-200';
+                                scoreButtons += '<button type="button" onclick="setRating(' + pegawai.id + ', \'' + ind.id + '\', ' + score + ')" class="' + btnClass + '" title="Skor ' + score + ' (' + (score * 20) + '%)">' + score + '</button>';
+                            }
+                            inputHTML = '<div class="flex items-center space-x-1 self-end sm:self-center"><span class="text-[10px] text-slate-400 mr-1 hidden sm:inline">Pilih Skor:</span>' + scoreButtons + '</div>';
+                        } else if (method === 'percent_0_100') {
+                            inputHTML = '<div class="flex items-center space-x-2 self-end sm:self-center">' +
+                                '<input type="number" min="0" max="100" step="0.1" value="' + (ind.skor || 0) + '" ' +
+                                'onchange="setRatingPercent(' + pegawai.id + ', \'' + ind.id + '\', this.value)" ' +
+                                'class="w-16 px-2 py-1 text-xs border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500" ' +
+                                'title="Input persentase 0-100">' +
+                                '<span class="text-[10px] text-slate-400">%</span>' +
+                                '</div>';
+                        } else if (method === 'custom') {
+                            const minDisp = minVal;
+                            const maxDisp = maxVal;
+                            inputHTML = '<div class="flex items-center space-x-2 self-end sm:self-center">' +
+                                '<input type="number" min="' + minDisp + '" max="' + maxDisp + '" step="0.1" value="' + (ind.skor || minDisp) + '" ' +
+                                'onchange="setRatingPercent(' + pegawai.id + ', \'' + ind.id + '\', this.value)" ' +
+                                'class="w-16 px-2 py-1 text-xs border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500" ' +
+                                'title="Range: ' + minDisp + ' - ' + maxDisp + '">' +
+                                '<span class="text-[10px] text-slate-400">/ ' + maxDisp + '</span>' +
+                                '<span class="text-[10px] text-indigo-500 font-medium ml-1">(' + currentPct.toFixed(1) + '%)</span>' +
+                                '</div>';
+                        }
+                        
+                        indicatorHTML += '<div class="flex flex-col sm:flex-row sm:items-center justify-between p-2.5 bg-white rounded-lg border border-slate-200 text-xs shadow-2xs gap-2"><div class="flex-1"><div class="flex items-center space-x-1.5"><span class="font-semibold text-slate-800">' + ind.nama + '</span><span class="text-[10px] text-slate-500 font-medium">(' + ind.bobot + '%)</span></div><span class="text-[10px] text-indigo-500 font-medium">Nilai: ' + currentPct.toFixed(1) + '% (Skor ' + (ind.skor || 0) + ')</span></div>' + inputHTML + '</div>';
+                    }
+                });
+
+                html += '<tr class="hover:bg-slate-50/80 transition duration-150"><td class="py-4 px-4 align-top border-r border-slate-100"><div class="flex items-start space-x-3"><img src="' + (pegawai.foto || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80') + '" alt="Guru" class="w-10 h-10 rounded-full object-cover border border-slate-200 mt-0.5"><div><h3 class="font-bold text-slate-800 leading-snug">' + pegawai.nama + '</h3><p class="text-xs text-slate-500 font-mono mt-0.5">NIY: ' + (pegawai.nip || '-') + '</p><span class="inline-block mt-2 px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[11px] font-medium border border-slate-200">' + (pegawai.jabatan || 'Pegawai') + '</span></div></div></td><td class="py-4 px-3 align-top border-r border-slate-100"><span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ' + (pegawai.kategori === "Guru" ? "bg-indigo-100 text-indigo-700" : "bg-teal-100 text-teal-700") + '"><i class="fa-solid ' + (pegawai.kategori === "Guru" ? "fa-chalkboard-user" : "fa-id-badge") + ' mr-1.5 text-[10px]"></i>' + pegawai.kategori + '</span></td><td class="py-4 px-4 align-top border-r border-slate-100"><div class="space-y-3">' + indicatorHTML + '</div></td><td class="py-4 px-4 text-center align-top border-r border-slate-100"><div class="flex flex-col items-center justify-center h-full pt-4"><span class="text-3xl font-extrabold text-indigo-900 tracking-tight">' + totalSkorAkhir + '</span><span class="text-[10px] font-medium text-slate-400 uppercase tracking-wider mb-2">Total Skor KPI</span>' + badgeGrade + '</div></td></tr>';
+            }); 
+            document.getElementById('kpiTableBody').innerHTML = html;
+        }
+
+        function setRating(pegawaiId, indId, newSkor) { 
+            const pegawai = dataPegawai.find(function(p) { return String(p.id) === String(pegawaiId); }); 
+             if (pegawai && Array.isArray(pegawai.indikator)) { 
+                 const indikator = pegawai.indikator.find(function(i) { return String(i.id) === String(indId); }); 
+                if (indikator) { 
+                    indikator.skor = newSkor;
+                    const method = indikator.scoring_method || 'discrete_1_4';
+                    const nilaiPct = convertScoreToPercent(newSkor, method, indikator.score_min, indikator.score_max);
+                    
+                    const payload = {
+                        teacher_id: pegawaiId,
+                        tenant_id: document.getElementById('selectSekolah').value,
+                        period_id: document.getElementById('selectPeriode').value,
+                        indicator_id: indId,
+                        nilai_aktual: nilaiPct,
+                        pencapaian: nilaiPct,
+                        skor: newSkor,
+                        target: indikator.target || 100
+                    };
+                    
+                    try {
+                        fetch('/api/sdm/kpi/assessments', {
+                            method: 'POST',
+                            headers: { 
+                                'Content-Type': 'application/json',
+                                'Authorization': authHeader.Authorization || ''
+                            },
+                            body: JSON.stringify(payload)
+                        }).catch(function(err) {
+                            console.error("Gagal kirim rating ke backend:", err);
+                        });
+                    } catch (err) {
+                        console.error("Gagal koneksi backend:", err);
+                    }
+                    
+                    renderTable(); 
+                } 
+            } 
+        }
+
+        function setRatingPercent(pegawaiId, indId, newVal) {
+            const pegawai = dataPegawai.find(function(p) { return String(p.id) === String(pegawaiId); }); 
+            if (pegawai && Array.isArray(pegawai.indikator)) { 
+                const indikator = pegawai.indikator.find(function(i) { return String(i.id) === String(indId); }); 
+                if (indikator) { 
+                    indikator.skor = parseFloat(newVal) || 0;
+                    const method = indikator.scoring_method || 'discrete_1_4';
+                    const nilaiPct = convertScoreToPercent(indikator.skor, method, indikator.score_min, indikator.score_max);
+                    
+                    const payload = {
+                        teacher_id: pegawaiId,
+                        tenant_id: document.getElementById('selectSekolah').value,
+                        period_id: document.getElementById('selectPeriode').value,
+                        indicator_id: indId,
+                        nilai_aktual: nilaiPct,
+                        pencapaian: nilaiPct,
+                        skor: indikator.skor,
+                        target: indikator.target || 100
+                    };
+                    
+                    try {
+                        fetch('/api/sdm/kpi/assessments', {
+                            method: 'POST',
+                            headers: { 
+                                'Content-Type': 'application/json',
+                                'Authorization': authHeader.Authorization || ''
+                            },
+                            body: JSON.stringify(payload)
+                        }).catch(function(err) {
+                            console.error("Gagal kirim rating ke backend:", err);
+                        });
+                    } catch (err) {
+                        console.error("Gagal koneksi backend:", err);
+                    }
+                    
+                    renderTable(); 
+                } 
+            }
+        }
+
+        async function simpanData() {
+            const periodId = document.getElementById('selectPeriode').value;
+            const unitSelect = document.getElementById('selectSekolah').value;
+
+            if (!periodId) {
+                bukaModal(false, 'Periode Belum Dipilih', 'Silakan pilih periode evaluasi terlebih dahulu.');
+                return;
+            }
+            if (!unitSelect) {
+                bukaModal(false, 'Sekolah Belum Dipilih', 'Silakan pilih sekolah/unit terlebih dahulu.');
+                return;
+            }
+
+            const scoresToSave = [];
+
+            dataPegawai.forEach(function(pegawai) {
+                if (pegawai.sekolah !== unitSelect) return;
+                if (!Array.isArray(pegawai.indikator)) return;
+
+                pegawai.indikator.forEach(function(ind) {
+                    if (String(ind.id).startsWith('ind_')) return;
+
+                    let nilaiAktual;
+                    if (ind.jenis === 'auto') {
+                        nilaiAktual = ind.nilai || 0;
+                    } else {
+                        const method = ind.scoring_method || 'discrete_1_4';
+                        nilaiAktual = convertScoreToPercent(ind.skor || 0, method, ind.score_min, ind.score_max);
+                    }
+
+                    scoresToSave.push({
+                        teacher_id: pegawai.id,
+                        tenant_id: unitSelect,
+                        period_id: periodId,
+                        indicator_id: ind.id,
+                        skor: ind.skor || 0,
+                        nilai_aktual: nilaiAktual,
+                        pencapaian: nilaiAktual
+                    });
+                });
+            });
+
+            if (scoresToSave.length === 0) {
+                bukaModal(false, 'Tidak Ada Data', 'Tidak ada nilai KPI yang bisa disimpan.');
+                return;
+            }
+
+            const payload = { assessments: scoresToSave };
+
+            try {
+                const response = await fetch('/api/sdm/kpi/assessments/bulk', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': authHeader.Authorization || ''
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const resData = await response.json();
+
+                if (response.ok && resData.success) {
+                    bukaModal(true, 'Berhasil Disimpan!', resData.message || 'Seluruh nilai KPI berhasil diperbarui.');
+                } else {
+                    bukaModal(false, 'Gagal Menyimpan', resData.message || 'Terjadi kesalahan saat menyimpan data ke database.');
+                }
+            } catch (err) {
+                console.error("Gagal menyimpan data KPI:", err);
+                bukaModal(false, 'Kesalahan Koneksi', 'Gagal menghubungkan ke server backend.');
+            }
+        }
+
+        function bukaModal(isSuccess, title, desc) {
+            const modal = document.getElementById('modalToast');
+            const iconEl = modal.querySelector('.w-16');
+            const titleEl = modal.querySelector('h3');
+            const descEl = modal.querySelector('p');
+            
+            iconEl.className = 'w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl ' + (isSuccess ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600');
+            iconEl.innerHTML = isSuccess ? '<i class="fa-solid fa-check"></i>' : '<i class="fa-solid fa-xmark"></i>';
+            titleEl.innerText = title;
+            descEl.innerText = desc;
+            
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function tutupModal() { 
+            const modal = document.getElementById('modalToast');
+            modal.classList.add('hidden'); 
+            modal.classList.remove('flex'); 
+        }
+
+        async function showDetailModal(pegawaiId, indName, indJenis) {
+            const modal = document.getElementById('detailModal');
+            const titleEl = document.getElementById('detailModalTitle');
+            const subtitleEl = document.getElementById('detailModalSubtitle');
+            const contentEl = document.getElementById('detailModalContent');
+
+            const pegawai = dataPegawai.find(function(p) { return String(p.id) === String(pegawaiId); });
+            
+            titleEl.innerText = indName;
+            subtitleEl.innerText = (pegawai ? pegawai.nama : '') + ' | ' + (pegawai ? pegawai.nip : '');
+
+            const indType = indName.toLowerCase().includes('kehadiran') || indName.toLowerCase().includes('absen') ? 'kehadiran' : 'evaluasi';
+
+            contentEl.innerHTML = '<div class="text-center py-8 text-slate-400"><i class="fa-solid fa-spinner fa-spin text-2xl mb-2"></i><p class="text-xs">Memuat data detail...</p></div>';
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+
+            try {
+                const unit = document.getElementById('selectSekolah').value;
+                const periodId = document.getElementById('selectPeriode').value;
+                const res = await fetch('/api/sdm/kpi/detail-logs?tenant_id=' + encodeURIComponent(unit) + '&period_id=' + encodeURIComponent(periodId) + '&teacher_id=' + encodeURIComponent(pegawaiId) + '&jenis=all', {
+                    headers: { 'Content-Type': 'application/json', ...authHeader }
+                });
+                const result = await res.json();
+
+                if (result.success && result.data) {
+                    const logs = result.data[indType] || [];
+                    const leaveRequests = result.data.leave_requests || [];
+                    const calendar = result.data.calendar || [];
+                    renderDetailLogs(logs, indType, leaveRequests, pegawai, indName, calendar);
+                } else {
+                    contentEl.innerHTML = '<p class="text-sm text-slate-500 py-4">Tidak ada data detail tersedia.</p>';
+                }
+            } catch (err) {
+                console.error("Gagal memuat detail logs:", err);
+                contentEl.innerHTML = '<p class="text-sm text-red-500 py-4">Gagal memuat data. Silakan coba lagi.</p>';
+            }
+        }
+
+        function renderDetailLogs(logs, type, leaveRequests, pegawai, indName, calendar) {
+            const contentEl = document.getElementById('detailModalContent');
+            let html = '';
+
+            if (type === 'kehadiran') {
+                var bd = (pegawai && pegawai.breakdown) || {};
+
+                html += '<div class="mb-4 pb-3 border-b border-slate-200">';
+                html += '<div class="flex flex-wrap gap-x-6 gap-y-2 text-xs mb-2">';
+                html += '<div><span class="text-slate-500">Hari Hadir:</span><span class="font-bold text-emerald-600">' + (bd.hadir || 0) + '</span></div>';
+                html += '<div><span class="text-slate-500">Hari Terlambat:</span><span class="font-bold text-amber-600">' + (bd.terlambat || 0) + '</span></div>';
+                html += '<div><span class="text-slate-500">Izin:</span><span class="font-bold text-blue-600">' + (bd.izin || 0) + '</span></div>';
+                html += '<div><span class="text-slate-500">Sakit:</span><span class="font-bold text-purple-600">' + (bd.sakit || 0) + '</span></div>';
+                html += '<div><span class="text-slate-500">Cuti:</span><span class="font-bold text-indigo-600">' + (bd.cuti || 0) + '</span></div>';
+                html += '<div><span class="text-slate-500">Dinas Luar:</span><span class="font-bold text-cyan-600">' + (bd.dinas_luar || 0) + '</span></div>';
+                html += '<div><span class="text-slate-500">Tanpa Keterangan:</span><span class="font-bold text-slate-400">' + (bd.tanpa_keterangan || 0) + '</span></div>';
+                html += '</div>';
+                html += '<div class="flex flex-wrap gap-x-6 gap-y-2 text-xs mb-2 pt-2 border-t border-slate-100">';
+                html += '<div><span class="text-slate-500">Total Hari Efektif:</span><span class="font-bold text-slate-800">' + (bd.total_hari_efektif || 0) + '</span></div>';
+                html += '<div><span class="text-slate-500">Total Penalty:</span><span class="font-bold text-red-600">' + (bd.total_penalty || 0) + ' poin</span></div>';
+                html += '<div><span class="text-slate-500">Formula:</span><span class="font-mono text-xs text-slate-600">100 - (penalty / hari_efektif)</span></div>';
+                html += '</div>';
+                html += '</div>';
+
+                if (calendar && calendar.length > 0) {
+                    html += '<div class="text-xs font-medium text-slate-600 mb-2">Kalender Kehadiran Periode</div>';
+                    html += '<div class="overflow-x-auto"><table class="w-full text-xs"><thead class="bg-slate-100"><tr class="text-left"><th class="py-2 px-3">Tanggal</th><th class="py-2 px-3">Hari</th><th class="py-2 px-3">Status</th><th class="py-2 px-3">Detail</th></tr></thead><tbody class="divide-y divide-slate-200">';
+                    calendar.forEach(function(day) {
+                        var dt = new Date(day.date + 'T00:00:00');
+                        var tgl = dt.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+                        var dayName = dt.toLocaleDateString('id-ID', { weekday: 'short' });
+                        var statusClass = 'bg-slate-100 text-slate-400';
+                        var statusText = '';
+                        var detailText = '-';
+
+                        if (day.status === 'tepat_waktu') {
+                            statusClass = 'bg-emerald-100 text-emerald-700';
+                            statusText = 'Hadir (Tepat Waktu)';
+                            if (day.details) {
+                                var detailTime = new Date(day.details.waktu_scan).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+                                detailText = detailTime + ' (' + (day.details.metode || '-') + ')';
+                            }
+                        } else if (day.status === 'terlambat') {
+                            statusClass = 'bg-amber-100 text-amber-700';
+                            statusText = 'Terlambat';
+                            if (day.details) {
+                                var detailTime = new Date(day.details.waktu_scan).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+                                detailText = detailTime + ' (' + (day.details.metode || '-') + ')';
+                            }
+                        } else if (day.status === 'izin') {
+                            statusClass = day.approved ? 'bg-blue-100 text-blue-700' : 'bg-yellow-100 text-yellow-700';
+                            statusText = 'Izin' + (day.leave_status === 'pending' ? ' (Pending)' : day.leave_status === 'rejected' ? ' (Ditolak)' : '');
+                            if (day.details) detailText = day.details.keterangan || '-';
+                        } else if (day.status === 'sakit') {
+                            statusClass = day.approved ? 'bg-purple-100 text-purple-700' : 'bg-yellow-100 text-yellow-700';
+                            statusText = 'Sakit' + (day.leave_status === 'pending' ? ' (Pending)' : day.leave_status === 'rejected' ? ' (Ditolak)' : '');
+                            if (day.details) detailText = day.details.keterangan || '-';
+                        } else if (day.status === 'cuti') {
+                            statusClass = day.approved ? 'bg-indigo-100 text-indigo-700' : 'bg-yellow-100 text-yellow-700';
+                            statusText = 'Cuti' + (day.leave_status === 'pending' ? ' (Pending)' : day.leave_status === 'rejected' ? ' (Ditolak)' : '');
+                            if (day.details) detailText = day.details.keterangan || '-';
+                        } else if (day.status === 'dinas_luar') {
+                            statusClass = day.approved ? 'bg-cyan-100 text-cyan-700' : 'bg-yellow-100 text-yellow-700';
+                            statusText = 'Dinas Luar' + (day.leave_status === 'pending' ? ' (Pending)' : day.leave_status === 'rejected' ? ' (Ditolak)' : '');
+                            if (day.details) detailText = day.details.keterangan || '-';
+                        } else if (day.status === 'tanpa_keterangan') {
+                            statusClass = 'bg-gray-100 text-gray-500';
+                            statusText = 'Tanpa Keterangan';
+                        }
+
+                        html += '<tr><td class="py-2 px-3">' + tgl + '</td><td class="py-2 px-3">' + dayName + '</td><td class="py-2 px-3"><span class="px-2 py-1 rounded text-xs font-medium ' + statusClass + '">' + statusText + '</span></td><td class="py-2 px-3">' + detailText + '</td></tr>';
+                    });
+                    html += '</tbody></table></div>';
+                } else {
+                    html += '<p class="text-sm text-slate-500 py-4">Pilih periode untuk melihat kalender kehadiran.</p>';
+                }
+
+                // Datang (Masuk) scan detail table
+                var masukLogs = logs.filter(function(l) { return l.jenis === 'masuk'; });
+                if (masukLogs.length > 0) {
+                    html += '<div class="mt-4 pt-3 border-t border-slate-200">';
+                    html += '<div class="text-xs font-medium text-slate-600 mb-2">Scan Datang (Masuk)</div>';
+                    html += '<div class="overflow-x-auto"><table class="w-full text-xs"><thead class="bg-slate-100"><tr class="text-left"><th class="py-2 px-3">Tanggal</th><th class="py-2 px-3">Waktu</th><th class="py-2 px-3">Status</th><th class="py-2 px-3">Metode</th></tr></thead><tbody class="divide-y divide-slate-200">';
+                    masukLogs.forEach(function(log) {
+                        var dt = new Date(log.waktu_scan);
+                        var tgl = dt.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+                        var wkt = dt.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+                        var statusClass = log.status === 'tepat_waktu' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700';
+                        var statusText = log.status === 'tepat_waktu' ? 'Tepat Waktu' : 'Terlambat';
+                        html += '<tr><td class="py-2 px-3">' + tgl + '</td><td class="py-2 px-3">' + wkt + '</td><td class="py-2 px-3"><span class="px-2 py-1 rounded text-xs font-medium ' + statusClass + '">' + statusText + '</span></td><td class="py-2 px-3">' + (log.metode || '-') + '</td></tr>';
+                    });
+                    html += '</tbody></table></div>';
+                    html += '</div>';
+                }
+
+                // Pulang scan detail table
+                var pulangLogs = logs.filter(function(l) { return l.jenis === 'pulang'; });
+                if (pulangLogs.length > 0) {
+                    html += '<div class="mt-4 pt-3 border-t border-slate-200">';
+                    html += '<div class="text-xs font-medium text-slate-600 mb-2">Scan Pulang</div>';
+                    html += '<div class="overflow-x-auto"><table class="w-full text-xs"><thead class="bg-slate-100"><tr class="text-left"><th class="py-2 px-3">Tanggal</th><th class="py-2 px-3">Waktu</th><th class="py-2 px-3">Status</th><th class="py-2 px-3">Metode</th></tr></thead><tbody class="divide-y divide-slate-200">';
+                    pulangLogs.forEach(function(log) {
+                        var dt = new Date(log.waktu_scan);
+                        var tgl = dt.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+                        var wkt = dt.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+                        var statusClass = log.status === 'tepat_waktu' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700';
+                        var statusText = log.status === 'tepat_waktu' ? 'Tepat Waktu' : 'Telat Pulang';
+                        html += '<tr><td class="py-2 px-3">' + tgl + '</td><td class="py-2 px-3">' + wkt + '</td><td class="py-2 px-3"><span class="px-2 py-1 rounded text-xs font-medium ' + statusClass + '">' + statusText + '</span></td><td class="py-2 px-3">' + (log.metode || '-') + '</td></tr>';
+                    });
+                    html += '</tbody></table></div>';
+                    html += '</div>';
+                }
+
+                // Leave history table (all statuses)
+                if (leaveRequests && leaveRequests.length > 0) {
+                    html += '<div class="mt-4 pt-3 border-t border-slate-200">';
+                    html += '<div class="text-xs font-medium text-slate-600 mb-2">Riwayatan Izin / Cuti / Dinas Luar</div>';
+                    html += '<div class="overflow-x-auto"><table class="w-full text-xs"><thead class="bg-slate-100"><tr class="text-left"><th class="py-2 px-3">Tanggal</th><th class="py-2 px-3">Jenis</th><th class="py-2 px-3">Status</th><th class="py-2 px-3">Keterangan</th></tr></thead><tbody class="divide-y divide-slate-200">';
+                    leaveRequests.forEach(function(lr) {
+                        var start = new Date(lr.tanggal_mulai);
+                        var end = new Date(lr.tanggal_selesai);
+                        var tglRange = start.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+                        if (lr.tanggal_selesai && lr.tanggal_selesai !== lr.tanggal_mulai) {
+                            tglRange += ' - ' + end.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+                        }
+                        var jenisLabel = lr.jenis || '-';
+                        var jenisClass = 'bg-slate-100 text-slate-700';
+                        if (lr.jenis === 'izin') jenisClass = 'bg-blue-100 text-blue-700';
+                        else if (lr.jenis === 'sakit') jenisClass = 'bg-purple-100 text-purple-700';
+                        else if (lr.jenis === 'cuti') jenisClass = 'bg-indigo-100 text-indigo-700';
+                        else if (lr.jenis === 'dinas_luar') jenisClass = 'bg-cyan-100 text-cyan-700';
+                        var statusClass = lr.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : (lr.status === 'pending' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700');
+                        var statusText = lr.status === 'approved' ? 'Disetujui' : (lr.status === 'pending' ? 'Pending' : 'Ditolak');
+                        html += '<tr><td class="py-2 px-3">' + tglRange + '</td><td class="py-2 px-3"><span class="px-2 py-1 rounded text-xs font-medium ' + jenisClass + '">' + jenisLabel + '</span></td><td class="py-2 px-3"><span class="px-2 py-1 rounded text-xs font-medium ' + statusClass + '">' + statusText + '</span></td><td class="py-2 px-3">' + (lr.keterangan || '-') + '</td></tr>';
+                    });
+                    html += '</tbody></table></div>';
+                    html += '</div>';
+                }
+            } else {
+                if (!logs || logs.length === 0) {
+                    contentEl.innerHTML = '<p class="text-sm text-slate-500 py-4">Tidak ada data evaluasi untuk periode yang dipilih.</p>';
+                    return;
+                }
+                let avg = logs.reduce((sum, l) => sum + parseFloat(l.score || 0), 0) / logs.length;
+                html += '<div class="mb-4 pb-3 border-b border-slate-200"><div class="flex space-x-6 text-xs"><div><span class="text-slate-500">Total Evaluasi:</span><span class="font-bold text-slate-800">' + logs.length + '</span></div><div><span class="text-slate-500">Rata-rata Skor:</span><span class="font-bold text-indigo-600">' + avg.toFixed(1) + ' / 5</span></div></div></div>';
+                html += '<div class="overflow-x-auto"><table class="w-full text-xs"><thead class="bg-slate-100"><tr class="text-left"><th class="py-2 px-3">Tanggal</th><th class="py-2 px-3">Skor</th><th class="py-2 px-3">Kategori</th><th class="py-2 px-3">Catatan</th></tr></thead><tbody class="divide-y divide-slate-200">';
+                logs.forEach(function(log) {
+                    var dt = new Date(log.evaluation_date);
+                    var tgl = dt.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+                    html += '<tr><td class="py-2 px-3">' + tgl + '</td><td class="py-2 px-3 font-bold">' + log.score + ' / 5</td><td class="py-2 px-3">' + (log.category || '-') + '</td><td class="py-2 px-3">' + (log.notes || '-') + '</td></tr>';
+                });
+                html += '</tbody></table></div>';
+            }
+
+            contentEl.innerHTML = html;
+        }
+
+        function tutupDetailModal() {
+            const modal = document.getElementById('detailModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        // ===== TEMPLATE MODAL FUNCTIONS =====
+        function bukaTemplateModal(template = null) {
+            const modal = document.getElementById('templateModal');
+            const form = document.getElementById('templateForm');
+            form.reset();
+            document.getElementById('templateId').value = '';
+            
+            if (template) {
+                document.getElementById('templateModalTitle').innerText = 'Edit Template KPI';
+                document.getElementById('templateId').value = template.id;
+                document.getElementById('templateNama').value = template.nama;
+                document.getElementById('templateKategori').value = template.kategori;
+                document.getElementById('templateBobot').value = template.bobot;
+                document.getElementById('templateSatuan').value = template.satuan || '%';
+                document.getElementById('templateTarget').value = template.target_default || 100;
+                document.getElementById('templateSumber').value = template.sumber || 'manual';
+                document.getElementById('templateScoringMethod').value = template.scoring_method || 'discrete_1_4';
+                document.getElementById('templateScoreMin').value = template.score_min || 0;
+                document.getElementById('templateScoreMax').value = template.score_max || 100;
+                document.getElementById('templateUrutan').value = template.urutan || 0;
+                document.getElementById('templateKeterangan').value = template.keterangan || '';
+                toggleScoringOptions();
+            } else {
+                document.getElementById('templateModalTitle').innerText = 'Tambah Template KPI';
+                document.getElementById('templateScoringMethod').value = 'discrete_1_4';
+                toggleScoringOptions();
+            }
+            
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function tutupTemplateModal() {
+            const modal = document.getElementById('templateModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function toggleScoringOptions() {
+            const method = document.getElementById('templateScoringMethod').value;
+            const customDiv = document.getElementById('customScoreOptions');
+            if (method === 'custom') {
+                customDiv.classList.remove('hidden');
+            } else {
+                customDiv.classList.add('hidden');
+            }
+        }
+
+        async function simpanTemplate() {
+            if (!isSdmPusat()) {
+                alert('Hanya SDM Pusat yang boleh mengelola template');
+                return;
+            }
+            
+            const form = document.getElementById('templateForm');
+            const formData = new FormData(form);
+            const payload = {};
+            formData.forEach((value, key) => {
+                if (key === 'bobot' || key === 'target_default' || key === 'score_min' || key === 'score_max') {
+                    payload[key] = parseFloat(value) || 0;
+                } else if (key === 'urutan') {
+                    payload[key] = parseInt(value) || 0;
+                } else {
+                    payload[key] = value;
+                }
+            });
+            
+            const id = document.getElementById('templateId').value;
+            const url = id ? '/api/sdm/kpi/templates' : '/api/sdm/kpi/templates';
+            
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', ...authHeader },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                
+                if (result.success) {
+                    bukaModal(true, 'Berhasil', 'Template KPI berhasil disimpan');
+                    tutupTemplateModal();
+                    // Refresh template list (would need to reload data)
+                    loadData();
+                } else {
+                    bukaModal(false, 'Gagal', result.message || 'Gagal menyimpan template');
+                }
+            } catch (err) {
+                console.error('Gagal simpan template:', err);
+                bukaModal(false, 'Error', 'Gagal menghubungkan ke server');
+            }
+        }
+
+        function isSdmPusat() {
+            try {
+                const rawUser = localStorage.getItem('user');
+                if (rawUser) {
+                    const userData = JSON.parse(rawUser);
+                    const assignments = userData.assignments || [];
+                    return assignments.some(function(a) {
+                        const jabatan = (a.jabatan_di_unit || "").trim().toLowerCase();
+                        const tenant = (a.tenant_id || "").trim().toUpperCase();
+                        return jabatan.includes("sdm pusat") && tenant === "YPWILUTIM";
+                    });
+                }
+            } catch(e) {
+                return false;
+            }
+            return false;
+        }
+
+        window.onload = function() {
+            checkUserAccess();
+        };
+    </script>
+</body>
+</html>

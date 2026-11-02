@@ -355,8 +355,11 @@ async function getAttendanceDaily(tenantId, startDate, endDate) {
   
   const p = [start, end, start, end];
   if (tenantId) {
-    q += ` WHERE m.tenant_id_masuk = ? AND m.tenant_id_pulang = ?`;
-    p.push(tenantId, tenantId);
+    // Filter by tenant_id on check-in (masuk) only.
+    // Using LEFT JOIN, check-out (pulang) may be NULL if teacher hasn't checked out.
+    // Filter by tenant_id_masuk to include all check-ins for this tenant.
+    q += ` WHERE m.tenant_id_masuk = ?`;
+    p.push(tenantId);
   }
   q += ` ORDER BY m.teacher_id, m.tgl`;
   return db.query(q, p);

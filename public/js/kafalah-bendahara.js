@@ -2,7 +2,8 @@
 // KAFALAH - Client logic untuk Bendahara Dashboard
 // ============================================================
 
-let kafalahPreviewData = [];
+// Use var or check existing to allow multiple script loads (dashboard + sekolah)
+window.kafalahPreviewData = window.kafalahPreviewData || [];
 
 // Escape HTML so teacher-supplied values (nama, nik, jabatan, ...) cannot
 // inject markup/script when written into innerHTML.
@@ -1285,19 +1286,15 @@ window.openKafalahDetailModal = async function (index) {
   const periodLabel = period ? period.label : 'Periode tidak diketahui';
   const baseMode = document.getElementById('kafalahBaseToggle')?.checked ? 'Sekolah (Tenant)' : 'Global (Pusat)';
   
-  // Helper to format calculation
-  const calc = (days, rate) => {
+  // Helper to format calculation: if days > 0 and amount > 0, show formula
+  // Calculate rate from actual amount/days if available, else fallback to settings
+  const calcRate = (amount, days) => days > 0 ? amount / days : 0;
+  const calc = (days, amount) => {
     const d = days || 0;
-    const r = rate || 0;
-    return d > 0 && r > 0 ? `${d} hari × ${fmtRp(r)} = ${fmtRp(d * r)}` : '-';
+    const a = amount || 0;
+    const rate = d > 0 ? a / d : 0;
+    return d > 0 && a > 0 ? `${d} hari × ${fmtRp(rate)} = ${fmtRp(a)}` : (d > 0 ? `${d} hari × ${fmtRp(0)} = ${fmtRp(0)}` : '-');
   };
-  
-  // Get rates from settings
-  const tTransport = settings.tunj_transport || 0;
-  const tTepatWaktu = settings.tunj_tepat_waktu || 0;
-  const tTidakCepat = settings.tunj_tidak_cepat_pulang || 0;
-  const tUangMakan = settings.tunj_uang_makan || 0;
-  const tKJM = settings.nominal_kjm || 0;
   
   const modalHtml = `
     <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" id="kafalahDetailModal">
@@ -1374,11 +1371,11 @@ window.openKafalahDetailModal = async function (index) {
                 <span class="text-gray-600">Fungsional</span> <span class="font-medium text-right">${fmtRp(r.tunj_fungsional)}</span>
                 <span class="text-gray-600">Pembina</span> <span class="font-medium text-right">${fmtRp(r.tunj_pembina)}</span>
                 <span class="text-gray-600">Pondok</span> <span class="font-medium text-right">${fmtRp(r.tunj_pondok)}</span>
-                <span class="text-gray-600">Transport (${r.transportDays || 0}hr)</span> <span class="font-medium text-right">${fmtRp(r.tunj_transport)} <span class="text-green-600 ml-1">(${calc(r.transportDays, tTransport)})</span></span>
-                <span class="text-gray-600">Tepat Waktu (${r.tepatWaktuDays || 0}hr)</span> <span class="font-medium text-right">${fmtRp(r.tunj_tepat_waktu)} <span class="text-green-600 ml-1">(${calc(r.tepatWaktuDays, tTepatWaktu)})</span></span>
-                <span class="text-gray-600">Tdk Cepat Plg (${r.tidakCepatPulangDays || 0}hr)</span> <span class="font-medium text-right">${fmtRp(r.tunj_tidak_cepat_pulang)} <span class="text-green-600 ml-1">(${calc(r.tidakCepatPulangDays, tTidakCepat)})</span></span>
-                <span class="text-gray-600">Uang Makan (${r.uangMakanDays || 0}hr)</span> <span class="font-medium text-right">${fmtRp(r.tunj_uang_makan)} <span class="text-green-600 ml-1">(${calc(r.uangMakanDays, tUangMakan)})</span></span>
-                <span class="text-gray-600">KJM (${r.kjm || 0}hr)</span> <span class="font-medium text-right">${fmtRp(r.tunj_kjm)} <span class="text-green-600 ml-1">(${r.kjm || 0} × ${fmtRp(tKJM)})</span></span>
+                <span class="text-gray-600">Transport (${r.transportDays || 0}hr)</span> <span class="font-medium text-right">${fmtRp(r.tunj_transport)} <span class="text-green-600 ml-1">(${calc(r.transportDays, r.tunj_transport)})</span></span>
+                <span class="text-gray-600">Tepat Waktu (${r.tepatWaktuDays || 0}hr)</span> <span class="font-medium text-right">${fmtRp(r.tunj_tepat_waktu)} <span class="text-green-600 ml-1">(${calc(r.tepatWaktuDays, r.tunj_tepat_waktu)})</span></span>
+                <span class="text-gray-600">Tdk Cepat Plg (${r.tidakCepatPulangDays || 0}hr)</span> <span class="font-medium text-right">${fmtRp(r.tunj_tidak_cepat_pulang)} <span class="text-green-600 ml-1">(${calc(r.tidakCepatPulangDays, r.tunj_tidak_cepat_pulang)})</span></span>
+                <span class="text-gray-600">Uang Makan (${r.uangMakanDays || 0}hr)</span> <span class="font-medium text-right">${fmtRp(r.tunj_uang_makan)} <span class="text-green-600 ml-1">(${calc(r.uangMakanDays, r.tunj_uang_makan)})</span></span>
+                <span class="text-gray-600">KJM (${r.kjm || 0}hr)</span> <span class="font-medium text-right">${fmtRp(r.tunj_kjm)} <span class="text-green-600 ml-1">(${r.kjm || 0} × ${fmtRp(r.kjm > 0 ? r.tunj_kjm / (r.kjm || 1) : 0)})</span></span>
                 <span class="text-gray-600">Prestasi</span> <span class="font-medium text-right">${fmtRp(r.tunj_prestasi_kinerja)}</span>
                 <span class="text-gray-600">Apresiasi</span> <span class="font-medium text-right">${fmtRp(r.tunj_apresiasi)}</span>
                 <span class="text-gray-600">Jam Mengajar</span> <span class="font-medium text-right">${fmtRp(r.tunj_jam_mengajar)}</span>

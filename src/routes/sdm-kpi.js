@@ -53,7 +53,7 @@ router.get('/sdm/kpi/templates', authenticateOperator, async (req, res) => {
 
     const params = [];
     let query = `
-      SELECT id, nama, kategori, bobot, satuan, target_default, sumber, urutan, aktif, keterangan
+      SELECT id, nama, kategori, bobot, satuan, target_default, sumber, scoring_method, score_min, score_max, urutan, aktif, keterangan
       FROM kpi_indicators
       WHERE aktif = TRUE
     `;
@@ -81,11 +81,15 @@ router.post('/sdm/kpi/templates', authenticateOperator, async (req, res) => {
       return res.status(403).json({ success: false, message: 'Hanya SDM Pusat yang boleh membuat/ mengubah template KPI' });
     }
 
-    const { id, nama, kategori, bobot, satuan, target_default, sumber, urutan, keterangan } = req.body;
+    const { id, nama, kategori, bobot, satuan, target_default, sumber, scoring_method, score_min, score_max, urutan, keterangan } = req.body;
 
     if (!nama || !kategori) {
       return res.status(400).json({ success: false, message: 'Nama dan kategori wajib diisi' });
     }
+
+    // Validasi scoring_method
+    const validMethods = ['discrete_1_4', 'percent_0_100', 'scale_1_5', 'custom'];
+    const safeMethod = validMethods.includes(scoring_method) ? scoring_method : 'discrete_1_4';
 
     // Normalisasi nilai opsional agar tidak mengirim undefined ke MySQL
     const safeBobot = (bobot === undefined || bobot === null || bobot === '') ? 0 : parseFloat(bobot);
@@ -94,20 +98,22 @@ router.post('/sdm/kpi/templates', authenticateOperator, async (req, res) => {
     const safeSumber = sumber || 'manual';
     const safeUrutan = (urutan === undefined || urutan === null || urutan === '') ? 0 : parseInt(urutan);
     const safeKeterangan = (keterangan === undefined || keterangan === '') ? null : keterangan;
+    const safeScoreMin = (score_min === undefined || score_min === null || score_min === '') ? 0 : parseFloat(score_min);
+    const safeScoreMax = (score_max === undefined || score_max === null || score_max === '') ? 100 : parseFloat(score_max);
 
     if (id) {
       // Update existing
       await db.query(`
         UPDATE kpi_indicators SET 
-          nama = ?, kategori = ?, bobot = ?, satuan = ?, target_default = ?, sumber = ?, urutan = ?, keterangan = ?
+          nama = ?, kategori = ?, bobot = ?, satuan = ?, target_default = ?, sumber = ?, scoring_method = ?, score_min = ?, score_max = ?, urutan = ?, keterangan = ?
         WHERE id = ?
-      `, [nama, kategori, safeBobot, safeSatuan, safeTarget, safeSumber, safeUrutan, safeKeterangan, id]);
+      `, [nama, kategori, safeBobot, safeSatuan, safeTarget, safeSumber, safeMethod, safeScoreMin, safeScoreMax, safeUrutan, safeKeterangan, id]);
     } else {
       // Insert new
       const insertResult = await db.query(`
-        INSERT INTO kpi_indicators (nama, kategori, bobot, satuan, target_default, sumber, urutan, keterangan, aktif)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, TRUE)
-      `, [nama, kategori, safeBobot, safeSatuan, safeTarget, safeSumber, safeUrutan, safeKeterangan]);
+        INSERT INTO kpi_indicators (nama, kategori, bobot, satuan, target_default, sumber, scoring_method, score_min, score_max, urutan, keterangan, aktif)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)
+      `, [nama, kategori, safeBobot, safeSatuan, safeTarget, safeSumber, safeMethod, safeScoreMin, safeScoreMax, safeUrutan, safeKeterangan]);
       var newTemplateId = insertResult.insertId || null;
     }
 
@@ -255,10 +261,15 @@ router.get('/sdm/kpi/assessments', authenticateOperator, async (req, res) => {
     let query = `
       SELECT 
         ks.id, ks.teacher_id, t.nama as teacher_name, 
+        t.nik, t.nip, t.link_foto,
+        (SELECT GROUP_CONCAT(DISTINCT ta.jabatan_di_unit ORDER BY ta.id SEPARATOR ', ')
+         FROM teacher_assignments ta 
+         WHERE ta.teacher_id = ks.teacher_id AND ta.tenant_id = ks.tenant_id) as jabatan_di_unit,
         ks.tenant_id, kp.nama as period_name, kp.jenis as period_jenis, kp.tahun as period_tahun,
-        ki.nama as indicator_name, ki.id as indicator_id,
-        ki.kategori,
-        ki.bobot,
+         ki.nama as indicator_name, ki.id as indicator_id, ki.sumber,
+         ki.kategori,
+         ki.bobot,
+         ki.scoring_method, ki.score_min, ki.score_max,
         ks.nilai_aktual, ks.target, ks.pencapaian, ks.skor,
         ks.penilai_id, ks.catatan, ks.status,
         kpen.nama as penilai_name
@@ -332,6 +343,439 @@ router.get('/sdm/kpi/assessments', authenticateOperator, async (req, res) => {
   }
 });
 
+// GET /api/sdm/kpi/auto-values - Compute auto indicator values from source tables
+// Returns attendance % (from attendance_logs) and evaluation avg (from evaluations)
+// filtered by the KPI period's date range, for all active teachers in allowed tenants.
+router.get('/sdm/kpi/auto-values', authenticateOperator, async (req, res) => {
+  try {
+    const allowedTenants = await getSdmAllowedTenants(req);
+    const { tenant_id, period_id, teacher_id } = req.query;
+
+    if (allowedTenants.length === 0) {
+      return res.json({ success: true, data: {} });
+    }
+
+    let dateFilterClause = '';
+    let dateParams = [];
+    let tanggal_mulai, tanggal_selesai;
+    if (period_id) {
+      const periodRows = await db.query(
+        'SELECT tanggal_mulai, tanggal_selesai FROM kpi_periods WHERE id = ?',
+        [parseInt(period_id)]
+      );
+      if (periodRows.length === 0) {
+        return res.json({ success: true, data: {} });
+      }
+      tanggal_mulai = periodRows[0].tanggal_mulai;
+      tanggal_selesai = periodRows[0].tanggal_selesai;
+      dateFilterClause = 'AND DATE(al.waktu_scan) >= ? AND DATE(al.waktu_scan) <= ?';
+      dateParams = [tanggal_mulai, tanggal_selesai];
+    } else {
+      const oneMonthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+      tanggal_mulai = oneMonthAgo.toISOString().split('T')[0];
+      tanggal_selesai = new Date().toISOString().split('T')[0];
+      dateFilterClause = 'AND al.waktu_scan >= DATE_SUB(NOW(), INTERVAL 1 MONTH)';
+    }
+
+    const tenantPlaceholders = allowedTenants.map(() => '?').join(',');
+    let tenantFilter = `ta.tenant_id IN (${tenantPlaceholders})`;
+    let tenantParams = [...allowedTenants];
+
+    if (tenant_id && allowedTenants.includes(tenant_id)) {
+      tenantFilter = 'ta.tenant_id = ?';
+      tenantParams = [tenant_id];
+    }
+
+    let teacherFilter = '';
+    let teacherParams = [];
+    if (teacher_id) {
+      teacherFilter = 'AND t.id = ?';
+      teacherParams = [parseInt(teacher_id)];
+    }
+
+    // Compute attendance breakdown per category (COUNT DISTINCT dates per category)
+    // kehadiran_pct computed in JS after tanpa_keterangan is determined
+    const attendanceQuery = `
+      SELECT 
+        t.id as teacher_id,
+        ta.tenant_id,
+        COUNT(DISTINCT CASE WHEN al.status = 'tepat_waktu' AND al.dinas_luar = 0 THEN DATE(al.waktu_scan) END) as hadir,
+        COUNT(DISTINCT CASE WHEN al.status = 'terlambat' AND al.dinas_luar = 0 THEN DATE(al.waktu_scan) END) as terlambat,
+        COUNT(DISTINCT CASE WHEN al.dinas_luar = 1 THEN DATE(al.waktu_scan) END) as dinas_luar_attendance,
+        COUNT(DISTINCT CASE WHEN al.jenis = 'masuk' THEN DATE(al.waktu_scan) END) as total_masuk_days
+      FROM teachers t
+      JOIN teacher_assignments ta ON t.id = ta.teacher_id
+      LEFT JOIN attendance_logs al ON al.teacher_id = t.id 
+        AND al.tenant_id = ta.tenant_id 
+        AND al.jenis = 'masuk' 
+        ${dateFilterClause}
+      WHERE ${tenantFilter} AND t.status_aktif = 1
+        ${teacherFilter}
+      GROUP BY t.id, ta.tenant_id
+    `;
+
+    const attendanceResults = await db.query(attendanceQuery, [...dateParams, ...tenantParams, ...teacherParams]);
+
+    // Compute evaluation avg (AVG(score)/5*100)
+    // Uses the same period date range
+    let evalDateFilter = '';
+    let evalDateParams = [];
+    if (period_id) {
+      evalDateFilter = 'AND e.evaluation_date >= ? AND e.evaluation_date <= ?';
+      evalDateParams = [...dateParams];
+    } else {
+      evalDateFilter = 'AND e.evaluation_date >= DATE_SUB(NOW(), INTERVAL 1 MONTH)';
+    }
+
+    const evaluationQuery = `
+      SELECT 
+        t.id as teacher_id,
+        ta.tenant_id,
+        ROUND(COALESCE(AVG(e.score), 0) / 5 * 100, 2) as evaluasi_pct
+      FROM teachers t
+      JOIN teacher_assignments ta ON t.id = ta.teacher_id
+      LEFT JOIN evaluations e ON e.teacher_id = t.id 
+        AND e.tenant_id = ta.tenant_id
+        ${evalDateFilter}
+      WHERE ${tenantFilter} AND t.status_aktif = 1
+        ${teacherFilter}
+      GROUP BY t.id, ta.tenant_id
+    `;
+
+    const evaluationResults = await db.query(evaluationQuery, [...evalDateParams, ...tenantParams, ...teacherParams]);
+
+    // Fetch approved leave_requests for breakdown (izin, sakit, cuti, dinas_luar)
+    let leaveDateFilter = '';
+    let leaveDateParams = [];
+    if (period_id) {
+      leaveDateFilter = 'AND lr.tanggal_selesai >= ? AND lr.tanggal_mulai <= ?';
+      leaveDateParams = [tanggal_mulai, tanggal_selesai];
+    } else {
+      leaveDateFilter = 'AND lr.tanggal_selesai >= DATE_SUB(NOW(), INTERVAL 1 MONTH)';
+    }
+
+    const leaveQuery = `
+      SELECT 
+        lr.teacher_id,
+        lr.jenis,
+        lr.tanggal_mulai,
+        lr.tanggal_selesai
+      FROM leave_requests lr
+      WHERE lr.status = 'approved'
+        ${leaveDateFilter}
+        AND (lr.tenant_id IN (${tenantParams.map(() => '?').join(',')}) OR lr.tenant_id = '' OR lr.tenant_id IS NULL)
+        ${teacherFilter ? 'AND lr.teacher_id = ?' : ''}
+    `;
+    const leaveParams = [...leaveDateParams, ...tenantParams];
+    if (teacherFilter) {
+      leaveParams.push(...teacherParams);
+    }
+
+    const leaveResults = await db.query(leaveQuery, leaveParams);
+
+    // Query all distinct dates in the period (from attendance_logs)
+    // Leave request date ranges are expanded in JavaScript (below) after fetching leave results
+    const allDatesQuery = `
+      SELECT DISTINCT DATE(waktu_scan) as record_date FROM attendance_logs
+      WHERE tenant_id IN (${tenantParams.map(() => '?').join(',')})
+        AND DATE(waktu_scan) >= ? AND DATE(waktu_scan) <= ?
+    `;
+    const allDatesParams = [...tenantParams, tanggal_mulai, tanggal_selesai];
+    const allDatesResults = await db.query(allDatesQuery, allDatesParams);
+    const allTenantDates = allDatesResults.map(function(r) { return r.record_date; });
+    const tenantDatesSet = new Set(allTenantDates);
+
+    // Build leave breakdown per teacher (expand date ranges to distinct dates)
+    // Leave dates do NOT expand tenantDatesSet — only attendance_logs dates define effective days
+    const leaveBreakdown = {};
+    leaveResults.forEach(function(row) {
+      var key = String(row.teacher_id);
+      if (!leaveBreakdown[key]) {
+        leaveBreakdown[key] = { izin: new Set(), sakit: new Set(), cuti: new Set(), dinas_luar: new Set() };
+      }
+      var start = new Date(row.tanggal_mulai);
+      var end = new Date(row.tanggal_selesai);
+      for (var d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        var dayKey = d.toISOString().split('T')[0];
+        var jenisKey = row.jenis;
+        if (leaveBreakdown[key][jenisKey]) {
+          leaveBreakdown[key][jenisKey].add(dayKey);
+        }
+      }
+    });
+    const totalTenantDays = tenantDatesSet.size;
+
+    // Merge results into a lookup: { teacher_id: { tenant_id, kehadiran_pct, evaluasi_pct } }
+    const autoValues = {};
+
+    attendanceResults.forEach(row => {
+      const key = String(row.teacher_id);
+      if (!autoValues[key]) {
+        autoValues[key] = { teacher_id: row.teacher_id, tenant_id: row.tenant_id, kehadiran_pct: 0, evaluasi_pct: 0, breakdown: {} };
+      }
+      var lb = leaveBreakdown[key];
+      var totalRecorded = (row.hadir || 0) + (row.terlambat || 0) + (lb ? (lb.izin.size + lb.sakit.size + lb.cuti.size + lb.dinas_luar.size) : 0) + (row.dinas_luar_attendance || 0);
+      var tanpaKeterangan = totalTenantDays > 0 ? Math.max(0, totalTenantDays - totalRecorded) : 0;
+      // New formula: 100 - (total_penalty / total_hari_efektif)
+      // Penalty: terlambat × 3 pts, tanpa_keterangan × 100 pts
+      // total_hari_efektif includes ALL active days: hadir + terlambat + izin + sakit + cuti + dinas_luar + tanpa_keterangan
+      var totalHariEfektif = (row.hadir || 0) + (row.terlambat || 0) + (lb ? (lb.izin.size + lb.sakit.size + lb.cuti.size + lb.dinas_luar.size) : 0) + (row.dinas_luar_attendance || 0) + tanpaKeterangan;
+      var totalPenalty = ((row.terlambat || 0) * 3) + (tanpaKeterangan * 100);
+      var kehadiranPct = totalHariEfektif > 0 ? Math.max(0, Math.round((100 - (totalPenalty / totalHariEfektif)) * 100) / 100) : 100;
+      autoValues[key].kehadiran_pct = kehadiranPct;
+      autoValues[key].breakdown = {
+        hadir: row.hadir || 0,
+        terlambat: row.terlambat || 0,
+        izin: lb ? lb.izin.size : 0,
+        sakit: lb ? lb.sakit.size : 0,
+        cuti: lb ? lb.cuti.size : 0,
+        dinas_luar: (row.dinas_luar_attendance || 0) + (lb ? lb.dinas_luar.size : 0),
+        tanpa_keterangan: tanpaKeterangan,
+        total_hari_efektif: totalHariEfektif,
+        total_penalty: totalPenalty
+      };
+    });
+
+    evaluationResults.forEach(row => {
+      const key = String(row.teacher_id);
+      if (!autoValues[key]) {
+        autoValues[key] = { teacher_id: row.teacher_id, tenant_id: row.tenant_id, kehadiran_pct: 0, evaluasi_pct: 0, breakdown: {} };
+      }
+      autoValues[key].evaluasi_pct = row.evaluasi_pct || 0;
+    });
+
+    res.json({
+      success: true,
+      data: autoValues,
+      debug: {
+        totalTenantDays: tenantDatesSet.size,
+        tenantDates: allTenantDates,
+        allowedTenants: allowedTenants,
+        requestedTenant: tenant_id || null,
+        tenantParams: tenantParams,
+        periodId: period_id || null,
+        periodDateRange: tanggal_mulai ? { tanggal_mulai, tanggal_selesai } : null
+      }
+    });
+  } catch (error) {
+    console.error('KPI auto-values error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching KPI auto values', error: error.message });
+  }
+});
+
+// GET /api/sdm/kpi/detail-logs - Detailed source logs for auto indicator verification
+// Returns attendance_logs and evaluations entries filtered by period date range.
+// Query: ?tenant_id=<unit>&period_id=<id>&teacher_id=<id>
+router.get('/sdm/kpi/detail-logs', authenticateOperator, async (req, res) => {
+  try {
+    const allowedTenants = await getSdmAllowedTenants(req);
+    const { tenant_id, period_id, teacher_id, jenis } = req.query;
+
+    if (allowedTenants.length === 0) {
+      return res.json({ success: true, data: {} });
+    }
+
+    // Get period date range
+    if (!period_id) {
+      return res.status(400).json({ success: false, message: 'period_id wajib diisi' });
+    }
+
+    const periodRows = await db.query(
+      'SELECT tanggal_mulai, tanggal_selesai FROM kpi_periods WHERE id = ?',
+      [parseInt(period_id)]
+    );
+    if (periodRows.length === 0) {
+      return res.json({ success: true, data: { kehadiran: [], evaluasi: [] } });
+    }
+    const { tanggal_mulai, tanggal_selesai } = periodRows[0];
+
+    // Determine effective tenant: if tenant_id provided and allowed, use it; else use first allowed
+    const effectiveTenant = (tenant_id && allowedTenants.includes(tenant_id)) ? tenant_id : allowedTenants[0];
+
+    // Fetch attendance logs (filtered by period dates)
+    // jenis parameter: 'masuk' (default) or 'pulang' or 'all'
+    const jenisFilter = (jenis && jenis !== 'all') ? jenis : 'masuk';
+    let atQuery = `
+      SELECT 
+        al.id,
+        al.waktu_scan,
+        al.jenis,
+        al.status,
+        al.metode,
+        al.dinas_luar,
+        al.keterangan,
+        t.nama as teacher_name
+      FROM attendance_logs al
+      JOIN teachers t ON al.teacher_id = t.id
+      WHERE al.tenant_id = ?
+        AND DATE(al.waktu_scan) >= ?
+        AND DATE(al.waktu_scan) <= ?
+    `;
+    let atParams = [effectiveTenant, tanggal_mulai, tanggal_selesai];
+    if (jenisFilter) {
+      atQuery += ' AND al.jenis = ?';
+      atParams.push(jenisFilter);
+    }
+    if (teacher_id) {
+      atQuery += ' AND al.teacher_id = ?';
+      atParams.push(parseInt(teacher_id));
+    }
+    atQuery += ' ORDER BY al.waktu_scan DESC';
+
+    const attendanceLogs = await db.query(atQuery, atParams);
+
+    // Fetch evaluation logs (filtered by period dates)
+    let evQuery = `
+      SELECT 
+        e.id,
+        e.score,
+        e.category,
+        e.notes,
+        e.evaluation_date,
+        t.nama as teacher_name
+      FROM evaluations e
+      JOIN teachers t ON e.teacher_id = t.id
+      WHERE e.tenant_id = ?
+        AND e.evaluation_date >= ?
+        AND e.evaluation_date <= ?
+    `;
+    let evParams = [effectiveTenant, tanggal_mulai, tanggal_selesai];
+    if (teacher_id) {
+      evQuery += ' AND e.teacher_id = ?';
+      evParams.push(parseInt(teacher_id));
+    }
+    evQuery += ' ORDER BY e.evaluation_date DESC';
+
+    const evaluationLogs = await db.query(evQuery, evParams);
+
+    // Fetch ALL leave_requests for the detail modal (all statuses: pending/approved/rejected)
+    // Handle empty/NULL tenant_id by using OR condition
+    let lrQuery = `
+      SELECT 
+        lr.id,
+        lr.teacher_id,
+        lr.jenis,
+        lr.keterangan,
+        lr.tanggal_mulai,
+        lr.tanggal_selesai,
+        lr.status,
+        t.nama as teacher_name
+      FROM leave_requests lr
+      JOIN teachers t ON lr.teacher_id = t.id
+      WHERE (lr.tenant_id = ? OR lr.tenant_id = '' OR lr.tenant_id IS NULL)
+        AND lr.tanggal_selesai >= ?
+        AND lr.tanggal_mulai <= ?
+    `;
+    let lrParams = [effectiveTenant, tanggal_mulai, tanggal_selesai];
+    if (teacher_id) {
+      lrQuery += ' AND lr.teacher_id = ?';
+      lrParams.push(parseInt(teacher_id));
+    }
+    lrQuery += ' ORDER BY lr.tanggal_mulai DESC';
+
+    const leaveRequests = await db.query(lrQuery, lrParams);
+
+    // Query all distinct dates in the tenant during the period (from attendance_logs)
+    // Leave request date ranges are expanded in JavaScript (below)
+    // Used to distinguish: null (no records at all) vs tanpa_keterangan (other teachers have records)
+    const tenantDatesQuery = `
+      SELECT DISTINCT DATE(waktu_scan) as record_date FROM attendance_logs
+      WHERE tenant_id = ?
+        AND DATE(waktu_scan) >= ?
+        AND DATE(waktu_scan) <= ?
+    `;
+    const tenantDatesResults = await db.query(tenantDatesQuery, [
+        effectiveTenant, tanggal_mulai, tanggal_selesai
+    ]);
+    const tenantDatesSet = new Set();
+    tenantDatesResults.forEach(function(r) {
+      tenantDatesSet.add(r.record_date);
+    });
+
+    // Generate full calendar for the period (only when teacher_id is provided)
+    // Each date is categorized: hadir, terlambat, izin, sakit, cuti, dinas_luar, tanpa_keterangan, or null
+    // - null: no records exist for this date in the tenant (weekend/holiday/boundary)
+    // - tanpa_keterangan: other teachers have records but this teacher doesn't (absent without permission)
+    let calendar = [];
+    if (teacher_id) {
+        const calStart = new Date(tanggal_mulai);
+        const calEnd = new Date(tanggal_selesai);
+        for (let d = new Date(calStart); d <= calEnd; d.setDate(d.getDate() + 1)) {
+            const dayKey = d.toISOString().split('T')[0];
+            const dayEntry = { date: dayKey };
+
+            // Priority 1: Check leave_requests for a leave covering this date (all statuses)
+            const matchingLeave = leaveRequests.find(function(lr) {
+                const lrStart = new Date(lr.tanggal_mulai).toISOString().split('T')[0];
+                const lrEnd = new Date(lr.tanggal_selesai).toISOString().split('T')[0];
+                return dayKey >= lrStart && dayKey <= lrEnd;
+            });
+
+            if (matchingLeave) {
+                dayEntry.status = matchingLeave.jenis;
+                dayEntry.source = 'leave';
+                dayEntry.approved = matchingLeave.status === 'approved';
+                dayEntry.leave_status = matchingLeave.status;
+                dayEntry.details = matchingLeave;
+            } else {
+                // Priority 2: Check attendance_logs for masuk scan on this date
+                const matchingAttendance = attendanceLogs.find(function(al) {
+                    const alDate = new Date(al.waktu_scan).toISOString().split('T')[0];
+                    return alDate === dayKey && al.jenis === 'masuk';
+                });
+
+                if (matchingAttendance) {
+                    dayEntry.status = matchingAttendance.status;
+                    dayEntry.source = 'attendance';
+                    dayEntry.details = matchingAttendance;
+                } else {
+                    // Check if dinas_luar flag exists for this date (any jenis)
+                    const dinasLuarMatch = attendanceLogs.find(function(al) {
+                        const alDate = new Date(al.waktu_scan).toISOString().split('T')[0];
+                        return alDate === dayKey && al.dinas_luar == 1;
+                    });
+                    if (dinasLuarMatch) {
+                        dayEntry.status = 'dinas_luar';
+                        dayEntry.source = 'attendance';
+                        dayEntry.details = dinasLuarMatch;
+                    } else {
+                        // Distinguish null vs tanpa_keterangan
+                        if (tenantDatesSet.has(dayKey)) {
+                            dayEntry.status = 'tanpa_keterangan';
+                            dayEntry.source = 'none';
+                        } else {
+                            dayEntry.status = null;
+                            dayEntry.source = 'none';
+                        }
+                        dayEntry.details = null;
+                    }
+                }
+            }
+            calendar.push(dayEntry);
+        }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        kehadiran: attendanceLogs,
+        evaluasi: evaluationLogs,
+        leave_requests: leaveRequests,
+        calendar: calendar
+      },
+      debug: {
+        effectiveTenant: effectiveTenant,
+        requestedTenant: tenant_id || null,
+        periodDateRange: { tanggal_mulai, tanggal_selesai },
+        tenantDatesSetSize: tenantDatesSet.size
+      }
+    });
+  } catch (error) {
+    console.error('KPI detail-logs error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching KPI detail logs', error: error.message });
+  }
+});
+
 // Helper: Ambil tenant_id penempatan guru (assignment pertama)
 async function getTeacherTenantId(teacherId, fallbackTenantId) {
   const rows = await db.query(
@@ -350,6 +794,29 @@ function computeSkor(nilaiAktual, target, pencapaian) {
   const actual = parseFloat(nilaiAktual);
   if (isNaN(actual) || t <= 0) return 0;
   return Math.round((actual / t) * 100 * 100) / 100;
+}
+
+// Helper: Konversi skor input ke persentase 0-100 berdasarkan scoring_method
+function convertScoreToPercent(score, method, min, max) {
+  const s = parseFloat(score);
+  if (isNaN(s)) return 0;
+  switch (method) {
+    case 'discrete_1_4':
+      return Math.min(100, Math.max(0, s * 25));
+    case 'scale_1_5':
+      return Math.min(100, Math.max(0, s * 20));
+    case 'percent_0_100':
+      return Math.min(100, Math.max(0, s));
+    case 'custom': {
+      const mn = parseFloat(min) || 0;
+      const mx = parseFloat(max) || 100;
+      const range = mx - mn;
+      if (range <= 0) return 0;
+      return Math.min(100, Math.max(0, ((s - mn) / range) * 100));
+    }
+    default:
+      return Math.min(100, Math.max(0, s * 25));
+  }
 }
 
 // POST /api/sdm/kpi/assessments - Input/Update KPI assessment per guru
@@ -498,82 +965,103 @@ router.post('/sdm/kpi/assessments/bulk', authenticateOperator, async (req, res) 
       return res.status(403).json({ success: false, message: 'Hanya SDM Pusat yang boleh melakukan bulk input KPI' });
     }
 
-    const { teacher_ids, period_id, indicator_ids } = req.body;
+    const providedAssessments = Array.isArray(req.body.assessments) ? req.body.assessments : [];
 
-    if (!period_id || !teacher_ids || !indicator_ids || !Array.isArray(teacher_ids) || !Array.isArray(indicator_ids)) {
-      return res.status(400).json({ success: false, message: 'period_id, teacher_ids (array), dan indicator_ids (array) wajib diisi' });
+    if (!providedAssessments.length) {
+      return res.status(400).json({ success: false, message: 'assessments array wajib diisi' });
+    }
+
+    // Get period_id from first assessment (all should have same period)
+    const periodId = providedAssessments[0]?.period_id;
+    if (!periodId) {
+      return res.status(400).json({ success: false, message: 'period_id wajib diisi di setiap assessment' });
     }
 
     // Cek periode aktif
-    const periodRows = await db.query('SELECT id, status FROM kpi_periods WHERE id = ?', [period_id]);
+    const periodRows = await db.query('SELECT id, status FROM kpi_periods WHERE id = ?', [periodId]);
     if (!periodRows.length || periodRows[0].status !== 'aktif') {
       return res.status(400).json({ success: false, message: 'Periode penilaian KPI tidak aktif' });
     }
 
     const allowedTenants = await getSdmAllowedTenants(req);
-    const providedAssessments = Array.isArray(req.body.assessments) ? req.body.assessments : [];
     const results = [];
     const skipped = [];
 
-    for (const teacherId of teacher_ids) {
-      const teacherTenantId = await getTeacherTenantId(parseInt(teacherId), req.user.tenant_id);
+    for (const assessment of providedAssessments) {
+      const teacherId = parseInt(assessment.teacher_id);
+      const indicatorId = parseInt(assessment.indicator_id);
+      const periodIdAssessment = assessment.period_id;
 
-      // Skip guru di luar tenant yang diizinkan
-      if (!allowedTenants.includes(teacherTenantId)) {
-        skipped.push({ teacher_id: teacherId, reason: 'guru di luar unit Anda' });
+      if (!teacherId || !indicatorId || !periodIdAssessment) {
+        skipped.push({ assessment, reason: 'field wajib (teacher_id, indicator_id, period_id) kosong' });
         continue;
       }
 
-      for (const indicatorId of indicator_ids) {
-        // Cek indicator
-        const indicatorRows = await db.query('SELECT id, kategori, target_default FROM kpi_indicators WHERE id = ?', [indicatorId]);
-        if (!indicatorRows.length) continue;
-        const indicator = indicatorRows[0];
-
-        const found = providedAssessments.find(a =>
-          parseInt(a.teacher_id) === parseInt(teacherId) && parseInt(a.indicator_id) === parseInt(indicatorId)
-        );
-
-        const parsedTarget = parseFloat(found?.target);
-        const defaultTarget = parseFloat(indicator.target_default) || 100;
-        const target = (!isNaN(parsedTarget) && found?.target !== undefined && found?.target !== null && found?.target !== '')
-          ? parsedTarget
-          : defaultTarget;
-        const parsedNilai = parseFloat(found?.nilai_aktual);
-        const nilaiAktual = (!isNaN(parsedNilai) && found?.nilai_aktual !== undefined && found?.nilai_aktual !== null && found?.nilai_aktual !== '')
-          ? parsedNilai
-          : null;
-        const parsedSkor = parseFloat(found?.skor);
-        const skor = (!isNaN(parsedSkor) && found?.skor !== undefined && found?.skor !== null && found?.skor !== '')
-          ? Math.round(parsedSkor * 100) / 100
-          : computeSkor(nilaiAktual, target, found?.pencapaian);
-        const parsedPencapaian = parseFloat(found?.pencapaian);
-        const pencapaian = (!isNaN(parsedPencapaian) && found?.pencapaian !== undefined && found?.pencapaian !== null && found?.pencapaian !== '')
-          ? parsedPencapaian
-          : skor;
-        const safeNilai = nilaiAktual === null ? 0 : nilaiAktual;
-
-        // Cek apakah sudah ada
-        const existingRows = await db.query(
-          'SELECT id FROM kpi_scores WHERE teacher_id = ? AND period_id = ? AND indicator_id = ?',
-          [teacherId, period_id, indicatorId]
-        );
-
-        if (existingRows.length > 0) {
-          await db.query(`
-            UPDATE kpi_scores SET
-              nilai_aktual = ?, target = ?, pencapaian = ?, skor = ?, catatan = ?, penilai_id = ?, updated_at = NOW()
-            WHERE id = ?
-          `, [safeNilai, target, pencapaian, skor, found ? (found.catatan || null) : null, req.user.id, existingRows[0].id]);
-        } else {
-          await db.query(`
-            INSERT INTO kpi_scores (teacher_id, period_id, indicator_id, tenant_id, nilai_aktual, target, pencapaian, skor, penilai_id, status, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', NOW())
-          `, [teacherId, period_id, indicatorId, teacherTenantId, safeNilai, target, pencapaian, skor, req.user.id]);
-        }
-
-        results.push({ teacher_id: parseInt(teacherId), indicator_id: parseInt(indicatorId), skor });
+      // Verify period matches
+      if (parseInt(periodIdAssessment) !== parseInt(periodId)) {
+        skipped.push({ assessment, reason: 'period_id tidak konsisten' });
+        continue;
       }
+
+      // Tentukan tenant: dari assessment, atau turunan dari penempatan guru
+      let tenantId = assessment.tenant_id;
+      if (!tenantId) {
+        tenantId = await getTeacherTenantId(teacherId, req.user.tenant_id);
+      }
+
+      // Verify teacher is in allowed tenant
+      if (!tenantId || !allowedTenants.includes(tenantId)) {
+        skipped.push({ assessment, reason: 'guru di luar unit Anda' });
+        continue;
+      }
+
+      // Cek indicator
+      const indicatorRows = await db.query('SELECT id, kategori, target_default FROM kpi_indicators WHERE id = ?', [indicatorId]);
+      if (!indicatorRows.length) {
+        skipped.push({ assessment, reason: 'indikator tidak ditemukan' });
+        continue;
+      }
+      const indicator = indicatorRows[0];
+
+      const parsedTarget = parseFloat(assessment.target);
+      const defaultTarget = parseFloat(indicator.target_default) || 100;
+      const target = (!isNaN(parsedTarget) && assessment.target !== undefined && assessment.target !== null && assessment.target !== '')
+        ? parsedTarget
+        : defaultTarget;
+      const parsedNilai = parseFloat(assessment.nilai_aktual);
+      const nilaiAktual = (!isNaN(parsedNilai) && assessment.nilai_aktual !== undefined && assessment.nilai_aktual !== null && assessment.nilai_aktual !== '')
+        ? parsedNilai
+        : 0;
+      const parsedSkor = parseFloat(assessment.skor);
+      const skor = (!isNaN(parsedSkor) && assessment.skor !== undefined && assessment.skor !== null && assessment.skor !== '')
+        ? Math.round(parsedSkor * 100) / 100
+        : computeSkor(nilaiAktual, target, assessment.pencapaian);
+      const parsedPencapaian = parseFloat(assessment.pencapaian);
+      const pencapaian = (!isNaN(parsedPencapaian) && assessment.pencapaian !== undefined && assessment.pencapaian !== null && assessment.pencapaian !== '')
+        ? parsedPencapaian
+        : skor;
+      const safeNilai = nilaiAktual === null ? 0 : nilaiAktual;
+
+      // Cek apakah sudah ada
+      const existingRows = await db.query(
+        'SELECT id FROM kpi_scores WHERE teacher_id = ? AND period_id = ? AND indicator_id = ?',
+        [teacherId, periodId, indicatorId]
+      );
+
+      if (existingRows.length > 0) {
+        await db.query(`
+          UPDATE kpi_scores SET
+            nilai_aktual = ?, target = ?, pencapaian = ?, skor = ?, catatan = ?, penilai_id = ?, updated_at = NOW()
+          WHERE id = ?
+        `, [safeNilai, target, pencapaian, skor, assessment.catatan || null, req.user.id, existingRows[0].id]);
+      } else {
+        await db.query(`
+          INSERT INTO kpi_scores (teacher_id, period_id, indicator_id, tenant_id, nilai_aktual, target, pencapaian, skor, penilai_id, status, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', NOW())
+        `, [teacherId, periodId, indicatorId, tenantId, safeNilai, target, pencapaian, skor, req.user.id]);
+      }
+
+      results.push({ teacher_id: teacherId, indicator_id: indicatorId, skor });
     }
 
     res.json({

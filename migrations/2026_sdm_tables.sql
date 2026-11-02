@@ -147,9 +147,7 @@ SELECT * FROM (
 ) AS seed2
 WHERE NOT EXISTS (SELECT 1 FROM `kpi_indicators` WHERE `kategori` = 'staf');
 
--- 8. Kolom workflow penilaian pada kpi_scores.
---    Idempotent: guarded via information_schema so it is safe to re-run on
---    both MySQL and MariaDB (no reliance on ADD COLUMN IF NOT EXISTS).
+-- 8. Tambah kolom kpi_category ke teacher_assignments (untuk membedakan guru vs staf)
 DROP PROCEDURE IF EXISTS _add_col_if_missing;
 DELIMITER $$
 CREATE PROCEDURE _add_col_if_missing(
@@ -172,6 +170,69 @@ BEGIN
 END$$
 DELIMITER ;
 
-CALL _add_col_if_missing('kpi_scores', 'status', 'ENUM(''draft'',''submitted'',''approved'') NOT NULL DEFAULT ''draft'' COMMENT ''Status penilaian KPI'' AFTER `skor`');
+CALL _add_col_if_missing('teacher_assignments', 'kpi_category', "ENUM('guru','staf') DEFAULT NULL COMMENT 'Kategori KPI: guru atau staf' AFTER `jabatan_di_unit`");
 
 DROP PROCEDURE IF EXISTS _add_col_if_missing;
+
+-- 9. Tambah kolom status ke kpi_scores (jika belum ada) dan foreign key constraints
+DROP PROCEDURE IF EXISTS _add_col_if_missing;
+DELIMITER $$
+CREATE PROCEDURE _add_col_if_missing(
+  IN p_table VARCHAR(64),
+  IN p_column VARCHAR(64),
+  IN p_definition TEXT
+)
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = p_table
+      AND COLUMN_NAME = p_column
+  ) THEN
+    SET @ddl = CONCAT('ALTER TABLE `', p_table, '` ADD COLUMN `', p_column, '` ', p_definition);
+    PREPARE stmt FROM @ddl;
+    EXECUTE stmt;
+    DEALLOCATE PREPARE stmt;
+  END IF;
+END$$
+DELIMITER ;
+
+CALL _add_col_if_missing('kpi_scores', 'status', "ENUM('draft','submitted','approved') NOT NULL DEFAULT 'draft' COMMENT 'Status penilaian KPI' AFTER `skor`");
+
+-- 11. Add scoring_method columns to kpi_indicators (idempotent)
+CALL _add_col_if_missing('kpi_indicators', 'scoring_method', "ENUM('discrete_1_4','percent_0_100','scale_1_5','custom') NOT NULL DEFAULT 'discrete_1_4' COMMENT 'Metode scoring: 1-4, 0-100, 1-5, custom' AFTER `sumber`");
+CALL _add_col_if_missing('kpi_indicators', 'score_min', "DECIMAL(5,2) DEFAULT 0 COMMENT 'Minimum score untuk custom method' AFTER `scoring_method`");
+CALL _add_col_if_missing('kpi_indicators', 'score_max', "DECIMAL(5,2) DEFAULT 100 COMMENT 'Maximum score untuk custom method' AFTER `score_min`");
+
+DROP PROCEDURE IF EXISTS _add_col_if_missing;
+
+-- 10. Foreign key constraints untuk kpi_scores (idempotent via stored procedure)
+DROP PROCEDURE IF EXISTS _add_fk_if_missing;
+DELIMITER $$
+CREATE PROCEDURE _add_fk_if_missing(
+  IN p_table VARCHAR(64),
+  IN p_fk_name VARCHAR(64),
+  IN p_col VARCHAR(64),
+  IN p_ref_table VARCHAR(64),
+  IN p_ref_col VARCHAR(64)
+)
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.TABLE_CONSTRAINTS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = p_table
+      AND CONSTRAINT_NAME = p_fk_name
+  ) THEN
+    SET @ddl = CONCAT('ALTER TABLE `', p_table, '` ADD CONSTRAINT `', p_fk_name, '` FOREIGN KEY (`', p_col, '`) REFERENCES `', p_ref_table, '`(`', p_ref_col, '`)');
+    PREPARE stmt FROM @ddl;
+    EXECUTE stmt;
+    DEALLOCATE PREPARE stmt;
+  END IF;
+END$$
+DELIMITER ;
+
+CALL _add_fk_if_missing('kpi_scores', 'fk_kpi_scores_teacher', 'teacher_id', 'teachers', 'id');
+CALL _add_fk_if_missing('kpi_scores', 'fk_kpi_scores_indicator', 'indicator_id', 'kpi_indicators', 'id');
+CALL _add_fk_if_missing('kpi_scores', 'fk_kpi_scores_period', 'period_id', 'kpi_periods', 'id');
+
+DROP PROCEDURE IF EXISTS _add_fk_if_missing;

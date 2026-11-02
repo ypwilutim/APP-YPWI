@@ -1188,6 +1188,9 @@ async function startServer() {
     await ensureColumn('teachers', 'potongan', 'DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER honor_bendahara');
     await ensureColumn('teachers', 'pending_password_hash', 'VARCHAR(255) DEFAULT NULL AFTER link_foto');
 
+    // --- sk_guru: flag verifikasi manual untuk bulk generate guru yang belum layak ---
+    await ensureColumn('sk_guru', 'manual_verified', 'TINYINT(1) NOT NULL DEFAULT 0 COMMENT "1=SK dibuat via verifikasi manual operator (belum memenuhi syarat masa kerja)" AFTER tentag_type');
+
     // --- teacher_assignments: kolom payroll override + is_paid ---
     await ensureColumn('teacher_assignments', 'is_paid', 'TINYINT(1) NOT NULL DEFAULT 1 COMMENT "1=digaji, 0=tidak"');
     await ensureColumn('teacher_assignments', 'gaji_pokok', 'DECIMAL(12,2) NOT NULL DEFAULT 0.00');

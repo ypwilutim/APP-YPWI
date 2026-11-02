@@ -448,7 +448,8 @@ router.get('/sdm-dashboard/teacher-list', authenticateOperator, async (req, res)
     let query = `
       SELECT 
         t.id, t.nama, t.nik, t.nip, t.email, t.status_kepegawaian, t.status_aktif,
-        t.no_wa,
+        t.no_wa, t.link_foto,
+        ta.kpi_category,
         GROUP_CONCAT(DISTINCT ta.jabatan_di_unit SEPARATOR ', ') as jabatan_di_unit,
         t.tmt, t.gaji_pokok, t.tunj_kinerja, t.tunj_kehadiran,
         GROUP_CONCAT(DISTINCT ta.tenant_id SEPARATOR ', ') as tenant_ids,
@@ -459,7 +460,7 @@ router.get('/sdm-dashboard/teacher-list', authenticateOperator, async (req, res)
       JOIN teacher_assignments ta ON t.id = ta.teacher_id
       JOIN tenants tn ON ta.tenant_id = tn.tenant_id
       WHERE ta.tenant_id IN (${tenantPlaceholders}) AND t.status_aktif = 1
-      GROUP BY t.id, t.nama, t.nik, t.nip, t.email, t.status_kepegawaian, t.status_aktif, t.no_wa, t.tmt, t.gaji_pokok, t.tunj_kinerja, t.tunj_kehadiran
+      GROUP BY t.id, t.nama, t.nik, t.nip, t.email, t.status_kepegawaian, t.status_aktif, t.no_wa, t.link_foto, ta.kpi_category, t.tmt, t.gaji_pokok, t.tunj_kinerja, t.tunj_kehadiran
     `;
     let params = [...tenantFilter];
 
@@ -584,7 +585,7 @@ router.get('/sdm-dashboard/attendance-logs', authenticateOperator, async (req, r
   try {
     const allowedTenants = await getSdmAllowedTenants(req);
     const {
-      date, status, jenis,
+      date, status, jenis, teacher_id,
       page = 1, limit = 50
     } = req.query;
 
@@ -619,6 +620,10 @@ router.get('/sdm-dashboard/attendance-logs', authenticateOperator, async (req, r
     if (jenis) {
       whereClauses.push('al.jenis = ?');
       params.push(jenis);
+    }
+    if (teacher_id) {
+      whereClauses.push('al.teacher_id = ?');
+      params.push(parseInt(teacher_id));
     }
 
     const whereSql = whereClauses.join(' AND ');

@@ -51,6 +51,10 @@
     #skGuruModal.show { display: flex; }
     #accountModal.hidden { display: none; }
     #accountModal.show { display: flex; }
+    #skBulkModal.hidden { display: none; }
+    #skBulkModal.show { display: flex; }
+    #skBulkEditModal.hidden { display: none; }
+    #skBulkEditModal.show { display: flex; }
 
     .chart-placeholder {
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -1296,9 +1300,14 @@
                 <h3 class="text-lg font-semibold text-gray-900">Dokumen SK Guru Yayasan</h3>
                 <p class="text-gray-600">Buat dan kelola Surat Keputusan Pengangkatan Guru</p>
               </div>
-              <button onclick="showSkGuruModal()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
-                <i class="fas fa-plus mr-2"></i>Buat SK Guru
-              </button>
+              <div class="flex space-x-3">
+                <button onclick="openSkBulkModal()" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">
+                  <i class="fas fa-users mr-2"></i>Bulk Generate SK
+                </button>
+                <button onclick="showSkGuruModal()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+                  <i class="fas fa-plus mr-2"></i>Buat SK Guru
+                </button>
+              </div>
             </div>
 
             <!-- SK Guru List -->
@@ -1438,15 +1447,11 @@
                   <div class="flex justify-end space-x-3 pt-4">
                    <button type="button" onclick="hideSkGuruModal()"
                      class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100">Batal</button>
-                   <button type="button" onclick="previewSkGuru()"
-                     class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700">
-                     <i class="fas fa-eye mr-2"></i>Preview
-                   </button>
-                   <button type="button" onclick="bulkGenerateSkGuru()"
-                     class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
-                     <i class="fas fa-users mr-2"></i>Bulk Generate
-                   </button>
-                    <button type="submit" id="skGenerateBtn" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                    <button type="button" onclick="previewSkGuru()"
+                      class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700">
+                      <i class="fas fa-eye mr-2"></i>Preview
+                    </button>
+                     <button type="submit" id="skGenerateBtn" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
                      <i class="fas fa-file-word mr-2"></i>Generate SK
                    </button>
                  </div>
@@ -1511,6 +1516,160 @@
             <button type="button" onclick="confirmGenerateSk()"
               class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
               <i class="fas fa-download mr-2"></i>Download SK
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bulk SK Modal -->
+      <div id="skBulkModal"
+        class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden overflow-auto">
+        <div class="bg-white rounded-xl p-6 w-full max-w-6xl mx-4 max-h-[90vh] overflow-y-auto">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold text-gray-900">Bulk Generate SK Guru</h3>
+            <button onclick="hideSkBulkModal()" class="text-gray-500 hover:text-gray-700">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+
+          <div class="flex flex-wrap items-end space-x-3 mb-3">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Sekolah / Scope</label>
+              <select id="skBulkTenant"
+                class="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 min-w-[240px]">
+                <option value="all">Semua Sekolah</option>
+              </select>
+            </div>
+            <button type="button" onclick="loadSkBulkCandidates()"
+              class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+              <i class="fas fa-search mr-2"></i>Muat Daftar Guru
+            </button>
+            <div class="flex-1 min-w-[200px]">
+              <label class="block text-sm font-medium text-gray-700 mb-2">Cari Nama / NIK</label>
+              <input type="text" id="skBulkSearch" placeholder="Ketik nama atau NIK..."
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500"
+                oninput="filterSkBulkTable()">
+            </div>
+          </div>
+
+          <p id="skBulkInfo" class="text-xs text-gray-500 mb-2">Klik "Muat Daftar Guru" untuk menampilkan kandidat SK.</p>
+
+          <div class="overflow-x-auto border border-gray-200 rounded-lg mb-3">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th class="px-3 py-2 text-left"><input type="checkbox" id="skBulkSelectAll" onchange="toggleSkBulkSelectAll(this)"></th>
+                  <th class="px-3 py-2 text-left">No. Surat</th>
+                  <th class="px-3 py-2 text-left">Nama Guru</th>
+                  <th class="px-3 py-2 text-left">Sekolah / Unit</th>
+                  <th class="px-3 py-2 text-left">Tentang</th>
+                  <th class="px-3 py-2 text-left">Periode</th>
+                  <th class="px-3 py-2 text-left">TMT</th>
+                  <th class="px-3 py-2 text-left">Pendidikan</th>
+                  <th class="px-3 py-2 text-left">NIY</th>
+                  <th class="px-3 py-2 text-left">Status</th>
+                  <th class="px-3 py-2 text-left">Verifikasi</th>
+                  <th class="px-3 py-2 text-left">Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="skBulkTable" class="divide-y divide-gray-100">
+                <tr>
+                  <td colspan="12" class="px-4 py-8 text-center text-gray-500">Klik "Muat Daftar Guru" untuk menampilkan kandidat</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="flex justify-between items-center pt-3 border-t border-gray-100">
+            <p id="skBulkSelectedInfo" class="text-sm text-gray-600">0 guru terpilih</p>
+            <div class="flex space-x-3">
+              <button type="button" onclick="hideSkBulkModal()"
+                class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100">Tutup</button>
+              <button type="button" id="skBulkGenerateBtn" onclick="submitSkBulkGenerate()"
+                class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                <i class="fas fa-file-export mr-2"></i>Generate SK Terpilih (0)
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bulk SK Edit Modal -->
+      <div id="skBulkEditModal"
+        class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden overflow-auto">
+        <div class="bg-white rounded-xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold text-gray-900">Edit SK Guru (Bulk)</h3>
+            <button onclick="hideSkBulkEditModal()" class="text-gray-500 hover:text-gray-700">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+          <input type="hidden" id="skBulkEditIndex">
+          <div class="space-y-4">
+            <div class="bg-gray-50 rounded-lg p-3 text-sm">
+              <p id="skBulkEditNama" class="font-medium text-gray-900">-</p>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Jenis SK</label>
+              <select id="skBulkEditType" onchange="updateSkBulkEditTentang()"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
+                <option value="baru">PENGANGKATAN GURU</option>
+                <option value="kembali">PENGANGKATAN KEMBALI GURU</option>
+                <option value="honorer_guru">PENGANGKATAN GURU HONOR</option>
+                <option value="honorer_pegawai">PENGANGKATAN PEGAWAI HONOR</option>
+                <option value="kontrak_guru">PENGANGKATAN GURU KONTRAK</option>
+                <option value="kontrak_pegawai">PENGANGKATAN PEGAWAI KONTRAK</option>
+                <option value="tetap_guru">PENGANGKATAN GURU TETAP</option>
+                <option value="tetap_pegawai">PENGANGKATAN PEGAWAI TETAP</option>
+                <option value="pimpinan">PENGANGKATAN PIMPINAN</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">No. Surat</label>
+              <input type="text" id="skBulkEditNoSurat" placeholder="Kosongkan untuk nomor otomatis"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Tentang / Perihal (Opsional)</label>
+              <input type="text" id="skBulkEditTentang" placeholder="Misal: untuk pengabdian ke aktivitas X"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Periode SK / Masa Kerja (Mulai)</label>
+                <input type="month" id="skBulkEditTglMulai"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Periode SK Berakhir</label>
+                <input type="month" id="skBulkEditTglSelesai"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Pendidikan Terakhir</label>
+              <input type="text" id="skBulkEditPT" placeholder="Contoh: S1/PEND. SOSIOLOGI/UNM/2019"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">TMT (Tanggal Mulai Tugas)</label>
+              <input type="month" id="skBulkEditTmt"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
+            </div>
+          </div>
+
+          <div class="flex justify-end space-x-3 pt-4">
+            <button type="button" onclick="hideSkBulkEditModal()"
+              class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100">Batal</button>
+            <button type="button" onclick="saveSkBulkEdit()"
+              class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+              <i class="fas fa-save mr-2"></i>Simpan Perubahan
             </button>
           </div>
         </div>

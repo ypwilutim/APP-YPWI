@@ -1860,17 +1860,18 @@ router.get('/treasurer/bendahara/saldo', authenticateBendahara, async (req, res)
       console.error('ensureBillingTables error:', e.message);
     }
 
-    const tenantId = req.query.tenant_id || '';
+    let tenantId = req.query.tenant_id || '';
     const statusFilter = req.query.status || ''; // 'tunggakan' | 'kelebihan' | '' (semua)
     const search = req.query.search || ''; // Cari nama_siswa atau nisn
-    const limit = parseInt(req.query.limit) || 500;
-    const page = parseInt(req.query.page) || 1;
+    const limit = Math.max(1, Math.min(1000, parseInt(req.query.limit) || 25));
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const offset = (page - 1) * limit;
 
-    // Handle 'all' for tenant filter - show all schools
-    let effectiveTenantId = tenantId;
-    if (tenantId === 'all' || !tenantId) {
-      effectiveTenantId = null;
+    // Handle 'all', empty, or 'null' string for tenant filter - show all schools
+    if (tenantId === 'all' || !tenantId || tenantId === 'null') {
+      tenantId = '';
     }
+    const effectiveTenantId = tenantId || null;
 
     let where = 'WHERE 1=1';
     const params = [];
@@ -1899,7 +1900,9 @@ router.get('/treasurer/bendahara/saldo', authenticateBendahara, async (req, res)
       ORDER BY saldo ASC
       LIMIT ? OFFSET ?
     `;
-    const data = await db.query(query, [...params, limit, (page - 1) * limit]);
+    // Ensure limit and offset are integers for MySQL prepared statement
+    const queryParams = [...params, Number(limit), Number(offset)];
+    const data = await db.query(query, queryParams);
 
     // Ringkasan global (dari saldo_siswa) - dengan filter yang sama
     const summaryWhere = search ? ' AND (s.nama_siswa LIKE ? OR s.nisn LIKE ?)' : '';

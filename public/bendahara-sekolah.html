@@ -295,6 +295,29 @@
             <i class="fas fa-info-circle mr-1"></i>
             Pengaturan ini berlaku untuk <strong>sekolah ini saja</strong>. Jika dikosongkan, akan menggunakan pengaturan global Yayasan. Perubahan tidak mengubah slip yang sudah tersimpan.
           </div>
+          <!-- Base Setting Toggle + School Selector for School -->
+          <div class="mb-4 p-3 bg-gray-50 rounded-lg">
+            <div class="flex flex-wrap items-center gap-4">
+              <span class="text-sm font-medium text-gray-700">Base Setting:</span>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" id="kafalahBaseToggle" class="sr-only peer" onchange="kafalahOnSettingsContextChange()">
+                <div class="w-11 h-6 bg-gray-300 rounded-full peer peer-checked:bg-blue-600 peer-focus:outline-none after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full peer-checked:after:border-white"></div>
+                <span class="ml-3 text-sm font-medium text-blue-600">
+                  <span class="peer-checked:hidden">Global (Pusat)</span>
+                  <span class="hidden peer-checked:inline">Sekolah (Lokal)</span>
+                </span>
+              </label>
+              <div class="flex items-center gap-2">
+                <label class="text-xs font-medium text-gray-600">Sekolah:</label>
+                <select id="kafalahSettingsTenantSelect" onchange="kafalahOnSettingsContextChange(this.value)" class="px-3 py-1.5 border border-gray-300 rounded-md text-sm">
+                  <option value="">Pilih sekolah</option>
+                </select>
+              </div>
+              <span class="ml-2 text-xs text-blue-600">* Individual override selalu berlaku di atas base setting</span>
+            </div>
+            <p id="kafalahSettingsInfo" class="text-xs text-gray-500 mt-2"></p>
+          </div>
+
           <form id="payrollSettingsForm" onsubmit="savePayrollSettings(event)" class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Tunj. Pengabdian (flat)</label>
@@ -1046,6 +1069,11 @@
       if (kafalahSel) {
         kafalahSel.innerHTML = '<option value="">Pilih Sekolah</option>' + units.map(u => `<option value="${u.tenant_id}">${u.nama_sekolah || u.tenant_id}</option>`).join('');
       }
+      
+      const kafalahSettingsSel = document.getElementById('kafalahSettingsTenantSelect');
+      if (kafalahSettingsSel) {
+        kafalahSettingsSel.innerHTML = '<option value="">Pilih Sekolah</option>' + units.map(u => `<option value="${u.tenant_id}">${u.nama_sekolah || u.tenant_id}</option>`).join('');
+      }
     }
 
     function switchUnit() {
@@ -1127,10 +1155,10 @@
             const lastDayLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
             document.getElementById('kafalahStart').value = firstDayLastMonth.toISOString().split('T')[0];
             document.getElementById('kafalahEnd').value = lastDayLastMonth.toISOString().split('T')[0];
-            loadPayroll();
+            kafalahOnSettingsContextChange(currentTenantId);
           }
           if (btn.dataset.tab === 'payrollSettings') {
-            loadPayrollSettings();
+            kafalahOnSettingsContextChange();
           }
           if (btn.dataset.tab === 'spp') {
             pagination.spp.page = 1;
@@ -1258,32 +1286,32 @@
       const start = document.getElementById('kafalahStart').value;
       const end = document.getElementById('kafalahEnd').value;
       if (!tenantId || !start || !end) { showToast('Pilih sekolah & periode', 'error'); return; }
+      const baseMode = document.getElementById('kafalahBaseToggle')?.checked ? 'school' : 'global';
 
       const tbody = document.getElementById('kafalahTable');
-      tbody.innerHTML = '<tr><td colspan="23" class="text-center py-6"><i class="fas fa-spinner fa-spin"></i> Menghitung...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="27" class="text-center py-6"><i class="fas fa-spinner fa-spin"></i> Menghitung...</td></tr>';
 
       try {
         const res = await fetch('/api/kafalah/preview', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
-          body: JSON.stringify({ tenant_id: tenantId, periode_mulai: start, periode_selesai: end })
+          body: JSON.stringify({ tenant_id: tenantId, periode_mulai: start, periode_selesai: end, base_mode: baseMode })
         });
         const json = await res.json();
-        if (!json.success) { tbody.innerHTML = '<tr><td colspan="23" class="text-center text-red-500">' + json.message + '</td></tr>'; return; }
+        if (!json.success) { tbody.innerHTML = '<tr><td colspan="27" class="text-center text-red-500">' + json.message + '</td></tr>'; return; }
         kafalahPreviewData = json.data || [];
         renderKafalahTable(kafalahPreviewData);
         renderKafalahSummary(kafalahPreviewData);
-        document.getElementById('generateKafalahBtn').classList.remove('hidden');
       } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="23" class="text-center text-red-500">' + e.message + '</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="27" class="text-center text-red-500">' + e.message + '</td></tr>';
       }
     }
 
     function renderKafalahTable(rows) {
       const tbody = document.getElementById('kafalahTable');
-      if (!rows.length) { tbody.innerHTML = '<tr><td colspan="23" class="text-center py-6">Tidak ada data guru</td></tr>'; return; }
+      if (!rows.length) { tbody.innerHTML = '<tr><td colspan="27" class="text-center py-6">Tidak ada data guru</td></tr>'; return; }
       tbody.innerHTML = rows.map((r, i) => `
-        <tr class="hover:bg-gray-50">
+        <tr class="hover:bg-gray-50 cursor-pointer" onclick="openKafalahDetailModal(${i})">
           <td class="px-2 py-1">${i + 1}</td>
           <td class="px-2 py-1 font-medium">${r.nama}</td>
           <td class="px-2 py-1">${r.nik || '-'}</td>
@@ -1293,26 +1321,26 @@
           <td class="px-2 py-1 text-right">${fmtRp(r.tunj_keluarga_istri)}</td>
           <td class="px-2 py-1 text-right">${fmtRp(r.tunj_keluarga_anak)}</td>
           <td class="px-2 py-1 text-right bg-blue-50 font-medium">${fmtRp(r.total_a)}</td>
-          <td class="px-2 py-1 text-right">
-            <input type="number" value="${r.tunj_struktural || 0}" min="0" step="50000" class="w-20 border rounded px-1 py-0.5 text-right text-xs" onchange="updateKafalahRow(${i}, 'tunj_struktural', this.value)" />
-          </td>
-          <td class="px-2 py-1 text-right">${fmtRp(r.tunj_pengabdian)}</td>
+          <td class="px-2 py-1 text-right">${fmtRp(r.tunj_struktural)}</td>
           <td class="px-2 py-1 text-right">${fmtRp(r.tunj_fungsional)}</td>
-          <td class="px-2 py-1 text-right">${fmtRp(r.tunj_pembina)}</td>
-          <td class="px-2 py-1 text-right">${fmtRp(r.tunj_pondok)}</td>
           <td class="px-2 py-1 text-right">${fmtRp(r.tunj_transport)}</td>
           <td class="px-2 py-1 text-right">${fmtRp(r.tunj_tepat_waktu)}</td>
           <td class="px-2 py-1 text-right">${fmtRp(r.tunj_tidak_cepat_pulang)}</td>
+          <td class="px-2 py-1 text-right">${fmtRp(r.tunj_uang_makan)}</td>
           <td class="px-2 py-1 text-right">${fmtRp(r.tunj_kjm)}</td>
           <td class="px-2 py-1 text-right">${fmtRp(r.tunj_prestasi_kinerja)}</td>
-          <td class="px-2 py-1 text-right">
-            <input type="number" value="${r.tunj_apresiasi || 0}" min="0" step="50000" class="w-20 border rounded px-1 py-0.5 text-right text-xs" onchange="updateKafalahRow(${i}, 'tunj_apresiasi', this.value)" />
-          </td>
+          <td class="px-2 py-1 text-right">${fmtRp(r.tunj_apresiasi)}</td>
+          <td class="px-2 py-1 text-right">${fmtRp(r.tunj_pembina)}</td>
+          <td class="px-2 py-1 text-right">${fmtRp(r.tunj_jam_mengajar)}</td>
           <td class="px-2 py-1 text-right bg-emerald-50 font-medium">${fmtRp(r.total_b)}</td>
-          <td class="px-2 py-1 text-right bg-red-50">
-            <input type="number" value="${r.total_c || 0}" min="0" step="1000" class="w-20 border rounded px-1 py-0.5 text-right text-xs" onchange="updateKafalahRow(${i}, 'total_c', this.value)" />
-          </td>
+          <td class="px-2 py-1 text-right bg-red-50">${fmtRp(r.potong_cuti_luar_tanggungan || 0)}</td>
+          <td class="px-2 py-1 text-right bg-red-50">${fmtRp(r.potong_simt || 0)}</td>
+          <td class="px-2 py-1 text-right bg-red-50">${fmtRp(r.potong_taawun || 0)}</td>
+          <td class="px-2 py-1 text-right bg-red-50">${fmtRp(r.potong_pinjaman || 0)}</td>
           <td class="px-2 py-1 text-right bg-yellow-50 font-bold">${fmtRp(r.total_pendapatan)}</td>
+          <td class="px-2 py-2 text-center">
+            <button onclick="event.stopPropagation(); openKafalahEditModal(${i})" class="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"><i class="fas fa-edit mr-1"></i>Edit</button>
+          </td>
         </tr>
       `).join('');
     }
@@ -1371,12 +1399,13 @@
       const tenantId = document.getElementById('kafalahTenantSelect').value || currentTenantId;
       const start = document.getElementById('kafalahStart').value;
       const end = document.getElementById('kafalahEnd').value;
+      const baseMode = document.getElementById('kafalahBaseToggle')?.checked ? 'school' : 'global';
       if (!confirm(`Simpan ${kafalahPreviewData.length} slip KAFALAH untuk periode ini?`)) return;
       try {
         const res = await fetch('/api/kafalah/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
-          body: JSON.stringify({ tenant_id: tenantId, periode_mulai: start, periode_selesai: end, data: kafalahPreviewData })
+          body: JSON.stringify({ tenant_id: tenantId, periode_mulai: start, periode_selesai: end, base_mode: baseMode })
         });
         const json = await res.json();
         if (json.success) { showToast(json.message, 'success'); kafalahPreviewData = []; }
@@ -1384,9 +1413,29 @@
       } catch (e) { showToast('Error: ' + e.message, 'error'); }
     }
 
+    async function regenerateKafalah() {
+      if (!kafalahPreviewData.length) { showToast('Hitung preview dulu', 'error'); return; }
+      const tenantId = document.getElementById('kafalahTenantSelect').value || currentTenantId;
+      const start = document.getElementById('kafalahStart').value;
+      const end = document.getElementById('kafalahEnd').value;
+      const baseMode = document.getElementById('kafalahBaseToggle')?.checked ? 'school' : 'global';
+      if (!confirm(`PERINGATAN: Akan menghapus dan menghitung ulang SEMUA slip untuk periode ini. Lanjutkan?`)) return;
+      try {
+        const teacherIds = kafalahPreviewData.map(r => r.teacher_id).filter(id => id);
+        const res = await fetch('/api/kafalah/regenerate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+          body: JSON.stringify({ teacher_ids: teacherIds, tenant_id: tenantId, periode_mulai: start, periode_selesai: end, base_mode: baseMode })
+        });
+        const json = await res.json();
+        if (json.success) { showToast(json.message, 'success'); kafalahPreviewData = json.data || []; renderKafalahTable(kafalahPreviewData); renderKafalahSummary(kafalahPreviewData); }
+        else showToast(json.message || 'Gagal', 'error');
+      } catch (e) { showToast('Error: ' + e.message, 'error'); }
+    }
+
     // ==================== PAYROLL SETTINGS ====================
     async function loadPayrollSettings() {
-      const tenantId = currentTenantId;
+      const tenantId = getKafalahTenantId ? getKafalahTenantId() : currentTenantId;
       if (!tenantId) return;
       try {
         const res = await fetch('/api/kafalah/settings/tenant?tenant_id=' + tenantId, { headers: getAuthHeader() });

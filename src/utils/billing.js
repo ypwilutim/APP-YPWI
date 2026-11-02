@@ -9,6 +9,38 @@ const db = require('../../db');
 
 const MONTHS = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12' };
 
+// Helper to check if column exists (MySQL-compatible)
+async function columnExists(table, column) {
+  const [rows] = await db.query(
+    `SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ? LIMIT 1`,
+    [table, column]
+  );
+  return rows.length > 0;
+}
+
+// Helper to check if index exists (MySQL-compatible)
+async function indexExists(table, indexName) {
+  const [rows] = await db.query(
+    `SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ? LIMIT 1`,
+    [table, indexName]
+  );
+  return rows.length > 0;
+}
+
+// Helper to safely add column if not exists
+async function ensureColumn(table, column, definition) {
+  if (!(await columnExists(table, column))) {
+    await db.query(`ALTER TABLE \`${table}\` ADD COLUMN \`${column}\` ${definition}`);
+  }
+}
+
+// Helper to safely add index if not exists
+async function ensureIndex(table, indexName, columns) {
+  if (!(await indexExists(table, indexName))) {
+    await db.query(`ALTER TABLE \`${table}\` ADD INDEX \`${indexName}\` (${columns})`);
+  }
+}
+
 function parseDateBSI(dateStr) {
   const parts = (dateStr || '').split(' ');
   if (parts.length < 3) return null;
@@ -159,24 +191,20 @@ async function ensureBillingTables() {
   `);
 
   // Add missing columns if not exists (for existing tables)
-  try {
-    await db.query(`ALTER TABLE billing_payment ADD COLUMN IF NOT EXISTS ransportasi DECIMAL(12,2) DEFAULT 0 AFTER spp_bulanan`);
-    await db.query(`ALTER TABLE billing_payment ADD COLUMN IF NOT EXISTS subsidi DECIMAL(12,2) DEFAULT 0 AFTER ransportasi`);
-    await db.query(`ALTER TABLE billing_payment ADD COLUMN IF NOT EXISTS catatan TEXT DEFAULT NULL AFTER status`);
-    await db.query(`ALTER TABLE billing_payment ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at`);
-    await db.query(`ALTER TABLE billing_payment ADD INDEX IF NOT EXISTS idx_bulan (bulan)`);
-    await db.query(`ALTER TABLE billing_payment ADD COLUMN IF NOT EXISTS metode_pembayaran ENUM('tunai','transfer_pusat','gateway','belum_bayar') DEFAULT NULL AFTER status`);
-    await db.query(`ALTER TABLE billing_payment ADD COLUMN IF NOT EXISTS tanggal_bayar DATE DEFAULT NULL AFTER metode_pembayaran`);
-    await db.query(`ALTER TABLE billing_payment ADD COLUMN IF NOT EXISTS dibayar_oleh VARCHAR(100) DEFAULT NULL AFTER tanggal_bayar`);
-    await db.query(`ALTER TABLE billing_payment ADD COLUMN IF NOT EXISTS catatan_pelunasan TEXT DEFAULT NULL AFTER dibayar_oleh`);
-    await db.query(`ALTER TABLE billing_payment ADD COLUMN IF NOT EXISTS biaya_admin_va DECIMAL(12,2) DEFAULT 0 AFTER subsidi`);
-    await db.query(`ALTER TABLE billing_payment ADD COLUMN IF NOT EXISTS tahun_ajaran_id INT(11) DEFAULT NULL AFTER biaya_admin_va`);
-    await db.query(`ALTER TABLE billing_payment ADD COLUMN IF NOT EXISTS semester_id INT(11) DEFAULT NULL AFTER tahun_ajaran_id`);
-    await db.query(`ALTER TABLE billing_payment ADD INDEX IF NOT EXISTS idx_ta (tahun_ajaran_id)`);
-    await db.query(`ALTER TABLE billing_payment ADD INDEX IF NOT EXISTS idx_semester (semester_id)`);
-  } catch (e) {
-    // Columns might already exist
-  }
+  await ensureColumn('billing_payment', 'ransportasi', 'DECIMAL(12,2) DEFAULT 0');
+  await ensureColumn('billing_payment', 'subsidi', 'DECIMAL(12,2) DEFAULT 0');
+  await ensureColumn('billing_payment', 'catatan', 'TEXT DEFAULT NULL');
+  await ensureColumn('billing_payment', 'updated_at', 'TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP');
+  await ensureIndex('billing_payment', 'idx_bulan', 'bulan');
+  await ensureColumn('billing_payment', 'metode_pembayaran', "ENUM('tunai','transfer_pusat','gateway','belum_bayar') DEFAULT NULL");
+  await ensureColumn('billing_payment', 'tanggal_bayar', 'DATE DEFAULT NULL');
+  await ensureColumn('billing_payment', 'dibayar_oleh', 'VARCHAR(100) DEFAULT NULL');
+  await ensureColumn('billing_payment', 'catatan_pelunasan', 'TEXT DEFAULT NULL');
+  await ensureColumn('billing_payment', 'biaya_admin_va', 'DECIMAL(12,2) DEFAULT 0');
+  await ensureColumn('billing_payment', 'tahun_ajaran_id', 'INT(11) DEFAULT NULL');
+  await ensureColumn('billing_payment', 'semester_id', 'INT(11) DEFAULT NULL');
+  await ensureIndex('billing_payment', 'idx_ta', 'tahun_ajaran_id');
+  await ensureIndex('billing_payment', 'idx_semester', 'semester_id');
 
   // Payment admin settings table (per siswa/guru - biaya admin VA BSI)
   // Tabel ini berbeda dari payment_settings (auto-billing config)
@@ -278,17 +306,10 @@ async function ensureBillingTables() {
 
    // Migration: add new columns jika belum ada (untuk hosting yang sudah ada tabelnya)
    try {
-     await db.query(`ALTER TABLE financial_transactions ADD COLUMN IF NOT EXISTS foto_struk VARCHAR(255) DEFAULT NULL AFTER no_bukti`);
-    try {
-      await db.query(`ALTER TABLE financial_transactions ADD COLUMN IF NOT EXISTS foto_barang VARCHAR(255) DEFAULT NULL AFTER foto_struk`);
-      try { await db.query(`ALTER TABLE financial_transactions MODIFY COLUMN status VARCHAR(20) NOT NULL DEFAULT 'approved'`); } catch(e2) { await db.query(`ALTER TABLE financial_transactions ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'approved' AFTER foto_barang`); }
-      await db.query(`ALTER TABLE financial_transactions ADD INDEX IF NOT EXISTS idx_tenant_status (tenant_id, status)`);
-    } catch (e) {
-      // Columns might already exist
-    }
-   } catch (e) {
-     // Columns might already exist
-   }
+     await ensureColumn('financial_transactions', 'foto_struk', 'VARCHAR(255) DEFAULT NULL');
+    await ensureColumn('financial_transactions', 'foto_barang', 'VARCHAR(255) DEFAULT NULL');
+    try { await db.query(`ALTER TABLE financial_transactions MODIFY COLUMN status VARCHAR(20) NOT NULL DEFAULT 'approved'`); } catch(e2) { await ensureColumn('financial_transactions', 'status', "VARCHAR(20) NOT NULL DEFAULT 'approved'"); }
+    await ensureIndex('financial_transactions', 'idx_tenant_status', 'tenant_id, status');
 
    // Transaction items table (untuk itemized receipt)
    await db.query(`
@@ -322,19 +343,13 @@ async function ensureBillingTables() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
-  try {
-    await db.query(`ALTER TABLE financial_categories ADD COLUMN IF NOT EXISTS kelompok_akun ENUM('aset','aset_tetap','liabilitas','aset_net_terbatas','aset_net_tanpa_batas','pendapatan','beban','modal') DEFAULT NULL`);
-    await db.query(`ALTER TABLE financial_categories ADD COLUMN IF NOT EXISTS nomor_akun VARCHAR(20) DEFAULT NULL`);
-  } catch (e) { /* column might already exist */ }
-
-  // Hapus duplicate (jika table lama tanpa unique key) lalu tambahkan constraint
-  // agar INSERT IGNORE di seed tidak bolak-balik bikin duplikat tiap restart server
-  try {
-    await db.query(`ALTER TABLE financial_categories ADD UNIQUE INDEX IF NOT EXISTS uniq_tenant_jenis_nama (tenant_id, jenis, nama)`);
+  await ensureColumn('financial_categories', 'kelompok_akun', "ENUM('aset','aset_tetap','liabilitas','aset_net_terbatas','aset_net_tanpa_batas','pendapatan','beban','modal') DEFAULT NULL");
+  await ensureColumn('financial_categories', 'nomor_akun', 'VARCHAR(20) DEFAULT NULL');
+  await ensureIndex('financial_categories', 'uniq_tenant_jenis_nama', 'tenant_id, jenis, nama');
   } catch (uniqErr) {
     try {
       await db.query(`DELETE c1 FROM financial_categories c1 INNER JOIN financial_categories c2 WHERE c1.id > c2.id AND COALESCE(c1.tenant_id,'') = COALESCE(c2.tenant_id,'') AND c1.nama = c2.nama AND c1.jenis = c2.jenis`);
-      await db.query(`ALTER TABLE financial_categories ADD UNIQUE INDEX IF NOT EXISTS uniq_tenant_jenis_nama (tenant_id, jenis, nama)`);
+      await ensureIndex('financial_categories', 'uniq_tenant_jenis_nama', 'tenant_id, jenis, nama');
     } catch (e3) { /* ignore — not critical */ }
   }
 
