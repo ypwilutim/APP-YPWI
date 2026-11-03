@@ -948,25 +948,48 @@ niy: skData.niy,
  });
 
 router.delete('/:id', authenticateOperator, async (req, res) => {
-   try {
-     const skId = req.params.id;
-     const [sk] = await db.query('SELECT tenant_id FROM sk_guru WHERE id = ?', [skId]);
-     
-     if (!sk) {
-       return res.status(404).json({ success: false, message: 'SK tidak ditemukan' });
-     }
-     
-     if (!verifyTenantAccess(req, sk.tenant_id)) {
-       return res.status(403).json({ success: false, message: 'Akses ditolak untuk tenant ini' });
-     }
-     
-     await db.query('DELETE FROM sk_guru WHERE id = ?', [skId]);
-     res.json({ success: true, message: 'SK berhasil dihapus' });
-   } catch (error) {
-     console.error('Delete SK error:', error);
-     res.status(500).json({ success: false, message: 'Error menghapus SK' });
-   }
- });
+  try {
+    const skId = req.params.id;
+    const [sk] = await db.query('SELECT * FROM sk_guru WHERE id = ?', [skId]);
+    
+    if (!sk) {
+      return res.status(404).json({ success: false, message: 'SK tidak ditemukan' });
+    }
+    
+    if (!verifyTenantAccess(req, sk.tenant_id)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak untuk tenant ini' });
+    }
+
+    // Get hijri year from SK (from bh field which is hijri date like "23 Jumadil Awal 1448 H")
+    const hijriYearMatch = sk.bh ? sk.bh.match(/(\d{4})\s*H$/i) : null;
+    const hijriYear = hijriYearMatch ? parseInt(hijriYearMatch[1], 10) : (sk.bm ? parseInt(sk.bm.match(/(\d{4})/)?.[1], 10) : new Date(sk.created_at).getFullYear());
+
+    // Delete the SK
+    await db.query('DELETE FROM sk_guru WHERE id = ?', [skId]);
+
+    // Check if this was the last SK for this tenant and hijri year
+    const [remaining] = await db.query(
+      'SELECT COUNT(*) as count, MAX(CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(no_surat, "/", 1), ".", -1) AS UNSIGNED)) as max_num FROM sk_guru WHERE tenant_id = ? AND no_surat LIKE ?',
+      [sk.tenant_id, 'QR.%/' + hijriYear + '%']
+    );
+
+    if (remaining.count === 0) {
+      // No more SKs for this tenant/year - reset sequence
+      await db.query('DELETE FROM sk_sequence WHERE tenant_id = ? AND hijri_year = ?', [sk.tenant_id, hijriYear]);
+    } else if (remaining.max_num !== null) {
+      // Update sequence to the highest existing number
+      await db.query(
+        'UPDATE sk_sequence SET last_number = ? WHERE tenant_id = ? AND hijri_year = ?',
+        [remaining.max_num, sk.tenant_id, hijriYear]
+      );
+    }
+
+    res.json({ success: true, message: 'SK berhasil dihapus dan nomor surat direset' });
+  } catch (error) {
+    console.error('Delete SK error:', error);
+    res.status(500).json({ success: false, message: 'Error menghapus SK: ' + error.message });
+  }
+});
 
 
 // GET /bulk-candidates - List guru aktif dengan detail SK preview untuk bulk generate
@@ -1608,12 +1631,13 @@ router.post('/approve', authenticateOperator, async (req, res) => {
       results.push({ teacher_id: teacherId, status: 'approved' });
     }
 
-    res.json({ success: true, message: `${results.filter(r => r.status === 'approved').length} guru disetujui`, data: results });
+res.json({ success: true, message: `${results.filter(r => r.status === 'approved').length} guru disetujui`, data: results });
   } catch (error) {
     console.error('Approve SK error:', error);
     res.status(500).json({ success: false, message: 'Error menyetujui guru: ' + error.message });
   }
 });
+
 
 module.exports = router;
 

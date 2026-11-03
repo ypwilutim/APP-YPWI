@@ -4831,6 +4831,7 @@ window.loadSkGuruList = async function () {
                 const createdDate = sk.created_at ? new Date(sk.created_at).toLocaleDateString('id-ID') : '-';
                 const tmtDate = sk.tmt || '-';
                 let actions = '<button onclick="downloadSkGuru(' + sk.id + ')" class="text-blue-600 hover:text-blue-800 mr-2" title="Unduh"><i class="fas fa-download"></i></button>';
+                actions += '<button onclick="deleteSkGuru(' + sk.id + ', \'' + (sk.teacher_name || sk.nama || '').replace(/'/g, "\\'") + '\')" class="text-red-600 hover:text-red-800 mr-2" title="Hapus"><i class="fas fa-trash"></i></button>';
                 return '<tr>' +
                     '<td class="px-4 py-3 text-sm"><input type="checkbox" class="sk-list-row-checkbox w-4 h-4" value="' + sk.id + '" onchange="updateSkListBulkBar()"></td>' +
                     '<td class="px-4 py-3 text-sm">' + (sk.no_surat || '-') + '</td>' +
@@ -4867,15 +4868,17 @@ window.toggleSkListSelectAll = function (checkbox) {
 window.updateSkListBulkBar = function () {
     const checkboxes = document.querySelectorAll('.sk-list-row-checkbox:checked');
     const count = checkboxes.length;
-    const bulkBar = document.getElementById('skListBulkBar');
+    const bulkActions = document.getElementById('skListBulkActions');
     const countEl = document.getElementById('skListSelectedCount');
     const selectAll = document.getElementById('skListSelectAll');
     
     if (count > 0) {
-        if (bulkBar) bulkBar.classList.remove('hidden');
+        if (bulkActions) bulkActions.classList.remove('hidden');
+        if (bulkActions) bulkActions.classList.add('flex');
         if (countEl) countEl.textContent = count + ' SK terpilih';
     } else {
-        if (bulkBar) bulkBar.classList.add('hidden');
+        if (bulkActions) bulkActions.classList.add('hidden');
+        if (bulkActions) bulkActions.classList.remove('flex');
     }
     
     // Update select all checkbox state
@@ -4930,6 +4933,106 @@ window.downloadSkListBulkZip = async function () {
         console.error('[SK LIST BULK DOWNLOAD]', e);
         hideSkLoading();
         showToast('Terjadi kesalahan saat mengunduh ZIP', 'error');
+    }
+};
+
+window.deleteSkListBulk = async function () {
+    const checkboxes = document.querySelectorAll('.sk-list-row-checkbox:checked');
+    const skIds = Array.from(checkboxes).map(cb => parseInt(cb.value, 10));
+    
+    if (skIds.length === 0) {
+        showToast('Pilih minimal satu SK untuk dihapus', 'warning');
+        return;
+    }
+
+    const confirmResult = await Swal.fire({
+        title: 'Hapus SK Terpilih?',
+        html: 'Yakin ingin menghapus <b>' + skIds.length + ' SK</b>?<br><span class="text-sm text-amber-600">Nomor surat akan direset untuk tenant/tahun yang tidak memiliki SK tersisa.</span>',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Ya, Hapus Semua',
+        cancelButtonText: 'Batal',
+        confirmButtonColor: '#dc2626'
+    });
+    if (!confirmResult.isConfirmed) return;
+
+    showSkLoading('Menghapus SK (Bulk)', 'Menghapus ' + skIds.length + ' SK...', 'Memproses...');
+    try {
+        let successCount = 0;
+        let errorCount = 0;
+        
+        for (let i = 0; i < skIds.length; i++) {
+            const skId = skIds[i];
+            updateSkLoading(Math.round((i / skIds.length) * 90), 'Menghapus SK ' + (i + 1) + ' dari ' + skIds.length, 'ID: ' + skId);
+            
+            try {
+                const res = await fetch('/api/' + skId, {
+                    method: 'DELETE',
+                    headers: skGuruAuthHdr()
+                });
+                const data = await res.json();
+                if (data.success) {
+                    successCount++;
+                } else {
+                    errorCount++;
+                    console.error('[DELETE SK BULK] Error for ID ' + skId + ':', data.message);
+                }
+            } catch (e) {
+                errorCount++;
+                console.error('[DELETE SK BULK] Exception for ID ' + skId + ':', e);
+            }
+        }
+        
+        updateSkLoading(100, 'Selesai!', 'Berhasil: ' + successCount + ', Gagal: ' + errorCount);
+        setTimeout(hideSkLoading, 500);
+        
+        if (successCount > 0) {
+            showToast(successCount + ' SK berhasil dihapus', 'success');
+            loadSkGuruList();
+        }
+        if (errorCount > 0) {
+            showToast(errorCount + ' SK gagal dihapus', 'error');
+        }
+    } catch (e) {
+        console.error('[DELETE SK LIST BULK]', e);
+        hideSkLoading();
+        showToast('Terjadi kesalahan saat menghapus SK', 'error');
+    }
+};
+
+window.deleteSkGuru = async function (skId, nama) {
+    const confirmResult = await Swal.fire({
+        title: 'Hapus SK?',
+        html: 'Yakin ingin menghapus SK untuk <b>' + (nama || '-') + '</b> (ID: ' + skId + ')?<br><span class="text-sm text-amber-600">Nomor surat akan direset jika ini SK terakhir untuk tenant/tahun ini.</span>',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Ya, Hapus',
+        cancelButtonText: 'Batal',
+        confirmButtonColor: '#dc2626'
+    });
+    if (!confirmResult.isConfirmed) return;
+
+    showSkLoading('Menghapus SK', 'Menghapus data...', 'SK ID: ' + skId);
+    try {
+        updateSkLoading(50, 'Mengirim request hapus...', '');
+        const res = await fetch('/api/sk-guru/' + skId, {
+            method: 'DELETE',
+            headers: skGuruAuthHdr()
+        });
+        updateSkLoading(80, 'Memproses...', '');
+        const data = await res.json();
+        updateSkLoading(100, 'Selesai!', '');
+        setTimeout(hideSkLoading, 300);
+        if (data.success) {
+            showToast(data.message || 'SK berhasil dihapus', 'success');
+            loadSkGuruList();
+        } else {
+            showToast(data.message || 'Gagal menghapus SK', 'error');
+        }
+    } catch (e) {
+        console.error('[DELETE SK]', e);
+        hideSkLoading();
+        showToast('Terjadi kesalahan saat menghapus SK', 'error');
     }
 };
 

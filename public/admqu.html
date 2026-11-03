@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#f59e0b">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>ADMQU - SK Guru, Absensi, Slip Gaji | YPWI Lutim</title>
+  <link rel="manifest" href="/dashboard-manifest.json">
+  <link rel="icon" href="assets/images/YPWI LOGO HITAM.png" type="image/png">
+  <link rel="stylesheet" href="styles.css">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <style>
+    body {
+      background-color: #f8fafc;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    .admqu-container {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 1.5rem;
+      box-sizing: border-box;
+    }
+    @media (min-width: 992px) {
+      .admqu-container { padding: 2rem; }
+    }
+    .admqu-header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .admqu-header-left {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    .admqu-logo {
+      width: 48px;
+      height: 48px;
+      background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 1.5rem;
+    }
+    .admqu-title h1 {
+      margin: 0;
+      font-size: 1.25rem;
+      font-weight: 800;
+      color: #0f172a;
+    }
+    .admqu-title p {
+      margin: 0;
+      font-size: 0.85rem;
+      color: #64748b;
+    }
+    .admqu-header-right {
+      display: flex;
+      gap: 0.5rem;
+    }
+    .btn-admqu {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.6rem 1rem;
+      border-radius: 0.5rem;
+      font-weight: 600;
+      font-size: 0.85rem;
+      border: none;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+    .btn-outline {
+      background: #f1f5f9;
+      color: #475569;
+      border: 1px solid #e2e8f0;
+    }
+    .btn-outline:hover {
+      background: #e2e8f0;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+      color: white;
+    }
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+    }
+    .tab-navigation {
+      display: flex;
+      gap: 0.25rem;
+      background: #f1f5f9;
+      padding: 0.25rem;
+      border-radius: 0.75rem;
+      margin-bottom: 1.5rem;
+      overflow-x: auto;
+    }
+    .tab-btn {
+      flex: 1;
+      min-width: 120px;
+      padding: 0.75rem 1rem;
+      border-radius: 0.5rem;
+      font-weight: 600;
+      font-size: 0.85rem;
+      border: none;
+      background: transparent;
+      color: #64748b;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .tab-btn:hover {
+      color: #0f172a;
+      background: #e2e8f0;
+    }
+    .tab-btn.active {
+      background: #ffffff;
+      color: #f59e0b;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    .tab-content {
+      display: none;
+      animation: fadeIn 0.3s ease;
+    }
+    .tab-content.active {
+      display: block;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .card {
+      background: #ffffff;
+      border-radius: 1rem;
+      border: 1px solid #e2e8f0;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02);
+      overflow: hidden;
+    }
+    .card-header {
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid #e2e8f0;
+      background: #f8fafc;
+    }
+    .card-header h3 {
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 700;
+      color: #0f172a;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .card-body {
+      padding: 1.25rem;
+    }
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0.75rem;
+    }
+    @media (min-width: 640px) {
+      .stat-grid { grid-template-columns: repeat(4, 1fr); }
+    }
+    @media (min-width: 992px) {
+      .stat-grid { grid-template-columns: repeat(7, 1fr); }
+    }
+    .stat-card {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 0.75rem;
+      padding: 1rem;
+      text-align: center;
+    }
+    .stat-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 0.75rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 0.5rem;
+      font-size: 1.1rem;
+    }
+    .stat-value {
+      font-size: 1.5rem;
+      font-weight: 800;
+      color: #0f172a;
+      line-height: 1.2;
+    }
+    .stat-label {
+      font-size: 0.7rem;
+      color: #64748b;
+      font-weight: 600;
+      text-transform: uppercase;
+      margin-top: 0.25rem;
+    }
+    .stat-hadir .stat-icon { background: #dcfce7; color: #166534; }
+    .stat-terlambat .stat-icon { background: #fef3c7; color: #92400e; }
+    .stat-izin .stat-icon { background: #dbeafe; color: #1e40af; }
+    .stat-sakit .stat-icon { background: #fce7f3; color: #9d174d; }
+    .stat-dinas .stat-icon { background: #ede9fe; color: #5b21b6; }
+    .stat-cuti .stat-icon { background: #fef08a; color: #854d0e; }
+    .stat-tanpa .stat-icon { background: #fee2e2; color: #991b1b; }
+    .form-group {
+      margin-bottom: 1rem;
+    }
+    .form-label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 0.5rem;
+    }
+    .form-input, .form-select {
+      width: 100%;
+      padding: 0.625rem 0.875rem;
+      border: 1px solid #cbd5e1;
+      border-radius: 0.5rem;
+      font-size: 0.9rem;
+      background: #fff;
+      color: #0f172a;
+      box-sizing: border-box;
+      transition: border 0.2s, box-shadow 0.2s;
+    }
+    .form-input:focus, .form-select:focus {
+      outline: none;
+      border-color: #f59e0b;
+      box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.1);
+    }
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1rem;
+    }
+    @media (min-width: 640px) {
+      .form-row { grid-template-columns: 1fr 1fr; }
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1.25rem;
+      border-radius: 0.5rem;
+      font-weight: 600;
+      font-size: 0.875rem;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+      color: white;
+    }
+    .btn-primary:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+    }
+    .btn-secondary {
+      background: #f1f5f9;
+      color: #475569;
+      border: 1px solid #e2e8f0;
+    }
+    .btn-secondary:hover {
+      background: #e2e8f0;
+    }
+    .btn-outline {
+      background: transparent;
+      color: #f59e0b;
+      border: 1px solid #f59e0b;
+    }
+    .btn-outline:hover {
+      background: #fffbeb;
+    }
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none !important;
+      box-shadow: none !important;
+    }
+    .btn-sm {
+      padding: 0.5rem 1rem;
+      font-size: 0.8rem;
+    }
+    .btn-group {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .alert {
+      padding: 1rem;
+      border-radius: 0.5rem;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+    }
+    .alert-info {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      color: #1e40af;
+    }
+    .alert-success {
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      color: #166534;
+    }
+    .alert-warning {
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      color: #92400e;
+    }
+    .alert-icon {
+      flex-shrink: 0;
+      margin-top: 0.125rem;
+    }
+    .alert-content {
+      flex: 1;
+    }
+    .alert-title {
+      font-weight: 700;
+      margin-bottom: 0.25rem;
+    }
+    .alert-text {
+      font-size: 0.875rem;
+      line-height: 1.5;
+    }
+    .sk-preview {
+      background: #fafafa;
+      border: 1px solid #e5e7eb;
+      border-radius: 0.5rem;
+      padding: 1.5rem;
+      max-height: 400px;
+      overflow-y: auto;
+      font-family: "Times New Roman", Times, serif;
+      font-size: 0.9rem;
+      line-height: 1.6;
+    }
+    .sk-preview .kop {
+      text-align: center;
+      margin-bottom: 0.5rem;
+    }
+    .sk-preview .kop img {
+      max-width: 100%;
+      height: auto;
+    }
+    .sk-preview .bismillah {
+      text-align: center;
+      margin-bottom: 0.5rem;
+    }
+    .sk-preview .bismillah img {
+      width: 100px;
+    }
+    .sk-preview .judul {
+      text-align: center;
+      font-weight: bold;
+      margin-bottom: 0.5rem;
+    }
+    .sk-preview table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 0.5rem;
+    }
+    .sk-preview td {
+      padding: 2px 4px;
+      vertical-align: top;
+    }
+    .sk-preview .ttd-area {
+      margin-top: 2rem;
+      text-align: right;
+    }
+    .period-selector {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      align-items: end;
+      margin-bottom: 1.5rem;
+      padding: 1rem;
+      background: #f8fafc;
+      border-radius: 0.75rem;
+      border: 1px solid #e2e8f0;
+    }
+    .period-selector .form-group {
+      margin-bottom: 0;
+      flex: 1;
+      min-width: 140px;
+    }
+    .salary-breakdown {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }
+    .salary-breakdown th,
+    .salary-breakdown td {
+      padding: 0.75rem 1rem;
+      text-align: left;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .salary-breakdown th {
+      background: #f8fafc;
+      font-weight: 600;
+      color: #374151;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+    }
+    .salary-breakdown .text-right { text-align: right; }
+    .salary-breakdown .font-medium { font-weight: 500; }
+    .salary-breakdown .font-bold { font-weight: 700; }
+    .salary-breakdown .bg-green { background: #f0fdf4; }
+    .salary-breakdown .bg-red { background: #fef2f2; }
+    .salary-breakdown .bg-yellow { background: #fffbeb; }
+    .salary-breakdown .total-row {
+      background: #f8fafc;
+      font-weight: 700;
+      border-top: 2px solid #e2e8f0;
+    }
+    .salary-breakdown .net-row {
+      background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+      font-weight: 800;
+      font-size: 1rem;
+    }
+    .history-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }
+    .history-table th,
+    .history-table td {
+      padding: 0.75rem 1rem;
+      text-align: left;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .history-table th {
+      background: #f8fafc;
+      font-weight: 600;
+      color: #374151;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+    }
+    .history-table tr:hover { background: #f8fafc; }
+    .empty-state {
+      text-align: center;
+      padding: 3rem 1rem;
+      color: #94a3b8;
+    }
+    .empty-state i {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+      opacity: 0.5;
+    }
+    .empty-state p {
+      margin: 0;
+      font-size: 0.9rem;
+    }
+    .calendar-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 2px;
+      margin-top: 1rem;
+    }
+    .calendar-day {
+      aspect-ratio: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      border-radius: 0.375rem;
+      font-size: 0.7rem;
+      font-weight: 600;
+      background: #f1f5f9;
+      color: #475569;
+      position: relative;
+    }
+    .calendar-day.weekend { background: #fef2f2; color: #fca5a5; }
+    .calendar-day.today { border: 2px solid #f59e0b; }
+    .calendar-day.hadir { background: #dcfce7; color: #166534; }
+    .calendar-day.terlambat { background: #fef3c7; color: #92400e; }
+    .calendar-day.izin { background: #dbeafe; color: #1e40af; }
+    .calendar-day.sakit { background: #fce7f3; color: #9d174d; }
+    .calendar-day.dinas { background: #ede9fe; color: #5b21b6; }
+    .calendar-day.cuti { background: #fef08a; color: #854d0e; }
+    .calendar-day.tanpa { background: #fee2e2; color: #991b1b; }
+    .calendar-day.empty { background: transparent; }
+    .calendar-day .day-num { font-size: 0.75rem; }
+    .calendar-day .day-status { font-size: 0.6rem; }
+    .calendar-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-top: 1rem;
+      font-size: 0.7rem;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    .legend-color {
+      width: 12px;
+      height: 12px;
+      border-radius: 0.25rem;
+    }
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.6);
+      backdrop-filter: blur(4px);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal-container {
+      max-width: 600px;
+      width: 100%;
+      max-height: 90vh;
+      background: #ffffff;
+      border-radius: 1rem;
+      overflow: hidden;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+      display: flex;
+      flex-direction: column;
+    }
+    .modal-header {
+      background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+      padding: 1.25rem;
+      color: white;
+    }
+    .modal-header h3 { margin: 0; font-size: 1.1rem; }
+    .modal-body { padding: 1.25rem; overflow-y: auto; flex: 1; }
+    .modal-footer { padding: 1rem 1.25rem; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 0.5rem; }
+    .sk-type-badge {
+      display: inline-block;
+      padding: 0.25rem 0.5rem;
+      border-radius: 0.375rem;
+      font-size: 0.7rem;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .sk-type-baru { background: #dbeafe; color: #1e40af; }
+    .sk-type-kembali { background: #fef3c7; color: #92400e; }
+    .sk-type-tetap { background: #dcfce7; color: #166534; }
+    .sk-type-kontrak { background: #ede9fe; color: #5b21b6; }
+    .sk-type-honorer { background: #fce7f3; color: #9d174d; }
+  </style>
+</head>
+<body>
+  <div class="admqu-container">
+    <header class="admqu-header">
+      <div class="admqu-header-left">
+        <div class="admqu-logo"><i class="fas fa-file-alt"></i></div>
+        <div class="admqu-title">
+          <h1>ADMQU</h1>
+          <p>Administrasi Kepegawaian - SK, Absensi, Slip Gaji</p>
+        </div>
+      </div>
+      <div class="admqu-header-right">
+        <a href="dashboard.html" class="btn-admqu btn-outline"><i class="fas fa-arrow-left"></i> Kembali</a>
+        <button onclick="logout()" class="btn-admqu btn-primary"><i class="fas fa-sign-out-alt"></i> Keluar</button>
+      </div>
+    </header>
+
+    <nav class="tab-navigation" role="tablist">
+      <button class="tab-btn active" role="tab" data-tab="sk-guru" onclick="showTab('sk-guru')"><i class="fas fa-file-signature"></i> SK Guru</button>
+      <button class="tab-btn" role="tab" data-tab="absensi" onclick="showTab('absensi')"><i class="fas fa-calendar-check"></i> Ringkasan Absensi</button>
+      <button class="tab-btn" role="tab" data-tab="slip-gaji" onclick="showTab('slip-gaji')"><i class="fas fa-wallet"></i> Slip Gaji</button>
+    </nav>
+
+    <!-- TAB 1: SK GURU -->
+    <div class="tab-content active" id="tab-sk-guru" role="tabpanel">
+      <div class="card" id="skExistingCard" style="display: none;">
+        <div class="card-header">
+          <h3><i class="fas fa-file-alt text-amber-600"></i> SK Guru Terbit</h3>
+        </div>
+        <div class="card-body">
+          <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-start;">
+            <div style="flex: 1; min-width: 280px;">
+              <p style="margin: 0 0 0.5rem; font-size: 0.9rem;"><strong>Nomor:</strong> <span id="skNoSurat">-</span></p>
+              <p style="margin: 0 0 0.5rem; font-size: 0.9rem;"><strong>Tentang:</strong> <span id="skTentang">-</span></p>
+              <p style="margin: 0 0 0.5rem; font-size: 0.9rem;"><strong>Tanggal:</strong> <span id="skTanggal">-</span></p>
+              <p style="margin: 0; font-size: 0.9rem;"><strong>Jenis:</strong> <span id="skJenis" class="sk-type-badge sk-type-baru">-</span></p>
+            </div>
+            <div class="btn-group">
+              <button class="btn btn-primary" onclick="downloadSk('pdf')"><i class="fas fa-file-pdf"></i> Download PDF</button>
+              <button class="btn btn-outline" onclick="downloadSk('docx')"><i class="fas fa-file-word"></i> Download DOCX</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" id="skEmptyCard" style="display: none;">
+        <div class="card-header">
+          <h3><i class="fas fa-file-plus text-amber-600"></i> Belum Ada SK</h3>
+        </div>
+        <div class="card-body" style="text-align: center; padding: 2rem;">
+          <i class="fas fa-file-alt" style="font-size: 3rem; color: #cbd5e1; margin-bottom: 1rem;"></i>
+          <p id="skEmptyText" style="margin: 0 0 1.5rem; font-size: 0.95rem; color: #64748b;">Belum ada SK untuk tahun ini.</p>
+          <button class="btn btn-primary" onclick="openSkModal()"><i class="fas fa-plus"></i> Ajukan SK Baru</button>
+        </div>
+      </div>
+    </div>
+            <button class="btn btn-secondary" onclick="closeSkPreview()">Tutup</button>
+            <button class="btn btn-primary" onclick="confirmSkFromPreview()"><i class="fas fa-check"></i> Konfirmasi & Ajukan</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: RINGKASAN ABSENSI -->
+    <div class="tab-content" id="tab-absensi" role="tabpanel">
+      <div class="card">
+        <div class="card-header">
+          <h3><i class="fas fa-filter text-amber-600"></i> Filter Periode</h3>
+        </div>
+        <div class="card-body">
+          <div class="period-selector">
+            <div class="form-group">
+              <label class="form-label">Bulan</label>
+              <select class="form-select" id="absensiBulan" onchange="loadAbsensi()">
+                <option value="1">Januari</option><option value="2">Februari</option><option value="3">Maret</option>
+                <option value="4">April</option><option value="5">Mei</option><option value="6">Juni</option>
+                <option value="7">Juli</option><option value="8">Agustus</option><option value="9">September</option>
+                <option value="10">Oktober</option><option value="11">November</option><option value="12">Desember</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Tahun</label>
+              <select class="form-select" id="absensiTahun" onchange="loadAbsensi()"></select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" id="absensiStatsCard" style="display: none;">
+        <div class="card-header">
+          <h3><i class="fas fa-chart-bar text-amber-600"></i> Ringkasan Kehadiran</h3>
+        </div>
+        <div class="card-body">
+          <div class="stat-grid">
+            <div class="stat-card stat-hadir"><div class="stat-icon"><i class="fas fa-check-circle"></i></div><div class="stat-value" id="statHadir">0</div><div class="stat-label">Hadir</div></div>
+            <div class="stat-card stat-terlambat"><div class="stat-icon"><i class="fas fa-clock"></i></div><div class="stat-value" id="statTerlambat">0</div><div class="stat-label">Terlambat</div></div>
+            <div class="stat-card stat-izin"><div class="stat-icon"><i class="fas fa-file-medical"></i></div><div class="stat-value" id="statIzin">0</div><div class="stat-label">Izin</div></div>
+            <div class="stat-card stat-sakit"><div class="stat-icon"><i class="fas fa-bed"></i></div><div class="stat-value" id="statSakit">0</div><div class="stat-label">Sakit</div></div>
+            <div class="stat-card stat-dinas"><div class="stat-icon"><i class="fas fa-map-marker-alt"></i></div><div class="stat-value" id="statDinas">0</div><div class="stat-label">Dinas Luar</div></div>
+            <div class="stat-card stat-cuti"><div class="stat-icon"><i class="fas fa-umbrella-beach"></i></div><div class="stat-value" id="statCuti">0</div><div class="stat-label">Cuti</div></div>
+            <div class="stat-card stat-tanpa"><div class="stat-icon"><i class="fas fa-question-circle"></i></div><div class="stat-value" id="statTanpa">0</div><div class="stat-label">Tanpa Ket.</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" id="absensiCalendarCard" style="display: none;">
+        <div class="card-header">
+          <h3><i class="fas fa-calendar-alt text-amber-600"></i> Kalender Absensi</h3>
+        </div>
+        <div class="card-body">
+          <div class="calendar-grid" id="calendarGrid">
+            <div class="calendar-day"><span class="day-label">Min</span></div>
+            <div class="calendar-day"><span class="day-label">Sen</span></div>
+            <div class="calendar-day"><span class="day-label">Sel</span></div>
+            <div class="calendar-day"><span class="day-label">Rab</span></div>
+            <div class="calendar-day"><span class="day-label">Kam</span></div>
+            <div class="calendar-day"><span class="day-label">Jum</span></div>
+            <div class="calendar-day"><span class="day-label">Sab</span></div>
+          </div>
+          <div class="calendar-legend">
+            <div class="legend-item"><span class="legend-color" style="background:#dcfce7"></span> Hadir</div>
+            <div class="legend-item"><span class="legend-color" style="background:#fef3c7"></span> Terlambat</div>
+            <div class="legend-item"><span class="legend-color" style="background:#dbeafe"></span> Izin</div>
+            <div class="legend-item"><span class="legend-color" style="background:#fce7f3"></span> Sakit</div>
+            <div class="legend-item"><span class="legend-color" style="background:#ede9fe"></span> Dinas</div>
+            <div class="legend-item"><span class="legend-color" style="background:#fef08a"></span> Cuti</div>
+            <div class="legend-item"><span class="legend-color" style="background:#fee2e2"></span> Tanpa Ket.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: SLIP GAJI -->
+    <div class="tab-content" id="tab-slip-gaji" role="tabpanel">
+      <div class="card">
+        <div class="card-header">
+          <h3><i class="fas fa-filter text-amber-600"></i> Filter Periode</h3>
+        </div>
+        <div class="card-body">
+          <div class="period-selector">
+            <div class="form-group">
+              <label class="form-label">Bulan</label>
+              <select class="form-select" id="slipBulan" onchange="loadSlipGaji()">
+                <option value="1">Januari</option><option value="2">Februari</option><option value="3">Maret</option>
+                <option value="4">April</option><option value="5">Mei</option><option value="6">Juni</option>
+                <option value="7">Juli</option><option value="8">Agustus</option><option value="9">September</option>
+                <option value="10">Oktober</option><option value="11">November</option><option value="12">Desember</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Tahun</label>
+              <select class="form-select" id="slipTahun" onchange="loadSlipGaji()"></select>
+            </div>
+            <div class="btn-group">
+              <button class="btn btn-primary" onclick="downloadSlipGaji()"><i class="fas fa-file-pdf"></i> Download PDF</button>
+              <button class="btn btn-outline" onclick="emailSlipGaji()"><i class="fas fa-envelope"></i> Email Slip</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" id="slipGajiCard" style="display: none;">
+        <div class="card-header">
+          <h3><i class="fas fa-wallet text-amber-600"></i> Slip Gaji <span id="slipPeriode" style="font-weight: 400; font-size: 0.9rem; color: #64748b;"></span></h3>
+        </div>
+        <div class="card-body">
+          <div style="margin-bottom: 1rem; padding: 1rem; background: #f8fafc; border-radius: 0.5rem; border: 1px solid #e2e8f0;">
+            <div class="form-row">
+              <div><strong>Nama:</strong> <span id="slipNama">-</span></div>
+              <div><strong>NIP:</strong> <span id="slipNip">-</span></div>
+              <div><strong>Jabatan:</strong> <span id="slipJabatan">-</span></div>
+              <div><strong>Sekolah:</strong> <span id="slipSekolah">-</span></div>
+            </div>
+          </div>
+          <table class="salary-breakdown">
+            <thead>
+              <tr>
+                <th>Komponen</th>
+                <th class="text-right">Jumlah (Rp)</th>
+              </tr>
+            </thead>
+            <tbody id="slipBreakdownBody">
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card" id="slipHistoryCard" style="display: none;">
+        <div class="card-header">
+          <h3><i class="fas fa-history text-amber-600"></i> Riwayat Slip Gaji</h3>
+        </div>
+        <div class="card-body">
+          <table class="history-table">
+            <thead>
+              <tr>
+                <th>Periode</th>
+                <th class="text-right">Total Gaji</th>
+                <th>Tanggal Generate</th>
+              </tr>
+            </thead>
+            <tbody id="slipHistoryBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SK Apply Modal -->
+  <div class="modal-overlay" id="skApplyModal">
+    <div class="modal-container" style="max-width: 700px;">
+      <div class="modal-header">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <h3><i class="fas fa-plus-circle"></i> Ajukan SK Guru Baru</h3>
+          <button onclick="closeSkApplyModal()" style="background: none; border: none; color: white; cursor: pointer; font-size: 1.25rem;">&times;</button>
+        </div>
+      </div>
+      <div class="modal-body" style="padding: 1.25rem; max-height: 70vh; overflow-y: auto;">
+        <form id="skApplyForm">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Jenis SK <span style="color: #dc2626;">*</span></label>
+              <select class="form-select" id="skJenisSelect" name="tentang_type" required>
+                <option value="">-- Pilih Jenis SK --</option>
+                <option value="baru">Pengangkatan Guru Baru</option>
+                <option value="kembali">Pengangkatan Kembali Guru</option>
+                <option value="tetap_guru">Pengangkatan Guru Tetap</option>
+                <option value="kontrak_guru">Pengangkatan Guru Kontrak</option>
+                <option value="honorer_guru">Pengangkatan Guru Honor</option>
+                <option value="pimpinan">Pengangkatan Pimpinan</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Tahun Ajaran / Hijriah</label>
+              <input type="text" class="form-input" id="skHijriYear" name="hijri_year" readonly>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Tanggal Mulai <span style="color: #dc2626;">*</span></label>
+              <input type="date" class="form-input" id="skTglMulai" name="tgl_mulai_custom" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Tanggal Selesai <span style="color: #dc2626;">*</span></label>
+              <input type="date" class="form-input" id="skTglSelesai" name="tgl_selesai_custom" required>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Pendidikan Terakhir</label>
+              <input type="text" class="form-input" id="skPt" name="pt" placeholder="Contoh: S1/PEND. SOSIOLOGI/UNM/2019">
+            </div>
+            <div class="form-group">
+              <label class="form-label">TMT (Tanggal Mulai Tugas)</label>
+              <input type="date" class="form-input" id="skTmt" name="tmt_custom">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Tentang (Custom)</label>
+            <input type="text" class="form-input" id="skTentangCustom" name="tentang" placeholder="Biarkan kosong untuk otomatis">
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeSkApplyModal()">Batal</button>
+        <button class="btn btn-primary" onclick="previewSkFromModal()"><i class="fas fa-eye"></i> Preview</button>
+        <button class="btn btn-primary" style="background: #22c55e;" onclick="submitSkFromModal()"><i class="fas fa-paper-plane"></i> Ajukan SK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SK Preview Modal -->
+  <div class="modal-overlay" id="skPreviewModal">
+    <div class="modal-container">
+      <div class="modal-header">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <h3><i class="fas fa-eye"></i> Preview SK Guru</h3>
+          <button onclick="closeSkPreviewModal()" style="background: none; border: none; color: white; cursor: pointer; font-size: 1.25rem;">&times;</button>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div class="sk-preview" id="skPreviewModalContent" style="max-height: 60vh;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeSkPreviewModal()">Tutup</button>
+        <button class="btn btn-primary" onclick="confirmSkFromPreviewModal()"><i class="fas fa-check"></i> Konfirmasi & Ajukan</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="js/admqu.js"></script>
+</body>
+</html>
