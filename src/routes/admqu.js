@@ -136,7 +136,7 @@ router.get('/absensi-ringkasan', authenticateOperator, async (req, res) => {
     const lastDayOfMonth = String(tahun).padStart(4, '0') + '-' + String(bulan).padStart(2, '0') + '-' + String(daysInMonth).padStart(2, '0');
 
     const logs = await db.query(
-      'SELECT al.hari, al.status, al.jenis, al.dinas_luar, al.keterangan, al.waktu_scan FROM attendance_logs al WHERE MONTH(al.waktu_scan) = ? AND YEAR(al.waktu_scan) = ? AND al.teacher_id = ?',
+      'SELECT DAY(al.waktu_scan) as hari, al.status, al.jenis, al.dinas_luar, al.keterangan, al.waktu_scan FROM attendance_logs al WHERE MONTH(al.waktu_scan) = ? AND YEAR(al.waktu_scan) = ? AND al.teacher_id = ?',
       [bulan, tahun, teacherId]
     );
 
@@ -328,7 +328,7 @@ router.get('/slip-gaji', authenticateOperator, async (req, res) => {
     const lastDayOfMonth = String(tahun).padStart(4, '0') + '-' + String(bulan).padStart(2, '0') + '-' + String(daysInMonth).padStart(2, '0');
 
     const logs = await db.query(
-      'SELECT al.hari, al.status, al.jenis, al.dinas_luar, al.keterangan, al.waktu_scan FROM attendance_logs al WHERE MONTH(al.waktu_scan) = ? AND YEAR(al.waktu_scan) = ? AND al.teacher_id = ?',
+      'SELECT DAY(al.waktu_scan) as hari, al.status, al.jenis, al.dinas_luar, al.keterangan, al.waktu_scan FROM attendance_logs al WHERE MONTH(al.waktu_scan) = ? AND YEAR(al.waktu_scan) = ? AND al.teacher_id = ?',
       [bulan, tahun, teacherId]
     );
 
@@ -508,7 +508,7 @@ router.get('/slip-gaji/history', authenticateOperator, async (req, res) => {
     }
 
     const history = await db.query(
-      'SELECT periode, total_gaji, created_at FROM payroll_history WHERE teacher_id = ? ORDER BY created_at DESC LIMIT 24',
+      'SELECT periode, total_gaji, created_at FROM payroll WHERE teacher_id = ? ORDER BY created_at DESC LIMIT 24',
       [teacherId]
     );
 

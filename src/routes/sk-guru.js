@@ -4,7 +4,12 @@ const { authenticateOperator, verifyTenantAccess } = require('../middleware/auth
 const fs = require('fs');
 const path = require('path');
 const PizZip = require('pizzip');
+<<<<<<< HEAD
 const { generateSkPdf } = require('../utils/generateSkPdf');
+=======
+const PDFDocument = require('pdfkit');
+const { execFileSync } = require('child_process');
+>>>>>>> 4e37c21e68b94fb475a870f79fe2b816825e0ffd
 
 const router = express.Router();
 
@@ -95,6 +100,248 @@ function buildHtmlSk(htmlTemplate, data) {
     .replace(/<<BM>>/g, escapeHtml(data.bmFormatted))
     .replace(/<<PERIODE>>/g, escapeHtml(data.periode));
   return html;
+}
+
+function generateSkPdf(data) {
+  return new Promise((resolve, reject) => {
+    try {
+      const doc = new PDFDocument({
+        size: [612, 936], // F4/Folio: 215mm x 330mm ≈ 612pt x 936pt
+        margins: { top: 28, bottom: 28, left: 42, right: 42 }, // ~10mm/15mm
+        bufferPages: true
+      });
+
+      const chunks = [];
+      doc.on('data', (c) => chunks.push(c));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+
+      const pageWidth = doc.page.width;
+      const margin = 42;
+      const usableWidth = pageWidth - margin * 2;
+      const centerX = pageWidth / 2;
+
+      // Font setup
+      const fontNormal = 'Times-Roman';
+      const fontBold = 'Times-Bold';
+      const fontSize = 9.5;
+      const leading = fontSize * 1.15;
+
+      // Helper functions
+      const drawCentered = (text, y, size = fontSize, font = fontNormal) => {
+        doc.font(font).fontSize(size).text(text, margin, y, { width: usableWidth, align: 'center' });
+      };
+
+      const drawRight = (text, y, size = fontSize, font = fontNormal) => {
+        doc.font(font).fontSize(size).text(text, margin, y, { width: usableWidth, align: 'right' });
+      };
+
+      const drawLeft = (text, y, size = fontSize, font = fontNormal) => {
+        doc.font(font).fontSize(size).text(text, margin, y, { width: usableWidth, align: 'left' });
+      };
+
+      const drawTableRow = (cells, y, colWidths, fonts = [], aligns = []) => {
+        let x = margin;
+        cells.forEach((cell, i) => {
+          const w = colWidths[i] || usableWidth / cells.length;
+          const f = fonts[i] || fontNormal;
+          const a = aligns[i] || 'left';
+          doc.font(f).fontSize(fontSize).text(cell, x + 2, y, { width: w - 4, align: a });
+          x += w;
+        });
+        return y + leading;
+      };
+
+      // 1. KOP YPWI Header Image
+      const kopPath = path.join(__dirname, '../../SKTEMPLATE/images/image2.jpg');
+      if (fs.existsSync(kopPath)) {
+        try {
+          doc.image(kopPath, margin, doc.y, { width: usableWidth });
+          doc.moveDown(0.5);
+        } catch (e) { /* ignore image error */ }
+      }
+
+      // 2. Bismillah Image
+      const bismillahPath = path.join(__dirname, '../../SKTEMPLATE/images/image1.png');
+      if (fs.existsSync(bismillahPath)) {
+        try {
+          const imgW = 130;
+          doc.image(bismillahPath, (pageWidth - imgW) / 2, doc.y, { width: imgW });
+          doc.moveDown(0.3);
+        } catch (e) { /* ignore image error */ }
+      }
+
+      // 3. Title Block
+      doc.moveDown(0.2);
+      drawCentered('SURAT KEPUTUSAN', doc.y, 10, fontBold);
+      doc.moveDown(0.1);
+      drawCentered('KETUA YAYASAN PESANTREN WAHDAH ISLAMIYAH LUWU TIMUR', doc.y, 9.5, fontBold);
+      doc.moveDown(0.2);
+      drawCentered('Nomor : ' + (data.noSurat || ''), doc.y, 9.5, fontBold);
+      doc.moveDown(0.2);
+      drawCentered('TENTANG', doc.y, 10, fontBold);
+      doc.moveDown(0.1);
+      drawCentered(data.tentang || '', doc.y, 9.5, fontBold);
+      doc.moveDown(0.3);
+
+      // 4. "KETUA YAYASAN... SETELAH,"
+      drawCentered('KETUA YAYASAN PESANTREN WAHDAH ISLAMIYAH LUWU TIMUR SETELAH,', doc.y, 9.5, fontBold);
+      doc.moveDown(0.3);
+
+      // 5. Considerations Table (Menimbang, Mengingat, Memperhatikan)
+      const col1Width = 90;
+      const col2Width = 10;
+      const col3Width = 15;
+      const col4Width = usableWidth - col1Width - col2Width - col3Width;
+
+      let y = doc.y;
+
+      // Menimbang a
+      y = drawTableRow(['Menimbang', ':', 'a.', 'Bahwa untuk efektivitas dan keberhasilan penyelenggaraan pendidikan di ' + (data.unit || ''), ' perlu menetapkan kembali jabatan ' + (data.jabatan || '') + ' sesuai dengan kompetensinya.'], y, [col1Width, col2Width, col3Width, col4Width], [fontBold, fontNormal, fontNormal, fontNormal], ['left', 'left', 'left', 'justify']);
+
+      // Menimbang b
+      y = drawTableRow(['', '', 'b.', 'Bahwa Saudara/i ' + (data.nama || '') + ' dipandang layak, cakap dan memenuhi syarat untuk menetapkan kembali sebagai ' + (data.jabatan || '') + ' di ' + (data.unit || '') + '.'], y, [col1Width, col2Width, col3Width, col4Width], [fontNormal, fontNormal, fontNormal, fontNormal], ['left', 'left', 'left', 'justify']);
+
+      doc.moveDown(0.2);
+
+      // Mengingat 1-4
+      y = drawTableRow(['Mengingat', ':', '1.', 'Firman Allah dalam Al-Qur\'an Al-Mujadilah (58) ayat 11.'], y, [col1Width, col2Width, col3Width, col4Width], [fontBold, fontNormal, fontNormal, fontNormal], ['left', 'left', 'left', 'justify']);
+      y = drawTableRow(['', '', '2.', 'Undang-Undang No. 20 tahun 2003 tentang Sistem Pendidikan Nasional.'], y, [col1Width, col2Width, col3Width, col4Width], [fontNormal, fontNormal, fontNormal, fontNormal], ['left', 'left', 'left', 'justify']);
+      y = drawTableRow(['', '', '3.', 'Undang-Undang No. 14 tahun 2005 tentang Sertifikasi Guru dan Dosen.'], y, [col1Width, col2Width, col3Width, col4Width], [fontNormal, fontNormal, fontNormal, fontNormal], ['left', 'left', 'left', 'justify']);
+      y = drawTableRow(['', '', '4.', 'Peraturan Menteri Pendidikan dan Kebudayaan No. 23 tahun 2013 tentang perubahan atas Peraturan Menteri Pendidikan Nasional No. 15 tahun 2010 tentang Standar Pelayanan Minimal Pendidikan Dasar di Kabupaten/Kota.'], y, [col1Width, col2Width, col3Width, col4Width], [fontNormal, fontNormal, fontNormal, fontNormal], ['left', 'left', 'left', 'justify']);
+
+      doc.moveDown(0.1);
+
+      // Memperhatikan 1-2
+      y = drawTableRow(['Memperhatikan', ':', '1.', 'Anggaran Dasar dan Anggaran Rumah Tangga Yayasan Pesantren Wahdah Islamiyah Luwu Timur.'], y, [col1Width, col2Width, col3Width, col4Width], [fontBold, fontNormal, fontNormal, fontNormal], ['left', 'left', 'left', 'justify']);
+      y = drawTableRow(['', '', '2.', 'Hasil Musyawarah Pengurus YPWI Luwu Timur.'], y, [col1Width, col2Width, col3Width, col4Width], [fontNormal, fontNormal, fontNormal, fontNormal], ['left', 'left', 'left', 'justify']);
+
+      doc.moveDown(0.3);
+
+      // 6. MEMUTUSKAN
+      drawCentered('M E M U T U S K A N', doc.y, 10, fontBold);
+      doc.moveDown(0.3);
+
+      drawLeft('Menetapkan', doc.y);
+      doc.moveDown(0.3);
+
+      // PERTAMA
+      drawLeft('PERTAMA', doc.y, fontSize, fontBold);
+      doc.moveDown(0.1);
+      const pertamaText = 'Terhitung mulai tanggal ' + (data.tglMulai || '') + ' mengangkat yang bersangkutan sebagai ' + (data.jabatan || '') + ' ' + (data.unit || '') + ' selama periode ' + (data.periode || '') + ' sampai dengan tanggal ' + (data.tglSelesai || '');
+      doc.font(fontNormal).fontSize(fontSize).text(pertamaText, margin + col1Width + col2Width + col3Width, doc.y, { width: col4Width, align: 'justify' });
+      doc.moveDown(0.5);
+
+      // 7. Biodata Table
+      const bioCol1 = 110;
+      const bioCol2 = 10;
+      const bioCol3 = usableWidth - bioCol1 - bioCol2;
+      const bioX = margin + 115; // 115pt from left
+
+      const bioRows = [
+        ['Nama', ':', data.nama || ''],
+        ['Tempat/tanggal lahir', ':', data.ttl || ''],
+        ['Tahun Mulai Tugas', ':', data.tmtFormatted || ''],
+        ['Pendidikan Terakhir', ':', data.ptFormatted || ''],
+        ['Status Kepegawaian', ':', data.status || ''],
+        ['NIY', ':', data.niy || ''],
+        ['Unit Kerja', ':', data.unit || '']
+      ];
+
+      bioRows.forEach((row, i) => {
+        const ry = doc.y;
+        doc.font(fontNormal).fontSize(fontSize);
+        // Label
+        doc.text(row[0], bioX, ry, { width: bioCol1, align: 'left' });
+        // Colon
+        doc.text(row[1], bioX + bioCol1, ry, { width: bioCol2, align: 'left' });
+        // Value
+        doc.font(fontBold).text(row[2], bioX + bioCol1 + bioCol2, ry, { width: bioCol3, align: 'left' });
+        doc.moveDown(0.5);
+      });
+
+      doc.moveDown(0.2);
+
+      // 8. Diktum KEDUA & KETIGA
+      const diktumRows = [
+        ['KEDUA', 'Apabila dikemudian hari ternyata terdapat kekeliruan dalam keputusan ini akan diadakan perbaikan dan diperhitungkan kembali sebagaimana mestinya.'],
+        ['KETIGA', '<b>Asli</b> Keputusan ini diberikan kepada yang bersangkutan dan yang berkepentingan untuk digunakan sebagaimana mestinya.']
+      ];
+
+      diktumRows.forEach((row) => {
+        const ry = doc.y;
+        doc.font(fontBold).fontSize(fontSize).text(row[0], margin, ry, { width: 90, align: 'left' });
+        doc.text(':', margin + 90, ry, { width: 10, align: 'left' });
+        doc.font(fontNormal).text(row[1].replace(/<b>/g, '').replace(/<\/b>/g, ''), margin + 100, ry, { width: usableWidth - 100, align: 'justify' });
+        doc.moveDown(0.5);
+      });
+
+      doc.moveDown(0.5);
+
+      // 9. TTD Block (right aligned)
+      const ttdX = pageWidth - margin - 250; // 250pt wide block
+      const ttdY = doc.y;
+
+      drawLeft('Ditetapkan di', ttdY, fontSize, fontNormal);
+      doc.font(fontNormal).fontSize(fontSize).text('Luwu Timur', ttdX + 70, ttdY, { width: 180, align: 'left' });
+      doc.moveDown(0.5);
+
+      // Tanggal dengan BH bergaris bawah
+      const bhLine = (data.bhFormatted || '');
+      const bmLine = (data.bmFormatted || '');
+      const dateY = doc.y;
+      doc.font(fontNormal).fontSize(fontSize).text('Pada tanggal', ttdX, dateY, { width: 70, align: 'left' });
+      doc.text(':', ttdX + 70, dateY, { width: 10, align: 'left' });
+      // BH with underline
+      doc.font(fontNormal).fontSize(fontSize).text(bhLine, ttdX + 80, dateY, { width: 170, align: 'left', underline: true });
+      doc.moveDown(0.5);
+      doc.font(fontNormal).fontSize(fontSize).text(bmLine, ttdX + 80, doc.y, { width: 170, align: 'left' });
+      doc.moveDown(0.5);
+
+      // Organization name
+      drawLeft('Yayasan Pesantren Wahdah Islamiyah', doc.y);
+      drawLeft('Luwu Timur', doc.y);
+      drawLeft('Ketua', doc.y);
+
+      doc.moveDown(4.5); // Space for signature
+
+      // Signature images
+      const stampPath = path.join(__dirname, '../../SKTEMPLATE/images/image4.png');
+      const signPath = path.join(__dirname, '../../SKTEMPLATE/images/image3.png');
+
+      if (fs.existsSync(stampPath)) {
+        try {
+          doc.image(stampPath, ttdX - 20, doc.y - 100, { width: 155 });
+        } catch (e) {}
+      }
+
+      if (fs.existsSync(signPath)) {
+        try {
+          doc.image(signPath, ttdX + 100, doc.y - 120, { width: 120 });
+        } catch (e) {}
+      }
+
+      doc.moveDown(5);
+
+      // Name and NIY under signature
+      drawLeft('Usman, S.Pd.I,. Gr.', doc.y, 10, fontBold);
+      drawLeft('NIY.3112198706201402006', doc.y, 9.5, fontNormal);
+
+      doc.moveDown(0.5);
+
+      // 10. Tembusan
+      drawLeft('Tembusan Keputusan ini disampaikan kepada :', doc.y, 9, fontBold);
+      doc.moveDown(0.2);
+      const tembusan = ['Pembina YPWI Luwu Timur', 'Pengawas YPWI Luwu Timur', 'Arsip,-'];
+      tembusan.forEach((t, i) => {
+        drawLeft((i + 1) + '. ' + t, doc.y, 9, fontNormal);
+      });
+
+      doc.end();
+    } catch (e) {
+      reject(e);
+    }
+  });
 }
 
 router.get('/teachers/:id/data', authenticateOperator, async (req, res) => {
@@ -745,72 +992,23 @@ router.get('/file/:skId', authenticateOperator, async (req, res) => {
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'attachment; filename="SK_Guru.pdf"');
 
+// Generate PDF using pdfkit (no Chrome dependency)
     try {
       const pdfBuf = await generateSkPdf(htmlData);
       res.setHeader('Content-Length', pdfBuf.length);
+<<<<<<< HEAD
       res.end(pdfBuf);
       return;
     } catch (pdfErr) {
       console.error('PDF generation error:', pdfErr.message);
+=======
+      return res.send(pdfBuf);
+    } catch (pdfErr) {
+      console.error('PDFKit generation error:', pdfErr.message);
+      return res.status(500).json({ success: false, message: 'Gagal generate PDF: ' + pdfErr.message });
+>>>>>>> 4e37c21e68b94fb475a870f79fe2b816825e0ffd
     }
 
-    const docxTemplatePath = path.join(__dirname, '../../SKTEMPLATE.docx');
-    if (fs.existsSync(docxTemplatePath)) {
-      const skYear = sk.bm ? parseInt(sk.bm.match(/(\d{4})/)?.[1] || new Date(sk.created_at).getFullYear()) : new Date(sk.created_at).getFullYear();
-      const skMonthName = sk.bm ? sk.bm.match(/(\w+)/)?.[1] : idnMonths[new Date(sk.created_at).getMonth()];
-      const skMonthIdx = skMonthName ? idnMonths.findIndex(m => m === skMonthName) : new Date(sk.created_at).getMonth();
-      const lastDayDec = new Date(skYear, idnMonths.indexOf('Desember') + 1, 0).getDate();
-      const docxTglSelesai = lastDayDec + ' ' + idnMonths[idnMonths.indexOf('Desember')] + ' ' + skYear + ' M';
-      let docxTglMulai;
-      if (skMonthIdx === 0 || (skMonthIdx >= 0 && idnMonths[skMonthIdx] === 'Januari')) {
-        docxTglMulai = '1 Januari ' + skYear + ' M';
-      } else {
-        const dayMatch = sk.bm ? sk.bm.match(/^(\d+)/)?.[1] : null;
-        const dayNum = dayMatch ? parseInt(dayMatch) : new Date(sk.created_at).getDate();
-        docxTglMulai = dayNum + ' ' + idnMonths[skMonthIdx >= 0 ? skMonthIdx : 0] + ' ' + skYear + ' M';
-      }
-      
-      const templateContent = fs.readFileSync(docxTemplatePath, 'binary');
-      const zip = new PizZip(templateContent);
-      let docXml = zip.file('word/document.xml').asText();
-      docXml = docXml
-        .replace(/&lt;&lt;NO SURAT&gt;&gt;/g, sk.no_surat || '')
-        .replace(/<<NO SURAT>>/g, sk.no_surat || '')
-        .replace(/&lt;&lt;TENTANG&gt;&gt;/g, sk.tentang || '')
-        .replace(/<<TENTANG>>/g, sk.tentang || '')
-        .replace(/&lt;&lt;NAMA&gt;&gt;/g, teacher ? (teacher.nama || '') : '')
-        .replace(/<<NAMA>>/g, teacher ? (teacher.nama || '') : '')
-        .replace(/&lt;&lt;TTL&gt;&gt;/g, sk.ttl || '')
-        .replace(/<<TTL>>/g, sk.ttl || '')
-        .replace(/&lt;&lt;TMT&gt;&gt;/g, sk.tmt || '')
-        .replace(/<<TMT>>/g, sk.tmt || '')
-        .replace(/&lt;&lt;PT&gt;&gt;/g, sk.pt || '')
-        .replace(/<<PT>>/g, sk.pt || '')
-        .replace(/&lt;&lt;NIY&gt;&gt;/g, sk.niy || '')
-        .replace(/<<NIY>>/g, sk.niy || '')
-        .replace(/&lt;&lt;UNIT&gt;&gt;/g, sk.unit || '')
-        .replace(/<<UNIT>>/g, sk.unit || '')
-        .replace(/&lt;&lt;JABATAN&gt;&gt;/g, sk.jabatan || (teacher ? teacher.unit || 'Guru' : 'Guru'))
-        .replace(/<<JABATAN>>/g, sk.jabatan || (teacher ? teacher.unit || 'Guru' : 'Guru'))
-        .replace(/&lt;&lt;TGL_MULAI&gt;&gt;/g, docxTglMulai)
-        .replace(/<<TGL_MULAI>>/g, docxTglMulai)
-        .replace(/&lt;&lt;STATUS&gt;&gt;/g, sk.status || '')
-        .replace(/<<STATUS>>/g, sk.status || '')
-        .replace(/&lt;&lt;TGL_SELESAI&gt;&gt;/g, docxTglSelesai)
-        .replace(/<<TGL_SELESAI>>/g, docxTglSelesai)
-        .replace(/&lt;&lt;BH&gt;&gt;/g, sk.bh || '')
-        .replace(/<<BH>>/g, sk.bh || '')
-        .replace(/&lt;&lt;BM&gt;&gt;/g, sk.bm || '')
-        .replace(/<<BM>>/g, sk.bm || '');
-      zip.file('word/document.xml', docXml);
-      const docxBuf = zip.generate({ type: 'nodebuffer' });
-      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
-      res.setHeader('Content-Disposition', 'attachment; filename="SK_Guru.docx"');
-      res.setHeader('Content-Length', docxBuf.length);
-      return res.send(docxBuf);
-    }
-
-    return res.status(500).json({ success: false, message: 'Tidak dapat generate file SK' });
   } catch (error) {
     console.error('Download SK error:', error);
     res.status(500).json({ success: false, message: 'Error generating SK file: ' + error.message });
@@ -1267,10 +1465,6 @@ router.post('/bulk-download', authenticateOperator, async (req, res) => {
     archive.pipe(res);
 
     // Generate PDF for each SK and add to ZIP
-    const skTemplateDir = path.join(__dirname, '../../SKTEMPLATE');
-    const htmlTemplatePath = path.join(skTemplateDir, 'test.html');
-    const htmlTemplate = fs.readFileSync(htmlTemplatePath, 'utf8');
-
     for (const sk of sks) {
       try {
         // Get teacher data
@@ -1279,7 +1473,11 @@ router.post('/bulk-download', authenticateOperator, async (req, res) => {
           [sk.teacher_id]
         );
 
+<<<<<<< HEAD
         // Use stored custom dates from DB (tgl_mulai, tgl_selesai, periode) instead of recomputing
+=======
+        // Use stored custom dates from DB (tgl_mulai, tgl_selesai) instead of recomputing from hijri date
+>>>>>>> 4e37c21e68b94fb475a870f79fe2b816825e0ffd
         const tglMulai = sk.tgl_mulai || '1 Januari ' + new Date(sk.created_at).getFullYear() + ' M';
         const tglSelesai = sk.tgl_selesai || '31 Desember ' + new Date(sk.created_at).getFullYear() + ' M';
 
@@ -1300,8 +1498,8 @@ router.post('/bulk-download', authenticateOperator, async (req, res) => {
           bmFormatted: sk.bm || '',
           periode: sk.periode || computePeriode(tglMulai, tglSelesai)
         };
-        var renderedHtml = buildHtmlSk(htmlTemplate, htmlData);
 
+<<<<<<< HEAD
         // Generate PDF using pdfmake
         try {
           const pdfBuf = await generateSkPdf(htmlData);
@@ -1310,6 +1508,12 @@ router.post('/bulk-download', authenticateOperator, async (req, res) => {
         } catch (pdfErr) {
           console.error(`[BULK DOWNLOAD] Error generating PDF for SK ${sk.id}:`, pdfErr.message);
         }
+=======
+        // Generate PDF using pdfkit (no Chrome dependency)
+        const pdfBuf = await generateSkPdf(htmlData);
+        const safeName = (sk.no_surat || 'SK_' + sk.id).replace(/[^a-zA-Z0-9._-]/g, '_');
+        archive.append(pdfBuf, { name: `${safeName}.pdf` });
+>>>>>>> 4e37c21e68b94fb475a870f79fe2b816825e0ffd
 
       } catch (err) {
         console.error(`[BULK DOWNLOAD] Error generating PDF for SK ${sk.id}:`, err.message);
