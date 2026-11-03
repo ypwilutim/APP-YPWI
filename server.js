@@ -1,5 +1,16 @@
 require('dotenv').config();
 
+// Prevent crashes from unhandled rejections (e.g., WhatsApp/baileys)
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  // Don't exit the process, just log the error
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+  // Don't exit the process, just log the error
+});
+
 console.log('Loading environment variables...');
 console.log('EMAIL_HOST:', process.env.EMAIL_HOST ? 'LOADED' : 'NOT FOUND');
 
@@ -147,6 +158,7 @@ const sanitizeInput = (req, res, next) => {
 // Only apply sanitize to non-file-upload routes
 app.use('/api', sanitizeInput);
 
+
 // Error handling for multer and generic errors
 app.use((error, req, res, next) => {
   if (error instanceof multer.MulterError) {
@@ -254,7 +266,8 @@ const sdmKpiRoutes = require('./src/routes/sdm-kpi');
 const sdmRoutes = require('./src/routes/sdm');
 
 // Start Baileys (WhatsApp Web) as the primary sender when WhatsApp is enabled
-if (process.env.WHATSAPP_ENABLED !== 'false') {
+// Disabled by default for testing - set WHATSAPP_ENABLED=true to enable
+if (process.env.WHATSAPP_ENABLED === 'true') {
   require('./src/utils/whatsappBaileys').initWhatsAppBaileys().catch(err => {
     console.error('[WAHA] Failed to initialize:', err.message);
   });
@@ -274,8 +287,7 @@ app.use('/api/idcard', idcardRoutes);
 app.use('/api', chatRoutes);
 app.use('/api', notificationsRoutes);
 app.use('/api', skGuruRoutes);
-app.use('/api', require('./src/routes/admqu'));
-app.use('/api', payrollRoutes);
+app.use('/api/admqu', require('./src/routes/admqu'));
 app.use('/api', kafalahRoutes);
 app.use('/api', require('./src/routes/paktaIntegritas'));
 app.use('/api', wahaRoutes);
