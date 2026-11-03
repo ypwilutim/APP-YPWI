@@ -322,9 +322,9 @@ async function submitSk(previewData = null) {
 async function downloadSk(format) {
   if (!currentTeacherId) return;
   try {
-    const [skList] = await api('/sk-guru/list?tenant_id=' + currentTenantId);
-    if (skList.success && skList.data?.length) {
-      const latestSk = skList.data[0];
+    const res = await api('/admqu/sk-list');
+    if (res.success && res.data?.length) {
+      const latestSk = res.data[0];
       window.open(`${API_BASE}/sk-guru/file/${latestSk.id}?format=${format}`, '_blank');
     } else {
       Swal.fire('Info', 'Tidak ada SK yang tersedia', 'info');
@@ -486,7 +486,7 @@ async function downloadSlipGaji() {
   const bulan = document.getElementById('slipBulan').value;
   const tahun = document.getElementById('slipTahun').value;
   if (!currentTeacherId) return;
-  window.open(`${API_BASE}/treasurer/public/salary-slip/${currentTeacherId}/${tahun}-${String(bulan).padStart(2, '0')}`, '_blank');
+  window.open(`${API_BASE}/treasurer/public/salary-slip-pdf/${currentTeacherId}?month=${tahun}-${String(bulan).padStart(2, '0')}`, '_blank');
 }
 
 async function emailSlipGaji() {

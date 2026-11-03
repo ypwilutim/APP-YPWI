@@ -1,6 +1,6 @@
 const express = require('express');
 const db = require('../../db');
-const { authenticateOperator, verifyTenantAccess } = require('../middleware/auth');
+const { authenticateOperator } = require('../middleware/auth');
 const { toHijri } = require('hijri-converter');
 
 const router = express.Router();
@@ -129,10 +129,6 @@ router.get('/absensi-ringkasan', authenticateOperator, async (req, res) => {
 
     const bulan = parseInt(req.query.bulan) || (new Date().getMonth() + 1);
     const tahun = parseInt(req.query.tahun) || new Date().getFullYear();
-
-    if (tenantId && !verifyTenantAccess(req, tenantId)) {
-      return res.status(403).json({ success: false, message: 'Akses ditolak untuk tenant ini' });
-    }
 
     const daysInMonth = new Date(tahun, bulan, 0).getDate();
 
@@ -295,10 +291,6 @@ router.get('/slip-gaji', authenticateOperator, async (req, res) => {
     const bulan = parseInt(req.query.bulan) || (new Date().getMonth() + 1);
     const tahun = parseInt(req.query.tahun) || new Date().getFullYear();
     const periode = tahun + '-' + String(bulan).padStart(2, '0');
-
-    if (tenantId && !verifyTenantAccess(req, tenantId)) {
-      return res.status(403).json({ success: false, message: 'Akses ditolak untuk tenant ini' });
-    }
 
     const [teacher] = await db.query(
       `SELECT t.id, t.nama, t.nik, t.nip, t.email, t.status_kepegawaian, t.tmt, t.pendidikan_terakhir as pt,
@@ -515,10 +507,6 @@ router.get('/slip-gaji/history', authenticateOperator, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Teacher ID tidak ditemukan di token' });
     }
 
-    if (tenantId && !verifyTenantAccess(req, tenantId)) {
-      return res.status(403).json({ success: false, message: 'Akses ditolak untuk tenant ini' });
-    }
-
     const history = await db.query(
       'SELECT periode, total_gaji, created_at FROM payroll_history WHERE teacher_id = ? ORDER BY created_at DESC LIMIT 24',
       [teacherId]
@@ -535,6 +523,27 @@ router.get('/slip-gaji/history', authenticateOperator, async (req, res) => {
   } catch (error) {
     console.error('ADMQU Slip Gaji History error:', error);
     res.status(500).json({ success: false, message: 'Error fetching slip gaji history: ' + error.message });
+  }
+});
+
+router.get('/sk-list', authenticateOperator, async (req, res) => {
+  try {
+    const teacherId = getTeacherIdFromUser(req.user);
+    const tenantId = getTenantIdFromUser(req.user);
+
+    if (!teacherId) {
+      return res.status(400).json({ success: false, message: 'Teacher ID tidak ditemukan di token' });
+    }
+
+    const skList = await db.query(
+      'SELECT * FROM sk_guru WHERE teacher_id = ? ORDER BY created_at DESC LIMIT 100',
+      [teacherId]
+    );
+
+    res.json({ success: true, data: skList });
+  } catch (error) {
+    console.error('ADMQU SK List error:', error);
+    res.status(500).json({ success: false, message: 'Error fetching SK list: ' + error.message });
   }
 });
 
