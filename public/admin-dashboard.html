@@ -1315,6 +1315,7 @@
               <table class="w-full">
                 <thead class="bg-gray-50 border-b border-gray-100">
                   <tr>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-12"><input type="checkbox" id="skListSelectAll" onchange="toggleSkListSelectAll(this)" class="w-4 h-4"></th>
                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">No. Surat</th>
                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nama Guru</th>
                     <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tentang</th>
@@ -1326,13 +1327,21 @@
                 </thead>
                 <tbody id="skGuruTable" class="divide-y divide-gray-100">
                   <tr>
-                    <td colspan="7" class="px-4 py-8 text-center text-gray-500">
+                    <td colspan="8" class="px-4 py-8 text-center text-gray-500">
                       <i class="fas fa-file-alt text-3xl mb-2"></i>
                       <p>Memuat data SK Guru...</p>
                     </td>
                   </tr>
                 </tbody>
               </table>
+            </div>
+
+            <!-- Bulk Download Bar (hidden initially) -->
+            <div id="skListBulkBar" class="hidden bg-blue-50 border border-blue-100 rounded-lg p-3 mt-3 flex justify-between items-center">
+              <span class="text-sm text-blue-800" id="skListSelectedCount">0 SK terpilih</span>
+              <button type="button" onclick="downloadSkListBulkZip()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">
+                <i class="fas fa-file-archive mr-2"></i>Download ZIP Terpilih
+              </button>
             </div>
           </div>
 
@@ -1552,6 +1561,35 @@
             </div>
           </div>
 
+          <div class="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-3">
+            <p class="text-xs font-medium text-blue-800 mb-2">Periode SK — diterapkan ke semua guru terpilih (opsional; kosongkan biarkan masing-masing baris)</p>
+            <div class="flex flex-wrap items-end space-x-3">
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">Tanggal Mulai</label>
+                <input type="date" id="skBulkTglMulai" onchange="updateSkBulkPeriodeAuto()" class="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">Tanggal Akhir</label>
+                <input type="date" id="skBulkTglSelesai" onchange="updateSkBulkPeriodeAuto()" class="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
+              </div>
+              <div class="flex-1 min-w-[160px]">
+                <label class="block text-xs font-medium text-gray-700 mb-1">Jabatan / Status (opsional; kosongkan pakai data guru)</label>
+                <input type="text" id="skBulkJabatan" placeholder="Contoh: Guru Mapel / Kepala Sekolah" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
+              </div>
+              <div class="flex-1 min-w-[200px]">
+                <label class="block text-xs font-medium text-gray-700 mb-1">Tentang / Perihal (Opsional)</label>
+                <input type="text" id="skBulkTentang" placeholder="Misal: untuk pengabdian ke aktivitas X" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
+              </div>
+              <div class="flex-1 min-w-[160px]">
+                <label class="block text-xs font-medium text-gray-700 mb-1">Periode / Durasi</label>
+                <input type="text" id="skBulkPeriode" placeholder="Otomatis dari tanggal (misal: 1 Tahun)" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
+              </div>
+              <button type="button" onclick="applySkBulkDates()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm whitespace-nowrap">
+                <i class="fas fa-calendar-check mr-2"></i>Terapkan ke Terpilih
+              </button>
+            </div>
+          </div>
+
           <p id="skBulkInfo" class="text-xs text-gray-500 mb-2">Klik "Muat Daftar Guru" untuk menampilkan kandidat SK.</p>
 
           <div class="overflow-x-auto border border-gray-200 rounded-lg mb-3">
@@ -1632,23 +1670,35 @@
                 class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
             </div>
 
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Tanggal Mulai SK</label>
+                <input type="date" id="skBulkEditTglMulai"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Tanggal Akhir SK</label>
+                <input type="date" id="skBulkEditTglSelesai"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Jabatan / Status (opsional; kosongkan pakai data guru)</label>
+              <input type="text" id="skBulkEditJabatan" placeholder="Contoh: Guru Mapel / Kepala Sekolah"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
+            </div>
+
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-2">Tentang / Perihal (Opsional)</label>
               <input type="text" id="skBulkEditTentang" placeholder="Misal: untuk pengabdian ke aktivitas X"
                 class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
             </div>
 
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Periode SK / Masa Kerja (Mulai)</label>
-                <input type="month" id="skBulkEditTglMulai"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Periode SK Berakhir</label>
-                <input type="month" id="skBulkEditTglSelesai"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
-              </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Periode / Durasi (opsional; otomatis jika kosong)</label>
+              <input type="text" id="skBulkEditPeriode" placeholder="Contoh: 1 Tahun"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
             </div>
 
             <div>
@@ -1671,6 +1721,23 @@
               class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
               <i class="fas fa-save mr-2"></i>Simpan Perubahan
             </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Loading Progress Modal -->
+      <div id="skLoadingModal"
+        class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-xl p-6 w-full max-w-md mx-4">
+          <div class="text-center">
+            <div class="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-4"></div>
+            <h3 id="skLoadingTitle" class="text-lg font-semibold text-gray-900 mb-2">Menyiapkan SK...</h3>
+            <p id="skLoadingMessage" class="text-sm text-gray-600 mb-4">Mempersiapkan data...</p>
+            <div class="w-full bg-gray-200 rounded-full h-3 mb-3">
+              <div id="skLoadingBar" class="bg-blue-600 h-3 rounded-full transition-all duration-300" style="width: 0%"></div>
+            </div>
+            <p id="skLoadingPercent" class="text-sm font-medium text-gray-700">0%</p>
+            <p id="skLoadingDetail" class="text-xs text-gray-500 mt-2"></p>
           </div>
         </div>
       </div>

@@ -121,7 +121,7 @@ router.get('/teachers/:id/data', authenticateOperator, async (req, res) => {
    try {
      const teacherId = req.params.id;
   const [teacher] = await db.query(
-       'SELECT t.id, t.nama, t.nik, t.nip, t.tempat_lahir, t.tanggal_lahir, t.status_kepegawaian, t.tmt, t.pendidikan_terakhir as pt, ta.tenant_id, ta.jabatan_di_unit as unit, tn.nama_sekolah, tn.id as tenant_pk FROM teachers t JOIN teacher_assignments ta ON t.id = ta.teacher_id JOIN tenants tn ON ta.tenant_id = tn.tenant_id WHERE t.id = ? AND t.status_aktif = 1',
+       'SELECT t.id, t.nama, t.nik, t.nip, t.tempat_lahir, t.tanggal_lahir, t.status_kepegawaian, t.tmt, t.pendidikan_terakhir as pt, ta.id as assignment_id, ta.created_at as assignment_created_at, ta.tenant_id, ta.jabatan_di_unit as unit, tn.nama_sekolah, tn.id as tenant_pk FROM teachers t JOIN teacher_assignments ta ON t.id = ta.teacher_id JOIN tenants tn ON ta.tenant_id = tn.tenant_id WHERE t.id = ? AND t.status_aktif = 1 ORDER BY ta.created_at ASC, ta.id ASC LIMIT 1',
        [teacherId]
      );
 
@@ -282,7 +282,36 @@ function computePeriode(tglMulaiStr, tglSelesaiStr) {
   return months + ' Bulan';
 }
 
-function buildSkData(teacher, tentang_type, pt, tmt_custom, nomorUrut, hijriYear, noSuratCustom, tglMulaiCustom, tglSelesaiCustom, tentangCustom) {
+function pickPrimaryAssignment(rows) {
+  if (!rows || !rows.length) return null;
+  let primary = rows[0];
+  for (let i = 1; i < rows.length; i++) {
+    const cur = rows[i];
+    const curCreated = new Date(cur.assignment_created_at || 0).getTime();
+    const priCreated = new Date(primary.assignment_created_at || 0).getTime();
+    if (curCreated < priCreated || (curCreated === priCreated && (cur.assignment_id || 0) < (primary.assignment_id || 0))) {
+      primary = cur;
+    }
+  }
+  return primary;
+}
+
+function formatJabatanList(str) {
+  if (!str) return '';
+  const parts = str.split(' / ').map(s => s.trim()).filter(Boolean);
+  const formatted = parts.map(p => formatJabatan(p));
+  const seen = new Set();
+  const out = [];
+  for (const f of formatted) {
+    if (f && !seen.has(f)) {
+      seen.add(f);
+      out.push(f);
+    }
+  }
+  return out.join(' / ');
+}
+
+function buildSkData(teacher, tentang_type, pt, tmt_custom, nomorUrut, hijriYear, noSuratCustom, tglMulaiCustom, tglSelesaiCustom, tentangCustom, periodeCustom, jabatanCustom) {
    const today = new Date();
    const birthDate = parseDate(teacher.tanggal_lahir) || today;
    const tmtDate = tmt_custom ? parseDate(tmt_custom) : (parseDate(teacher.tmt) || today);
@@ -382,7 +411,7 @@ function buildSkData(teacher, tentang_type, pt, tmt_custom, nomorUrut, hijriYear
        tglSelesai = tglSelesaiCalculated;
      }
 
-    const periode = computePeriode(tglMulai, tglSelesai);
+    const periode = (periodeCustom && String(periodeCustom).trim()) ? String(periodeCustom).trim() : computePeriode(tglMulai, tglSelesai);
 
     const tglMulaiDate = parseIndoDate(tglMulai) || parseDate(tglMulai);
     const tglSelesaiDate = parseIndoDate(tglSelesai) || parseDate(tglSelesai);
@@ -402,7 +431,7 @@ function buildSkData(teacher, tentang_type, pt, tmt_custom, nomorUrut, hijriYear
       tglMulai,
       tglSelesai,
   unit: teacher.nama_sekolah || teacher.unit || 'Guru',
-        jabatan: formatJabatan(teacher.unit),
+        jabatan: jabatanCustom ? jabatanCustom : formatJabatanList(teacher.unit),
         status: getStatusKepegawaian(teacher.status_kepegawaian),
         periode,
         tglMulaiMonth,
@@ -413,7 +442,7 @@ function buildSkData(teacher, tentang_type, pt, tmt_custom, nomorUrut, hijriYear
 
 router.post('/generate', authenticateOperator, async (req, res) => {
     try {
-       const { teacher_id, tentang_type, pt, tmt_custom, format, no_surat, tgl_mulai_custom, tgl_selesai_custom, tentang } = req.body;
+       const { teacher_id, tentang_type, pt, tmt_custom, format, no_surat, tgl_mulai_custom, tgl_selesai_custom, tentang, periode_custom } = req.body;
        console.log('[SK GURU GENERATE INPUT]', { no_surat, tgl_mulai_custom, tgl_selesai_custom, tentang_type });
 
        if (!teacher_id) {
@@ -421,7 +450,7 @@ router.post('/generate', authenticateOperator, async (req, res) => {
       }
 
      const [teacher] = await db.query(
-       'SELECT t.id, t.nama, t.nik, t.nip, t.tempat_lahir, t.tanggal_lahir, t.status_kepegawaian, t.tmt, t.pendidikan_terakhir as pt, ta.tenant_id, ta.jabatan_di_unit as unit, tn.nama_sekolah, tn.id as tenant_pk FROM teachers t JOIN teacher_assignments ta ON t.id = ta.teacher_id JOIN tenants tn ON ta.tenant_id = tn.tenant_id WHERE t.id = ? AND t.status_aktif = 1',
+       'SELECT t.id, t.nama, t.nik, t.nip, t.tempat_lahir, t.tanggal_lahir, t.status_kepegawaian, t.tmt, t.pendidikan_terakhir as pt, ta.id as assignment_id, ta.created_at as assignment_created_at, ta.tenant_id, ta.jabatan_di_unit as unit, tn.nama_sekolah, tn.id as tenant_pk FROM teachers t JOIN teacher_assignments ta ON t.id = ta.teacher_id JOIN tenants tn ON ta.tenant_id = tn.tenant_id WHERE t.id = ? AND t.status_aktif = 1 ORDER BY ta.created_at ASC, ta.id ASC LIMIT 1',
        [teacher_id]
      );
 
@@ -443,11 +472,11 @@ router.post('/generate', authenticateOperator, async (req, res) => {
      const docxTemplatePath = path.join(__dirname, '../../SKTEMPLATE.docx');
      let docxBuf = null;
      
-     const today = new Date();
-     const hijriToday = gregorianToHijri(today);
-     const nomorUrut = await getNextSkNumber(teacher.tenant_id, hijriToday.year);
+const today = new Date();
+      const hijriToday = gregorianToHijri(today);
+      const nomorUrut = await getNextSkNumber(teacher.tenant_id, hijriToday.year);
 
-     const skData = buildSkData(teacher, tentang_type, pt, tmt_custom, nomorUrut, hijriToday.year, no_surat, tgl_mulai_custom, tgl_selesai_custom, tentang);
+      const skData = buildSkData(teacher, tentang_type, pt, tmt_custom, nomorUrut, hijriToday.year, no_surat, tgl_mulai_custom, tgl_selesai_custom, tentang, periode_custom, undefined);
 
     console.log('[SK GURU PREVIEW DEBUG]', {
       teacher_nip: teacher.nip,
@@ -672,26 +701,17 @@ router.get('/file/:skId', authenticateOperator, async (req, res) => {
     }
 
     const [teacher] = await db.query(
-      'SELECT t.id, t.nama, t.nik, t.nip, t.tempat_lahir, t.tanggal_lahir, t.status_kepegawaian, t.tmt, t.pendidikan_terakhir as pt, ta.tenant_id, ta.jabatan_di_unit as unit, tn.nama_sekolah, tn.id as tenant_pk FROM teachers t JOIN teacher_assignments ta ON t.id = ta.teacher_id JOIN tenants tn ON ta.tenant_id = tn.tenant_id WHERE t.id = ? AND t.status_aktif = 1',
+      'SELECT t.id, t.nama, t.nik, t.nip, t.tempat_lahir, t.tanggal_lahir, t.status_kepegawaian, t.tmt, t.pendidikan_terakhir as pt, ta.id as assignment_id, ta.created_at as assignment_created_at, ta.tenant_id, ta.jabatan_di_unit as unit, tn.nama_sekolah, tn.id as tenant_pk FROM teachers t JOIN teacher_assignments ta ON t.id = ta.teacher_id JOIN tenants tn ON ta.tenant_id = tn.tenant_id WHERE t.id = ? AND t.status_aktif = 1 ORDER BY ta.created_at ASC, ta.id ASC LIMIT 1',
       [sk.teacher_id]
     );
 
     const htmlTemplatePath = path.join(__dirname, '../../SKTEMPLATE/test.html');
     const htmlTemplate = fs.readFileSync(htmlTemplatePath, 'utf8');
 
-    const skYear = sk.bm ? parseInt(sk.bm.match(/(\d{4})/)?.[1] || new Date(sk.created_at).getFullYear()) : new Date(sk.created_at).getFullYear();
-    const skMonthName = sk.bm ? sk.bm.match(/(\w+)/)?.[1] : idnMonths[new Date(sk.created_at).getMonth()];
-    const skMonthIdx = skMonthName ? idnMonths.findIndex(m => m === skMonthName) : new Date(sk.created_at).getMonth();
-    const lastDayDec = new Date(skYear, idnMonths.indexOf('Desember') + 1, 0).getDate();
-    const tglSelesai = lastDayDec + ' ' + idnMonths[idnMonths.indexOf('Desember')] + ' ' + skYear + ' M';
-    let tglMulai;
-    if (skMonthIdx === 0 || (skMonthIdx >= 0 && idnMonths[skMonthIdx] === 'Januari')) {
-      tglMulai = '1 Januari ' + skYear + ' M';
-    } else {
-      const dayMatch = sk.bm ? sk.bm.match(/^(\d+)/)?.[1] : null;
-      const dayNum = dayMatch ? parseInt(dayMatch) : new Date(sk.created_at).getDate();
-      tglMulai = dayNum + ' ' + idnMonths[skMonthIdx >= 0 ? skMonthIdx : 0] + ' ' + skYear + ' M';
-    }
+    // Use stored custom dates from DB (tgl_mulai, tgl_selesai) instead of recomputing from hijri date
+    const tglMulai = sk.tgl_mulai || '1 Januari ' + new Date(sk.created_at).getFullYear() + ' M';
+    const tglSelesai = sk.tgl_selesai || '31 Desember ' + new Date(sk.created_at).getFullYear() + ' M';
+
     var htmlData = {
       noSurat: sk.no_surat || '',
       tentang: sk.tentang || '',
@@ -707,7 +727,7 @@ router.get('/file/:skId', authenticateOperator, async (req, res) => {
       tglSelesai: tglSelesai,
       bhFormatted: sk.bh || '',
       bmFormatted: sk.bm || '',
-      periode: computePeriode(tglMulai, tglSelesai)
+      periode: sk.periode || computePeriode(tglMulai, tglSelesai)
     };
     var renderedHtml = buildHtmlSk(htmlTemplate, htmlData);
 
@@ -864,14 +884,14 @@ router.get('/file/:skId', authenticateOperator, async (req, res) => {
 
 router.post('/preview', authenticateOperator, async (req, res) => {
    try {
-      const { teacher_id, tentang_type, pt, tmt_custom, no_surat, tgl_mulai_custom, tgl_selesai_custom, tentang } = req.body;
+       const { teacher_id, tentang_type, pt, tmt_custom, no_surat, tgl_mulai_custom, tgl_selesai_custom, tentang, periode_custom } = req.body;
 
       if (!teacher_id) {
         return res.status(400).json({ success: false, message: 'teacher_id diperlukan' });
       }
 
      const [teacher] = await db.query(
-       'SELECT t.id, t.nama, t.nik, t.nip, t.tempat_lahir, t.tanggal_lahir, t.status_kepegawaian, t.tmt, t.pendidikan_terakhir as pt, ta.tenant_id, ta.jabatan_di_unit as unit, tn.nama_sekolah, tn.id as tenant_pk FROM teachers t JOIN teacher_assignments ta ON t.id = ta.teacher_id JOIN tenants tn ON ta.tenant_id = tn.tenant_id WHERE t.id = ? AND t.status_aktif = 1',
+       'SELECT t.id, t.nama, t.nik, t.nip, t.tempat_lahir, t.tanggal_lahir, t.status_kepegawaian, t.tmt, t.pendidikan_terakhir as pt, ta.id as assignment_id, ta.created_at as assignment_created_at, ta.tenant_id, ta.jabatan_di_unit as unit, tn.nama_sekolah, tn.id as tenant_pk FROM teachers t JOIN teacher_assignments ta ON t.id = ta.teacher_id JOIN tenants tn ON ta.tenant_id = tn.tenant_id WHERE t.id = ? AND t.status_aktif = 1 ORDER BY ta.created_at ASC, ta.id ASC LIMIT 1',
        [teacher_id]
      );
 
@@ -883,11 +903,11 @@ router.post('/preview', authenticateOperator, async (req, res) => {
        return res.status(403).json({ success: false, message: 'Akses ditolak untuk tenant ini' });
      }
 
-     const today = new Date();
-     const hijriToday = gregorianToHijri(today);
-     const nomorUrut = await peekNextSkNumber(teacher.tenant_id, hijriToday.year);
+const today = new Date();
+      const hijriToday = gregorianToHijri(today);
+      const nomorUrut = await peekNextSkNumber(teacher.tenant_id, hijriToday.year);
 
-     const skData = buildSkData(teacher, tentang_type, pt, tmt_custom, nomorUrut, hijriToday.year, no_surat, tgl_mulai_custom, tgl_selesai_custom, tentang);
+      const skData = buildSkData(teacher, tentang_type, pt, tmt_custom, nomorUrut, hijriToday.year, no_surat, tgl_mulai_custom, tgl_selesai_custom, tentang, periode_custom, undefined);
 
     console.log('[SK GURU PREVIEW DEBUG]', {
       teacher_nip: teacher.nip,
@@ -982,22 +1002,41 @@ router.get('/bulk-candidates', authenticateOperator, async (req, res) => {
     const statusRules = await db.query('SELECT * FROM employment_status_rules');
     const hijriToday = gregorianToHijri(new Date());
 
-    const baseQuery = 'SELECT t.id as teacher_id, t.nama, t.nik, t.nip, t.tempat_lahir, t.tanggal_lahir, t.status_kepegawaian, t.tmt, t.pendidikan_terakhir as pt, ta.tenant_id, ta.jabatan_di_unit as unit, tn.nama_sekolah, tn.id as tenant_pk FROM teachers t JOIN teacher_assignments ta ON t.id = ta.teacher_id JOIN tenants tn ON ta.tenant_id = tn.tenant_id';
+    const baseQuery = 'SELECT t.id as teacher_id, t.nama, t.nik, t.nip, t.tempat_lahir, t.tanggal_lahir, t.status_kepegawaian, t.tmt, t.pendidikan_terakhir as pt, ta.id as assignment_id, ta.created_at as assignment_created_at, ta.jabatan_di_unit as jabatan_di_unit, ta.tenant_id, tn.nama_sekolah, tn.id as tenant_pk FROM teachers t JOIN teacher_assignments ta ON t.id = ta.teacher_id JOIN tenants tn ON ta.tenant_id = tn.tenant_id';
     let teachers;
     if (allTenants) {
-      teachers = await db.query(baseQuery + ' WHERE t.status_aktif = 1 ORDER BY tn.nama_sekolah ASC, t.nama ASC LIMIT 500');
+      teachers = await db.query(baseQuery + ' WHERE t.status_aktif = 1 ORDER BY tn.nama_sekolah ASC, t.nama ASC, ta.created_at ASC, ta.id ASC LIMIT 500');
     } else {
-      teachers = await db.query(baseQuery + ' WHERE ta.tenant_id = ? AND t.status_aktif = 1 ORDER BY t.nama ASC LIMIT 500', [tenantId]);
+      teachers = await db.query(baseQuery + ' WHERE ta.tenant_id = ? AND t.status_aktif = 1 ORDER BY t.nama ASC, ta.created_at ASC, ta.id ASC LIMIT 500', [tenantId]);
     }
 
-    const existingSkRows = await db.query('SELECT DISTINCT teacher_id FROM sk_guru');
-    const existingSkSet = new Set(existingSkRows.map(r => r.teacher_id));
+    const existingSkRows = await db.query('SELECT DISTINCT teacher_id, tenant_id FROM sk_guru');
+    const existingSkSet = new Set(existingSkRows.map(r => (r.teacher_id || '') + '|' + (r.tenant_id || '')));
 
     const tenantPeekBase = {};
     const tenantSeqCounter = {};
     const results = [];
 
-    for (const teacher of teachers) {
+    const teacherMap = new Map();
+    for (const t of teachers) {
+      const key = (t.teacher_id || '') + '|' + (t.tenant_id || '');
+      let g = teacherMap.get(key);
+      if (!g) {
+        g = { rows: [], jabatan: [] };
+        teacherMap.set(key, g);
+      }
+      g.rows.push(t);
+      if (t.jabatan_di_unit && !g.jabatan.includes(t.jabatan_di_unit)) {
+        g.jabatan.push(t.jabatan_di_unit);
+      }
+    }
+
+    for (const [, g] of teacherMap) {
+      const primary = pickPrimaryAssignment(g.rows);
+      const teacher = Object.assign({}, primary, {
+        unit: formatJabatanList(g.jabatan.join(' / ')),
+        jabatan_di_unit: primary.jabatan_di_unit
+      });
       const tId = teacher.tenant_id || 'unknown';
       if (!(tId in tenantPeekBase)) {
         tenantPeekBase[tId] = await peekNextSkNumber(tId, hijriToday.year);
@@ -1006,13 +1045,13 @@ router.get('/bulk-candidates', authenticateOperator, async (req, res) => {
       tenantSeqCounter[tId] += 1;
       const nomorUrut = tenantPeekBase[tId] + tenantSeqCounter[tId] - 1;
 
-      const skData = buildSkData(teacher, 'baru', teacher.pt, null, nomorUrut, hijriToday.year);
+      const skData = buildSkData(teacher, 'baru', teacher.pt, null, nomorUrut, hijriToday.year, undefined, undefined, undefined, undefined, undefined, undefined);
 
       const tmtDate = parseDate(teacher.tmt);
       const today = new Date();
       const yearsOfService = tmtDate ? (today.getFullYear() - tmtDate.getFullYear()) : 0;
       const teacherEmploymentType = getStatusKepegawaian(teacher.status_kepegawaian);
-      const rule = employmentRules.find(r => teacher.jabatan_di_unit?.toLowerCase().includes(r.job_title_pattern.toLowerCase()))
+      const rule = employmentRules.find(r => (teacher.jabatan_di_unit || '').toLowerCase().includes((r.job_title_pattern || '').toLowerCase()))
         || statusRules.find(r => r.employment_type === teacherEmploymentType);
       const minYearsRequired = rule ? rule.min_years : 2;
       const qualified = yearsOfService >= minYearsRequired;
@@ -1033,7 +1072,7 @@ router.get('/bulk-candidates', authenticateOperator, async (req, res) => {
         qualified,
         years_of_service: yearsOfService,
         min_years: minYearsRequired,
-        already_has_sk: existingSkSet.has(teacher.teacher_id),
+        already_has_sk: existingSkSet.has((teacher.teacher_id || '') + '|' + (teacher.tenant_id || '')),
         sk: {
           tentang_type: 'baru',
           no_surat: skData.noSurat,
@@ -1081,6 +1120,10 @@ router.post('/bulk-generate', authenticateOperator, async (req, res) => {
     const skipped = [];
     const errors = [];
     const usedNoSurat = new Set();
+    const usedTeacherKey = new Set();
+
+    // Pass 1: Validate all rows, collect valid rows for generation
+    const validRows = [];
 
     for (const row of rows) {
       const teacher_id = row?.teacher_id;
@@ -1090,7 +1133,9 @@ router.post('/bulk-generate', authenticateOperator, async (req, res) => {
       const no_surat = (row?.no_surat || '').trim();
       const tgl_mulai_custom = row?.tgl_mulai_custom || '';
       const tgl_selesai_custom = row?.tgl_selesai_custom || '';
+      const periode_custom = row?.periode_custom || '';
       const tentang = row?.tentang || '';
+      const jabatan = row?.jabatan || '';
 
       try {
         if (!teacher_id) {
@@ -1098,15 +1143,26 @@ router.post('/bulk-generate', authenticateOperator, async (req, res) => {
           continue;
         }
 
+        const teacherKey = (teacher_id || '') + '|' + (row.tenant_id || '');
+        if (usedTeacherKey.has(teacherKey)) {
+          skipped.push({ teacher_id, nama: row?.nama || '-', reason: 'Duplikat guru dalam batch' });
+          continue;
+        }
+        usedTeacherKey.add(teacherKey);
+
         const teacherRows = await db.query(
-          'SELECT t.id as teacher_id, t.nama, t.nik, t.nip, t.tempat_lahir, t.tanggal_lahir, t.status_kepegawaian, t.tmt, t.pendidikan_terakhir as pt, ta.tenant_id, ta.jabatan_di_unit as unit, tn.nama_sekolah, tn.id as tenant_pk FROM teachers t JOIN teacher_assignments ta ON t.id = ta.teacher_id JOIN tenants tn ON ta.tenant_id = tn.tenant_id WHERE t.id = ? AND t.status_aktif = 1',
-          [teacher_id]
+          'SELECT t.id as teacher_id, t.nama, t.nik, t.nip, t.tempat_lahir, t.tanggal_lahir, t.status_kepegawaian, t.tmt, t.pendidikan_terakhir as pt, ta.id as assignment_id, ta.created_at as assignment_created_at, ta.jabatan_di_unit as jabatan_di_unit, ta.tenant_id, tn.nama_sekolah, tn.id as tenant_pk FROM teachers t JOIN teacher_assignments ta ON t.id = ta.teacher_id JOIN tenants tn ON ta.tenant_id = tn.tenant_id WHERE t.id = ? AND ta.tenant_id = ? AND t.status_aktif = 1 ORDER BY ta.created_at ASC, ta.id ASC',
+          [teacher_id, row.tenant_id || null]
         );
         if (!teacherRows.length) {
           errors.push({ teacher_id, nama: row?.nama || '-', reason: 'Guru tidak ditemukan atau tidak aktif' });
           continue;
         }
-        const teacher = teacherRows[0];
+        const primary = pickPrimaryAssignment(teacherRows);
+        const teacher = Object.assign({}, primary, {
+          unit: formatJabatanList(teacherRows.map(r => r.jabatan_di_unit).filter(Boolean).join(' / ')),
+          jabatan_di_unit: primary.jabatan_di_unit
+        });
 
         if (!verifyTenantAccess(req, teacher.tenant_id)) {
           return res.status(403).json({ success: false, message: 'Akses ditolak untuk tenant ini' });
@@ -1118,7 +1174,7 @@ router.post('/bulk-generate', authenticateOperator, async (req, res) => {
         const tmtDate = parseDate(teacher.tmt);
         const yearsOfService = tmtDate ? (new Date().getFullYear() - tmtDate.getFullYear()) : 0;
         const teacherEmploymentType = getStatusKepegawaian(teacher.status_kepegawaian);
-        const rule = employmentRules.find(r => (teacher.unit || '').toLowerCase().includes((r.job_title_pattern || '').toLowerCase()))
+        const rule = employmentRules.find(r => (teacher.jabatan_di_unit || '').toLowerCase().includes((r.job_title_pattern || '').toLowerCase()))
           || statusRules.find(r => r.employment_type === teacherEmploymentType);
         const minYearsRequired = rule ? rule.min_years : 2;
         const qualified = yearsOfService >= minYearsRequired;
@@ -1133,7 +1189,7 @@ router.post('/bulk-generate', authenticateOperator, async (req, res) => {
             skipped.push({ teacher_id, nama: teacher.nama, reason: 'Nomor surat duplikat dalam batch' });
             continue;
           }
-          const existingNo = await db.query('SELECT id FROM sk_guru WHERE no_surat = ? LIMIT 1', [no_surat]);
+          const existingNo = await db.query('SELECT id FROM sk_guru WHERE no_surat = ? AND tenant_id = ? LIMIT 1', [no_surat, teacher.tenant_id]);
           if (existingNo.length) {
             skipped.push({ teacher_id, nama: teacher.nama, reason: 'Nomor surat sudah digunakan SK lain' });
             continue;
@@ -1141,13 +1197,12 @@ router.post('/bulk-generate', authenticateOperator, async (req, res) => {
           usedNoSurat.add(no_surat);
         }
 
-        const nomorUrut = await getNextSkNumber(teacher.tenant_id, hijriToday.year);
-        const skData = buildSkData(teacher, tentang_type, pt, tmt_custom, nomorUrut, hijriToday.year, no_surat, tgl_mulai_custom, tgl_selesai_custom, tentang);
-
-        if (skData.niy) {
+        // NIY conflict check (without nomorUrut)
+        const tempSkData = buildSkData(teacher, tentang_type, pt, tmt_custom, 0, hijriToday.year, no_surat, tgl_mulai_custom, tgl_selesai_custom, tentang, periode_custom, jabatan);
+        if (tempSkData.niy) {
           const conflict = await db.query(
             'SELECT id FROM teachers WHERE nip = ? AND id != ?',
-            [skData.niy, teacher_id]
+            [tempSkData.niy, teacher_id]
           );
           if (conflict.length > 0) {
             skipped.push({ teacher_id, nama: teacher.nama, reason: 'NIY sudah digunakan guru lain' });
@@ -1155,19 +1210,49 @@ router.post('/bulk-generate', authenticateOperator, async (req, res) => {
           }
         }
 
-        await db.query(
-          'INSERT INTO sk_guru (teacher_id, tenant_id, tahun_ajaran_id, no_surat, tentang, ttl, tmt, pt, niy, unit, bh, bm, jabatan, status, tentag_type, tgl_mulai, tgl_selesai, manual_verified, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())',
-          [teacher_id, teacher.tenant_id, req.activeTahunAjaran?.id || null, skData.noSurat, skData.tentang, skData.ttl, skData.tmtFormatted, skData.ptFormatted, skData.niy, skData.unit, skData.bhFormatted, skData.bmFormatted, skData.jabatan, skData.status, tentang_type, skData.tglMulai, skData.tglSelesai, manualOverride ? 1 : 0]
-        );
+        // Row is valid - store for pass 2
+        validRows.push({
+          row,
+          teacher,
+          teacher_id,
+          tentang_type,
+          pt,
+          tmt_custom,
+          no_surat,
+          tgl_mulai_custom,
+          tgl_selesai_custom,
+          periode_custom,
+          tentang,
+          jabatan,
+          manualOverride,
+          manualVerified
+        });
 
-        if ((!teacher.nip || teacher.nip === '-' || teacher.nip === '') && skData.niy) {
-          await db.query('UPDATE teachers SET nip = ? WHERE id = ?', [skData.niy, teacher_id]);
-        }
-
-        generated.push({ teacher_id, nama: teacher.nama, no_surat: skData.noSurat, niy: skData.niy, manual_verified: manualOverride });
       } catch (rowErr) {
         console.error('[SK BULK] error per baris:', rowErr);
         errors.push({ teacher_id, nama: row?.nama || '-', reason: rowErr.message });
+      }
+    }
+
+    // Pass 2: Assign nomorUrut and insert for valid rows only
+    for (const v of validRows) {
+      try {
+        const nomorUrut = await getNextSkNumber(v.teacher.tenant_id, hijriToday.year);
+        const skData = buildSkData(v.teacher, v.tentang_type, v.pt, v.tmt_custom, nomorUrut, hijriToday.year, v.no_surat, v.tgl_mulai_custom, v.tgl_selesai_custom, v.tentang, v.periode_custom, v.jabatan);
+
+        await db.query(
+          'INSERT INTO sk_guru (teacher_id, tenant_id, tahun_ajaran_id, no_surat, tentang, ttl, tmt, pt, niy, unit, bh, bm, jabatan, status, tentag_type, tgl_mulai, tgl_selesai, manual_verified, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())',
+          [v.teacher_id, v.teacher.tenant_id, req.activeTahunAjaran?.id || null, skData.noSurat, skData.tentang, skData.ttl, skData.tmtFormatted, skData.ptFormatted, skData.niy, skData.unit, skData.bhFormatted, skData.bmFormatted, skData.jabatan, skData.status, v.tentang_type, skData.tglMulai, skData.tglSelesai, v.manualOverride ? 1 : 0]
+        );
+
+        if ((!v.teacher.nip || v.teacher.nip === '-' || v.teacher.nip === '') && skData.niy) {
+          await db.query('UPDATE teachers SET nip = ? WHERE id = ?', [skData.niy, v.teacher_id]);
+        }
+
+        generated.push({ teacher_id: v.teacher_id, nama: v.teacher.nama, no_surat: skData.noSurat, niy: skData.niy, manual_verified: v.manualOverride });
+      } catch (insertErr) {
+        console.error('[SK BULK] insert error:', insertErr);
+        errors.push({ teacher_id: v.teacher_id, nama: v.teacher.nama, reason: insertErr.message });
       }
     }
 
@@ -1179,6 +1264,135 @@ router.post('/bulk-generate', authenticateOperator, async (req, res) => {
   } catch (error) {
     console.error('Bulk generate error:', error);
     res.status(500).json({ success: false, message: 'Error bulk generate: ' + error.message });
+  }
+});
+
+
+// POST /api/sk-guru/bulk-download - Download multiple SKs as ZIP
+router.post('/bulk-download', authenticateOperator, async (req, res) => {
+  try {
+    const { sk_ids } = req.body;
+    if (!Array.isArray(sk_ids) || sk_ids.length === 0) {
+      return res.status(400).json({ success: false, message: 'Tidak ada SK yang dipilih untuk diunduh' });
+    }
+
+    // Fetch SKs and verify access
+    const placeholders = sk_ids.map(() => '?').join(',');
+    const sks = await db.query(
+      `SELECT * FROM sk_guru WHERE id IN (${placeholders})`,
+      sk_ids
+    );
+
+    if (!sks.length) {
+      return res.status(404).json({ success: false, message: 'SK tidak ditemukan' });
+}
+
+// Verify tenant access for all SKs
+    for (const sk of sks) {
+      if (!verifyTenantAccess(req, sk.tenant_id)) {
+        return res.status(403).json({ success: false, message: 'Akses ditolak untuk salah satu tenant' });
+      }
+    }
+
+    // Dynamic import for archiver (ES module) - use ZipArchive directly
+    const archiverModule = await import('archiver');
+    const ZipArchive = archiverModule.ZipArchive;
+    if (!ZipArchive) {
+      return res.status(500).json({ success: false, message: 'Archiver ZipArchive not available' });
+    }
+
+    // Set up ZIP response
+    const archive = new ZipArchive({ zlib: { level: 9 } });
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="SK_Bulk_${Date.now()}.zip"`);
+    archive.pipe(res);
+
+    // Generate PDF for each SK and add to ZIP
+    const skTemplateDir = path.join(__dirname, '../../SKTEMPLATE');
+    const htmlTemplatePath = path.join(skTemplateDir, 'test.html');
+    const htmlTemplate = fs.readFileSync(htmlTemplatePath, 'utf8');
+
+    for (const sk of sks) {
+      try {
+        // Get teacher data
+        const [teacher] = await db.query(
+          'SELECT t.id, t.nama, t.nik, t.nip, t.tempat_lahir, t.tanggal_lahir, t.status_kepegawaian, t.tmt, t.pendidikan_terakhir as pt, ta.id as assignment_id, ta.created_at as assignment_created_at, ta.tenant_id, ta.jabatan_di_unit as unit, tn.nama_sekolah, tn.id as tenant_pk FROM teachers t JOIN teacher_assignments ta ON t.id = ta.teacher_id JOIN tenants tn ON ta.tenant_id = tn.tenant_id WHERE t.id = ? AND t.status_aktif = 1 ORDER BY ta.created_at ASC, ta.id ASC LIMIT 1',
+          [sk.teacher_id]
+        );
+
+        // Prepare HTML data for PDF generation
+        const skYear = sk.bm ? parseInt(sk.bm.match(/(\d{4})/)?.[1] || new Date(sk.created_at).getFullYear()) : new Date(sk.created_at).getFullYear();
+        const skMonthName = sk.bm ? sk.bm.match(/(\w+)/)?.[1] : idnMonths[new Date(sk.created_at).getMonth()];
+        const skMonthIdx = skMonthName ? idnMonths.findIndex(m => m === skMonthName) : new Date(sk.created_at).getMonth();
+        const lastDayDec = new Date(skYear, idnMonths.indexOf('Desember') + 1, 0).getDate();
+        const tglSelesai = lastDayDec + ' ' + idnMonths[idnMonths.indexOf('Desember')] + ' ' + skYear + ' M';
+        let tglMulai;
+        if (skMonthIdx === 0 || (skMonthIdx >= 0 && idnMonths[skMonthIdx] === 'Januari')) {
+          tglMulai = '1 Januari ' + skYear + ' M';
+        } else {
+          const dayMatch = sk.bm ? sk.bm.match(/^(\d+)/)?.[1] : null;
+          const dayNum = dayMatch ? parseInt(dayMatch) : new Date(sk.created_at).getDate();
+          tglMulai = dayNum + ' ' + idnMonths[skMonthIdx >= 0 ? skMonthIdx : 0] + ' ' + skYear + ' M';
+        }
+
+        var htmlData = {
+          noSurat: sk.no_surat || '',
+          tentang: sk.tentang || '',
+          nama: teacher ? (teacher.nama || '') : (sk.niy || ''),
+          ttl: sk.ttl || '',
+          tmtFormatted: sk.tmt || '',
+          ptFormatted: sk.pt || '',
+          niy: sk.niy || '',
+          unit: sk.unit || '',
+          jabatan: sk.jabatan || (teacher ? formatJabatanList(teacher.unit) : 'Guru'),
+          tglMulai: tglMulai,
+          status: sk.status || (teacher ? getStatusKepegawaian(teacher.status_kepegawaian) : ''),
+          tglSelesai: tglSelesai,
+          bhFormatted: sk.bh || '',
+          bmFormatted: sk.bm || '',
+          periode: computePeriode(tglMulai, tglSelesai)
+        };
+        var renderedHtml = buildHtmlSk(htmlTemplate, htmlData);
+
+        // Generate PDF using headless Chrome
+        const tmpHtmlPath = path.join(skTemplateDir, 'sk_bulk_' + sk.id + '_' + Date.now() + '.html');
+        const tmpPdfPath = path.join(skTemplateDir, 'sk_bulk_' + sk.id + '_' + Date.now() + '.pdf');
+        fs.writeFileSync(tmpHtmlPath, renderedHtml);
+
+        const chromePath = getChromePath();
+        if (chromePath) {
+          execFileSync(chromePath, [
+            '--headless', '--disable-gpu', '--no-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-extensions',
+            '--no-first-run',
+            '--disable-software-rasterizer',
+            '--print-to-pdf=' + tmpPdfPath,
+            '--default-print-margin-type=NONE',
+            '--virtual-time-budget=5000',
+            'file://' + tmpHtmlPath
+          ], { timeout: 30000, stdio: 'pipe' });
+        }
+
+        if (fs.existsSync(tmpPdfPath)) {
+          const pdfBuf = fs.readFileSync(tmpPdfPath);
+          const safeName = (sk.no_surat || 'SK_' + sk.id).replace(/[^a-zA-Z0-9._-]/g, '_');
+          archive.append(pdfBuf, { name: `${safeName}.pdf` });
+          fs.unlinkSync(tmpPdfPath);
+        }
+        fs.unlinkSync(tmpHtmlPath);
+
+      } catch (err) {
+        console.error(`[BULK DOWNLOAD] Error generating PDF for SK ${sk.id}:`, err.message);
+        // Continue with other SKs
+      }
+    }
+
+    await archive.finalize();
+
+  } catch (error) {
+    console.error('Bulk download error:', error);
+    res.status(500).json({ success: false, message: 'Error bulk download: ' + error.message });
   }
 });
 
@@ -1284,8 +1498,30 @@ router.get('/approval', authenticateOperator, async (req, res) => {
     const existingSettings = await db.query('SELECT min_service_years FROM sk_automation_settings LIMIT 1');
     const minYears = existingSettings.length ? existingSettings[0].min_service_years : 2;
 
+    const approvalMap = new Map();
+    for (const t of teachers) {
+      const key = (t.teacher_id || '') + '|' + (t.tenant_id || '');
+      let g = approvalMap.get(key);
+      if (!g) {
+        g = { rows: [], jabatan: [] };
+        approvalMap.set(key, g);
+      }
+      g.rows.push(t);
+      if (t.jabatan_di_unit && !g.jabatan.includes(t.jabatan_di_unit)) {
+        g.jabatan.push(t.jabatan_di_unit);
+      }
+    }
+    const dedupedTeachers = [];
+    for (const [, g] of approvalMap) {
+      const primary = pickPrimaryAssignment(g.rows);
+      dedupedTeachers.push(Object.assign({}, primary, {
+        unit: formatJabatanList(g.jabatan.join(' / ')),
+        jabatan_di_unit: primary.jabatan_di_unit
+      }));
+    }
+
     const results = [];
-    for (const teacher of teachers) {
+    for (const teacher of dedupedTeachers) {
       const tmtDate = parseDate(teacher.tmt);
       const yearsOfService = tmtDate ? (today.getFullYear() - tmtDate.getFullYear()) : 0;
       const qualified = yearsOfService >= minYears;
@@ -1294,8 +1530,8 @@ router.get('/approval', authenticateOperator, async (req, res) => {
         [teacher.teacher_id, teacher.tenant_id || teacher.tenant_id, 'baru']
       );
       const alreadyGenerated = await db.query(
-        'SELECT id FROM sk_guru WHERE teacher_id = ? AND tentag_type = ? LIMIT 1',
-        [teacher.teacher_id, 'baru']
+        'SELECT id FROM sk_guru WHERE teacher_id = ? AND tenant_id = ? AND tentag_type = ? LIMIT 1',
+        [teacher.teacher_id, teacher.tenant_id, 'baru']
       );
       results.push({
         teacher_id: teacher.teacher_id,

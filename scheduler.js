@@ -519,15 +519,21 @@ async function runAutoSkGeneration() {
     if (settings[0].auto_generate_date && settings[0].auto_generate_date === todayMM) {
       console.log('Running auto SK generation...');
       
-      const approvedTeachers = await db.query(
-        `SELECT t.id as teacher_id, t.nama, t.nik, t.nip, t.tempat_lahir, t.tanggal_lahir, t.status_kepegawaian, t.tmt, t.pendidikan_terakhir, ta.jabatan_di_unit as unit, tn.nama_sekolah, tn.id as tenant_pk, aq.tentang_type
+      const approvedTeachersRaw = await db.query(
+        `SELECT t.id as teacher_id, t.nama, t.nik, t.nip, t.tempat_lahir, t.tanggal_lahir, t.status_kepegawaian, t.tmt, t.pendidikan_terakhir, ta.id as assignment_id, ta.created_at as assignment_created_at, ta.jabatan_di_unit as unit, tn.nama_sekolah, tn.id as tenant_pk, aq.tentang_type
          FROM sk_approval_queue aq
          JOIN teachers t ON aq.teacher_id = t.id
          JOIN teacher_assignments ta ON t.id = ta.teacher_id
          JOIN tenants tn ON ta.tenant_id = tn.tenant_id
          WHERE aq.status = 'approved'
-         ORDER BY tn.nama_sekolah, t.nama`
+         ORDER BY tn.nama_sekolah, t.nama, ta.created_at ASC, ta.id ASC`
       );
+      const teacherMap = new Map();
+      for (const t of approvedTeachersRaw) {
+        const key = (t.teacher_id || '') + '|' + (t.tenant_id || '');
+        if (!teacherMap.has(key)) teacherMap.set(key, t);
+      }
+      const approvedTeachers = [...teacherMap.values()];
 
       const hijriMonths = ['Muharam', 'Safar', 'Rabiul Awal', 'Rabiul Akhir', 'Jumadil Awal', 'Jumadil Akhir', 'Rajab', 'Syaban', 'Ramadhan', 'Syawal', 'Dzul Qaidah', 'Dzul Hijjah'];
       const idnMonths = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
@@ -580,6 +586,7 @@ async function runAutoSkGeneration() {
       
       function buildSkData(teacher, tentangType, pt, hijriYear) {
         const now = new Date();
+        const birthDate = parseDate(teacher.tanggal_lahir) || now;
         const hijriToday = gregorianToHijri(now);
         const tmtDate = parseDate(teacher.tmt);
         

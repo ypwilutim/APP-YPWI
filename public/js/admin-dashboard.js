@@ -4154,6 +4154,84 @@ window.loadSkBulkTenantOptions = async function () {
     }
 };
 
+const SK_BULK_IDN_MONTHS = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+window.fmtDateDisplay = function (v) {
+    if (!v) return '-';
+    const parts = String(v).split('-');
+    if (parts.length < 2) return v;
+    const y = parts[0], m = parts[1];
+    const d = parts[2] ? parseInt(parts[2], 10) : 1;
+    const mi = parseInt(m, 10) - 1;
+    return d + ' ' + (SK_BULK_IDN_MONTHS[mi] || '') + ' ' + y + ' M';
+};
+window.computePeriodeFromDates = function (mulaiStr, selesaiStr) {
+    if (!mulaiStr || !selesaiStr) return '';
+    const pm = String(mulaiStr).split('-'), ps = String(selesaiStr).split('-');
+    if (pm.length < 2 || ps.length < 2) return '';
+    const m = new Date(parseInt(pm[0], 10), parseInt(pm[1], 10) - 1, pm[2] ? parseInt(pm[2], 10) : 1);
+    const s = new Date(parseInt(ps[0], 10), parseInt(ps[1], 10) - 1, ps[2] ? parseInt(ps[2], 10) : 1);
+    let totalMonths = (s.getFullYear() - m.getFullYear()) * 12 + (s.getMonth() - m.getMonth());
+    if (s.getDate() < m.getDate()) totalMonths--;
+    if (totalMonths < 0) totalMonths = 0;
+    const years = Math.floor(totalMonths / 12), months = totalMonths % 12;
+    if (years >= 1) return years + ' Tahun' + (months > 0 ? ' ' + months + ' Bulan' : '');
+    return months + ' Bulan';
+};
+window.toDateInputValue = function (v, isEnd) {
+    if (!v) return '';
+    const parts = String(v).split('-');
+    if (parts.length >= 3) return parts[0] + '-' + parts[1] + '-' + parts[2];
+    if (parts.length === 2) {
+        const y = parts[0], m = parts[1];
+        if (isEnd) {
+            const lastDay = new Date(parseInt(y, 10), parseInt(m, 10), 0).getDate();
+            return y + '-' + m + '-' + String(lastDay).padStart(2, '0');
+        }
+        return y + '-' + m + '-01';
+    }
+    return '';
+};
+window.updateSkBulkPeriodeAuto = function () {
+    const mulai = document.getElementById('skBulkTglMulai')?.value;
+    const selesai = document.getElementById('skBulkTglSelesai')?.value;
+    const periodeInput = document.getElementById('skBulkPeriode');
+    if (!periodeInput || periodeInput.value) return;
+    periodeInput.value = computePeriodeFromDates(mulai, selesai) || '';
+};
+window.applySkBulkDates = async function () {
+    const mulai = document.getElementById('skBulkTglMulai')?.value;
+    const selesai = document.getElementById('skBulkTglSelesai')?.value;
+    const periode = (document.getElementById('skBulkPeriode')?.value || '').trim();
+    const jabatan = (document.getElementById('skBulkJabatan')?.value || '').trim();
+    const tentang = (document.getElementById('skBulkTentang')?.value || '').trim();
+    if (!mulai && !selesai && !periode && !jabatan && !tentang) { showToast('Isi minimal satu field', 'warning'); return; }
+    const selected = skBulkRows.filter(r => r.selected);
+    if (selected.length === 0) { showToast('Pilih setidaknya satu guru dulu', 'warning'); return; }
+    const result = await Swal.fire({
+        title: 'Terapkan Periode SK',
+        html: '<p class="text-sm text-gray-600">Menerapkan tanggal mulai' + (mulai ? ' <b>' + mulai + '</b>' : ' (tidak berubah)') + ', tanggal akhir' + (selesai ? ' <b>' + selesai + '</b>' : ' (tidak berubah)') + (periode ? ', periode <b>' + periode + '</b>' : ', periode otomatis') + (jabatan ? ', jabatan <b>' + jabatan + '</b>' : '') + (tentang ? ', tentang <b>' + tentang + '</b>' : '') + ' ke <b>' + selected.length + ' guru</b> terpilih.</p>',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Ya, Terapkan',
+        cancelButtonText: 'Batal',
+        confirmButtonColor: '#3b82f6'
+    });
+    if (!result.isConfirmed) return;
+    for (const r of selected) {
+        if (mulai) r.sk.tgl_mulai_month = mulai;
+        if (selesai) r.sk.tgl_selesai_month = selesai;
+        if (periode) r.sk.periode_custom = periode;
+        if (jabatan) r.sk.jabatan = jabatan;
+        if (tentang) r.sk.tentang = tentang;
+        r.sk.tgl_mulai = fmtDateDisplay(r.sk.tgl_mulai_month);
+        r.sk.tgl_selesai = fmtDateDisplay(r.sk.tgl_selesai_month);
+        r.sk.periode = (r.sk.tgl_mulai_month && r.sk.tgl_selesai_month) ? (r.sk.tgl_mulai + ' - ' + r.sk.tgl_selesai) : '-';
+    }
+    renderSkBulkTable();
+    updateSkBulkSelectedInfo();
+    showToast('Periode diterapkan ke ' + selected.length + ' guru', 'success');
+};
+
 window.loadSkBulkCandidates = async function () {
     const tenantSelect = document.getElementById('skBulkTenant');
     const tenantId = tenantSelect?.value || 'all';
@@ -4175,10 +4253,16 @@ window.loadSkBulkCandidates = async function () {
                 already_has_sk: r.already_has_sk,
                 selected: r.qualified && !r.already_has_sk,
                 manual_verified: false,
+                tenant_id: r.tenant_id,
                 sk: r.sk || {}
             }));
             renderSkBulkTable();
             updateSkBulkSelectedInfo();
+
+            // Clear bulk apply fields
+            const fields = ['skBulkTglMulai', 'skBulkTglSelesai', 'skBulkPeriode', 'skBulkJabatan', 'skBulkTentang'];
+            fields.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+
             if (infoEl) {
                 const belumLayak = skBulkRows.filter(r => !r.qualified && !r.already_has_sk).length;
                 infoEl.textContent = skBulkRows.length + ' guru aktif dimuat' + (data.note ? ' — ' + data.note : '') + '. Nomor surat bersifat provisional; nomor final ditetapkan saat generate.' + (belumLayak > 0 ? ' ' + belumLayak + ' guru belum layak (masa kerja di bawah syarat): centang "Verifikasi" pada kolom Verifikasi untuk tetap generate SK-nya.' : '');
@@ -4230,7 +4314,7 @@ window.renderSkBulkTable = function () {
         return hay.includes(skBulkSearch);
     });
     if (rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="11" class="px-4 py-8 text-center text-gray-500">' + (skBulkRows.length === 0 ? 'Klik "Muat Daftar Guru" untuk menampilkan kandidat' : 'Tidak ada yang cocok dengan pencarian') + '</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="12" class="px-4 py-8 text-center text-gray-500">' + (skBulkRows.length === 0 ? 'Klik "Muat Daftar Guru" untuk menampilkan kandidat' : 'Tidak ada yang cocok dengan pencarian') + '</td></tr>';
         return;
     }
     tbody.innerHTML = rows.map(r => {
@@ -4239,9 +4323,18 @@ window.renderSkBulkTable = function () {
             ? '<span class="text-blue-600">Sudah punya SK</span>'
             : (r.qualified
                 ? '<span class="text-green-600">✓ Layak (' + r.years_of_service + ' thn)</span>'
-                : '<span class="text-red-600">✗ ' + r.years_of_service + '/' + r.min_years + ' thn</span>');
+                : (r.manual_verified
+                    ? '<span class="text-amber-600">⚠ Verifikasi Manual (' + r.years_of_service + '/' + r.min_years + ' thn)</span>'
+                    : '<span class="text-red-600">✗ ' + r.years_of_service + '/' + r.min_years + ' thn</span>'));
+        const canSelect = r.qualified || r.manual_verified;
+        const selectCheckbox = canSelect
+            ? '<input type="checkbox" ' + (r.selected ? 'checked' : '') + ' onchange="toggleSkBulkRow(' + r.teacher_id + ')">'
+            : '<input type="checkbox" disabled title="Belum layak — centang Verifikasi dulu">';
+        const verifyCell = (r.qualified || r.already_has_sk)
+            ? '<span class="text-gray-400 text-xs">—</span>'
+            : '<label class="inline-flex items-center text-xs cursor-pointer select-none"><input type="checkbox" ' + (r.manual_verified ? 'checked' : '') + ' onchange="toggleSkBulkManualVerify(' + idx + ')" class="mr-1"> Verifikasi</label>';
         return '<tr class="hover:bg-gray-50">' +
-            '<td class="px-3 py-2"><input type="checkbox" ' + (r.selected ? 'checked' : '') + ' onchange="toggleSkBulkRow(' + r.teacher_id + ')"></td>' +
+            '<td class="px-3 py-2">' + selectCheckbox + '</td>' +
             '<td class="px-3 py-2">' + (r.sk.no_surat || '-') + '</td>' +
             '<td class="px-3 py-2 font-medium">' + (r.nama || '-') + '<div class="text-xs text-gray-400">NIK: ' + (r.nik || '-') + '</div></td>' +
             '<td class="px-3 py-2">' + (r.nama_sekolah || '-') + '<div class="text-xs text-gray-400">' + (r.unit || '-') + '</div></td>' +
@@ -4251,6 +4344,7 @@ window.renderSkBulkTable = function () {
             '<td class="px-3 py-2">' + (r.sk.pt || '-') + '</td>' +
             '<td class="px-3 py-2">' + (r.sk.niy || '-') + '</td>' +
             '<td class="px-3 py-2 text-xs">' + statusBadge + '</td>' +
+            '<td class="px-3 py-2">' + verifyCell + '</td>' +
             '<td class="px-3 py-2"><button type="button" onclick="openSkBulkEdit(' + idx + ')" class="text-blue-600 hover:text-blue-800" title="Edit"><i class="fas fa-edit"></i></button></td>' +
             '</tr>';
     }).join('');
@@ -4278,13 +4372,17 @@ window.openSkBulkEdit = function (index) {
     const tentang = document.getElementById('skBulkEditTentang');
     if (tentang) tentang.value = row.sk.tentang || '';
     const tglMulai = document.getElementById('skBulkEditTglMulai');
-    if (tglMulai) tglMulai.value = row.sk.tgl_mulai_month || '';
+    if (tglMulai) tglMulai.value = toDateInputValue(row.sk.tgl_mulai_month, false);
     const tglSelesai = document.getElementById('skBulkEditTglSelesai');
-    if (tglSelesai) tglSelesai.value = row.sk.tgl_selesai_month || '';
+    if (tglSelesai) tglSelesai.value = toDateInputValue(row.sk.tgl_selesai_month, true);
+    const periodeEdit = document.getElementById('skBulkEditPeriode');
+    if (periodeEdit) periodeEdit.value = row.sk.periode_custom || '';
     const pt = document.getElementById('skBulkEditPT');
     if (pt) pt.value = row.sk.pt || '';
     const tmt = document.getElementById('skBulkEditTmt');
     if (tmt) tmt.value = row.sk.tmt_month || '';
+    const jabatan = document.getElementById('skBulkEditJabatan');
+    if (jabatan) jabatan.value = row.sk.jabatan || '';
     const namaEl = document.getElementById('skBulkEditNama');
     if (namaEl) namaEl.textContent = (row.nama || '-') + ' — ' + (row.nama_sekolah || '-') + (row.unit ? ' / ' + row.unit : '');
     const idxInput = document.getElementById('skBulkEditIndex');
@@ -4323,7 +4421,12 @@ window.updateSkBulkEditTentang = function () {
         const today = new Date();
         const isPimpinan = typeSel.value === 'pimpinan';
         const endYear = today.getFullYear() + (isPimpinan ? 4 : 1) - 1;
-        tglSelesaiInput.value = endYear + '-12';
+        tglSelesaiInput.value = endYear + '-12-31';
+    }
+    const periodeInput = document.getElementById('skBulkEditPeriode');
+    if (periodeInput && !periodeInput.value) {
+        const tglMulaiInput = document.getElementById('skBulkEditTglMulai');
+        periodeInput.value = computePeriodeFromDates(tglMulaiInput?.value || '', tglSelesaiInput?.value || '');
     }
 };
 
@@ -4339,17 +4442,12 @@ window.saveSkBulkEdit = function () {
     row.sk.tentang = document.getElementById('skBulkEditTentang')?.value || '';
     row.sk.tgl_mulai_month = document.getElementById('skBulkEditTglMulai')?.value || '';
     row.sk.tgl_selesai_month = document.getElementById('skBulkEditTglSelesai')?.value || '';
+    row.sk.periode_custom = document.getElementById('skBulkEditPeriode')?.value || '';
     row.sk.pt = document.getElementById('skBulkEditPT')?.value || '';
     row.sk.tmt_month = document.getElementById('skBulkEditTmt')?.value || '';
+    row.sk.jabatan = document.getElementById('skBulkEditJabatan')?.value || '';
 
     const idnMonths = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
-    const fmtMonthDisplay = (m) => {
-        if (!m) return '-';
-        const parts = m.split('-');
-        if (parts.length < 2) return m;
-        const mi = parseInt(parts[1], 10) - 1;
-        return '1 ' + (idnMonths[mi] || '') + ' ' + parts[0] + ' M';
-    };
     const fmtTmtDisplay = (m) => {
         if (!m) return '-';
         const parts = m.split('-');
@@ -4357,8 +4455,8 @@ window.saveSkBulkEdit = function () {
         const mi = parseInt(parts[1], 10) - 1;
         return (idnMonths[mi] || '').toUpperCase() + ' ' + parts[0];
     };
-    row.sk.tgl_mulai = fmtMonthDisplay(row.sk.tgl_mulai_month);
-    row.sk.tgl_selesai = fmtMonthDisplay(row.sk.tgl_selesai_month);
+    row.sk.tgl_mulai = fmtDateDisplay(row.sk.tgl_mulai_month);
+    row.sk.tgl_selesai = fmtDateDisplay(row.sk.tgl_selesai_month);
     row.sk.tmt = fmtTmtDisplay(row.sk.tmt_month);
     row.sk.periode = (row.sk.tgl_mulai_month && row.sk.tgl_selesai_month) ? (row.sk.tgl_mulai + ' - ' + row.sk.tgl_selesai) : '-';
 
@@ -4389,16 +4487,20 @@ window.submitSkBulkGenerate = async function () {
 
     try {
         const payload = {
-            rows: selected.map(r => ({
+                rows: selected.map(r => ({
                 teacher_id: r.teacher_id,
                 nama: r.nama,
+                tenant_id: r.tenant_id,
                 tentang_type: r.sk.tentang_type || 'baru',
                 pt: r.sk.pt || '',
                 tmt_custom: r.sk.tmt_month || '',
                 no_surat: r.sk.no_surat || '',
                 tgl_mulai_custom: r.sk.tgl_mulai_month || '',
                 tgl_selesai_custom: r.sk.tgl_selesai_month || '',
-                tentang: r.sk.tentang || ''
+                tentang: r.sk.tentang || '',
+                periode_custom: r.sk.periode_custom || '',
+                jabatan: r.sk.jabatan || '',
+                manual_verified: !!r.manual_verified
             }))
         };
         const res = await fetch('/api/bulk-generate', {
@@ -4414,7 +4516,7 @@ window.submitSkBulkGenerate = async function () {
             const errors = d.errors || [];
             let html = '<p class="text-sm mb-2"><b>' + gen.length + ' SK berhasil dibuat</b></p>';
             if (gen.length > 0) {
-                html += '<div class="max-h-40 overflow-y-auto text-left text-xs mb-2">' + gen.map(g => '<div>' + (g.nama || '-') + ' → ' + (g.no_surat || '-') + '</div>').join('') + '</div>';
+                html += '<div class="max-h-40 overflow-y-auto text-left text-xs mb-2">' + gen.map(g => '<div>' + (g.nama || '-') + (g.manual_verified ? ' <span class="text-amber-600 font-medium">[verifikasi manual]</span>' : '') + ' → ' + (g.no_surat || '-') + '</div>').join('') + '</div>';
             }
             if (skipped.length > 0) {
                 html += '<p class="text-sm mb-1 text-yellow-600">' + skipped.length + ' dilewati:</p><div class="max-h-24 overflow-y-auto text-left text-xs mb-2">' + skipped.map(s => '<div>' + (s.nama || '-') + ': ' + (s.reason || '') + '</div>').join('') + '</div>';
@@ -4422,7 +4524,26 @@ window.submitSkBulkGenerate = async function () {
             if (errors.length > 0) {
                 html += '<p class="text-sm mb-1 text-red-600">' + errors.length + ' gagal:</p><div class="max-h-24 overflow-y-auto text-left text-xs">' + errors.map(e => '<div>' + (e.nama || '-') + ': ' + (e.reason || '') + '</div>').join('') + '</div>';
             }
-            Swal.fire({ title: 'Bulk Generate Selesai', html: html, icon: gen.length > 0 ? 'success' : 'warning', confirmButtonColor: '#3b82f6' });
+
+            // Show result with ZIP download button if there are generated SKs
+            const genIds = gen.map(g => g.teacher_id); // We need SK IDs, but we only have teacher_ids
+            // We'll fetch the SK IDs from the list after generation
+            const result = await Swal.fire({
+                title: 'Bulk Generate Selesai',
+                html: html,
+                icon: gen.length > 0 ? 'success' : 'warning',
+                confirmButtonColor: '#3b82f6',
+                showCancelButton: gen.length > 0,
+                cancelButtonText: gen.length > 0 ? 'Download ZIP' : undefined,
+                cancelButtonColor: '#16a34a',
+                confirmButtonText: 'Tutup'
+            });
+
+            if (result.dismiss === Swal.DismissReason.cancel && gen.length > 0) {
+                // User clicked "Download ZIP" - fetch SK IDs and download
+                await downloadSkBulkZip(gen.map(g => g.teacher_id));
+            }
+
             hideSkBulkModal();
             if (typeof loadSkGuruList === 'function') loadSkGuruList();
         } else {
@@ -4433,6 +4554,77 @@ window.submitSkBulkGenerate = async function () {
         showToast('Terjadi kesalahan saat bulk generate', 'error');
     } finally {
         if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-file-export mr-2"></i>Generate SK Terpilih (0)'; }
+    }
+};
+
+window.downloadSkBulkZip = async function (teacherIds) {
+    if (!Array.isArray(teacherIds) || teacherIds.length === 0) {
+        showToast('Tidak ada data untuk diunduh', 'warning');
+        return;
+    }
+
+    // First, get the SK IDs from the list (since bulk generate returns teacher_ids, not SK IDs)
+    try {
+        const res = await fetch('/api/list', { headers: skGuruAuthHdr() });
+        const data = await res.json();
+        if (!data.success || !data.data) {
+            showToast('Gagal memuat daftar SK', 'error');
+            return;
+        }
+
+        // Find SK IDs for the generated teachers (most recent ones)
+        const skList = data.data;
+        const skIds = [];
+        for (const tid of teacherIds) {
+            // Find the most recent SK for this teacher
+            const teacherSks = skList.filter(sk => sk.teacher_id === tid).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+            if (teacherSks.length > 0) {
+                skIds.push(teacherSks[0].id);
+            }
+        }
+
+        if (skIds.length === 0) {
+            showToast('Tidak ditemukan SK untuk diunduh', 'warning');
+            return;
+        }
+
+        showSkLoading('Mengunduh ZIP SK', 'Menyiapkan ' + skIds.length + ' file PDF...', 'Mengambil daftar SK...');
+        updateSkLoading(20, 'Server memproses PDF...', 'Ini bisa memakan waktu beberapa detik...');
+        
+        // Download ZIP
+        const downloadRes = await fetch('/api/bulk-download', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...skGuruAuthHdr() },
+            body: JSON.stringify({ sk_ids: skIds })
+        });
+
+        updateSkLoading(60, 'Menerima file ZIP...', 'Mengunduh...');
+        if (!downloadRes.ok) {
+            const err = await downloadRes.json().catch(() => ({ message: 'Download gagal' }));
+            hideSkLoading();
+            showToast(err.message || 'Gagal mengunduh ZIP', 'error');
+            return;
+        }
+
+        updateSkLoading(80, 'Mengunduh file...', 'Menyimpan ke perangkat...');
+        const blob = await downloadRes.blob();
+        updateSkLoading(95, 'Menyimpan...', 'Hampir selesai...');
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `SK_Bulk_${Date.now()}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        updateSkLoading(100, 'Selesai!', 'ZIP berhasil diunduh');
+        setTimeout(hideSkLoading, 500);
+        showToast('ZIP berhasil diunduh', 'success');
+
+    } catch (e) {
+        console.error('[SK BULK DOWNLOAD]', e);
+        hideSkLoading();
+        showToast('Terjadi kesalahan saat mengunduh ZIP', 'error');
     }
 };
 
@@ -4629,7 +4821,7 @@ window.loadSkGuruList = async function () {
     const tableBody = document.getElementById('skGuruTable');
     if (!tableBody) return;
 
-    tableBody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>Memuat data SK Guru...</td></tr>';
+    tableBody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-gray-500"><i class="fas fa-spinner fa-spin mr-2"></i>Memuat data SK Guru...</td></tr>';
 
     try {
         const res = await fetch('/api/list', { headers: skGuruAuthHdr() });
@@ -4640,6 +4832,7 @@ window.loadSkGuruList = async function () {
                 const tmtDate = sk.tmt || '-';
                 let actions = '<button onclick="downloadSkGuru(' + sk.id + ')" class="text-blue-600 hover:text-blue-800 mr-2" title="Unduh"><i class="fas fa-download"></i></button>';
                 return '<tr>' +
+                    '<td class="px-4 py-3 text-sm"><input type="checkbox" class="sk-list-row-checkbox w-4 h-4" value="' + sk.id + '" onchange="updateSkListBulkBar()"></td>' +
                     '<td class="px-4 py-3 text-sm">' + (sk.no_surat || '-') + '</td>' +
                     '<td class="px-4 py-3 text-sm font-medium">' + (sk.teacher_name || sk.nama || '-') + '</td>' +
                     '<td class="px-4 py-3 text-sm">' + (sk.tentang || '-') + '</td>' +
@@ -4650,35 +4843,158 @@ window.loadSkGuruList = async function () {
                     '</tr>';
             }).join('');
         } else {
-            tableBody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-500"><i class="fas fa-file-alt text-3xl mb-2"></i><p>Tidak ada data SK Guru</p></td></tr>';
+            tableBody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-gray-500"><i class="fas fa-file-alt text-3xl mb-2"></i><p>Tidak ada data SK Guru</p></td></tr>';
         }
+        // Reset bulk bar
+        const selectAll = document.getElementById('skListSelectAll');
+        if (selectAll) selectAll.checked = false;
+        const bulkBar = document.getElementById('skListBulkBar');
+        if (bulkBar) bulkBar.classList.add('hidden');
     } catch (e) {
         console.error('[SK GURU LIST]', e);
-        tableBody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">Gagal memuat data</td></tr>';
+        tableBody.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-gray-500">Gagal memuat data</td></tr>';
     }
 };
 
-window.downloadSkGuru = async function (skId) {
+window.toggleSkListSelectAll = function (checkbox) {
+    const checked = checkbox?.checked;
+    document.querySelectorAll('.sk-list-row-checkbox').forEach(cb => {
+        cb.checked = checked;
+    });
+    updateSkListBulkBar();
+};
+
+window.updateSkListBulkBar = function () {
+    const checkboxes = document.querySelectorAll('.sk-list-row-checkbox:checked');
+    const count = checkboxes.length;
+    const bulkBar = document.getElementById('skListBulkBar');
+    const countEl = document.getElementById('skListSelectedCount');
+    const selectAll = document.getElementById('skListSelectAll');
+    
+    if (count > 0) {
+        if (bulkBar) bulkBar.classList.remove('hidden');
+        if (countEl) countEl.textContent = count + ' SK terpilih';
+    } else {
+        if (bulkBar) bulkBar.classList.add('hidden');
+    }
+    
+    // Update select all checkbox state
+    const allCheckboxes = document.querySelectorAll('.sk-list-row-checkbox');
+    if (selectAll && allCheckboxes.length > 0) {
+        selectAll.checked = count === allCheckboxes.length;
+        selectAll.indeterminate = count > 0 && count < allCheckboxes.length;
+    }
+};
+
+window.downloadSkListBulkZip = async function () {
+    const checkboxes = document.querySelectorAll('.sk-list-row-checkbox:checked');
+    const skIds = Array.from(checkboxes).map(cb => parseInt(cb.value, 10));
+    
+    if (skIds.length === 0) {
+        showToast('Pilih minimal satu SK untuk diunduh', 'warning');
+        return;
+    }
+
+    showSkLoading('Mengunduh ZIP SK', 'Menyiapkan ' + skIds.length + ' file PDF...', 'Mengirim request ke server...');
     try {
-        const res = await fetch('/api/file/' + skId + '?format=pdf', {
-            headers: skGuruAuthHdr()
+        updateSkLoading(20, 'Server memproses PDF...', 'Ini bisa memakan waktu beberapa detik...');
+        const res = await fetch('/api/bulk-download', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...skGuruAuthHdr() },
+            body: JSON.stringify({ sk_ids: skIds })
         });
+
+        updateSkLoading(60, 'Menerima file ZIP...', 'Ukuran: ' + (res.headers.get('content-length') || 'unknown') + ' bytes');
         if (!res.ok) {
-            const data = await res.json().catch(() => null);
-            showToast(data?.message || 'Gagal mengunduh SK', 'error');
+            const err = await res.json().catch(() => ({ message: 'Download gagal' }));
+            hideSkLoading();
+            showToast(err.message || 'Gagal mengunduh ZIP', 'error');
             return;
         }
+
+        updateSkLoading(80, 'Mengunduh file...', 'Menyimpan ke perangkat...');
         const blob = await res.blob();
+        updateSkLoading(95, 'Menyimpan...', 'Hampir selesai...');
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'SK_Guru.pdf';
+        a.download = `SK_Bulk_${Date.now()}.zip`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
+        updateSkLoading(100, 'Selesai!', 'ZIP berhasil diunduh');
+        setTimeout(hideSkLoading, 500);
+        showToast('ZIP berhasil diunduh', 'success');
+    } catch (e) {
+        console.error('[SK LIST BULK DOWNLOAD]', e);
+        hideSkLoading();
+        showToast('Terjadi kesalahan saat mengunduh ZIP', 'error');
+    }
+};
+
+// ============ Loading Progress Modal ============
+window.showSkLoading = function (title, message, detail) {
+    const modal = document.getElementById('skLoadingModal');
+    if (!modal) return;
+    document.getElementById('skLoadingTitle').textContent = title || 'Memproses...';
+    document.getElementById('skLoadingMessage').textContent = message || 'Mohon tunggu...';
+    document.getElementById('skLoadingDetail').textContent = detail || '';
+    document.getElementById('skLoadingBar').style.width = '0%';
+    document.getElementById('skLoadingPercent').textContent = '0%';
+    modal.classList.remove('hidden');
+    modal.classList.add('show');
+};
+
+window.updateSkLoading = function (percent, message, detail) {
+    const bar = document.getElementById('skLoadingBar');
+    const percentEl = document.getElementById('skLoadingPercent');
+    const msgEl = document.getElementById('skLoadingMessage');
+    const detailEl = document.getElementById('skLoadingDetail');
+    if (bar) bar.style.width = Math.min(100, Math.max(0, percent)) + '%';
+    if (percentEl) percentEl.textContent = Math.min(100, Math.max(0, Math.round(percent))) + '%';
+    if (message && msgEl) msgEl.textContent = message;
+    if (detail && detailEl) detailEl.textContent = detail;
+};
+
+window.hideSkLoading = function () {
+    const modal = document.getElementById('skLoadingModal');
+    if (!modal) return;
+    modal.classList.remove('show');
+    modal.classList.add('hidden');
+};
+
+// Download with progress (simulated since we can't track actual progress from backend)
+window.downloadSkGuru = async function (skId) {
+    showSkLoading('Mengunduh SK', 'Menghubungi server...', 'SK ID: ' + skId);
+    try {
+        updateSkLoading(20, 'Meminta file PDF...', 'Menyiapkan respons...');
+        const res = await fetch('/api/file/' + skId + '?format=pdf', {
+            headers: skGuruAuthHdr()
+        });
+        updateSkLoading(60, 'Menerima data...', 'Memproses file...');
+        if (!res.ok) {
+            const data = await res.json().catch(() => null);
+            hideSkLoading();
+            showToast(data?.message || 'Gagal mengunduh SK', 'error');
+            return;
+        }
+        updateSkLoading(80, 'Mengunduh file...', 'Menyimpan ke perangkat...');
+        const blob = await res.blob();
+        updateSkLoading(95, 'Menyimpan...', 'Hampir selesai...');
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'SK_Guru_' + skId + '.pdf';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        updateSkLoading(100, 'Selesai!', 'File berhasil diunduh');
+        setTimeout(hideSkLoading, 500);
     } catch (e) {
         console.error('[SK GURU DOWNLOAD]', e);
+        hideSkLoading();
         showToast('Terjadi kesalahan saat mengunduh', 'error');
     }
 };
