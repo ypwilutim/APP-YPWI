@@ -3,50 +3,10 @@ const db = require('../../db');
 const { authenticateOperator, verifyTenantAccess } = require('../middleware/auth');
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const PizZip = require('pizzip');
-const { execFileSync } = require('child_process');
+const { generateSkPdf } = require('../utils/generateSkPdf');
 
 const router = express.Router();
-
-let _chromePathCache = null;
-function getChromePath() {
-  if (_chromePathCache !== null) return _chromePathCache;
-  const puppeteerChrome = (() => {
-    try {
-      return require('puppeteer')?.executablePath?.();
-    } catch(e) { return null; }
-  })();
-  const candidates = process.env.CHROME_PATH || [
-    puppeteerChrome,
-    path.join(os.homedir(), '.cache/puppeteer/chrome/linux-153.0.8010.36/chrome-linux64/chrome'),
-    '/home/ypwh2917/.cache/puppeteer/chrome/linux-153.0.8010.36/chrome-linux64/chrome',
-    'google-chrome',
-    'google-chrome-stable',
-    'chromium-browser',
-    'chromium',
-    'chrome',
-    '/usr/bin/google-chrome',
-    '/usr/bin/chromium-browser',
-    '/usr/bin/chromium'
-  ].filter(Boolean);
-  for (const c of candidates) {
-    try {
-      execFileSync(c, ['--version'], { stdio: 'pipe', timeout: 5000 });
-      _chromePathCache = c;
-      return c;
-    } catch (e) { /* try next */ }
-  }
-  for (const c of candidates) {
-    try {
-      execFileSync(c, ['--version'], { stdio: 'pipe', timeout: 5000 });
-      _chromePathCache = c;
-      return c;
-    } catch (e) { /* try next */ }
-  }
-  _chromePathCache = false;
-  return false;
-}
 
 
 const hijriMonths = ['Muharam', 'Safar', 'Rabiul Awal', 'Rabiul Akhir', 'Jumadil Awal', 'Jumadil Akhir', 'Rajab', 'Syaban', 'Ramadhan', 'Syawal', 'Dzul Qaidah', 'Dzul Hijjah'];
@@ -82,6 +42,26 @@ function parseDate(dateStr) {
       const d = new Date(parseInt(match[1]), parseInt(match[2]) - 1, 1);
       return isNaN(d.getTime()) ? null : d;
     }
+  }
+  // Handle DD/MM/YYYY or MM/DD/YYYY or DD-MM-YYYY or MM-DD-YYYY
+  if (typeof dateStr === 'string' && /^\d{2}[\/\-]\d{2}[\/\-]\d{4}$/.test(dateStr)) {
+    const parts = dateStr.split(/[\/\-]/);
+    const a = parseInt(parts[0], 10);
+    const b = parseInt(parts[1], 10);
+    const year = parseInt(parts[2], 10);
+    // If a > 12, it's DD/MM/YYYY (day first, Indonesian)
+    if (a > 12) {
+      const d = new Date(year, b - 1, a);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    // If b > 12, it's MM/DD/YYYY (month first, US)
+    if (b > 12) {
+      const d = new Date(year, a - 1, b);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    // Both <= 12: ambiguous, assume DD/MM/YYYY (Indonesian default)
+    const d = new Date(year, b - 1, a);
+    return isNaN(d.getTime()) ? null : d;
   }
   const d = new Date(dateStr);
   return isNaN(d.getTime()) ? null : d;
@@ -264,22 +244,37 @@ function parseIndoDate(str) {
 }
 
 function computePeriode(tglMulaiStr, tglSelesaiStr) {
-  const startDate = parseIndoDate(tglMulaiStr);
-  const endDate = parseIndoDate(tglSelesaiStr);
+  const startDate = parseIndoDate(tglMulaiStr) || parseDate(tglMulaiStr);
+  const endDate = parseIndoDate(tglSelesaiStr) || parseDate(tglSelesaiStr);
   if (!startDate || !endDate) return '';
 
-  let totalMonths = (endDate.getFullYear() - startDate.getFullYear()) * 12 + (endDate.getMonth() - startDate.getMonth());
-  if (endDate.getDate() < startDate.getDate()) totalMonths--;
+  let years = endDate.getFullYear() - startDate.getFullYear();
+  let months = endDate.getMonth() - startDate.getMonth();
+  let days = endDate.getDate() - startDate.getDate();
+
+  // Jika hari akhir kurang dari hari mulai, kurangi 1 bulan
+  if (days < 0) {
+    months--;
+  }
+
+  let totalMonths = (years * 12) + months;
+
+  // Penyesuaian agar tanggal 1 Januari s.d 31 Desember terbaca genap 1 Tahun / 12 Bulan
+  if (days >= -1 && startDate.getDate() === 1 && endDate.getDate() === 31 && startDate.getMonth() === 0 && endDate.getMonth() === 11) {
+    totalMonths = 12;
+  } else {
+    totalMonths += 1; // Inklusif masa kerja
+  }
 
   if (totalMonths < 0) totalMonths = 0;
 
-  const years = Math.floor(totalMonths / 12);
-  const months = totalMonths % 12;
+  const calcYears = Math.floor(totalMonths / 12);
+  const calcMonths = totalMonths % 12;
 
-  if (years >= 1) {
-    return years + ' Tahun' + (months > 0 ? ' ' + months + ' Bulan' : '');
+  if (calcYears >= 1) {
+    return calcYears + ' Tahun' + (calcMonths > 0 ? ' ' + calcMonths + ' Bulan' : '');
   }
-  return months + ' Bulan';
+  return calcMonths + ' Bulan';
 }
 
 function pickPrimaryAssignment(rows) {
@@ -442,8 +437,10 @@ function buildSkData(teacher, tentang_type, pt, tmt_custom, nomorUrut, hijriYear
 
 router.post('/generate', authenticateOperator, async (req, res) => {
     try {
-       const { teacher_id, tentang_type, pt, tmt_custom, format, no_surat, tgl_mulai_custom, tgl_selesai_custom, tentang, periode_custom } = req.body;
-       console.log('[SK GURU GENERATE INPUT]', { no_surat, tgl_mulai_custom, tgl_selesai_custom, tentang_type });
+       const { teacher_id, tentang_type, pt, tmt_custom, format, no_surat, tgl_mulai_custom, tgl_selesai_custom, tentang, periode_custom, periodeCustom } = req.body;
+       // Support both snake_case and camelCase
+       const periodeCustomValue = periode_custom || periodeCustom;
+       console.log('[SK GURU GENERATE INPUT]', { no_surat, tgl_mulai_custom, tgl_selesai_custom, tentang_type, periode_custom: periodeCustomValue });
 
        if (!teacher_id) {
         return res.status(400).json({ success: false, message: 'teacher_id diperlukan' });
@@ -476,7 +473,7 @@ const today = new Date();
       const hijriToday = gregorianToHijri(today);
       const nomorUrut = await getNextSkNumber(teacher.tenant_id, hijriToday.year);
 
-      const skData = buildSkData(teacher, tentang_type, pt, tmt_custom, nomorUrut, hijriToday.year, no_surat, tgl_mulai_custom, tgl_selesai_custom, tentang, periode_custom, undefined);
+      const skData = buildSkData(teacher, tentang_type, pt, tmt_custom, nomorUrut, hijriToday.year, no_surat, tgl_mulai_custom, tgl_selesai_custom, tentang, periodeCustomValue, undefined);
 
     console.log('[SK GURU PREVIEW DEBUG]', {
       teacher_nip: teacher.nip,
@@ -581,44 +578,12 @@ const today = new Date();
       res.setHeader('Content-Disposition', 'attachment; filename="SK_Guru.pdf"');
 
       try {
-        const skTemplateDir = path.join(__dirname, '../../SKTEMPLATE');
-        const tmpHtml = path.join(skTemplateDir, 'sk_guru_' + Date.now() + '.html');
-        const tmpPdf = path.join(skTemplateDir, 'sk_guru_' + Date.now() + '.pdf');
-        fs.writeFileSync(tmpHtml, renderedHtml);
-
-        const chromePath = getChromePath();
-        if (!chromePath) {
-          console.warn('Chrome/Chromium binary not found, falling back to DOCX');
-        } else {
-          execFileSync(chromePath, [
-            '--headless',
-            '--disable-gpu',
-            '--no-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-extensions',
-            '--no-first-run',
-            '--disable-software-rasterizer',
-            '--print-to-pdf=' + tmpPdf,
-            '--default-print-margin-type=NONE',
-            '--virtual-time-budget=5000',
-            'file://' + tmpHtml
-          ], { timeout: 30000, stdio: 'pipe' });
-        }
-
-        if (fs.existsSync(tmpPdf)) {
-          const pdfBuf = fs.readFileSync(tmpPdf);
-          const sendBuf = Buffer.from(pdfBuf);
-          res.setHeader('Content-Length', sendBuf.length);
-          fs.unlinkSync(tmpHtml);
-          fs.unlinkSync(tmpPdf);
-          res.flushHeaders();
-          res.end(sendBuf);
-          return;
-        } else {
-          console.warn('PDF conversion failed, falling back to DOCX');
-        }
-      } catch (convErr) {
-        console.error('PDF conversion error:', convErr.message);
+        const pdfBuf = await generateSkPdf(htmlData);
+        res.setHeader('Content-Length', pdfBuf.length);
+        res.end(pdfBuf);
+        return;
+      } catch (pdfErr) {
+        console.error('PDF generation error:', pdfErr.message);
       }
 
       if (docxBuf) {
@@ -781,42 +746,12 @@ router.get('/file/:skId', authenticateOperator, async (req, res) => {
     res.setHeader('Content-Disposition', 'attachment; filename="SK_Guru.pdf"');
 
     try {
-      const skTemplateDir = path.join(__dirname, '../../SKTEMPLATE');
-      const tmpHtmlPath = path.join(skTemplateDir, 'sk_' + Date.now() + '.html');
-      const tmpPdfPath = path.join(skTemplateDir, 'sk_' + Date.now() + '.pdf');
-      fs.writeFileSync(tmpHtmlPath, renderedHtml);
-
-      const chromePath = getChromePath();
-      if (!chromePath) {
-        console.warn('Chrome/Chromium binary not found, falling back to DOCX');
-      } else {
-        execFileSync(chromePath, [
-          '--headless', '--disable-gpu', '--no-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-extensions',
-          '--no-first-run',
-          '--disable-software-rasterizer',
-          '--print-to-pdf=' + tmpPdfPath,
-          '--default-print-margin-type=NONE',
-          '--virtual-time-budget=5000',
-          'file://' + tmpHtmlPath
-        ], { timeout: 30000, stdio: 'pipe' });
-      }
-
-      if (fs.existsSync(tmpPdfPath)) {
-        const pdfBuf = fs.readFileSync(tmpPdfPath);
-        const sendBuf = Buffer.from(pdfBuf);
-        res.setHeader('Content-Length', sendBuf.length);
-        fs.unlinkSync(tmpHtmlPath);
-        fs.unlinkSync(tmpPdfPath);
-        res.flushHeaders();
-        res.end(sendBuf);
-        return;
-      }
-      console.warn('PDF conversion failed for download');
-      fs.unlinkSync(tmpHtmlPath);
-    } catch (convErr) {
-      console.error('PDF conversion error:', convErr.message);
+      const pdfBuf = await generateSkPdf(htmlData);
+      res.setHeader('Content-Length', pdfBuf.length);
+      res.end(pdfBuf);
+      return;
+    } catch (pdfErr) {
+      console.error('PDF generation error:', pdfErr.message);
     }
 
     const docxTemplatePath = path.join(__dirname, '../../SKTEMPLATE.docx');
@@ -884,9 +819,10 @@ router.get('/file/:skId', authenticateOperator, async (req, res) => {
 
 router.post('/preview', authenticateOperator, async (req, res) => {
    try {
-       const { teacher_id, tentang_type, pt, tmt_custom, no_surat, tgl_mulai_custom, tgl_selesai_custom, tentang, periode_custom } = req.body;
+       const { teacher_id, tentang_type, pt, tmt_custom, no_surat, tgl_mulai_custom, tgl_selesai_custom, tentang, periode_custom, periodeCustom } = req.body;
+       const periodeCustomValue = periode_custom || periodeCustom;
 
-      if (!teacher_id) {
+  if (!teacher_id) {
         return res.status(400).json({ success: false, message: 'teacher_id diperlukan' });
       }
 
@@ -907,7 +843,7 @@ const today = new Date();
       const hijriToday = gregorianToHijri(today);
       const nomorUrut = await peekNextSkNumber(teacher.tenant_id, hijriToday.year);
 
-      const skData = buildSkData(teacher, tentang_type, pt, tmt_custom, nomorUrut, hijriToday.year, no_surat, tgl_mulai_custom, tgl_selesai_custom, tentang, periode_custom, undefined);
+      const skData = buildSkData(teacher, tentang_type, pt, tmt_custom, nomorUrut, hijriToday.year, no_surat, tgl_mulai_custom, tgl_selesai_custom, tentang, periodeCustomValue, undefined);
 
     console.log('[SK GURU PREVIEW DEBUG]', {
       teacher_nip: teacher.nip,
@@ -1156,7 +1092,7 @@ router.post('/bulk-generate', authenticateOperator, async (req, res) => {
       const no_surat = (row?.no_surat || '').trim();
       const tgl_mulai_custom = row?.tgl_mulai_custom || '';
       const tgl_selesai_custom = row?.tgl_selesai_custom || '';
-      const periode_custom = row?.periode_custom || '';
+      const periode_custom = row?.periode_custom || row?.periodeCustom || '';
       const tentang = row?.tentang || '';
       const jabatan = row?.jabatan || '';
 
@@ -1343,20 +1279,9 @@ router.post('/bulk-download', authenticateOperator, async (req, res) => {
           [sk.teacher_id]
         );
 
-        // Prepare HTML data for PDF generation
-        const skYear = sk.bm ? parseInt(sk.bm.match(/(\d{4})/)?.[1] || new Date(sk.created_at).getFullYear()) : new Date(sk.created_at).getFullYear();
-        const skMonthName = sk.bm ? sk.bm.match(/(\w+)/)?.[1] : idnMonths[new Date(sk.created_at).getMonth()];
-        const skMonthIdx = skMonthName ? idnMonths.findIndex(m => m === skMonthName) : new Date(sk.created_at).getMonth();
-        const lastDayDec = new Date(skYear, idnMonths.indexOf('Desember') + 1, 0).getDate();
-        const tglSelesai = lastDayDec + ' ' + idnMonths[idnMonths.indexOf('Desember')] + ' ' + skYear + ' M';
-        let tglMulai;
-        if (skMonthIdx === 0 || (skMonthIdx >= 0 && idnMonths[skMonthIdx] === 'Januari')) {
-          tglMulai = '1 Januari ' + skYear + ' M';
-        } else {
-          const dayMatch = sk.bm ? sk.bm.match(/^(\d+)/)?.[1] : null;
-          const dayNum = dayMatch ? parseInt(dayMatch) : new Date(sk.created_at).getDate();
-          tglMulai = dayNum + ' ' + idnMonths[skMonthIdx >= 0 ? skMonthIdx : 0] + ' ' + skYear + ' M';
-        }
+        // Use stored custom dates from DB (tgl_mulai, tgl_selesai, periode) instead of recomputing
+        const tglMulai = sk.tgl_mulai || '1 Januari ' + new Date(sk.created_at).getFullYear() + ' M';
+        const tglSelesai = sk.tgl_selesai || '31 Desember ' + new Date(sk.created_at).getFullYear() + ' M';
 
         var htmlData = {
           noSurat: sk.no_surat || '',
@@ -1373,37 +1298,18 @@ router.post('/bulk-download', authenticateOperator, async (req, res) => {
           tglSelesai: tglSelesai,
           bhFormatted: sk.bh || '',
           bmFormatted: sk.bm || '',
-          periode: computePeriode(tglMulai, tglSelesai)
+          periode: sk.periode || computePeriode(tglMulai, tglSelesai)
         };
         var renderedHtml = buildHtmlSk(htmlTemplate, htmlData);
 
-        // Generate PDF using headless Chrome
-        const tmpHtmlPath = path.join(skTemplateDir, 'sk_bulk_' + sk.id + '_' + Date.now() + '.html');
-        const tmpPdfPath = path.join(skTemplateDir, 'sk_bulk_' + sk.id + '_' + Date.now() + '.pdf');
-        fs.writeFileSync(tmpHtmlPath, renderedHtml);
-
-        const chromePath = getChromePath();
-        if (chromePath) {
-          execFileSync(chromePath, [
-            '--headless', '--disable-gpu', '--no-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-extensions',
-            '--no-first-run',
-            '--disable-software-rasterizer',
-            '--print-to-pdf=' + tmpPdfPath,
-            '--default-print-margin-type=NONE',
-            '--virtual-time-budget=5000',
-            'file://' + tmpHtmlPath
-          ], { timeout: 30000, stdio: 'pipe' });
-        }
-
-        if (fs.existsSync(tmpPdfPath)) {
-          const pdfBuf = fs.readFileSync(tmpPdfPath);
+        // Generate PDF using pdfmake
+        try {
+          const pdfBuf = await generateSkPdf(htmlData);
           const safeName = (sk.no_surat || 'SK_' + sk.id).replace(/[^a-zA-Z0-9._-]/g, '_');
           archive.append(pdfBuf, { name: `${safeName}.pdf` });
-          fs.unlinkSync(tmpPdfPath);
+        } catch (pdfErr) {
+          console.error(`[BULK DOWNLOAD] Error generating PDF for SK ${sk.id}:`, pdfErr.message);
         }
-        fs.unlinkSync(tmpHtmlPath);
 
       } catch (err) {
         console.error(`[BULK DOWNLOAD] Error generating PDF for SK ${sk.id}:`, err.message);
