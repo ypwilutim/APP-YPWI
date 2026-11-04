@@ -1372,8 +1372,15 @@ router.post('/admin/attendance/manual', authenticateOperator, async (req, res) =
     }
 
     const userTimezone = 'Asia/Makassar';
-    const dayName = scanDate.toLocaleDateString('id-ID', { weekday: 'long', timeZone: userTimezone });
-    const timeOnly = String(scanDate.getHours()).padStart(2, '0') + ':' + String(scanDate.getMinutes()).padStart(2, '0');
+    const dayName = new Intl.DateTimeFormat('id-ID', { weekday: 'long', timeZone: userTimezone }).format(scanDate);
+    const timeFormatter = new Intl.DateTimeFormat('id-ID', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      timeZone: userTimezone
+    });
+    const timeParts = timeFormatter.formatToParts(scanDate);
+    const timeOnly = timeParts.find(p => p.type === 'hour').value + ':' + timeParts.find(p => p.type === 'minute').value;
 
     const tipeRule = jenis === 'masuk' ? 'Datang' : 'Pulang';
 
@@ -1386,7 +1393,7 @@ router.post('/admin/attendance/manual', authenticateOperator, async (req, res) =
     const matchingRules = rules.filter(rule => {
       if (!rule.hari || rule.hari.trim() === '') return true;
       const ruleDays = rule.hari.toLowerCase().split(',').map(d => d.trim());
-      return ruleDays.includes(dayName);
+      return ruleDays.includes(dayName.toLowerCase());
     });
 
     if (matchingRules.length > 0) {

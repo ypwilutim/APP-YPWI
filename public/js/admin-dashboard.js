@@ -794,7 +794,9 @@ async function fetchAttendanceLogs() {
         const urlTenantId = urlParams.get('tenant');
 
         try {
-            const tenantRes = await fetch('/api/admin/tenants', {
+            // Pass tenant_id from URL to API so backend returns all tenants (for admin) or filters correctly (for guru)
+            const apiUrl = urlTenantId ? `/api/admin/tenants?tenant_id=${encodeURIComponent(urlTenantId)}` : '/api/admin/tenants';
+            const tenantRes = await fetch(apiUrl, {
                 headers: { 'Authorization': `Bearer ${window.authToken || localStorage.getItem('token') || ''}` }
             });
             const tenantJson = await tenantRes.json();
@@ -988,8 +990,15 @@ async function fetchAttendanceLogs() {
         try {
             const scanDate = new Date(`${tanggal}T${jam}:00`);
             const userTimezone = 'Asia/Makassar';
-            const dayName = scanDate.toLocaleDateString('id-ID', { weekday: 'long', timeZone: userTimezone });
-            const timeOnly = String(scanDate.getHours()).padStart(2, '0') + ':' + String(scanDate.getMinutes()).padStart(2, '0');
+            const dayName = new Intl.DateTimeFormat('id-ID', { weekday: 'long', timeZone: userTimezone }).format(scanDate);
+            const timeFormatter = new Intl.DateTimeFormat('id-ID', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false,
+                timeZone: userTimezone
+            });
+            const timeParts = timeFormatter.formatToParts(scanDate);
+            const timeOnly = timeParts.find(p => p.type === 'hour').value + ':' + timeParts.find(p => p.type === 'minute').value;
             const tipeRule = jenis === 'masuk' ? 'Datang' : 'Pulang';
 
             const res = await fetch(`/api/admin/attendance/rules?tenant_id=${encodeURIComponent(tenantId)}&tipe=${encodeURIComponent(tipeRule)}&time=${encodeURIComponent(timeOnly)}&day=${encodeURIComponent(dayName)}`, {
@@ -1107,7 +1116,14 @@ async function fetchAttendanceLogs() {
                     const ts = new Date(payload.ts);
                     const userTimezone = 'Asia/Makassar';
                     const tanggal = ts.toLocaleDateString('en-CA', { timeZone: userTimezone });
-                    const jam = String(ts.getHours()).padStart(2, '0') + ':' + String(ts.getMinutes()).padStart(2, '0');
+                    const timeFormatter = new Intl.DateTimeFormat('id-ID', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: false,
+                        timeZone: userTimezone
+                    });
+                    const timeParts = timeFormatter.formatToParts(ts);
+                    const jam = timeParts.find(p => p.type === 'hour').value + ':' + timeParts.find(p => p.type === 'minute').value;
                     const tanggalEl = document.getElementById('manualTanggal');
                     const jamEl = document.getElementById('manualJam');
                     if (tanggalEl) tanggalEl.value = tanggal;
