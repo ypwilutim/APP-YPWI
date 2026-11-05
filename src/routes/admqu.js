@@ -1,6 +1,6 @@
 const express = require('express');
 const db = require('../../db');
-const { authenticateOperator } = require('../middleware/auth');
+const { authenticateToken } = require('../middleware/auth');
 const { toHijri } = require('hijri-converter');
 
 const router = express.Router();
@@ -37,7 +37,7 @@ function getTenantIdFromUser(user) {
   return null;
 }
 
-router.get('/sk-status', authenticateOperator, async (req, res) => {
+router.get('/sk-status', authenticateToken, async (req, res) => {
   try {
     const teacherId = getTeacherIdFromUser(req.user);
     const tenantId = getTenantIdFromUser(req.user);
@@ -48,8 +48,8 @@ router.get('/sk-status', authenticateOperator, async (req, res) => {
     }
 
     const [existingSk] = await db.query(
-      'SELECT * FROM sk_guru WHERE teacher_id = ? AND YEAR(STR_TO_DATE(bm, "%d %M %Y")) = ? ORDER BY created_at DESC LIMIT 1',
-      [teacherId, hijriYear]
+      'SELECT * FROM sk_guru WHERE teacher_id = ? AND bh LIKE ? ORDER BY created_at DESC LIMIT 1',
+      [teacherId, `% ${hijriYear} H`]
     );
 
     if (existingSk) {
@@ -118,7 +118,7 @@ router.get('/sk-status', authenticateOperator, async (req, res) => {
   }
 });
 
-router.get('/absensi-ringkasan', authenticateOperator, async (req, res) => {
+router.get('/absensi-ringkasan', authenticateToken, async (req, res) => {
   try {
     const teacherId = getTeacherIdFromUser(req.user);
     const tenantId = getTenantIdFromUser(req.user);
@@ -279,7 +279,7 @@ router.get('/absensi-ringkasan', authenticateOperator, async (req, res) => {
   }
 });
 
-router.get('/slip-gaji', authenticateOperator, async (req, res) => {
+router.get('/slip-gaji', authenticateToken, async (req, res) => {
   try {
     const teacherId = getTeacherIdFromUser(req.user);
     const tenantId = getTenantIdFromUser(req.user);
@@ -419,8 +419,9 @@ router.get('/slip-gaji', authenticateOperator, async (req, res) => {
       }
     }
 
+    await db.query('INSERT INTO payroll_settings (id) VALUES (1) ON DUPLICATE KEY UPDATE id = id');
     const [deductionSettings] = await db.query(
-      'SELECT potongan_terlambat, potongan_izin, potongan_sakit, potongan_tanpa_keterangan, potongan_tidak_hadir, tunj_kehadiran FROM payroll_deduction_settings LIMIT 1'
+      'SELECT potongan_terlambat, potongan_izin, potongan_sakit, potongan_tanpa_keterangan, potongan_tidak_hadir, tunj_kehadiran FROM payroll_settings WHERE id = 1'
     );
 
     const potTerlambat = parseFloat(deductionSettings?.potongan_terlambat || 0);
@@ -487,7 +488,7 @@ router.get('/slip-gaji', authenticateOperator, async (req, res) => {
           sakit,
           dinas_luar,
           cuti,
-          tanpa_keterangan,
+          tanpa_keterangan: tanpaKeterangan,
           total_hari_kerja: totalWeekdays
         }
       }
@@ -498,7 +499,7 @@ router.get('/slip-gaji', authenticateOperator, async (req, res) => {
   }
 });
 
-router.get('/slip-gaji/history', authenticateOperator, async (req, res) => {
+router.get('/slip-gaji/history', authenticateToken, async (req, res) => {
   try {
     const teacherId = getTeacherIdFromUser(req.user);
     const tenantId = getTenantIdFromUser(req.user);
@@ -526,7 +527,7 @@ router.get('/slip-gaji/history', authenticateOperator, async (req, res) => {
   }
 });
 
-router.get('/sk-list', authenticateOperator, async (req, res) => {
+router.get('/sk-list', authenticateToken, async (req, res) => {
   try {
     const teacherId = getTeacherIdFromUser(req.user);
     const tenantId = getTenantIdFromUser(req.user);

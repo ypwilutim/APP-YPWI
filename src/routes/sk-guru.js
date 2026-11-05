@@ -1,6 +1,6 @@
 const express = require('express');
 const db = require('../../db');
-const { authenticateOperator, verifyTenantAccess } = require('../middleware/auth');
+const { authenticateToken, authenticateOperator, verifyTenantAccess, isPrivilegedOperator } = require('../middleware/auth');
 const fs = require('fs');
 const path = require('path');
 const PizZip = require('pizzip');
@@ -435,7 +435,7 @@ function buildSkData(teacher, tentang_type, pt, tmt_custom, nomorUrut, hijriYear
       };
   }
 
-router.post('/generate', authenticateOperator, async (req, res) => {
+router.post('/generate', authenticateToken, async (req, res) => {
     try {
        const { teacher_id, tentang_type, pt, tmt_custom, format, no_surat, tgl_mulai_custom, tgl_selesai_custom, tentang, periode_custom, periodeCustom } = req.body;
        // Support both snake_case and camelCase
@@ -455,11 +455,15 @@ router.post('/generate', authenticateOperator, async (req, res) => {
        return res.status(400).json({ success: false, message: 'Guru tidak ditemukan' });
      }
 
-     if (!verifyTenantAccess(req, teacher.tenant_id)) {
-       return res.status(403).json({ success: false, message: 'Akses ditolak untuk tenant ini' });
-     }
+      if (!isPrivilegedOperator(req.user)) {
+        if (parseInt(teacher_id, 10) !== parseInt(req.user.guru_id, 10)) {
+          return res.status(403).json({ success: false, message: 'Akses ditolak untuk guru ini' });
+        }
+      } else if (!verifyTenantAccess(req, teacher.tenant_id)) {
+        return res.status(403).json({ success: false, message: 'Akses ditolak untuk tenant ini' });
+      }
 
-     const htmlTemplatePath = path.join(__dirname, '../../SKTEMPLATE/test.html');
+      const htmlTemplatePath = path.join(__dirname, '../../SKTEMPLATE/test.html');
      if (!fs.existsSync(htmlTemplatePath)) {
        return res.status(404).json({ success: false, message: 'Template SK tidak ditemukan' });
      }
@@ -651,7 +655,7 @@ router.get('/list', authenticateOperator, async (req, res) => {
   }
 });
 
-router.get('/file/:skId', authenticateOperator, async (req, res) => {
+router.get('/file/:skId', authenticateToken, async (req, res) => {
   try {
     const skId = req.params.skId;
     const format = req.query.format || 'pdf';
@@ -661,7 +665,11 @@ router.get('/file/:skId', authenticateOperator, async (req, res) => {
       return res.status(404).json({ success: false, message: 'SK tidak ditemukan' });
     }
 
-    if (!verifyTenantAccess(req, sk.tenant_id)) {
+    if (!isPrivilegedOperator(req.user)) {
+      if (parseInt(sk.teacher_id, 10) !== parseInt(req.user.guru_id, 10)) {
+        return res.status(403).json({ success: false, message: 'Akses ditolak untuk SK ini' });
+      }
+    } else if (!verifyTenantAccess(req, sk.tenant_id)) {
       return res.status(403).json({ success: false, message: 'Akses ditolak untuk tenant ini' });
     }
 
@@ -761,7 +769,7 @@ res.setHeader('Content-Type', 'application/pdf');
   }
 });
 
-router.post('/preview', authenticateOperator, async (req, res) => {
+router.post('/preview', authenticateToken, async (req, res) => {
    try {
        const { teacher_id, tentang_type, pt, tmt_custom, no_surat, tgl_mulai_custom, tgl_selesai_custom, tentang, periode_custom, periodeCustom } = req.body;
        const periodeCustomValue = periode_custom || periodeCustom;
@@ -779,9 +787,13 @@ router.post('/preview', authenticateOperator, async (req, res) => {
        return res.status(400).json({ success: false, message: 'Guru tidak ditemukan' });
      }
 
-     if (!verifyTenantAccess(req, teacher.tenant_id)) {
-       return res.status(403).json({ success: false, message: 'Akses ditolak untuk tenant ini' });
-     }
+      if (!isPrivilegedOperator(req.user)) {
+        if (parseInt(teacher_id, 10) !== parseInt(req.user.guru_id, 10)) {
+          return res.status(403).json({ success: false, message: 'Akses ditolak untuk guru ini' });
+        }
+      } else if (!verifyTenantAccess(req, teacher.tenant_id)) {
+        return res.status(403).json({ success: false, message: 'Akses ditolak untuk tenant ini' });
+      }
 
 const today = new Date();
       const hijriToday = gregorianToHijri(today);
@@ -1011,7 +1023,7 @@ router.get('/bulk-candidates', authenticateOperator, async (req, res) => {
 
 router.post('/bulk-generate', authenticateOperator, async (req, res) => {
   try {
-    const { rows } = req.body;
+    const { rows, preview_only } = req.body;
     if (!Array.isArray(rows) || rows.length === 0) {
       return res.status(400).json({ success: false, message: 'Tidak ada guru yang dipilih' });
     }
@@ -1138,10 +1150,27 @@ router.post('/bulk-generate', authenticateOperator, async (req, res) => {
     }
 
     // Pass 2: Assign nomorUrut and insert for valid rows only
+    const previewCounters = {};
     for (const v of validRows) {
       try {
-        const nomorUrut = await getNextSkNumber(v.teacher.tenant_id, hijriToday.year);
+        let nomorUrut;
+        if (preview_only) {
+          const tId = v.teacher.tenant_id;
+          if (!(tId in previewCounters)) {
+            previewCounters[tId] = await peekNextSkNumber(tId, hijriToday.year) - 1;
+          }
+          previewCounters[tId] += 1;
+          nomorUrut = previewCounters[tId];
+        } else {
+          nomorUrut = await getNextSkNumber(v.teacher.tenant_id, hijriToday.year);
+        }
         const skData = buildSkData(v.teacher, v.tentang_type, v.pt, v.tmt_custom, nomorUrut, hijriToday.year, v.no_surat, v.tgl_mulai_custom, v.tgl_selesai_custom, v.tentang, v.periode_custom, v.jabatan);
+
+        if (preview_only) {
+          // Store proposed surat number in the valid row for response
+          v.proposed_no_surat = skData.noSurat;
+          continue;
+        }
 
         await db.query(
           'INSERT INTO sk_guru (teacher_id, tenant_id, tahun_ajaran_id, no_surat, tentang, ttl, tmt, pt, niy, unit, bh, bm, jabatan, status, tentag_type, tgl_mulai, tgl_selesai, manual_verified, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())',
@@ -1157,6 +1186,21 @@ router.post('/bulk-generate', authenticateOperator, async (req, res) => {
         console.error('[SK BULK] insert error:', insertErr);
         errors.push({ teacher_id: v.teacher_id, nama: v.teacher.nama, reason: insertErr.message });
       }
+    }
+
+    if (preview_only) {
+      // Return proposed surat numbers without generating
+      const proposed = validRows.map(v => ({
+        teacher_id: v.teacher_id,
+        nama: v.teacher.nama,
+        no_surat: v.proposed_no_surat || v.no_surat || '-'
+      }));
+      res.json({
+        success: true,
+        message: `Preview: ${proposed.length} guru akan di-generate`,
+        data: { proposed, skipped, errors, preview: true }
+      });
+      return;
     }
 
     res.json({

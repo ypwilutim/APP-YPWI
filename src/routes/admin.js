@@ -1494,6 +1494,113 @@ router.get('/admin/attendance/rules', authenticateOperator, async (req, res) => 
   }
 });
 
+// GET /api/admin/attendance/reset/preview - Preview attendance logs that would be deleted (super-admin only)
+router.get('/admin/attendance/reset/preview', authenticateOperator, async (req, res) => {
+  try {
+    // Only YPWILUTIM super-admin can reset attendance
+    if (req.user.tenant_id !== 'YPWILUTIM' && req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Hanya super-admin YPWILUTIM yang dapat mereset absensi' });
+    }
+
+    const { tenant_id, teacher_id, date_from, date_to, jenis } = req.query;
+
+    let query = `SELECT al.id, al.teacher_id, al.tenant_id, al.waktu_scan, al.jenis, al.status, al.metode,
+                 t.nama as teacher_name, tn.nama_sekolah
+                 FROM attendance_logs al
+                 LEFT JOIN teachers t ON al.teacher_id = t.id
+                 LEFT JOIN tenants tn ON al.tenant_id = tn.tenant_id
+                 WHERE 1=1`;
+    let params = [];
+
+    if (tenant_id) {
+      query += ' AND al.tenant_id = ?';
+      params.push(tenant_id);
+    }
+    if (teacher_id) {
+      query += ' AND al.teacher_id = ?';
+      params.push(teacher_id);
+    }
+    if (date_from) {
+      query += ' AND DATE(al.waktu_scan) >= ?';
+      params.push(date_from);
+    }
+    if (date_to) {
+      query += ' AND DATE(al.waktu_scan) <= ?';
+      params.push(date_to);
+    }
+    if (jenis && jenis !== 'semua') {
+      query += ' AND al.jenis = ?';
+      params.push(jenis);
+    }
+
+    query += ' ORDER BY al.waktu_scan DESC LIMIT 500';
+
+    const rows = await db.query(query, params);
+
+    // Format for frontend
+    const data = rows.map(r => ({
+      id: r.id,
+      teacher_id: r.teacher_id,
+      teacher_name: r.teacher_name || '-',
+      tenant_id: r.tenant_id,
+      nama_sekolah: r.nama_sekolah || r.tenant_id,
+      tanggal: r.waktu_scan,
+      jam_scan: r.waktu_scan ? new Date(r.waktu_scan).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '-',
+      jenis: r.jenis,
+      status: r.status
+    }));
+
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Attendance reset preview error:', error);
+    res.status(500).json({ success: false, message: 'Gagal memuat preview absensi' });
+  }
+});
+
+// DELETE /api/admin/attendance/reset - Reset/delete attendance logs (super-admin only)
+router.delete('/admin/attendance/reset', authenticateOperator, async (req, res) => {
+  try {
+    // Only YPWILUTIM super-admin can reset attendance
+    if (req.user.tenant_id !== 'YPWILUTIM' && req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Hanya super-admin YPWILUTIM yang dapat mereset absensi' });
+    }
+
+    const { tenant_id, teacher_id, date_from, date_to, jenis } = req.body;
+
+    let query = 'DELETE FROM attendance_logs WHERE 1=1';
+    let params = [];
+
+    if (tenant_id) {
+      query += ' AND tenant_id = ?';
+      params.push(tenant_id);
+    }
+    if (teacher_id) {
+      query += ' AND teacher_id = ?';
+      params.push(teacher_id);
+    }
+    if (date_from) {
+      query += ' AND DATE(waktu_scan) >= ?';
+      params.push(date_from);
+    }
+    if (date_to) {
+      query += ' AND DATE(waktu_scan) <= ?';
+      params.push(date_to);
+    }
+    if (jenis && jenis !== 'semua') {
+      query += ' AND jenis = ?';
+      params.push(jenis);
+    }
+
+    const result = await db.query(query, params);
+    const deletedCount = result.affectedRows || 0;
+
+    res.json({ success: true, message: `Berhasil menghapus ${deletedCount} data absensi`, deleted: deletedCount });
+  } catch (error) {
+    console.error('Attendance reset error:', error);
+    res.status(500).json({ success: false, message: 'Gagal mereset absensi' });
+  }
+});
+
 // POST /api/admin/attendance/qr-decode - Decode problem attendance QR and return teacher info
 router.post('/admin/attendance/qr-decode', authenticateOperator, async (req, res) => {
   try {
@@ -6146,23 +6253,27 @@ router.put('/public/teachers/:teacherId', berkasUpload.fields([
 ]), async (req, res) => {
   try {
     const teacherId = req.params.teacherId;
-    const { nama, nik, nip, email, tempat_lahir, tanggal_lahir, jenis_kelamin, alamat, no_wa, status_kepegawaian, status_aktif, tmt, pendidikan_terakhir, jurusan, nama_sekolah_pendidikan, tahun_angkatan, assignments_json, bank, nomor_rekening, status_perkawinan, jumlah_anak, data_keluarga } = req.body;
+    const { nama, nik, nip, email, tempat_lahir, tanggal_lahir, jenis_kelamin, alamat, no_wa, status_kepegawaian, status_aktif, tmt, pendidikan_terakhir, jurusan, nama_sekolah_pendidikan, tahun_angkatan, assignments_json, bank, nomor_rekening, status_perkawinan, jumlah_anak, data_keluarga, link_foto: bodyLinkFoto, link_ktp: bodyLinkKtp, link_kk: bodyLinkKk, link_ijazah: bodyLinkIjazah } = req.body;
     const foto = req.files && req.files.foto && req.files.foto[0] ? `/uploads/${req.files.foto[0].filename}` : null;
     const ktp = req.files && req.files.ktp && req.files.ktp[0] ? `/uploads/${req.files.ktp[0].filename}` : null;
     const kk = req.files && req.files.kk && req.files.kk[0] ? `/uploads/${req.files.kk[0].filename}` : null;
     const ijazah = req.files && req.files.ijazah && req.files.ijazah[0] ? `/uploads/${req.files.ijazah[0].filename}` : null;
 
     // Get existing values if not provided (fields may be disabled in form)
-    let selectQuery = 'SELECT nama, nik, nip, email, tempat_lahir, tanggal_lahir, jenis_kelamin, alamat, no_wa, status_kepegawaian, status_aktif, tmt, pendidikan_terakhir, pendidikan_kode';
-    const selectParams = [];
-    try {
-      await db.query('SELECT bank, nomor_rekening FROM teachers LIMIT 1');
-      selectQuery += ', bank, nomor_rekening';
-    } catch (err) { }
-    try {
-      await db.query('SELECT status_perkawinan, jumlah_anak, data_keluarga FROM teachers LIMIT 1');
-      selectQuery += ', status_perkawinan, jumlah_anak, data_keluarga';
-    } catch (err) { }
+let selectQuery = 'SELECT nama, nik, nip, email, tempat_lahir, tanggal_lahir, jenis_kelamin, alamat, no_wa, status_kepegawaian, status_aktif, tmt, pendidikan_terakhir';
+const selectParams = [];
+try {
+  await db.query('SELECT pendidikan_kode FROM teachers LIMIT 1');
+  selectQuery += ', pendidikan_kode';
+} catch (err) { }
+try {
+  await db.query('SELECT bank, nomor_rekening FROM teachers LIMIT 1');
+  selectQuery += ', bank, nomor_rekening';
+} catch (err) { }
+try {
+  await db.query('SELECT status_perkawinan, jumlah_anak, data_keluarga FROM teachers LIMIT 1');
+  selectQuery += ', status_perkawinan, jumlah_anak, data_keluarga';
+} catch (err) { }
     selectQuery += ' FROM teachers WHERE id = ?';
     selectParams.push(teacherId);
     const [existingTeacher] = await db.query(selectQuery, selectParams);
@@ -6177,13 +6288,13 @@ router.put('/public/teachers/:teacherId', berkasUpload.fields([
     const finalAlamat = alamat || existingTeacher?.alamat || null;
     const finalNoWa = no_wa || existingTeacher?.no_wa || null;
     const finalStatusKepegawaian = status_kepegawaian || existingTeacher?.status_kepegawaian || null;
-    const finalStatusAktif = status_aktif || existingTeacher?.status_aktif || null;
+    const finalStatusAktif = (status_aktif !== undefined && status_aktif !== null && String(status_aktif).trim() !== '') ? status_aktif : (existingTeacher?.status_aktif ?? null);
     const finalTmt = tmt || existingTeacher?.tmt || null;
     const finalBank = bank || existingTeacher?.bank || null;
     const finalNomorRekening = nomor_rekening || existingTeacher?.nomor_rekening || null;
     const finalStatusPerkawinan = status_perkawinan || existingTeacher?.status_perkawinan || null;
-    const finalJumlahAnak = jumlah_anak || existingTeacher?.jumlah_anak || 0;
-    const finalDataKeluarga = data_keluarga || existingTeacher?.data_keluarga || null;
+    const finalJumlahAnak = (jumlah_anak !== undefined && jumlah_anak !== null && String(jumlah_anak).trim() !== '') ? jumlah_anak : (existingTeacher?.jumlah_anak ?? 0);
+    const finalDataKeluarga = (data_keluarga !== undefined && data_keluarga !== null && String(data_keluarga).trim() !== '') ? data_keluarga : (existingTeacher?.data_keluarga ?? null);
 
     let pendidikanFormatted = pendidikan_terakhir || null;
     if (pendidikan_terakhir && ['SMK', 'S1', 'S2', 'S3'].includes(pendidikan_terakhir)) {
@@ -6211,7 +6322,12 @@ router.put('/public/teachers/:teacherId', berkasUpload.fields([
       pendidikan_kode: finalPendidikanKode,
       bank: finalBank, nomor_rekening: finalNomorRekening,
       status_perkawinan: finalStatusPerkawinan, jumlah_anak: finalJumlahAnak,
-      data_keluarga: finalDataKeluarga
+      data_keluarga: (() => {
+      if (finalDataKeluarga === null || finalDataKeluarga === undefined) return null;
+      const s = String(finalDataKeluarga).trim();
+      if (s === '') return null;
+      try { JSON.parse(s); return s; } catch (e) { return null; }
+    })()
     };
 
     let updateQuery = 'UPDATE teachers SET nama=?, nik=?, nip=?, email=?, tempat_lahir=?, tanggal_lahir=?, jenis_kelamin=?, alamat=?, no_wa=?, status_kepegawaian=?, status_aktif=?, tmt=?, pendidikan_terakhir=?';
@@ -6235,21 +6351,21 @@ router.put('/public/teachers/:teacherId', berkasUpload.fields([
       updateParams.push(safeParams.status_perkawinan, safeParams.jumlah_anak, safeParams.data_keluarga);
     } catch (err) { }
 
-    if (foto) {
+if (foto || bodyLinkFoto) {
       updateQuery += ', link_foto=?';
-      updateParams.push(foto);
+      updateParams.push(foto || bodyLinkFoto);
     }
-    if (ktp) {
+    if (ktp || bodyLinkKtp) {
       updateQuery += ', link_ktp=?';
-      updateParams.push(ktp);
+      updateParams.push(ktp || bodyLinkKtp);
     }
-    if (kk) {
+    if (kk || bodyLinkKk) {
       updateQuery += ', link_kk=?';
-      updateParams.push(kk);
+      updateParams.push(kk || bodyLinkKk);
     }
-    if (ijazah) {
+    if (ijazah || bodyLinkIjazah) {
       updateQuery += ', link_ijazah=?';
-      updateParams.push(ijazah);
+      updateParams.push(ijazah || bodyLinkIjazah);
     }
     updateQuery += ' WHERE id=?';
     updateParams.push(teacherId);
@@ -6257,7 +6373,11 @@ router.put('/public/teachers/:teacherId', berkasUpload.fields([
     await db.query(updateQuery, updateParams);
 
     // Save family data to teacher_family table
-    await db.query('DELETE FROM teacher_family WHERE teacher_id = ?', [teacherId]);
+    try {
+      await db.query('DELETE FROM teacher_family WHERE teacher_id = ?', [teacherId]);
+    } catch (delErr) {
+      console.error('Delete teacher_family skip:', delErr.message);
+    }
     if (data_keluarga) {
       try {
         const keluarga = typeof data_keluarga === 'string' ? JSON.parse(data_keluarga) : data_keluarga;
@@ -6290,31 +6410,42 @@ router.put('/public/teachers/:teacherId', berkasUpload.fields([
           const assignments = typeof assignments_json === 'string' ? JSON.parse(assignments_json) : assignments_json;
           if (Array.isArray(assignments)) {
             for (const a of assignments) {
-              await db.query(
-                'INSERT INTO teacher_assignments (teacher_id, tenant_id, jabatan_di_unit) VALUES (?, ?, ?)',
-                [teacherId, a.tenant_id || null, a.jabatan_di_unit || null]
-              );
+              try {
+                await db.query(
+                  'INSERT INTO teacher_assignments (teacher_id, tenant_id, jabatan_di_unit) VALUES (?, ?, ?)',
+                  [teacherId, a.tenant_id || null, a.jabatan_di_unit || null]
+                );
+              } catch (insertErr) {
+                console.error('Assignment insert skip/error:', insertErr.message);
+              }
             }
           }
         } catch (parseErr) {
           console.error('Assignments parse error:', parseErr);
-          // Kirim error response langsung ke client
           return res.status(400).json({ success: false, message: 'Format data penugasan tidak valid: ' + parseErr.message });
         }
       }
 
-    // Create user account if not exists
+// Create user account if not exists
     const existingUser = await db.query('SELECT id FROM users WHERE guru_id = ?', [teacherId]);
     const isNewUser = existingUser.length === 0;
     if (isNewUser && email) {
       const defaultPassword = 'ypwi123';
       const bcrypt = require('bcryptjs');
       const hashedPassword = await bcrypt.hash(defaultPassword, 10);
-      
-      await db.query(
-        'INSERT INTO users (username, password, guru_id, role, is_profile_complete, is_default_password) VALUES (?, ?, ?, ?, 1, 1)',
-        [email, hashedPassword, teacherId, 'guru']
-      );
+
+      const usernameExists = await db.query('SELECT id FROM users WHERE username = ? LIMIT 1', [email]);
+      if (usernameExists.length > 0) {
+        await db.query(
+          'UPDATE users SET guru_id = ?, is_profile_complete = 1 WHERE username = ?',
+          [teacherId, email]
+        );
+      } else {
+        await db.query(
+          'INSERT INTO users (username, password, guru_id, role, is_profile_complete, is_default_password) VALUES (?, ?, ?, ?, 1, 1)',
+          [email, hashedPassword, teacherId, 'guru']
+        );
+      }
     } else if (existingUser.length > 0) {
       // Update existing user to mark profile complete
       await db.query('UPDATE users SET is_profile_complete = 1 WHERE guru_id = ?', [teacherId]);
@@ -6364,7 +6495,13 @@ router.put('/public/teachers/:teacherId', berkasUpload.fields([
     res.json({ success: true, message: 'Profil berhasil diperbarui', email, nama, no_wa });
   } catch (error) {
     console.error('Public teacher update error:', error);
-    res.status(500).json({ success: false, message: 'Error updating teacher profile' });
+    let msg = 'Error updating teacher profile';
+    if (error && error.code === 'ER_DUP_ENTRY') msg = 'Data duplikat: ' + (error.sqlMessage || error.message);
+    else if (error && error.code === 'ER_NO_REFERENCED_ROW_2') msg = 'Referensi data tidak valid (unit/jabatan).';
+    else if (error && error.code === 'ER_CHECK_CONSTRAINT_VIOLATED') msg = 'Format data tidak valid (JSON).';
+    else if (error && /ER_BAD_FIELD_ERROR/i.test(error.code || '')) msg = 'Kolom database tidak sesuai.';
+    else if (error && error.message) msg = error.message;
+    res.status(500).json({ success: false, message: msg });
   }
 });
 
@@ -6372,15 +6509,25 @@ router.get('/public/teachers/:teacherId', async (req, res) => {
   try {
     const teacherId = req.params.teacherId;
     
-    let selectQuery = 'SELECT t.id, t.nama, t.nik, t.nip, t.email, t.tempat_lahir, t.tanggal_lahir, t.jenis_kelamin, t.alamat, t.no_wa, t.status_kepegawaian, t.status_aktif, t.tmt, t.pendidikan_terakhir, t.BANK as bank, t.nomor_rekening, t.link_foto, t.link_ktp, t.link_kk, t.link_ijazah, GROUP_CONCAT(CONCAT(ta.tenant_id, ":", ta.jabatan_di_unit)) as assignments';
+    let selectQuery = 'SELECT t.id, t.nama, t.nik, t.nip, t.email, t.tempat_lahir, t.tanggal_lahir, t.jenis_kelamin, t.alamat, t.no_wa, t.status_kepegawaian, t.status_aktif, t.tmt, t.pendidikan_terakhir, t.BANK as bank, t.nomor_rekening, t.link_foto';
     const selectParams = [teacherId];
+
+    const optionalCols = [
+      { col: 'link_ktp', sql: ', t.link_ktp' },
+      { col: 'link_kk', sql: ', t.link_kk' },
+      { col: 'link_ijazah', sql: ', t.link_ijazah' },
+      { col: 'status_perkawinan', sql: ', t.status_perkawinan' },
+      { col: 'jumlah_anak', sql: ', t.jumlah_anak' }
+    ];
+    for (const oc of optionalCols) {
+      try {
+        await db.query('SELECT ' + oc.col + ' FROM teachers LIMIT 1');
+        selectQuery += oc.sql;
+      } catch (err) { }
+    }
+    selectQuery += ', GROUP_CONCAT(CONCAT(ta.tenant_id, ":", ta.jabatan_di_unit)) as assignments';
     
-    try {
-      await db.query('SELECT status_perkawinan, jumlah_anak FROM teachers LIMIT 1');
-      selectQuery += ', t.status_perkawinan, t.jumlah_anak';
-    } catch (err) { }
-    
-    selectQuery += ' FROM teachers t LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id WHERE t.id = ? GROUP BY t.id';
+selectQuery += ' FROM teachers t LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id WHERE t.id = ? GROUP BY t.id';
     
     const [teacher] = await db.query(selectQuery, selectParams);
 

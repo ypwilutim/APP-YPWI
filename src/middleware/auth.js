@@ -424,6 +424,19 @@ function isSuperAdminTenant(tenantId) {
   return tenantId === 'YPWILUTIM';
 }
 
+function isPrivilegedOperator(user) {
+  if (!user) return false;
+  if (user.role === 'admin' || user.role === 'bendahara') return true;
+  if (user.role === 'guru' && Array.isArray(user.assignments)) {
+    const adminRoles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin', 'ketua', 'kepala', 'pimpinan', 'kepalasekolah', 'bendahara', 'sdm'];
+    return user.assignments.some(a => {
+      const normalized = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
+      return adminRoles.includes(normalized) || normalized.includes('sdm');
+    });
+  }
+  return false;
+}
+
 module.exports = {
   authenticateToken,
   authenticateAdmin,
@@ -433,6 +446,7 @@ module.exports = {
   authenticateSDM,
   sdmCanAccessTenant,
   verifyTenantAccess,
+  isPrivilegedOperator,
   getAllowedTenants,
   isDayMatch,
   calculateDistance,

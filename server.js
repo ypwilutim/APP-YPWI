@@ -287,6 +287,7 @@ app.use('/api/idcard', idcardRoutes);
 app.use('/api', chatRoutes);
 app.use('/api', notificationsRoutes);
 app.use('/api', skGuruRoutes);
+app.use('/api/sk-guru', skGuruRoutes);
 app.use('/api/admqu', require('./src/routes/admqu'));
 app.use('/api', kafalahRoutes);
 app.use('/api', require('./src/routes/paktaIntegritas'));

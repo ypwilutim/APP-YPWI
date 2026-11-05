@@ -1564,7 +1564,8 @@ function showTab(tabName) {
         evaluations: 'Penilaian Guru Otomatis',
         whatsapp: 'Pesan WhatsApp',
         email: 'Log Email',
-        'qr-generator': 'QR Scanner & Generator'
+        'qr-generator': 'QR Scanner & Generator',
+        'approval-reset': 'Approval & Reset'
     };
     setEl('pageTitle', titles[tabName]);
 
@@ -1582,6 +1583,7 @@ function showTab(tabName) {
     else if (tabName === 'settings') {
         showSettingsTab('locations');
     }
+    else if (tabName === 'approval-reset') initApprovalResetTab();
 }
 
 function showAddTeacherModal() {
@@ -4300,15 +4302,54 @@ window.filterSkBulkTable = function () {
 };
 
 window.toggleSkBulkSelectAll = function (checkbox) {
-    const checked = checkbox?.checked;
-    skBulkRows.forEach(r => { r.selected = checked && (r.qualified || r.manual_verified); });
+    try {
+        const checked = checkbox?.checked || false;
+        skBulkRows.forEach(r => { r.selected = checked && (r.qualified || r.manual_verified); });
+        renderSkBulkTable();
+        updateSkBulkSelectedInfo();
+    } catch (e) {
+        console.error('toggleSkBulkSelectAll error:', e);
+    }
+};
+
+window.toggleSkBulkSelectAllBtn = function () {
+    skBulkRows.forEach(r => { r.selected = (r.qualified || r.manual_verified); });
     renderSkBulkTable();
     updateSkBulkSelectedInfo();
 };
 
-window.toggleSkBulkRow = function (teacherId) {
-    const row = skBulkRows.find(r => r.teacher_id === teacherId);
-    if (row) row.selected = !row.selected;
+window.toggleSkBulkUnselectAllBtn = function () {
+    skBulkRows.forEach(r => { r.selected = false; });
+    renderSkBulkTable();
+    updateSkBulkSelectedInfo();
+};
+
+window.handleSkBulkRowClick = function (idx, checkbox) {
+    const row = skBulkRows[idx];
+    if (row) {
+        row.selected = checkbox.checked;
+    }
+    updateSkBulkSelectedInfo();
+    return true;
+};
+
+window.toggleSkBulkRow = function (idx, checkbox) {
+    const row = skBulkRows[idx];
+    if (row) row.selected = checkbox ? checkbox.checked : !row.selected;
+    // Update select all checkbox state (without triggering onchange)
+    const selectAll = document.getElementById('skBulkSelectAll');
+    if (selectAll) {
+        const filteredRows = skBulkRows.filter(r => {
+            if (!skBulkSearch) return true;
+            const hay = ((r.nama || '') + ' ' + (r.nik || '')).toLowerCase();
+            return hay.includes(skBulkSearch);
+        });
+        const handler = selectAll.onchange;
+        selectAll.onchange = null;
+        selectAll.checked = filteredRows.length > 0 && filteredRows.every(r => r.selected);
+        selectAll.indeterminate = filteredRows.some(r => r.selected) && !filteredRows.every(r => r.selected);
+        selectAll.onchange = handler;
+    }
     updateSkBulkSelectedInfo();
 };
 
@@ -4344,14 +4385,14 @@ window.renderSkBulkTable = function () {
                     : '<span class="text-red-600">✗ ' + r.years_of_service + '/' + r.min_years + ' thn</span>'));
         const canSelect = r.qualified || r.manual_verified;
         const selectCheckbox = canSelect
-            ? '<input type="checkbox" ' + (r.selected ? 'checked' : '') + ' onchange="toggleSkBulkRow(' + r.teacher_id + ')">'
+            ? '<input type="checkbox" ' + (r.selected ? 'checked' : '') + ' onclick="handleSkBulkRowClick(' + idx + ', this)" onchange="return false;">'
             : '<input type="checkbox" disabled title="Belum layak — centang Verifikasi dulu">';
         const verifyCell = (r.qualified || r.already_has_sk)
             ? '<span class="text-gray-400 text-xs">—</span>'
             : '<label class="inline-flex items-center text-xs cursor-pointer select-none"><input type="checkbox" ' + (r.manual_verified ? 'checked' : '') + ' onchange="toggleSkBulkManualVerify(' + idx + ')" class="mr-1"> Verifikasi</label>';
         return '<tr class="hover:bg-gray-50">' +
             '<td class="px-3 py-2">' + selectCheckbox + '</td>' +
-            '<td class="px-3 py-2">' + (r.sk.no_surat || '-') + '</td>' +
+            '<td class="px-3 py-2 text-gray-400">Akan ditetapkan</td>' +
             '<td class="px-3 py-2 font-medium">' + (r.nama || '-') + '<div class="text-xs text-gray-400">NIK: ' + (r.nik || '-') + '</div></td>' +
             '<td class="px-3 py-2">' + (r.nama_sekolah || '-') + '<div class="text-xs text-gray-400">' + (r.unit || '-') + '</div></td>' +
             '<td class="px-3 py-2">' + (r.sk.tentang || '-') + '</td>' +
@@ -4364,10 +4405,6 @@ window.renderSkBulkTable = function () {
             '<td class="px-3 py-2"><button type="button" onclick="openSkBulkEdit(' + idx + ')" class="text-blue-600 hover:text-blue-800" title="Edit"><i class="fas fa-edit"></i></button></td>' +
             '</tr>';
     }).join('');
-    const selectAll = document.getElementById('skBulkSelectAll');
-    if (selectAll) {
-        selectAll.checked = rows.length > 0 && rows.every(r => r.selected);
-    }
 };
 
 window.updateSkBulkSelectedInfo = function () {
@@ -4487,38 +4524,83 @@ window.submitSkBulkGenerate = async function () {
         showToast('Pilih setidaknya satu guru terlebih dahulu', 'warning');
         return;
     }
-    const result = await Swal.fire({
-        title: 'Bulk Generate SK Guru',
-        html: '<p class="text-sm text-gray-600">Akan membuat <b>' + selected.length + ' SK</b> untuk guru yang dipilih. Nomor surat provisional akan ditetapkan final saat generate.</p>',
-        icon: 'warning',
+    // Step 1: Preview - get proposed surat numbers
+    const btn = document.getElementById('skBulkGenerateBtn');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Memuat nomor surat...'; }
+
+    const payload = {
+            rows: selected.map(r => ({
+            teacher_id: r.teacher_id,
+            nama: r.nama,
+            tenant_id: r.tenant_id,
+            tentang_type: r.sk.tentang_type || 'baru',
+            pt: r.sk.pt || '',
+            tmt_custom: r.sk.tmt_month || '',
+            no_surat: r.sk.no_surat || '',
+            tgl_mulai_custom: r.sk.tgl_mulai_month || '',
+            tgl_selesai_custom: r.sk.tgl_selesai_month || '',
+            tentang: r.sk.tentang || '',
+            periode_custom: r.sk.periode_custom || '',
+            jabatan: r.sk.jabatan || '',
+            manual_verified: !!r.manual_verified
+        }))
+    };
+
+    let previewData;
+    try {
+        const previewRes = await fetch('/api/bulk-generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...skGuruAuthHdr() },
+            body: JSON.stringify({ ...payload, preview_only: true })
+        });
+        previewData = await previewRes.json();
+    } catch (e) {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-file-export mr-2"></i>Generate SK Terpilih (' + selected.length + ')'; }
+        showToast('Gagal memuat nomor surat', 'error');
+        return;
+    }
+
+    if (!previewData.success) {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-file-export mr-2"></i>Generate SK Terpilih (' + selected.length + ')'; }
+        showToast(previewData.message || 'Gagal memuat preview', 'error');
+        return;
+    }
+
+    const proposed = previewData.data?.proposed || [];
+    const skipped = previewData.data?.skipped || [];
+    const errors = previewData.data?.errors || [];
+
+    // Build preview HTML
+    let previewHtml = '<p class="text-sm mb-2"><b>' + proposed.length + ' guru akan di-generate:</b></p>';
+    if (proposed.length > 0) {
+        previewHtml += '<div class="max-h-40 overflow-y-auto text-left text-xs mb-2 border rounded p-2">';
+        previewHtml += proposed.map(p => '<div>' + (p.nama || '-') + ' → <b>' + (p.no_surat || '-') + '</b></div>').join('');
+        previewHtml += '</div>';
+    }
+    if (skipped.length > 0) {
+        previewHtml += '<p class="text-sm mb-1 text-yellow-600">' + skipped.length + ' dilewati:</p><div class="max-h-24 overflow-y-auto text-left text-xs mb-2">' + skipped.map(s => '<div>' + (s.nama || '-') + ': ' + (s.reason || '') + '</div>').join('') + '</div>';
+    }
+    if (errors.length > 0) {
+        previewHtml += '<p class="text-sm mb-1 text-red-600">' + errors.length + ' gagal:</p><div class="max-h-24 overflow-y-auto text-left text-xs">' + errors.map(e => '<div>' + (e.nama || '-') + ': ' + (e.reason || '') + '</div>').join('') + '</div>';
+    }
+
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-file-export mr-2"></i>Generate SK Terpilih (' + selected.length + ')'; }
+
+    // Step 2: Confirm with surat numbers shown
+    const confirmResult = await Swal.fire({
+        title: 'Konfirmasi Generate SK',
+        html: previewHtml,
+        icon: proposed.length > 0 ? 'info' : 'warning',
         showCancelButton: true,
         confirmButtonText: 'Generate Sekarang',
         cancelButtonText: 'Batal',
         confirmButtonColor: '#16a34a'
     });
-    if (!result.isConfirmed) return;
+    if (!confirmResult.isConfirmed) return;
 
-    const btn = document.getElementById('skBulkGenerateBtn');
     if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Generating...'; }
 
     try {
-        const payload = {
-                rows: selected.map(r => ({
-                teacher_id: r.teacher_id,
-                nama: r.nama,
-                tenant_id: r.tenant_id,
-                tentang_type: r.sk.tentang_type || 'baru',
-                pt: r.sk.pt || '',
-                tmt_custom: r.sk.tmt_month || '',
-                no_surat: r.sk.no_surat || '',
-                tgl_mulai_custom: r.sk.tgl_mulai_month || '',
-                tgl_selesai_custom: r.sk.tgl_selesai_month || '',
-                tentang: r.sk.tentang || '',
-                periode_custom: r.sk.periode_custom || '',
-                jabatan: r.sk.jabatan || '',
-                manual_verified: !!r.manual_verified
-            }))
-        };
         const res = await fetch('/api/bulk-generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...skGuruAuthHdr() },
@@ -6824,4 +6906,430 @@ document.addEventListener('DOMContentLoaded', function() {
   if (document.getElementById('qr-generate-form')) {
     initQRGenerator();
   }
+});
+
+// Initialize Approval & Reset Tab
+function initApprovalResetTab() {
+  // Sub-tab click handler
+  document.querySelectorAll('.subtab-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      // Hide all subtab content
+      document.querySelectorAll('.subtab-content').forEach(content => {
+        content.classList.add('hidden');
+      });
+      // Remove selected from all buttons
+      document.querySelectorAll('.subtab-btn').forEach(b => {
+        b.classList.remove('bg-blue-600', 'text-white');
+        b.classList.add('bg-gray-200', 'text-gray-700');
+        b.setAttribute('aria-selected', 'false');
+      });
+      
+      // Show selected content
+      const subtabId = this.getAttribute('data-subtab');
+      document.getElementById('subtab-content-' + subtabId).classList.remove('hidden');
+      this.classList.remove('bg-gray-200', 'text-gray-700');
+      this.classList.add('bg-blue-600', 'text-white');
+      this.setAttribute('aria-selected', 'true');
+    });
+  });
+
+  // Initialize perizinan load
+  loadApprovalPerizinan();
+}
+
+const IZIN_LABEL = { izin: 'Izin', sakit: 'Sakit', cuti: 'Cuti', dinas_luar: 'Dinas Luar' };
+const STATUS_LABEL = { pending: 'Menunggu', approved: 'Disetujui', rejected: 'Ditolak' };
+const STATUS_COLOR = { pending: '#d97706', approved: '#15803d', rejected: '#dc2626' };
+
+// Load Approval Perizinan
+async function loadApprovalPerizinan() {
+  const status = document.getElementById('izinStatusFilter')?.value || 'pending';
+  const tenant = document.getElementById('izinTenantFilter')?.value || '';
+  
+  const params = new URLSearchParams();
+  params.set('status', status);
+  if (tenant) params.set('tenant_id', tenant);
+  
+  try {
+    const res = await fetch(`/api/admin/leave-requests?${params.toString()}`, {
+      headers: { 'Authorization': 'Bearer ' + (window.token || localStorage.getItem('token')) }
+    });
+    const result = await res.json();
+    
+    const listEl = document.getElementById('approvalPerizinanList');
+    if (!listEl) return;
+    
+    if (!result.success || !result.data) {
+      listEl.innerHTML = '<div class="text-center py-8 text-gray-500">Gagal memuat data</div>';
+      return;
+    }
+    
+    const data = result.data || [];
+    if (data.length === 0) {
+      listEl.innerHTML = '<div class="text-center py-8 text-gray-500">Tidak ada pengajuan izin pada filter ini</div>';
+      return;
+    }
+    
+    const hasPending = data.some(r => (r.status || 'pending') === 'pending');
+    
+    const html = data.map(r => {
+      const status = r.status || 'pending';
+      const isPending = status === 'pending';
+      const tglMulai = r.tanggal_mulai ? new Date(r.tanggal_mulai).toLocaleDateString('id-ID') : '-';
+      const tglSelesai = r.tanggal_selesai ? new Date(r.tanggal_selesai).toLocaleDateString('id-ID') : '-';
+      const created = r.created_at ? new Date(r.created_at).toLocaleString('id-ID') : '-';
+      const jenisLabel = IZIN_LABEL[r.jenis] || r.jenis || '-';
+      const statusClass = STATUS_COLOR[status] || '#64748b';
+      const statusLabel = STATUS_LABEL[status] || status;
+      const actions = isPending
+        ? `<div class="flex gap-2 mt-2">
+             <button onclick="processApprovalIzin(${r.id}, 'approved')" class="px-2 py-1 bg-green-100 text-green-800 rounded text-xs">Setujui</button>
+             <button onclick="processApprovalIzin(${r.id}, 'rejected')" class="px-2 py-1 bg-red-100 text-red-800 rounded text-xs">Tolak</button>
+           </div>`
+        : `<div class="text-sm text-gray-500 mt-2">${r.catatan || 'Tidak ada catatan'}</div>`;
+      
+      return `
+        <div class="border rounded-lg p-3 ${isPending ? 'bg-yellow-50' : 'bg-gray-50'} transition-colors">
+          <div class="flex justify-between items-start">
+            <div>
+              <div class="font-medium text-gray-900">${escapeHtml(r.teacher_name || '-')}</div>
+              <div class="text-xs text-gray-500">${escapeHtml(r.nama_sekolah || r.tenant_id || '-')}</div>
+            </div>
+            <span class="px-2 py-1 rounded text-xs font-medium ${statusClass}">${statusLabel}</span>
+          </div>
+          <div class="mt-1 text-xs text-gray-500">
+            <div>Jenis: ${jenisLabel}</div>
+            <div>Periode: ${tglMulai}${tglSelesai && tglSelesai !== tglMulai ? ' s.d. ' + tglSelesai : ''}</div>
+            <div>Diajukan: ${created}</div>
+            ${r.catatan ? `<div>Catatan: ${escapeHtml(r.catatan)}</div>` : ''}
+          </div>
+          ${actions}
+        </div>`;
+    }).join('');
+    
+    listEl.innerHTML = html;
+    
+    // Show/hide bulk bar
+    const bulkBar = document.getElementById('izinBulkBar');
+    if (bulkBar) {
+      bulkBar.style.display = hasPending ? 'flex' : 'none';
+    }
+    
+  } catch (error) {
+    console.error('Approval perizinan load error:', error);
+    document.getElementById('approvalPerizinanList').innerHTML = '<div class="text-center py-8 text-red-500">Terjadi kesalahan saat memuat data</div>';
+  }
+}
+
+async function processApprovalIzin(id, status) {
+  const catatan = status === 'rejected'
+    ? prompt('Catatan penolakan (opsional):')
+    : prompt('Catatan persetujuan (opsional):');
+  if (catatan === null) return;
+
+  try {
+    const response = await fetch(`/api/admin/leave-requests/${id}/status`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': 'Bearer ' + (window.token || localStorage.getItem('token')),
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ status, catatan })
+    });
+    const result = await response.json();
+    if (result.success) {
+      if (window.Swal) {
+        Swal.fire({ icon: 'success', title: 'Berhasil', text: result.message, timer: 1500, showConfirmButton: false });
+      }
+      loadApprovalPerizinan();
+    } else {
+      alert(result.message || 'Gagal memproses izin');
+    }
+  } catch (error) {
+    console.error('Approval izin process error:', error);
+    alert('Terjadi kesalahan saat memproses izin');
+  }
+}
+
+// SK Manual Approval Functions
+async function loadApprovalSKManual() {
+  const tenant = document.getElementById('skManualTenantFilter')?.value || '';
+  
+  try {
+    const res = await fetch(`/api/sk-guru/list?tenant_id=${encodeURIComponent(tenant)}`, {
+      headers: skGuruAuthHdr()
+    });
+    const data = await res.json();
+    
+    const tableEl = document.getElementById('skManualTable');
+    if (!tableEl) return;
+    
+    if (!data.success || !data.data || data.data.length === 0) {
+      tableEl.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-gray-500"><i class="fas fa-file-alt text-3xl mb-2"></i><p>Tidak ada data SK</p></td></tr>';
+      return;
+    }
+    
+    const html = data.data.map(t => {
+      const approvedClass = t.approval_status === 'approved' ? 'text-green-600' : t.approval_status === 'rejected' ? 'text-red-600' : 'text-yellow-600';
+      const alreadyGen = t.already_generated ? '<span class="text-blue-600">Sudah dibuat</span>' : '';
+      const qualifiedClass = t.qualified ? 'text-green-600' : 'text-red-600';
+      const qualifiedText = t.qualified ? '✓ Layak' : '✗ Tidak layak';
+      
+      return '<tr class="cursor-pointer hover:bg-gray-50 transition-colors">' +
+        '<td><input type="checkbox" name="skManual_ids" value="' + t.teacher_id + '" class="skManual-check w-4 h-4"></td>' +
+        '<td>' + (t.no_surat || '-') + '</td>' +
+        '<td>' + (t.nama || '-') + '</td>' +
+        '<td>' + (t.tenant_name || '-') + '</td>' +
+        '<td>' + (t.tentang || '-') + '</td>' +
+        '<td>' + (t.tmt || '-') + '</td>' +
+        '<td>' + (t.created_at ? new Date(t.created_at).toLocaleDateString('id-ID') : '-') + '</td>' +
+        '<td><span class="' + approvedClass + '">' + (t.approval_status || 'Menunggu') + '</span></td>' +
+        '</tr>';
+    }).join('');
+
+    tableEl.innerHTML = html;
+  } catch (error) {
+    console.error('SK Manual approval load error:', error);
+    document.getElementById('skManualTable').innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-red-500">Gagal memuat data</td></tr>';
+  }
+}
+
+// SK Auto Approval Functions
+async function loadApprovalSKAuto() {
+  const tenant = document.getElementById('skAutoTenantFilter')?.value || '';
+  
+  try {
+    const res = await fetch('/api/sk-guru/approval', {
+      headers: skGuruAuthHdr()
+    });
+    const data = await res.json();
+    
+    const tableEl = document.getElementById('skAutoTable');
+    if (!tableEl) return;
+    
+    if (!data.success || !data.data || data.data.length === 0) {
+      tableEl.innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-gray-500"><i class="fas fa-file-alt text-3xl mb-2"></i><p>Tidak ada guru yang perlu disetujui</p></td></tr>';
+      return;
+    }
+    
+    const html = data.data.map(t => {
+      const qualifiedClass = t.qualified ? 'text-green-600' : 'text-red-600';
+      const qualifiedText = t.qualified ? '✓ Layak' : '✗ Tidak layak';
+      const alreadyGen = t.already_generated ? '<span class="text-blue-600">Sudah dibuat</span>' : '';
+      const approvedBadge = t.approval_status === 'approved' ? '<span class="text-green-600 font-medium">Disetujui</span>' :
+        t.approval_status === 'rejected' ? '<span class="text-red-600">Ditolak</span>' : '<span class="text-yellow-600">Menunggu</span>';
+      const checkbox = (!t.qualified || t.already_generated || t.approval_status === 'approved')
+        ? '<input type="checkbox" disabled class="ml-2">' 
+        : '<input type="checkbox" name="skAuto_ids" value="' + t.teacher_id + '" class="ml-2">';
+      
+      return '<tr>' +
+        '<td class="px-4 py-3 text-sm">' + checkbox + (t.nama || '-') + '</td>' +
+        '<td class="px-4 py-3 text-sm">' + (t.tenant_name || '-') + '</td>' +
+        '<td class="px-4 py-3 text-sm">' + (t.unit || '-') + '</td>' +
+        '<td class="px-4 py-3 text-sm ' + qualifiedClass + '">' + qualifiedText + ' (' + (t.years_of_service || 0) + ' tahun)</td>' +
+        '<td class="px-4 py-3 text-sm">' + alreadyGen + '</td>' +
+        '<td class="px-4 py-3 text-sm">' + approvedBadge + '</td>' +
+        '<td class="px-4 py-3 text-sm">' + (t.approval_status === 'approved' || !t.qualified || t.already_generated
+          ? '<button disabled class="text-green-600 mr-1" title="Sudah disetujui"><i class="fas fa-check"></i></button>'
+          : '<button onclick="approveSkGuru(' + t.teacher_id + ')" class="text-blue-600 hover:text-blue-800 mr-1" title="Setujui"><i class="fas fa-check"></i></button>') + '</td>' +
+        '</tr>';
+    }).join('');
+    
+    tableEl.innerHTML = html;
+  } catch (error) {
+    console.error('SK Auto approval load error:', error);
+    document.getElementById('skAutoTable').innerHTML = '<tr><td colspan="8" class="px-4 py-8 text-center text-red-500">Gagal memuat data</td></tr>';
+  }
+}
+
+// Reset Absensi Functions
+async function loadResetAbsensi() {
+  try {
+    // Load tenants
+    const tenantRes = await fetch('/api/admin/tenants?limit=500', {
+      headers: { 'Authorization': 'Bearer ' + (window.authToken || localStorage.getItem('token')) }
+    });
+    const tenantData = await tenantRes.json();
+    
+    const tenantFilter = document.getElementById('resetTenantFilter');
+    if (tenantFilter && tenantData.success && tenantData.data) {
+      tenantFilter.innerHTML = '<option value="">Semua Sekolah</option>';
+      tenantData.data.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.tenant_id;
+        opt.textContent = t.nama_sekolah || t.tenant_id;
+        tenantFilter.appendChild(opt);
+      });
+    }
+    
+    // Load teacher suggestions helper
+    window.loadResetTeacherSuggestions = function(query) {
+      if (!query || query.length < 2) {
+        document.getElementById('resetTeacherSuggestions').classList.add('hidden');
+        return;
+      }
+      
+      fetch(`/api/admin/teachers?search=${encodeURIComponent(query)}&limit=10`, {
+        headers: { 'Authorization': 'Bearer ' + (window.authToken || localStorage.getItem('token')) }
+      })
+        .then(res => res.json())
+        .then(data => {
+          const suggestionsEl = document.getElementById('resetTeacherSuggestions');
+          if (!data.success) return;
+          
+          suggestionsEl.innerHTML = data.data.map(t => `
+            <div class="px-3 py-1 hover:bg-gray-100 cursor-pointer text-sm">
+              <span>${escapeHtml(t.nama)} (${t.nik || '-'})</span>
+            </div>
+          `).join('');
+          
+          suggestionsEl.classList.remove('hidden');
+        })
+        .catch(err => console.error('Reset teacher suggestions error:', err));
+    };
+    
+    // Set up teacher search event listener
+    const teacherSearch = document.getElementById('resetTeacherSearch');
+    if (teacherSearch) {
+      let searchDebounce = null;
+      teacherSearch.addEventListener('input', (e) => {
+        clearTimeout(searchDebounce);
+        searchDebounce = setTimeout(() => {
+          loadResetTeacherSuggestions(e.target.value.trim());
+        }, 300);
+      });
+      
+      // Hide suggestions on click outside
+      document.addEventListener('click', (e) => {
+        if (!teacherSearch.contains(e.target) && !document.getElementById('resetTeacherSuggestions').contains(e.target)) {
+          document.getElementById('resetTeacherSuggestions').classList.add('hidden');
+        }
+      });
+    }
+    
+  } catch (error) {
+    console.error('Load reset absensi error:', error);
+  }
+}
+
+function toggleResetConfirm(checked) {
+  const resetExecuteBtn = document.getElementById('resetExecuteBtn');
+  if (checked) {
+    resetExecuteBtn.disabled = false;
+    resetExecuteBtn.style.opacity = '1';
+    resetExecuteBtn.style.cursor = 'pointer';
+  } else {
+    resetExecuteBtn.disabled = true;
+    resetExecuteBtn.style.opacity = '0.5';
+    resetExecuteBtn.style.cursor = 'not-allowed';
+  }
+}
+
+async function previewResetAbsensi() {
+  const tenantId = document.getElementById('resetTenantFilter')?.value || '';
+  const teacherId = document.getElementById('resetTeacherId')?.value || '';
+  const dateFrom = document.getElementById('resetDateFrom')?.value || '';
+  const dateTo = document.getElementById('resetDateTo')?.value || '';
+  const jenis = document.getElementById('resetJenisFilter')?.value || 'semua';
+  
+  const params = new URLSearchParams();
+  if (tenantId) params.set('tenant_id', tenantId);
+  if (teacherId) params.set('teacher_id', teacherId);
+  if (dateFrom) params.set('date_from', dateFrom);
+  if (dateTo) params.set('date_to', dateTo);
+  if (jenis && jenis !== 'semua') params.set('jenis', jenis);
+  
+  try {
+    const res = await fetch(`/api/admin/attendance/reset/preview?${params.toString()}`, {
+      headers: { 'Authorization': 'Bearer ' + (window.authToken || localStorage.getItem('token')) }
+    });
+    const result = await res.json();
+    
+    if (!result.success) {
+      Swal.fire({ title: 'Error', text: result.message || 'Gagal pratinjau', icon: 'error', confirmButtonColor: '#dc2626' });
+      return;
+    }
+    
+    // Show preview
+    const previewEl = document.getElementById('resetPreviewArea');
+    const previewTable = document.getElementById('resetPreviewTable');
+    const previewCount = document.getElementById('resetPreviewCount');
+    
+    if (result.data && result.data.length > 0) {
+      const html = result.data.map(l => `
+        <tr>
+          <td class="px-3 py-1 text-sm">${escapeHtml(l.teacher_name || '-')}</td>
+          <td class="px-3 py-1 text-sm">${escapeHtml(l.nama_sekolah || '-')}</td>
+          <td class="px-3 py-1 text-sm">${l.tanggal ? new Date(l.tanggal).toLocaleDateString('id-ID') : '-'}</td>
+          <td class="px-3 py-1 text-sm">${l.jenis || '-'}</td>
+          <td class="px-3 py-1 text-sm">${l.jam_scan || '-'}</td>
+          <td class="px-3 py-1 text-sm">${l.status || '-'}</td>
+        </tr>
+      `).join('');
+      
+      previewTable.innerHTML = html;
+      previewCount.textContent = `Menampilkan ${result.data.length} data absensi`;
+    } else {
+      previewTable.innerHTML = '<tr><td colspan="6" class="text-center text-gray-500">Tidak ada data yang akan dihapus</td></tr>';
+      previewCount.textContent = '';
+    }
+    
+    previewEl.classList.remove('hidden');
+    toggleResetConfirm(document.getElementById('resetConfirm').checked);
+    document.getElementById('resetExecuteBtn').disabled = result.data.length === 0;
+    
+  } catch (error) {
+    console.error('Reset preview error:', error);
+    Swal.fire({ title: 'Error', text: 'Terjadi kesalahan saat pratinjau', icon: 'error', confirmButtonColor: '#dc2626' });
+  }
+}
+
+async function executeResetAbsensi() {
+  if (!confirm('Yakin ingin menghapus data absensi yang ditampilkan? Tindakan ini tidak dapat dibatalkan.')) return;
+  
+  const tenantId = document.getElementById('resetTenantFilter')?.value || '';
+  const teacherId = document.getElementById('resetTeacherId')?.value || '';
+  const dateFrom = document.getElementById('resetDateFrom')?.value || '';
+  const dateTo = document.getElementById('resetDateTo')?.value || '';
+  const jenis = document.getElementById('resetJenisFilter')?.value || 'semua';
+  
+  const params = new URLSearchParams();
+  if (tenantId) params.set('tenant_id', tenantId);
+  if (teacherId) params.set('teacher_id', teacherId);
+  if (dateFrom) params.set('date_from', dateFrom);
+  if (dateTo) params.set('date_to', dateTo);
+  if (jenis && jenis !== 'semua') params.set('jenis', jenis);
+  
+  try {
+    const res = await fetch(`/api/admin/attendance/reset/preview?${params.toString()}`, {
+      headers: { 'Authorization': 'Bearer ' + (window.authToken || localStorage.getItem('token')) }
+    });
+    const result = await res.json();
+    
+    if (result.success) {
+      Swal.fire({ title: 'Sukses', text: result.message, icon: 'success', confirmButtonColor: '#10b981', timer: 1500, showConfirmButton: false });
+      // Refresh the tab
+      loadResetAbsensi();
+      // Hide preview
+      document.getElementById('resetPreviewArea').classList.add('hidden');
+      toggleResetConfirm(false);
+      document.getElementById('resetExecuteBtn').disabled = true;
+    } else {
+      Swal.fire({ title: 'Error', text: result.message || 'Gagal menghapus data', icon: 'error', confirmButtonColor: '#dc2626' });
+    }
+  } catch (error) {
+    console.error('Execute reset error:', error);
+    Swal.fire({ title: 'Error', text: 'Terjadi kesalahan', icon: 'error', confirmButtonColor: '#dc2626' });
+  }
+}
+
+// Initialize tab when DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+  // Only initialize if we're on the admin dashboard with approval-reset tab
+  if (document.getElementById('approval-resetTab')) {
+    initApprovalResetTab();
+  }
+
+
+
 });

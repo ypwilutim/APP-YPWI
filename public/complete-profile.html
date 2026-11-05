@@ -100,7 +100,7 @@
           <span id="step-label" class="text-lg font-semibold text-gray-700">Langkah 1 dari 4: Data Identitas Pribadi</span>
         </div>
 
-        <form id="profileForm">
+        <form id="profileForm" novalidate>
           <input type="hidden" id="teacherId" name="teacherId">
           <input type="hidden" id="link_foto" name="link_foto">
           <input type="hidden" id="link_ktp" name="link_ktp">
@@ -797,7 +797,7 @@
 
   function initPendidikanToggle() {
      const pendidikanSelect = document.getElementById('pendidikan_terakhir');
-     pendidikanSelect?.addEventListener('change', function () {
+     pendidikanSelect && pendidikanSelect.addEventListener('change', function () {
        updatePendidikanFields(this.value);
      });
    }
@@ -817,12 +817,12 @@
      document.querySelectorAll('.step-indicator').forEach(el => el.classList.remove('active', 'completed'));
      document.querySelectorAll('.step-line').forEach(el => el.classList.remove('completed'));
 
-     document.querySelector(`.step-content[data-step="${step}"]`)?.classList.add('active');
-     document.querySelector(`.step-indicator[data-step="${step}"]`)?.classList.add('active');
+     document.querySelector(`.step-content[data-step="${step}"]`) && document.querySelector(`.step-content[data-step="${step}"]`).classList.add('active');
+     document.querySelector(`.step-indicator[data-step="${step}"]`) && document.querySelector(`.step-indicator[data-step="${step}"]`).classList.add('active');
 
      for (let i = 1; i < step; i++) {
-       document.querySelector(`.step-indicator[data-step="${i}"]`)?.classList.add('completed');
-       document.querySelector(`.step-line[data-line="${i}"]`)?.classList.add('completed');
+       document.querySelector(`.step-indicator[data-step="${i}"]`) && document.querySelector(`.step-indicator[data-step="${i}"]`).classList.add('completed');
+       document.querySelector(`.step-line[data-line="${i}"]`) && document.querySelector(`.step-line[data-line="${i}"]`).classList.add('completed');
      }
 
       const labels = {
@@ -842,7 +842,8 @@
       }
    }
 
-   function validateStep(step) {
+    function validateStep(step) {
+      clearHiddenRequired();
       if (step === 1) {
         const requiredIds = ['nama', 'nik', 'email', 'tempat_lahir', 'tanggal_lahir', 'jenis_kelamin', 'no_wa', 'status_perkawinan', 'alamat'];
         for (const id of requiredIds) {
@@ -873,15 +874,44 @@
           Swal.fire('Error', 'Minimal satu penempatan unit sekolah harus dipilih.', 'error');
           return false;
         }
-        if (!document.getElementById('link_kk').value && !document.getElementById('kk').files[0]) {
-          Swal.fire('Error', 'Upload KK wajib diisi.', 'error');
-          return false;
-        }
-      }
-      return true;
+         if (!document.getElementById('link_kk').value && !document.getElementById('kk').files[0]) {
+           Swal.fire('Error', 'Upload KK wajib diisi.', 'error');
+           return false;
+         }
+       } else if (step === 3) {
+         clearHiddenRequired();
+         const pendidikan = document.getElementById('pendidikan_terakhir');
+         if (!pendidikan || !pendidikan.value) {
+           if (pendidikan) pendidikan.reportValidity();
+           return false;
+         }
+         const needsTahun = ['SD', 'SMP', 'SMA', 'SMK', 'S1', 'S2', 'S3'].includes(pendidikan.value);
+         const needsJurusan = ['SMK', 'S1', 'S2', 'S3'].includes(pendidikan.value);
+         const tahun = document.getElementById('tahun_angkatan');
+         const jurusan = document.getElementById('jurusan');
+         const namaSekolah = document.getElementById('nama_sekolah_pendidikan');
+         if (needsTahun && (!tahun || !tahun.value)) {
+           if (tahun) tahun.reportValidity();
+           return false;
+         }
+         if (needsJurusan && ((!jurusan || !jurusan.value) || (!namaSekolah || !namaSekolah.value))) {
+           const __repTarget = (jurusan && jurusan.value ? namaSekolah : jurusan);
+if (__repTarget) __repTarget.reportValidity();
+           return false;
+         }
+       }
+       return true;
     }
 
-   function previewFile(input, previewId, iconId, existingInfoId, docType) {
+    function clearHiddenRequired() {
+      document.querySelectorAll('#profileForm input, #profileForm select, #profileForm textarea').forEach(el => {
+        if (el.offsetParent === null) {
+          el.required = false;
+        }
+      });
+    }
+
+    async function previewFile(input, previewId, iconId, existingInfoId, docType) {
       const file = input.files[0];
       if (file) {
         const reader = new FileReader();
@@ -898,8 +928,12 @@
         };
         reader.readAsDataURL(file);
 
-        // Upload langsung ke database
-        if (docType) uploadDocument(docType, file);
+        if (docType) {
+          const ok = await uploadDocument(docType, file);
+          if (!ok) {
+            input.value = '';
+          }
+        }
       }
     }
 
@@ -916,11 +950,15 @@
         if (data.success) {
           const linkInput = document.getElementById('link_' + docType);
           if (linkInput) linkInput.value = data.url;
-        } else {
-          console.error('Upload', docType, 'gagal:', data.message);
+          return true;
         }
+        console.error('Upload', docType, 'gagal:', data.message);
+        Swal.fire('Error', data.message || ('Upload ' + docType + ' gagal.'), 'error');
+        return false;
       } catch (e) {
         console.error('Upload', docType, 'error:', e);
+        Swal.fire('Error', 'Upload ' + docType + ' error: ' + (e && e.message ? e.message : 'unknown'), 'error');
+        return false;
       }
     }
 
@@ -998,48 +1036,49 @@
   document.addEventListener('DOMContentLoaded', function () {
      showStep(1);
 
-     document.getElementById('addAssignmentBtn')?.addEventListener('click', () => {
+     document.getElementById('addAssignmentBtn') && document.getElementById('addAssignmentBtn').addEventListener('click', () => {
        document.getElementById('modal-penempatan').classList.remove('hidden');
        document.getElementById('modal-penempatan').classList.add('flex');
      });
-     document.getElementById('photoUploadArea')?.addEventListener('click', () => {
+     document.getElementById('photoUploadArea') && document.getElementById('photoUploadArea').addEventListener('click', () => {
        document.getElementById('foto').click();
      });
-     document.getElementById('ktpUploadArea')?.addEventListener('click', () => {
+     document.getElementById('ktpUploadArea') && document.getElementById('ktpUploadArea').addEventListener('click', () => {
        document.getElementById('ktp').click();
      });
-     document.getElementById('kkUploadArea')?.addEventListener('click', () => {
+     document.getElementById('kkUploadArea') && document.getElementById('kkUploadArea').addEventListener('click', () => {
        document.getElementById('kk').click();
      });
-     document.getElementById('ijazahUploadArea')?.addEventListener('click', () => {
+     document.getElementById('ijazahUploadArea') && document.getElementById('ijazahUploadArea').addEventListener('click', () => {
        document.getElementById('ijazah').click();
      });
-      document.getElementById('foto')?.addEventListener('change', e => previewFile(e.target, 'photo-preview', 'photo-icon', 'existing-photo-info', 'foto'));
-      document.getElementById('ktp')?.addEventListener('change', e => previewFile(e.target, 'ktp-preview', 'ktp-icon', 'existing-ktp-info', 'ktp'));
-      document.getElementById('kk')?.addEventListener('change', e => previewFile(e.target, 'kk-preview', 'kk-icon', 'existing-kk-info', 'kk'));
-      document.getElementById('ijazah')?.addEventListener('change', e => previewFile(e.target, 'ijazah-preview', 'ijazah-icon', 'existing-ijazah-info', 'ijazah'));
-     document.getElementById('closeAssignmentBtn')?.addEventListener('click', () => {
+      document.getElementById('foto') && document.getElementById('foto').addEventListener('change', e => previewFile(e.target, 'photo-preview', 'photo-icon', 'existing-photo-info', 'foto'));
+      document.getElementById('ktp') && document.getElementById('ktp').addEventListener('change', e => previewFile(e.target, 'ktp-preview', 'ktp-icon', 'existing-ktp-info', 'ktp'));
+      document.getElementById('kk') && document.getElementById('kk').addEventListener('change', e => previewFile(e.target, 'kk-preview', 'kk-icon', 'existing-kk-info', 'kk'));
+      document.getElementById('ijazah') && document.getElementById('ijazah').addEventListener('change', e => previewFile(e.target, 'ijazah-preview', 'ijazah-icon', 'existing-ijazah-info', 'ijazah'));
+     document.getElementById('closeAssignmentBtn') && document.getElementById('closeAssignmentBtn').addEventListener('click', () => {
        document.getElementById('modal-penempatan').classList.add('hidden');
        document.getElementById('modal-penempatan').classList.remove('flex');
      });
-     document.getElementById('saveAssignmentBtn')?.addEventListener('click', saveAssignment);
+     document.getElementById('saveAssignmentBtn') && document.getElementById('saveAssignmentBtn').addEventListener('click', saveAssignment);
      document.addEventListener('click', e => {
        if (e.target.closest('.remove-assignment-btn')) {
          const btn = e.target.closest('.remove-assignment-btn');
          removeAssignment(parseInt(btn.getAttribute('data-index')));
        }
      });
-     initPendidikanToggle();
+      initPendidikanToggle();
+updatePendidikanFields((document.getElementById('pendidikan_terakhir') || {}).value || '');
 
-     document.getElementById('status_perkawinan')?.addEventListener('change', initPerkawinanToggle);
-     document.getElementById('add_pasangan_btn')?.addEventListener('click', () => addPasanganField());
+     document.getElementById('status_perkawinan') && document.getElementById('status_perkawinan').addEventListener('change', initPerkawinanToggle);
+     document.getElementById('add_pasangan_btn') && document.getElementById('add_pasangan_btn').addEventListener('click', () => addPasanganField());
 
-     document.getElementById('prevBtn')?.addEventListener('click', () => {
-       const currentStep = parseInt(document.querySelector('.step-content.active')?.dataset.step || 1);
+     document.getElementById('prevBtn') && document.getElementById('prevBtn').addEventListener('click', () => {
+       const currentStep = parseInt((document.querySelector('.step-content.active') && document.querySelector('.step-content.active').dataset.step) || 1);
        showStep(currentStep - 1);
      });
-     document.getElementById('nextBtn')?.addEventListener('click', () => {
-       const currentStep = parseInt(document.querySelector('.step-content.active')?.dataset.step || 1);
+     document.getElementById('nextBtn') && document.getElementById('nextBtn').addEventListener('click', () => {
+       const currentStep = parseInt((document.querySelector('.step-content.active') && document.querySelector('.step-content.active').dataset.step) || 1);
        if (validateStep(currentStep)) {
          showStep(currentStep + 1);
        }
@@ -1063,8 +1102,11 @@
      displayAssignments();
    }
 
-  document.getElementById('profileForm').addEventListener('submit', async function (e) {
-     e.preventDefault();
+document.getElementById('profileForm').addEventListener('submit', async function (e) {
+   e.preventDefault();
+   try {
+     clearHiddenRequired();
+     updatePendidikanFields((document.getElementById('pendidikan_terakhir') || {}).value || '');
 
      if (localAssignments.length === 0) {
        return Swal.fire('Error', 'Minimal satu penempatan unit sekolah harus dipilih.', 'error');
@@ -1085,118 +1127,121 @@
        return Swal.fire('Error', 'Nomor rekening wajib diisi.', 'error');
      }
 
-      const link_foto = document.getElementById('link_foto').value;
-      if (!link_foto) {
-        return Swal.fire('Error', 'Pas foto wajib diupload.', 'error');
-      }
+     const link_foto = document.getElementById('link_foto').value;
+     if (!link_foto) {
+       return Swal.fire('Error', 'Pas foto wajib diupload.', 'error');
+     }
 
-      const link_ktp = document.getElementById('link_ktp').value;
-      if (!link_ktp) {
-        return Swal.fire('Error', 'Upload KTP wajib diisi.', 'error');
-      }
+     const link_ktp = document.getElementById('link_ktp').value;
+     if (!link_ktp) {
+       return Swal.fire('Error', 'Upload KTP wajib diisi.', 'error');
+     }
 
-      const link_kk = document.getElementById('link_kk').value;
-      if (!link_kk) {
-        return Swal.fire('Error', 'Upload KK wajib diisi.', 'error');
-      }
+     const link_kk = document.getElementById('link_kk').value;
+     if (!link_kk) {
+       return Swal.fire('Error', 'Upload KK wajib diisi.', 'error');
+     }
 
-      const link_ijazah = document.getElementById('link_ijazah').value;
-      if (!link_ijazah) {
-        return Swal.fire('Error', 'Upload Ijazah wajib diisi.', 'error');
-      }
+     const link_ijazah = document.getElementById('link_ijazah').value;
+     if (!link_ijazah) {
+       return Swal.fire('Error', 'Upload Ijazah wajib diisi.', 'error');
+     }
 
-       const submitBtn = e.target.querySelector('button[type="submit"]');
-       submitBtn.disabled = true;
-       submitBtn.innerHTML = '<div class="inline-block animate-spin rounded-full h-5 w-5 border-4 border-white border-t-transparent mr-2"></div>Menyimpan...';
+     const submitBtn = e.target.querySelector('button[type="submit"]');
+     if (!submitBtn) {
+       return Swal.fire('Error', 'Tombol submit tidak ditemukan.', 'error');
+     }
+     submitBtn.disabled = true;
+     submitBtn.innerHTML = '<div class="inline-block animate-spin rounded-full h-5 w-5 border-4 border-white border-t-transparent mr-2"></div>Menyimpan...';
 
-    try {
-           const formData = new FormData(e.target);
-           
-           // CRITICAL FIX: Populate assignments_json hidden field - this was missing!
-           const assignmentsJsonField = document.getElementById('assignments_json');
-           if (assignmentsJsonField && localAssignments && localAssignments.length > 0) {
-             assignmentsJsonField.value = JSON.stringify(localAssignments);
-           }
-           formData.append('assignments_json', JSON.stringify(localAssignments));
+     const formData = new FormData(e.target);
 
- // Collect pasangan data
-           const pasanganList = [];
-           const statusPerkawinan = document.getElementById('status_perkawinan').value;
-           const jk = document.getElementById('jenis_kelamin').value;
-           let defaultTipe = null;
-           if (statusPerkawinan === 'Menikah') {
-             defaultTipe = jk === 'P' ? 'suami' : 'istri';
-           } else if (statusPerkawinan === 'Cerai Hidup') {
-             defaultTipe = 'mantan';
-           }
-           document.querySelectorAll('#pasangan_list > div').forEach(div => {
-             const nik = div.querySelector('.pasangan-nik')?.value.trim() || '';
-             const nama = div.querySelector('.pasangan-nama')?.value.trim() || '';
-             const tipe = div.dataset.tipe || defaultTipe;
-             if (nik) pasanganList.push({ nik, nama, tipe });
-           });
-           formData.append('data_keluarga', JSON.stringify(pasanganList));
+     const assignmentsJsonField = document.getElementById('assignments_json');
+     if (assignmentsJsonField && localAssignments && localAssignments.length > 0) {
+       assignmentsJsonField.value = JSON.stringify(localAssignments);
+     }
+     formData.append('assignments_json', JSON.stringify(localAssignments));
 
-          // Auto-detect employment status based on assignments
-        const assignments = localAssignments.map(a => a.jabatan_di_unit);
-        const hasGuruRole = assignments.some(j => ['Guru', 'Guru Mapel', 'Guru Mengaji', 'Wali Kelas', 'Muhaffiz', 'Muhaffizah'].includes(j));
-        const hasPegawaiRole = assignments.some(j => ['Admin', 'TU', 'Tata Usaha', 'Operator', 'Pimpinan', 'Pimpinan Pondok', 'Kepala Sekolah', 'Wakasek', 'Ketua', 'Bendahara', 'Media', 'Security', 'Cleaning Service', 'Bag. Dapur', 'Bag. Kantin'].includes(j));
-        const tmtValue = document.getElementById('tmt').value;
-        const masaKerja = tmtValue ? (new Date().getFullYear() - new Date(tmtValue).getFullYear()) : 0;
+     const pasanganList = [];
+     const statusPerkawinan = document.getElementById('status_perkawinan').value;
+     const jk = document.getElementById('jenis_kelamin').value;
+     let defaultTipe = null;
+     if (statusPerkawinan === 'Menikah') {
+       defaultTipe = jk === 'P' ? 'suami' : 'istri';
+     } else if (statusPerkawinan === 'Cerai Hidup') {
+       defaultTipe = 'mantan';
+     }
+     document.querySelectorAll('#pasangan_list > div').forEach(div => {
+const nik = (div.querySelector('.pasangan-nik') && div.querySelector('.pasangan-nik').value.trim()) || '';
+const nama = (div.querySelector('.pasangan-nama') && div.querySelector('.pasangan-nama').value.trim()) || '';
+       const tipe = div.dataset.tipe || defaultTipe;
+       if (nik) pasanganList.push({ nik, nama, tipe });
+     });
+     formData.append('data_keluarga', JSON.stringify(pasanganList));
 
-        if (!formData.get('status_kepegawaian')) {
-          let employmentType = null;
-          if (hasGuruRole && hasPegawaiRole) {
-            employmentType = 'GTY'; // Multi-role, prioritize guru
-          } else if (hasGuruRole) {
-            employmentType = masaKerja >= 2 ? 'GTY' : 'GTTY';
-          } else if (hasPegawaiRole) {
-            employmentType = masaKerja >= 2 ? 'PTY' : 'PTTY';
-          }
-          if (employmentType) formData.set('status_kepegawaian', employmentType);
-        }
+     const assignments = localAssignments.map(a => a.jabatan_di_unit);
+     const hasGuruRole = assignments.some(j => ['Guru', 'Guru Mapel', 'Guru Mengaji', 'Wali Kelas', 'Muhaffiz', 'Muhaffizah'].includes(j));
+     const hasPegawaiRole = assignments.some(j => ['Admin', 'TU', 'Tata Usaha', 'Operator', 'Pimpinan', 'Pimpinan Pondok', 'Kepala Sekolah', 'Wakasek', 'Ketua', 'Bendahara', 'Media', 'Security', 'Cleaning Service', 'Bag. Dapur', 'Bag. Kantin'].includes(j));
+     const tmtValue = document.getElementById('tmt').value;
+     const masaKerja = tmtValue ? (new Date().getFullYear() - new Date(tmtValue).getFullYear()) : 0;
 
-        const response = await fetch('/api/public/teachers/' + formData.get('teacherId'), {
-          method: 'PUT',
-          headers: { 'Authorization': 'Bearer ' + (token || '') },
-          body: formData
-        });
-
-         if (response.ok) {
-            await fetch('/api/profile-complete/' + teacherId, { method: 'PUT', headers: { 'Content-Type': 'application/json' } });
-
-            const pendidikanTerakhir = document.getElementById('pendidikan_terakhir').value;
-            if (pendidikanTerakhir) {
-              try {
-                await fetch('/api/profile-complete/' + teacherId + '/pendidikan-kode', {
-                  method: 'PUT',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ pendidikan_terakhir: pendidikanTerakhir })
-                });
-              } catch (kodeErr) {
-                console.warn('Update pendidikan_kode gagal:', kodeErr.message);
-              }
-            }
-
-            Swal.fire({ title: 'Berhasil!', text: 'Profil berhasil diperbarui!', icon: 'success', timer: 3000, showConfirmButton: false }).then(() => {
-              window.location.href = 'login.html';
-            });
-         } else {
-           let msg = 'Update gagal (status ' + response.status + ')';
-           try {
-             const errJson = await response.json();
-             if (errJson && errJson.message) msg = errJson.message;
-           } catch (e) {}
-           Swal.fire({ title: 'Gagal', text: msg, icon: 'error' });
-           submitBtn.disabled = false;
-           submitBtn.innerHTML = '<i class="bi bi-cloud-arrow-up-fill"></i> SIMPAN DATA PROFIL';
-         }
-       } catch (error) {
-         Swal.fire({ title: 'Gagal', text: 'Terjadi kesalahan: ' + (error && error.message ? error.message : 'unknown'), icon: 'error' });
-         submitBtn.disabled = false;
-         submitBtn.innerHTML = '<i class="bi bi-cloud-arrow-up-fill"></i> SIMPAN DATA PROFIL';
+     if (!formData.get('status_kepegawaian')) {
+       let employmentType = null;
+       if (hasGuruRole && hasPegawaiRole) {
+         employmentType = 'GTY';
+       } else if (hasGuruRole) {
+         employmentType = masaKerja >= 2 ? 'GTY' : 'GTTY';
+       } else if (hasPegawaiRole) {
+         employmentType = masaKerja >= 2 ? 'PTY' : 'PTTY';
        }
-    });
+       if (employmentType) formData.set('status_kepegawaian', employmentType);
+     }
+
+     const response = await fetch('/api/public/teachers/' + formData.get('teacherId'), {
+       method: 'PUT',
+       headers: { 'Authorization': 'Bearer ' + (token || '') },
+       body: formData
+     });
+
+     if (response.ok) {
+       await fetch('/api/profile-complete/' + teacherId, { method: 'PUT', headers: { 'Content-Type': 'application/json' } });
+
+       const pendidikanTerakhir = document.getElementById('pendidikan_terakhir').value;
+       if (pendidikanTerakhir) {
+         try {
+           await fetch('/api/profile-complete/' + teacherId + '/pendidikan-kode', {
+             method: 'PUT',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ pendidikan_terakhir: pendidikanTerakhir })
+           });
+         } catch (kodeErr) {
+           console.warn('Update pendidikan_kode gagal:', kodeErr.message);
+         }
+       }
+
+       Swal.fire({ title: 'Berhasil!', text: 'Profil berhasil diperbarui!', icon: 'success', timer: 3000, showConfirmButton: false }).then(() => {
+         window.location.href = 'login.html';
+       });
+     } else {
+       let msg = 'Update gagal (status ' + response.status + ')';
+       try {
+         const errJson = await response.json();
+         if (errJson && errJson.message) msg = errJson.message;
+       } catch (e) {}
+       Swal.fire({ title: 'Gagal', text: msg, icon: 'error' });
+       submitBtn.disabled = false;
+       submitBtn.innerHTML = '<i class="bi bi-cloud-arrow-up-fill"></i> SIMPAN DATA PROFIL';
+     }
+   } catch (error) {
+     console.error('Submit error:', error);
+     Swal.fire({ title: 'Gagal', text: 'Terjadi kesalahan: ' + (error && error.message ? error.message : 'unknown'), icon: 'error' });
+     const btn = e.target.querySelector('button[type="submit"]');
+     if (btn) {
+       btn.disabled = false;
+       btn.innerHTML = '<i class="bi bi-cloud-arrow-up-fill"></i> SIMPAN DATA PROFIL';
+     }
+   }
+ });
   </script>
 </body>
 

@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Approval & Reset - YPWI Lutim</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .subtab-btn { transition: all 0.25s ease-in-out; }
+    .subtab-btn.active { background-color: #4f46e5; color: white; box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2); }
+    .subtab-btn.inactive { background-color: #f8fafc; color: #64748b; border: 1px solid #e2e8f0; }
+    .subtab-btn.inactive:hover { background-color: #f1f5f9; color: #334155; }
+    .subtab-content { display: block; }
+    .subtab-content.hidden { display: none; }
+  </style>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-800 antialiased">
+  
+  <!-- Login Overlay -->
+  <div id="loginOverlay" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm px-4">
+    <div class="bg-white rounded-2xl shadow-xl border border-slate-100 p-8 w-full max-w-md transform transition-all">
+      <div class="flex items-center space-x-4 mb-6">
+        <div class="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200">
+          <i class="fas fa-shield-alt text-white text-xl"></i>
+        </div>
+        <div>
+          <h1 class="text-xl font-bold text-slate-900">YPWI Lutim</h1>
+          <p class="text-sm text-slate-500 font-medium">Panel Approval & Reset</p>
+        </div>
+      </div>
+      <form onsubmit="doLogin(event)">
+        <div class="mb-4">
+          <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Username</label>
+          <div class="relative">
+            <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+              <i class="fas fa-user"></i>
+            </span>
+            <input id="loginUsername" type="text" required autocomplete="username" placeholder="Masukkan username admin"
+              class="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all outline-none">
+          </div>
+        </div>
+        <div class="mb-5">
+          <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Password</label>
+          <div class="relative">
+            <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+              <i class="fas fa-lock"></i>
+            </span>
+            <input id="loginPassword" type="password" required autocomplete="current-password" placeholder="Masukkan password"
+              class="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all outline-none">
+          </div>
+        </div>
+        <div id="loginError" class="hidden mb-4 text-sm text-red-600 bg-red-50 border border-red-100 p-3 rounded-xl font-medium"></div>
+        <button id="loginBtn" type="submit"
+          class="w-full px-4 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 font-semibold shadow-md shadow-indigo-200 transition-all flex items-center justify-center gap-2">
+          <span>Masuk ke Sistem</span>
+          <i class="fas fa-arrow-right text-xs"></i>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Main Content Wrapper -->
+  <div id="mainContent" class="hidden">
+    <!-- Header -->
+    <header class="bg-white border-b border-slate-200/80 sticky top-0 z-30 shadow-xs">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-3.5">
+            <div class="w-11 h-11 bg-indigo-600 rounded-xl flex items-center justify-center shadow-md shadow-indigo-100">
+              <i class="fas fa-gavel text-white text-lg"></i>
+            </div>
+            <div>
+              <h1 class="text-lg font-bold text-slate-900 leading-tight">Approval & Reset System</h1>
+              <p class="text-xs text-slate-500 font-medium">YPWI Luwu Timur Administration</p>
+            </div>
+          </div>
+          <div class="flex items-center space-x-3">
+            <span id="currentDate" class="hidden md:inline-block text-xs font-medium text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg"></span>
+            <button onclick="location.href='admin-dashboard.html'" class="px-3.5 py-2 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 text-xs font-semibold transition flex items-center gap-2">
+              <i class="fas fa-arrow-left"></i>
+              <span class="hidden sm:inline">Kembali</span>
+            </button>
+            <button onclick="doLogout()" class="px-3.5 py-2 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-xl text-xs font-semibold transition flex items-center gap-2">
+              <i class="fas fa-sign-out-alt"></i>
+              <span class="hidden sm:inline">Logout</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      
+      <!-- Sub-tab Navigation Cards -->
+      <div class="bg-white rounded-2xl shadow-xs border border-slate-200/80 p-3.5 mb-6">
+        <div class="flex flex-wrap gap-2" role="tablist">
+          <button id="subtab-perizinan" class="subtab-btn active px-4 py-2.5 rounded-xl text-xs font-semibold transition flex items-center gap-2" role="tab" aria-selected="true" data-subtab="perizinan">
+            <i class="fas fa-file-alt"></i> Approval Perizinan
+          </button>
+          <button id="subtab-sk-manual" class="subtab-btn inactive px-4 py-2.5 rounded-xl text-xs font-semibold transition flex items-center gap-2" role="tab" aria-selected="false" data-subtab="sk-manual">
+            <i class="fas fa-file-signature"></i> Pengajuan SK Manual
+          </button>
+          <button id="subtab-sk-auto" class="subtab-btn inactive px-4 py-2.5 rounded-xl text-xs font-semibold transition flex items-center gap-2" role="tab" aria-selected="false" data-subtab="sk-auto">
+            <i class="fas fa-magic"></i> SK Otomatis
+          </button>
+          <button id="subtab-reset-absensi" class="subtab-btn inactive px-4 py-2.5 rounded-xl text-xs font-semibold transition flex items-center gap-2" role="tab" aria-selected="false" data-subtab="reset-absensi">
+            <i class="fas fa-undo"></i> Reset Absensi
+          </button>
+        </div>
+      </div>
+
+      <!-- Sub-tab Content: Approval Perizinan -->
+      <div id="subtab-content-perizinan" class="subtab-content">
+        <div class="bg-white rounded-2xl shadow-xs border border-slate-200/80 p-6">
+          <div class="flex flex-wrap items-center justify-between gap-4 pb-5 mb-6 border-b border-slate-100">
+            <div>
+              <h3 class="text-base font-bold text-slate-900">Approval Perizinan Guru</h3>
+              <p class="text-slate-500 text-xs mt-0.5">Kelola pengajuan izin, sakit, cuti, dan dinas luar guru secara terpusat</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2.5">
+              <select id="izinStatusFilter" class="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none" onchange="loadApprovalPerizinan()">
+                <option value="pending">Menunggu</option>
+                <option value="approved">Disetujui</option>
+                <option value="rejected">Ditolak</option>
+                <option value="all">Semua Status</option>
+              </select>
+              <select id="izinTenantFilter" class="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none" onchange="loadApprovalPerizinan()">
+                <option value="">Semua Sekolah</option>
+              </select>
+              <button onclick="loadApprovalPerizinan()" class="px-3.5 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-xs font-semibold shadow-sm transition flex items-center gap-2">
+                <i class="fas fa-sync-alt"></i> Refresh
+              </button>
+            </div>
+          </div>
+          <div id="approvalPerizinanList" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="col-span-2 text-center py-12 text-slate-400">
+              <i class="fas fa-spinner fa-spin text-2xl mb-2 text-indigo-500"></i>
+              <p class="text-xs font-medium">Memuat data perizinan...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sub-tab Content: Approval Pengajuan SK Manual -->
+      <div id="subtab-content-sk-manual" class="subtab-content hidden">
+        <div class="bg-white rounded-2xl shadow-xs border border-slate-200/80 p-6">
+          <div class="flex flex-wrap items-center justify-between gap-4 pb-5 mb-6 border-b border-slate-100">
+            <div>
+              <h3 class="text-base font-bold text-slate-900">Approval Pengajuan SK Manual</h3>
+              <p class="text-slate-500 text-xs mt-0.5">Review dan setujui Surat Keputusan (SK) yang diajukan oleh guru</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2.5">
+              <select id="skManualTenantFilter" class="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none" onchange="loadApprovalSKManual()">
+                <option value="">Semua Sekolah</option>
+              </select>
+              <button onclick="loadApprovalSKManual()" class="px-3.5 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-xs font-semibold shadow-sm transition flex items-center gap-2">
+                <i class="fas fa-sync-alt"></i> Refresh
+              </button>
+            </div>
+          </div>
+          <div class="overflow-x-auto rounded-xl border border-slate-100">
+            <table class="w-full text-left border-collapse">
+              <thead class="bg-slate-50/75 border-b border-slate-100">
+                <tr>
+                  <th class="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">No. Surat</th>
+                  <th class="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Nama Guru</th>
+                  <th class="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Sekolah</th>
+                  <th class="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Tentang</th>
+                  <th class="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">TMT</th>
+                  <th class="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Tgl. Dibuat</th>
+                  <th class="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
+                </tr>
+              </thead>
+              <tbody id="skManualTable" class="divide-y divide-slate-100 text-xs font-medium text-slate-700">
+                <tr><td colspan="7" class="px-4 py-12 text-center text-slate-400"><i class="fas fa-spinner fa-spin text-xl mb-2 text-indigo-500"></i><p>Memuat data SK...</p></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sub-tab Content: Approval SK Otomatis -->
+      <div id="subtab-content-sk-auto" class="subtab-content hidden">
+        <div class="bg-white rounded-2xl shadow-xs border border-slate-200/80 p-6">
+          <div class="flex flex-wrap items-center justify-between gap-4 pb-5 mb-6 border-b border-slate-100">
+            <div>
+              <h3 class="text-base font-bold text-slate-900">Approval Penerbitan SK Otomatis (Alur Desember)</h3>
+              <p class="text-slate-500 text-xs mt-0.5">Setujui guru yang memenuhi syarat untuk penerbitan SK otomatis tanggal 1 Januari</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2.5">
+              <select id="skAutoTenantFilter" class="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none" onchange="loadApprovalSKAuto()">
+                <option value="">Semua Sekolah</option>
+              </select>
+              <button onclick="loadApprovalSKAuto()" class="px-3.5 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-xs font-semibold shadow-sm transition flex items-center gap-2">
+                <i class="fas fa-sync-alt"></i> Refresh
+              </button>
+            </div>
+          </div>
+          <div class="overflow-x-auto rounded-xl border border-slate-100">
+            <table class="w-full text-left border-collapse">
+              <thead class="bg-slate-50/75 border-b border-slate-100">
+                <tr>
+                  <th class="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Nama Guru</th>
+                  <th class="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Sekolah</th>
+                  <th class="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Unit</th>
+                  <th class="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Masa Kerja</th>
+                  <th class="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Status SK</th>
+                  <th class="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Approval</th>
+                  <th class="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="skAutoTable" class="divide-y divide-slate-100 text-xs font-medium text-slate-700">
+                <tr><td colspan="7" class="px-4 py-12 text-center text-slate-400"><i class="fas fa-spinner fa-spin text-xl mb-2 text-indigo-500"></i><p>Memuat data approval SK otomatis...</p></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sub-tab Content: Reset Absensi -->
+      <div id="subtab-content-reset-absensi" class="subtab-content hidden">
+        <div class="bg-white rounded-2xl shadow-xs border border-slate-200/80 p-6">
+          <div class="pb-5 mb-6 border-b border-slate-100">
+            <h3 class="text-base font-bold text-slate-900">Reset Data Absensi</h3>
+            <p class="text-slate-500 text-xs mt-0.5">Hapus data absensi berdasarkan filter tertentu. <span class="text-rose-600 font-semibold">Tindakan ini bersifat permanen!</span></p>
+          </div>
+
+          <!-- Peringatan Destruktif -->
+          <div class="bg-rose-50/75 border border-rose-200/80 rounded-2xl p-5 mb-6">
+            <div class="flex items-start gap-3.5">
+              <div class="w-8 h-8 rounded-xl bg-rose-100 flex items-center justify-center shrink-0 text-rose-600 mt-0.5">
+                <i class="fas fa-exclamation-triangle"></i>
+              </div>
+              <div>
+                <h4 class="text-xs font-bold text-rose-900 uppercase tracking-wider mb-1">Peringatan: Operasi Destruktif</h4>
+                <ul class="text-rose-700 text-xs space-y-1 list-disc list-inside font-medium">
+                  <li>Data absensi yang dihapus <strong>tidak dapat dikembalikan</strong> ke sistem.</li>
+                  <li>Hanya super-admin YPWILUTIM yang memiliki hak akses penuh untuk melakukan reset.</li>
+                  <li>Pastikan filter sudah benar dan spesifik sebelum meninjau atau mengeksekusi.</li>
+                  <li>Rekomendasi: Lakukan backup database terlebih dahulu.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- Filter Grid -->
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Sekolah</label>
+              <select id="resetTenantFilter" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none">
+                <option value="">Semua Sekolah</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Guru</label>
+              <input type="text" id="resetTeacherSearch" placeholder="Cari nama/NIK..." class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none" autocomplete="off">
+              <input type="hidden" id="resetTeacherId">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Dari Tanggal</label>
+              <input type="date" id="resetDateFrom" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Sampai Tanggal</label>
+              <input type="date" id="resetDateTo" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none">
+            </div>
+          </div>
+
+          <!-- Additional Option & Confirmation Check -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 pt-2">
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1.5">Jenis Absensi</label>
+              <select id="resetJenisFilter" class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none">
+                <option value="semua">Semua (Masuk & Pulang)</option>
+                <option value="masuk">Masuk</option>
+                <option value="pulang">Pulang</option>
+              </select>
+            </div>
+            <div class="flex items-center pt-5">
+              <label class="flex items-center gap-2.5 cursor-pointer bg-slate-50 border border-slate-200 px-4 py-2.5 rounded-xl w-full hover:bg-slate-100/70 transition">
+                <input type="checkbox" id="resetConfirm" class="w-4 h-4 text-rose-600 rounded border-slate-300 focus:ring-rose-500" onchange="toggleResetConfirm(this.checked)">
+                <span class="text-xs font-semibold text-slate-700">Saya yakin ingin menghapus data ini</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="flex flex-wrap gap-3">
+            <button onclick="previewResetAbsensi()" class="px-4 py-2.5 bg-amber-500 text-white rounded-xl hover:bg-amber-600 text-xs font-semibold shadow-sm transition flex items-center gap-2">
+              <i class="fas fa-eye"></i> Pratinjau Data yang Akan Dihapus
+            </button>
+            <button onclick="executeResetAbsensi()" id="resetExecuteBtn" disabled class="px-4 py-2.5 bg-rose-600 text-white rounded-xl hover:bg-rose-700 text-xs font-semibold shadow-sm transition flex items-center gap-2 opacity-50 cursor-not-allowed">
+              <i class="fas fa-trash"></i> Hapus Data Absensi
+            </button>
+          </div>
+
+          <!-- Preview Area -->
+          <div id="resetPreviewArea" class="hidden mt-6 pt-6 border-t border-slate-100">
+            <h4 class="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3">Pratinjau Data yang Akan Dihapus</h4>
+            <div class="bg-slate-50 rounded-xl p-4 border border-slate-200/70 max-h-96 overflow-y-auto">
+              <div class="overflow-x-auto">
+                <table class="w-full text-xs text-left border-collapse">
+                  <thead class="bg-slate-200/60 text-slate-700">
+                    <tr>
+                      <th class="px-3 py-2 font-semibold">Nama Guru</th>
+                      <th class="px-3 py-2 font-semibold">Sekolah</th>
+                      <th class="px-3 py-2 font-semibold">Tanggal</th>
+                      <th class="px-3 py-2 font-semibold">Jenis</th>
+                      <th class="px-3 py-2 font-semibold">Jam</th>
+                      <th class="px-3 py-2 font-semibold">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="resetPreviewTable" class="divide-y divide-slate-200/60 text-slate-600">
+                  </tbody>
+                </table>
+              </div>
+              <p id="resetPreviewCount" class="text-xs font-medium text-slate-500 mt-3"></p>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <script>
+    // Auth helpers
+    function getToken() { return localStorage.getItem('token'); }
+    function getUser() { try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch(e) { return {}; } }
+    function skGuruAuthHdr() { return { 'Authorization': 'Bearer ' + (getToken() || '') }; }
+
+    const IZIN_LABEL = { izin: 'Izin', sakit: 'Sakit', cuti: 'Cuti', dinas_luar: 'Dinas Luar' };
+    const STATUS_LABEL = { pending: 'Menunggu', approved: 'Disetujui', rejected: 'Ditolak' };
+    const STATUS_COLOR = { pending: '#d97706', approved: '#15803d', rejected: '#dc2626' };
+
+    function escapeHtml(text) {
+      if (text === null || text === undefined) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // Login
+    async function doLogin(e) {
+      e.preventDefault();
+      const username = document.getElementById('loginUsername').value;
+      const password = document.getElementById('loginPassword').value;
+      const btn = document.getElementById('loginBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Memproses...';
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+        if (data.success && data.token) {
+          localStorage.setItem('token', data.token);
+          localStorage.setItem('user', JSON.stringify(data.user || {}));
+          window.authToken = data.token;
+          window.currentUser = data.user || {};
+          document.getElementById('loginOverlay').classList.add('hidden');
+          document.getElementById('mainContent').classList.remove('hidden');
+          initPage();
+        } else {
+          const errEl = document.getElementById('loginError');
+          errEl.textContent = data.message || 'Login gagal';
+          errEl.classList.remove('hidden');
+        }
+      } catch (err) {
+        const errEl = document.getElementById('loginError');
+        errEl.textContent = 'Terjadi kesalahan jaringan';
+        errEl.classList.remove('hidden');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<span>Masuk ke Sistem</span><i class="fas fa-arrow-right text-xs"></i>';
+      }
+    }
+
+    function doLogout() {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      location.reload();
+    }
+
+    // Check auth on load
+    (function() {
+      const token = localStorage.getItem('token');
+      if (token) {
+        window.authToken = token;
+        try { window.currentUser = JSON.parse(localStorage.getItem('user') || '{}'); } catch(e) {}
+        document.getElementById('loginOverlay').classList.add('hidden');
+        document.getElementById('mainContent').classList.remove('hidden');
+        initPage();
+      }
+    })();
+
+    function initPage() {
+      const now = new Date();
+      document.getElementById('currentDate').textContent = now.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+      
+      // Load tenant filters for selects
+      loadTenantsFilter();
+
+      // Sub-tab click handler
+      document.querySelectorAll('.subtab-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          document.querySelectorAll('.subtab-content').forEach(content => content.classList.add('hidden'));
+          document.querySelectorAll('.subtab-btn').forEach(b => { b.classList.remove('active'); b.classList.add('inactive'); b.setAttribute('aria-selected', 'false'); });
+          const subtabId = this.getAttribute('data-subtab');
+          document.getElementById('subtab-content-' + subtabId).classList.remove('hidden');
+          this.classList.remove('inactive'); this.classList.add('active');
+          this.setAttribute('aria-selected', 'true');
+        });
+      });
+      loadApprovalPerizinan();
+      loadApprovalSKManual();
+      loadApprovalSKAuto();
+      loadResetAbsensi();
+    }
+
+    async function loadTenantsFilter() {
+      try {
+        const res = await fetch('/api/admin/tenants?limit=500', { headers: { 'Authorization': 'Bearer ' + (getToken() || '') } });
+        const data = await res.json();
+        if (data.success && data.data) {
+          const tenantSelectors = ['izinTenantFilter', 'skManualTenantFilter', 'skAutoTenantFilter', 'resetTenantFilter'];
+          tenantSelectors.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+              const currentVal = el.value;
+              el.innerHTML = '<option value="">Semua Sekolah</option>';
+              data.data.forEach(t => {
+                const opt = document.createElement('option');
+                opt.value = t.tenant_id;
+                opt.textContent = t.nama_sekolah || t.tenant_id;
+                el.appendChild(opt);
+              });
+              el.value = currentVal;
+            }
+          });
+        }
+      } catch (e) { console.error('Failed to load tenants filter', e); }
+    }
+
+    async function loadApprovalPerizinan() {
+      const status = document.getElementById('izinStatusFilter')?.value || 'pending';
+      const tenant = document.getElementById('izinTenantFilter')?.value || '';
+      const params = new URLSearchParams();
+      params.set('status', status);
+      if (tenant) params.set('tenant_id', tenant);
+      try {
+        const res = await fetch(`/api/admin/leave-requests?${params.toString()}`, { headers: { 'Authorization': 'Bearer ' + (getToken() || '') } });
+        const result = await res.json();
+        const listEl = document.getElementById('approvalPerizinanList');
+        if (!listEl) return;
+        if (!result.success || !result.data) { 
+          listEl.innerHTML = '<div class="col-span-2 text-center py-12 text-slate-400 text-xs font-medium">Gagal memuat data perizinan</div>'; 
+          return; 
+        }
+        const data = result.data || [];
+        if (data.length === 0) { 
+          listEl.innerHTML = '<div class="col-span-2 text-center py-12 text-slate-400 text-xs font-medium"><i class="fas fa-inbox text-2xl mb-2 text-slate-300"></i><p>Tidak ada pengajuan izin pada filter ini</p></div>'; 
+          return; 
+        }
+        
+        const html = data.map(r => {
+          const status = r.status || 'pending';
+          const isPending = status === 'pending';
+          const tglMulai = r.tanggal_mulai ? new Date(r.tanggal_mulai).toLocaleDateString('id-ID') : '-';
+          const tglSelesai = r.tanggal_selesai ? new Date(r.tanggal_selesai).toLocaleDateString('id-ID') : '-';
+          const created = r.created_at ? new Date(r.created_at).toLocaleString('id-ID') : '-';
+          const jenisLabel = IZIN_LABEL[r.jenis] || r.jenis || '-';
+          const statusClass = STATUS_COLOR[status] || '#64748b';
+          const statusLabel = STATUS_LABEL[status] || status;
+          
+          const actions = isPending 
+            ? `<div class="flex gap-2 mt-4 pt-3 border-t border-slate-100">
+                 <button onclick="processApprovalIzin(${r.id}, 'approved')" class="flex-1 px-3 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5">
+                   <i class="fas fa-check"></i> Setujui
+                 </button>
+                 <button onclick="processApprovalIzin(${r.id}, 'rejected')" class="flex-1 px-3 py-2 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5">
+                   <i class="fas fa-times"></i> Tolak
+                 </button>
+               </div>` 
+            : `<div class="mt-4 pt-3 border-t border-slate-100 text-xs text-slate-500 italic">
+                 Catatan: ${escapeHtml(r.catatan || 'Tidak ada catatan')}
+               </div>`;
+
+          return `
+            <div class="border border-slate-200/80 rounded-2xl p-4 ${isPending ? 'bg-amber-50/30' : 'bg-slate-50/50'} hover:shadow-xs transition-all flex flex-col justify-between">
+              <div>
+                <div class="flex justify-between items-start gap-2 mb-2">
+                  <div>
+                    <h4 class="font-bold text-slate-900 text-sm">${escapeHtml(r.teacher_name || '-')}</h4>
+                    <p class="text-xs text-slate-500 font-medium">${escapeHtml(r.nama_sekolah || r.tenant_id || '-')}</p>
+                  </div>
+                  <span class="px-2.5 py-1 rounded-full text-xs font-bold" style="background:${statusClass}15; color:${statusClass};">${statusLabel}</span>
+                </div>
+                <div class="space-y-1 text-xs text-slate-600 font-medium mt-3 bg-white p-3 rounded-xl border border-slate-100">
+                  <div class="flex justify-between"><span class="text-slate-400">Jenis:</span> <span class="font-semibold text-slate-700">${jenisLabel}</span></div>
+                  <div class="flex justify-between"><span class="text-slate-400">Periode:</span> <span>${tglMulai}${tglSelesai && tglSelesai !== tglMulai ? ' s.d. ' + tglSelesai : ''}</span></div>
+                  <div class="flex justify-between"><span class="text-slate-400">Diajukan:</span> <span>${created}</span></div>
+                </div>
+              </div>
+              ${actions}
+            </div>
+          `;
+        }).join('');
+        listEl.innerHTML = html;
+      } catch (error) {
+        console.error('Approval perizinan load error:', error);
+        document.getElementById('approvalPerizinanList').innerHTML = '<div class="col-span-2 text-center py-12 text-rose-500 text-xs font-medium">Terjadi kesalahan saat memuat data</div>';
+      }
+    }
+
+    async function processApprovalIzin(id, status) {
+      const catatan = status === 'rejected' ? prompt('Catatan penolakan (opsional):') : prompt('Catatan persetujuan (opsional):');
+      if (catatan === null) return;
+      try {
+        const response = await fetch('/api/admin/leave-requests/' + id + '/status', {
+          method: 'PUT',
+          headers: { 'Authorization': 'Bearer ' + (getToken() || ''), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status, catatan })
+        });
+        const result = await response.json();
+        if (result.success) {
+          if (window.Swal) Swal.fire({ icon: 'success', title: 'Berhasil', text: result.message, timer: 1500, showConfirmButton: false });
+          loadApprovalPerizinan();
+        } else { alert(result.message || 'Gagal memproses izin'); }
+      } catch (error) { console.error('Approval izin process error:', error); alert('Terjadi kesalahan saat memproses izin'); }
+    }
+
+    async function loadApprovalSKManual() {
+      const tenant = document.getElementById('skManualTenantFilter')?.value || '';
+      try {
+        const res = await fetch('/api/list?tenant_id=' + encodeURIComponent(tenant), { headers: skGuruAuthHdr() });
+        const data = await res.json();
+        const tableEl = document.getElementById('skManualTable');
+        if (!tableEl) return;
+        if (!data.success || !data.data || data.data.length === 0) {
+          tableEl.innerHTML = '<tr><td colspan="7" class="px-4 py-12 text-center text-slate-400"><i class="fas fa-file-alt text-3xl mb-2 text-slate-300"></i><p>Tidak ada data SK manual</p></td></tr>';
+          return;
+        }
+        const html = data.data.map(t => {
+          const approvedClass = t.approval_status === 'approved' ? 'text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full' : t.approval_status === 'rejected' ? 'text-rose-600 bg-rose-50 px-2.5 py-1 rounded-full' : 'text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full';
+          return `<tr class="hover:bg-slate-50/80 transition-colors">
+            <td class="px-4 py-3 font-semibold text-slate-900">${escapeHtml(t.no_surat || '-')}</td>
+            <td class="px-4 py-3">${escapeHtml(t.nama || '-')}</td>
+            <td class="px-4 py-3 text-slate-500">${escapeHtml(t.tenant_name || '-')}</td>
+            <td class="px-4 py-3">${escapeHtml(t.tentang || '-')}</td>
+            <td class="px-4 py-3 text-slate-500">${escapeHtml(t.tmt || '-')}</td>
+            <td class="px-4 py-3 text-slate-500">${t.created_at ? new Date(t.created_at).toLocaleDateString('id-ID') : '-'}</td>
+            <td class="px-4 py-3 font-semibold"><span class="${approvedClass}">${escapeHtml(t.approval_status || 'Menunggu')}</span></td>
+          </tr>`;
+        }).join('');
+        tableEl.innerHTML = html;
+      } catch (error) {
+        console.error('SK Manual approval load error:', error);
+        document.getElementById('skManualTable').innerHTML = '<tr><td colspan="7" class="px-4 py-12 text-center text-rose-500 font-medium">Gagal memuat data</td></tr>';
+      }
+    }
+
+    async function loadApprovalSKAuto() {
+      try {
+        const res = await fetch('/api/approval', { headers: skGuruAuthHdr() });
+        const data = await res.json();
+        const tableEl = document.getElementById('skAutoTable');
+        if (!tableEl) return;
+        if (!data.success || !data.data || data.data.length === 0) {
+          tableEl.innerHTML = '<tr><td colspan="7" class="px-4 py-12 text-center text-slate-400"><i class="fas fa-file-alt text-3xl mb-2 text-slate-300"></i><p>Tidak ada guru yang perlu disetujui</p></td></tr>';
+          return;
+        }
+        const html = data.data.map(t => {
+          const qualifiedClass = t.qualified ? 'text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full font-semibold' : 'text-rose-600 bg-rose-50 px-2.5 py-1 rounded-full font-semibold';
+          const qualifiedText = t.qualified ? 'Layak' : 'Tidak layak';
+          const alreadyGen = t.already_generated ? '<span class="text-indigo-600 font-medium">Sudah dibuat</span>' : '<span class="text-slate-400">-</span>';
+          const approvedBadge = t.approval_status === 'approved' ? '<span class="text-emerald-600 font-bold">Disetujui</span>' : t.approval_status === 'rejected' ? '<span class="text-rose-600 font-bold">Ditolak</span>' : '<span class="text-amber-600 font-semibold">Menunggu</span>';
+          
+          const actionBtn = (t.approval_status === 'approved' || !t.qualified || t.already_generated)
+            ? '<button disabled class="w-8 h-8 rounded-lg bg-slate-100 text-slate-300 cursor-not-allowed inline-flex items-center justify-center" title="Sudah disetujui / Tidak layak"><i class="fas fa-check"></i></button>'
+            : `<button onclick="approveSkGuru(${t.teacher_id})" class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition inline-flex items-center justify-center" title="Setujui"><i class="fas fa-check"></i></button>`;
+
+          return `<tr class="hover:bg-slate-50/80 transition-colors">
+            <td class="px-4 py-3 font-semibold text-slate-900">${escapeHtml(t.nama || '-')}</td>
+            <td class="px-4 py-3 text-slate-500">${escapeHtml(t.tenant_name || '-')}</td>
+            <td class="px-4 py-3 text-slate-500">${escapeHtml(t.unit || '-')}</td>
+            <td class="px-4 py-3"><span class="${qualifiedClass}">${qualifiedText} (${t.years_of_service || 0} thn)</span></td>
+            <td class="px-4 py-3">${alreadyGen}</td>
+            <td class="px-4 py-3">${approvedBadge}</td>
+            <td class="px-4 py-3">${actionBtn}</td>
+          </tr>`;
+        }).join('');
+        tableEl.innerHTML = html;
+      } catch (error) {
+        console.error('SK Auto approval load error:', error);
+        document.getElementById('skAutoTable').innerHTML = '<tr><td colspan="7" class="px-4 py-12 text-center text-rose-500 font-medium">Gagal memuat data</td></tr>';
+      }
+    }
+
+    async function approveSkGuru(teacherId) {
+      try {
+        const res = await fetch('/api/approve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...skGuruAuthHdr() },
+          body: JSON.stringify({ teacher_ids: [teacherId] })
+        });
+        const data = await res.json();
+        if (data.success) {
+          if (window.Swal) Swal.fire({ title: 'Berhasil', text: data.message || 'Guru disetujui', icon: 'success', timer: 1500, showConfirmButton: false });
+          loadApprovalSKAuto();
+        } else {
+          if (window.Swal) Swal.fire({ title: 'Gagal', text: data.message || 'Gagal menyetujui guru', icon: 'error' });
+        }
+      } catch (e) {
+        console.error('[SK GURU APPROVE]', e);
+        if (window.Swal) Swal.fire({ title: 'Error', text: 'Terjadi kesalahan', icon: 'error' });
+      }
+    }
+
+    async function loadResetAbsensi() {
+      // Tenants already loaded in init via loadTenantsFilter
+    }
+
+    function toggleResetConfirm(checked) {
+      const resetExecuteBtn = document.getElementById('resetExecuteBtn');
+      if (checked) {
+        resetExecuteBtn.disabled = false;
+        resetExecuteBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+      } else {
+        resetExecuteBtn.disabled = true;
+        resetExecuteBtn.classList.add('opacity-50', 'cursor-not-allowed');
+      }
+    }
+
+    async function previewResetAbsensi() {
+      const tenantId = document.getElementById('resetTenantFilter')?.value || '';
+      const teacherId = document.getElementById('resetTeacherId')?.value || '';
+      const dateFrom = document.getElementById('resetDateFrom')?.value || '';
+      const dateTo = document.getElementById('resetDateTo')?.value || '';
+      const jenis = document.getElementById('resetJenisFilter')?.value || 'semua';
+      const params = new URLSearchParams();
+      if (tenantId) params.set('tenant_id', tenantId);
+      if (teacherId) params.set('teacher_id', teacherId);
+      if (dateFrom) params.set('date_from', dateFrom);
+      if (dateTo) params.set('date_to', dateTo);
+      if (jenis && jenis !== 'semua') params.set('jenis', jenis);
+      try {
+        const res = await fetch('/api/admin/attendance/reset?' + params.toString(), { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + (getToken() || '') } });
+        const result = await res.json();
+        if (!result.success) { if (window.Swal) Swal.fire({ title: 'Error', text: result.message || 'Gagal pratinjau', icon: 'error', confirmButtonColor: '#e11d48' }); return; }
+        const previewEl = document.getElementById('resetPreviewArea');
+        const previewTable = document.getElementById('resetPreviewTable');
+        const previewCount = document.getElementById('resetPreviewCount');
+        if (result.data && result.data.length > 0) {
+          const html = result.data.map(l => `<tr class="hover:bg-slate-100/50 transition">
+            <td class="px-3 py-2 font-medium text-slate-900">${escapeHtml(l.teacher_name || '-')}</td>
+            <td class="px-3 py-2 text-slate-500">${escapeHtml(l.nama_sekolah || '-')}</td>
+            <td class="px-3 py-2 text-slate-500">${l.tanggal ? new Date(l.tanggal).toLocaleDateString('id-ID') : '-'}</td>
+            <td class="px-3 py-2"><span class="px-2 py-0.5 rounded-md bg-slate-200/70 text-slate-700 font-semibold">${l.jenis || '-'}</span></td>
+            <td class="px-3 py-2 text-slate-500">${l.jam_scan || '-'}</td>
+            <td class="px-3 py-2 text-slate-500">${l.status || '-'}</td>
+          </tr>`).join('');
+          previewTable.innerHTML = html;
+          previewCount.textContent = 'Menampilkan ' + result.data.length + ' data absensi yang akan dihapus.';
+        } else {
+          previewTable.innerHTML = '<tr><td colspan="6" class="text-center py-6 text-slate-400">Tidak ada data absensi yang sesuai dengan filter.</td></tr>';
+          previewCount.textContent = '';
+        }
+        previewEl.classList.remove('hidden');
+        document.getElementById('resetExecuteBtn').disabled = !document.getElementById('resetConfirm').checked || (result.data && result.data.length === 0);
+        if (result.data && result.data.length === 0) {
+          document.getElementById('resetExecuteBtn').classList.add('opacity-50', 'cursor-not-allowed');
+        }
+      } catch (error) { console.error('Reset preview error:', error); if (window.Swal) Swal.fire({ title: 'Error', text: 'Terjadi kesalahan saat pratinjau', icon: 'error', confirmButtonColor: '#e11d48' }); }
+    }
+
+    async function executeResetAbsensi() {
+      if (!confirm('Yakin ingin menghapus permanen data absensi yang ditampilkan? Tindakan ini tidak dapat dibatalkan.')) return;
+      const tenantId = document.getElementById('resetTenantFilter')?.value || '';
+      const teacherId = document.getElementById('resetTeacherId')?.value || '';
+      const dateFrom = document.getElementById('resetDateFrom')?.value || '';
+      const dateTo = document.getElementById('resetDateTo')?.value || '';
+      const jenis = document.getElementById('resetJenisFilter')?.value || 'semua';
+      const params = new URLSearchParams();
+      if (tenantId) params.set('tenant_id', tenantId);
+      if (teacherId) params.set('teacher_id', teacherId);
+      if (dateFrom) params.set('date_from', dateFrom);
+      if (dateTo) params.set('date_to', dateTo);
+      if (jenis && jenis !== 'semua') params.set('jenis', jenis);
+      try {
+        const res = await fetch('/api/admin/attendance/reset?' + params.toString(), { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + (getToken() || '') } });
+        const result = await res.json();
+        if (result.success) {
+          if (window.Swal) Swal.fire({ title: 'Sukses', text: result.message, icon: 'success', confirmButtonColor: '#10b981', timer: 1500, showConfirmButton: false });
+          document.getElementById('resetPreviewArea').classList.add('hidden');
+          document.getElementById('resetExecuteBtn').disabled = true;
+          document.getElementById('resetExecuteBtn').classList.add('opacity-50', 'cursor-not-allowed');
+          document.getElementById('resetConfirm').checked = false;
+        } else {
+          if (window.Swal) Swal.fire({ title: 'Error', text: result.message || 'Gagal menghapus data', icon: 'error', confirmButtonColor: '#e11d48' });
+        }
+      } catch (error) { console.error('Execute reset error:', error); if (window.Swal) Swal.fire({ title: 'Error', text: 'Terjadi kesalahan', icon: 'error', confirmButtonColor: '#e11d48' }); }
+    }
+  </script>
+</body>
+</html>
