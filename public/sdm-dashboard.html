@@ -82,6 +82,9 @@
         <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="rules">
           <i class="fas fa-user-tag"></i><span>Aturan Kepegawaian</span>
         </button>
+        <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="kafalah">
+          <i class="fas fa-coins text-yellow-600"></i><span>KAFALAH</span>
+        </button>
         <div class="border-t border-gray-200 my-2"></div>
         <button class="nav-item w-full text-left flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-100" data-tab="qr-generator">
           <i class="fas fa-qrcode"></i><span>QR Scanner</span>
@@ -684,6 +687,96 @@
           </div>
         </div>
 
+        <!-- Tab: KAFALAH -->
+        <div id="kafalahTab" class="tab-content hidden">
+          <div class="bg-white rounded-xl shadow-sm border-2 border-yellow-200 p-6 mb-4">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+              <div>
+                <h3 class="text-lg font-semibold text-gray-900"><i class="fas fa-coins mr-2 text-yellow-600"></i>Penggajian KAFALAH</h3>
+                <p class="text-sm text-gray-500">Mengikuti struktur KAFALAH YPWI Luwu Timur (Pokok + Tunjangan + Pemotongan)</p>
+              </div>
+              <div class="flex flex-wrap items-end gap-2">
+                <div><label class="block text-xs font-medium text-gray-600 mb-1">Sekolah</label>
+                  <select id="kafalahTenantSelect" onchange="kafalahOnSettingsContextChange(this.value)" class="px-3 py-2 border border-gray-300 rounded-md text-sm">
+                    <option value="">Pilih sekolah</option>
+                  </select>
+                </div>
+                <div><label class="block text-xs font-medium text-gray-600 mb-1">Bulan</label>
+                  <input type="month" id="kafalahBulan" class="px-3 py-2 border border-gray-300 rounded-md text-sm" />
+                </div>
+                <button onclick="previewKafalah()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm"><i
+                    class="fas fa-calculator mr-1"></i>Hitung & Simpan</button>
+                <button onclick="regenerateKafalah()" class="bg-red-600 text-white px-4 py-2 rounded-lg text-sm"><i
+                    class="fas fa-redo mr-1"></i>Hitung Ulang</button>
+                <button onclick="sendKafalahWhatsApp('pusat')" class="bg-green-700 text-white px-4 py-2 rounded-lg text-sm"><i
+                    class="fab fa-whatsapp mr-1"></i>Kirim WA (Pusat)</button>
+                <button onclick="sendKafalahWhatsApp('sekolah')" class="bg-teal-600 text-white px-4 py-2 rounded-lg text-sm"><i
+                    class="fab fa-whatsapp mr-1"></i>Kirim WA (Sekolah)</button>
+                <button onclick="exportKafalahExcel()" class="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm"><i
+                    class="fas fa-file-excel mr-1"></i>Excel</button>
+                <button onclick="loadKafalahHistory()" class="bg-gray-600 text-white px-4 py-2 rounded-lg text-sm"><i
+                    class="fas fa-history mr-1"></i>History</button>
+              </div>
+            </div>
+            
+            <div class="overflow-x-auto">
+              <table class="w-full text-xs divide-y divide-gray-100">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th class="px-2 py-2 text-left font-semibold text-gray-600 uppercase">No</th>
+                    <th class="px-2 py-2 text-left font-semibold text-gray-600 uppercase">Nama</th>
+                    <th class="px-2 py-2 text-left font-semibold text-gray-600 uppercase">NIK</th>
+                    <th class="px-2 py-2 text-left font-semibold text-gray-600 uppercase">Status</th>
+                    <th class="px-2 py-2 text-left font-semibold text-gray-600 uppercase">Jabatan</th>
+                    <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase">Kafalah Pokok</th>
+                    <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase">T. Keluarga (Istri)</th>
+                    <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase">T. Keluarga (Anak)</th>
+                    <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase bg-blue-50">Total A</th>
+                    <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase">T. Struktural</th>
+                    <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase">T. Fungsional</th>
+                    <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase">T. Transportasi</th>
+                    <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase">T. Kedatangan</th>
+                    <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase">T. Tidak Pulang Cepat</th>
+                    <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase">T. Uang Makan</th>
+                    <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase">KJM</th>
+                    <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase">T. Prestasi Kinerja</th>
+                    <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase">T. Apresiasi</th>
+                    <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase">T. Pembina</th>
+                    <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase">T. Jam Mengajar</th>
+                    <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase bg-emerald-50">Total B</th>
+                    <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase bg-red-50">Pemotongan Luar Tanggungan</th>
+                    <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase bg-red-50">Durasi SIM-T</th>
+                    <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase bg-red-50">Ta'awun</th>
+                    <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase bg-red-50">Piutang</th>
+                    <th class="px-2 py-2 text-right font-semibold text-gray-600 uppercase bg-yellow-50">Total KAFALAH</th>
+                    <th class="px-2 py-2 text-center font-semibold text-gray-600 uppercase">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="kafalahTable" class="divide-y divide-gray-100">
+                  <tr>
+                    <td colspan="26" class="px-4 py-8 text-center text-gray-500">
+                      <i class="fas fa-spinner fa-spin text-xl mb-2"></i>
+                      <p>Pilih sekolah & periode lalu klik Hitung Preview</p>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <!-- Base Setting info (toggle pindah ke tab Pengaturan Pembayaran agar satu tempat dengan form-nya) -->
+            <div class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
+              <i class="fas fa-info-circle mr-1"></i>
+              Base Setting (Pusat / Sekolah) dan komponen tunjangan diatur di tab
+              <b>Pengaturan Pembayaran &rarr; Pengaturan KAFALAH</b>.
+            </div>
+            <div id="kafalahSummary" class="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3 hidden">
+              <div class="bg-blue-50 p-3 rounded-lg"><p class="text-xs text-blue-700">Total Pendapatan Wajib</p><p class="text-lg font-bold text-blue-900" id="kSumWajib">Rp 0</p></div>
+              <div class="bg-emerald-50 p-3 rounded-lg"><p class="text-xs text-emerald-700">Total Pendapatan Insentif</p><p class="text-lg font-bold text-emerald-900" id="kSumInsentif">Rp 0</p></div>
+              <div class="bg-red-50 p-3 rounded-lg"><p class="text-xs text-red-700">Total Pemotongan</p><p class="text-lg font-bold text-red-900" id="kSumPotong">Rp 0</p></div>
+              <div class="bg-yellow-50 p-3 rounded-lg"><p class="text-xs text-yellow-700">Total KAFALAH Diterima</p><p class="text-lg font-bold text-yellow-900" id="kSumTotal">Rp 0</p></div>
+            </div>
+          </div>
+        </div>
+
         <!-- Tab: Aturan Kepegawaian -->
         <div id="rulesTab" class="tab-content hidden">
           <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
@@ -761,10 +854,106 @@
                 <p class="text-sm text-gray-500 mb-3">Kelola data sekolah, metode absensi, dan tipe unit.</p>
                 <span class="text-indigo-600 font-medium text-sm">Modul pengaturan SDM</span>
               </div>
+</div>
+            <!-- KAFALAH Settings Section -->
+            <div class="mt-8 pt-8 border-t border-gray-200">
+              <h4 class="text-lg font-semibold text-gray-900 mb-3"><i class="fas fa-coins mr-2 text-yellow-600"></i>Pengaturan KAFALAH (Komponen Tunjangan & Potongan)</h4>
+              <div class="flex items-center gap-3 mb-4">
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" id="kafalahBaseToggle" class="sr-only peer" onchange="kafalahOnSettingsContextChange()">
+                  <div class="w-12 h-6 rounded-full border-2 border-gray-300 peer-checked:bg-indigo-600 peer-checked:border-indigo-600 relative after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-5 after:h-5 after:bg-white after:rounded-full after:transition-all peer-checked:after:translate-x-full peer-focus:ring-2 peer-focus:ring-indigo-500 peer-focus:outline-none"></div>
+                  <span class="text-sm font-medium text-gray-700">
+                    <span class="peer-checked:hidden">Mode Pusat (Global)</span>
+                    <span class="hidden peer-checked:inline">Mode Sekolah</span>
+                  </span>
+                </label>
+                <div class="ml-4">
+                  <select id="kafalahSettingsTenantSelect" onchange="kafalahOnSettingsContextChange(this.value)" class="px-3 py-1.5 border border-gray-300 rounded-md text-sm">
+                    <option value="">Pilih sekolah</option>
+                  </select>
+                </div>
+              </div>
+              <p id="kafalahSettingsInfo" class="text-xs text-gray-500 mt-2"></p>
+              <form id="kafalahSettingsForm" onsubmit="saveKafalahSettings(event)" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-xs font-medium text-gray-700 mb-1">Tunj. Struktural</label>
+                  <input type="number" id="ksTunjStruktural" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" step="1000" min="0">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-700 mb-1">Tunj. Pengabdian</label>
+                  <input type="number" id="ksTunjPengabdian" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" step="1000" min="0">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-700 mb-1">Tunj. Fungsional</label>
+                  <input type="number" id="ksTunjFungsional" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" step="1000" min="0">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-700 mb-1">Tunj. Transport</label>
+                  <input type="number" id="ksTunjTransport" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" step="1000" min="0">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-700 mb-1">Tunj. Kedatangan</label>
+                  <input type="number" id="ksTunjTepatWaktu" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" step="1000" min="0">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-700 mb-1">Tunj. Tidak Cepat Pulang</label>
+                  <input type="number" id="ksTunjTidakCepatPulang" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" step="1000" min="0">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-700 mb-1">Tunj. Uang Makan</label>
+                  <input type="number" id="ksTunjUangMakan" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" step="1000" min="0">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-700 mb-1">Nominal KJM</label>
+                  <input type="number" id="ksNominalKjm" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" step="1000" min="0">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-700 mb-1">Tunj. Prestasi Kinerja</label>
+                  <input type="number" id="ksTunjPrestasiKinerja" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" step="1000" min="0">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-700 mb-1">Tunj. Apresiasi</label>
+                  <input type="number" id="ksTunjApresiasi" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" step="1000" min="0">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-700 mb-1">Tunj. Pembina</label>
+                  <input type="number" id="ksTunjPembina" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" step="1000" min="0">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-700 mb-1">Tunj. Jam Mengajar</label>
+                  <input type="number" id="ksTunjJamMengajar" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" step="1000" min="0">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-700 mb-1">Tunj. Istri</label>
+                  <input type="number" id="ksTunjIstri" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" step="1000" min="0">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-700 mb-1">Tunj. Anak</label>
+                  <input type="number" id="ksTunjAnak" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" step="1000" min="0">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-700 mb-1">Pot. Luar Tanggungan</label>
+                  <input type="number" id="ksPotLuarTanggungan" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" step="1000" min="0">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-700 mb-1">Pot. Durasi SIMT</label>
+                  <input type="number" id="ksPotDurasiSimt" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" step="1000" min="0">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-700 mb-1">Pot. Taawun</label>
+                  <input type="number" id="ksPotTaawun" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" step="1000" min="0">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-700 mb-1">Pot. Piutang</label>
+                  <input type="number" id="ksPotPiutang" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" step="1000" min="0">
+                </div>
+                <div class="flex justify-end">
+                  <button type="submit" class="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700"><i class="fas fa-save mr-1"></i>Simpan Pengaturan KAFALAH</button>
+                </div>
+              </form>
             </div>
-          </div>
-        </div>
-      </div>
+            <div class="mt-8 pt-8 border-t border-gray-200">
+              <h4 class="text-base font-semibold text-gray-900 mb-3"><i class="fas fa-chart-line mr-2 text-indigo-600"></i>Kenaikan Gaji Berkala</h4>
       </div>
     </main>
   </div>
@@ -1014,6 +1203,120 @@
     </div>
   </div>
 
+  <!-- Modal: Kafalah Edit Manual -->
+  <div id="kafalahEditModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto">
+      <div class="p-6 border-b flex justify-between items-center">
+        <h3 class="text-lg font-semibold text-gray-900" id="kafalahEditTitle">Edit KAFALAH Manual</h3>
+        <button onclick="closeKafalahEditModal()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+      </div>
+      <form id="kafalahEditForm" onsubmit="saveKafalahEdit(event)" class="p-6 space-y-4">
+        <input type="hidden" id="kafalahEditId">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Nama</label>
+            <input id="kafEdNama" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" required>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">NIK</label>
+            <input id="kafEdNik" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Jabatan</label>
+            <input id="kafEdJabatan" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Status</label>
+            <select id="kafEdStatus" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
+              <option value="PNS">PNS</option>
+              <option value="GTY">GTY</option>
+              <option value="GTT">GTT</option>
+              <option value="Kontrak">Kontrak</option>
+              <option value="Honorer">Honorer</option>
+            </select>
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-xs font-medium text-gray-600 mb-1">Kafalah Pokok</label>
+            <input type="number" id="kafEdPokok" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" step="1000">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">T. Keluarga (Istri)</label>
+            <input type="number" id="kafEdTistri" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" step="1000">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">T. Keluarga (Anak)</label>
+            <input type="number" id="kafEdTan" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" step="1000">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">T. Struktural</label>
+            <input type="number" id="kafEdTStruk" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" step="1000">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">T. Fungsional</label>
+            <input type="number" id="kafEdTFung" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" step="1000">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">T. Transportasi</label>
+            <input type="number" id="kafEdTTrans" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" step="1000">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">T. Kedatangan</label>
+            <input type="number" id="kafEdTKedat" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" step="1000">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">T. Tidak Pulang Cepat</label>
+            <input type="number" id="kafEdTTPul" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" step="1000">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">T. Uang Makan</label>
+            <input type="number" id="kafEdTUangM" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" step="1000">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">KJM</label>
+            <input type="number" id="kafEdKJM" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" step="1000">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">T. Prestasi Kinerja</label>
+            <input type="number" id="kafEdTPrest" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" step="1000">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">T. Apresiasi</label>
+            <input type="number" id="kafEdTApr" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" step="1000">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">T. Pembina</label>
+            <input type="number" id="kafEdTPem" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" step="1000">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">T. Jam Mengajar</label>
+            <input type="number" id="kafEdTJam" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" step="1000">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Pot. Luar Tanggungan</label>
+            <input type="number" id="kafEdPLT" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" step="1000">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Durasi SIM-T</label>
+            <input type="number" id="kafEdDSIM" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" step="1000">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Ta'awun</label>
+            <input type="number" id="kafEdTawun" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" step="1000">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-600 mb-1">Piutang</label>
+            <input type="number" id="kafEdPiut" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" step="1000">
+          </div>
+        </div>
+        <div class="p-6 border-t flex justify-end space-x-2">
+          <button type="button" onclick="closeKafalahEditModal()" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">Batal</button>
+          <button type="submit" class="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700"><i class="fas fa-save mr-1"></i>Simpan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="js/kafalah-bendahara.js"></script>
   <script src="sdm-dashboard.js"></script>
 </body>
 
