@@ -4342,6 +4342,84 @@ function navigateToADMQU() {
   });
 }
 
+// ==================== PWA UPDATE ====================
+async function checkPwaUpdate() {
+  if (!('serviceWorker' in navigator)) {
+    Swal.fire('Info', 'PWA tidak didukung di browser ini', 'info');
+    return;
+  }
+
+  const registration = await navigator.serviceWorker.ready;
+  
+  // Check if there's a waiting SW
+  if (registration.waiting) {
+    promptReload();
+    return;
+  }
+
+  // Check for updates
+  try {
+    await registration.update();
+    
+    if (registration.waiting) {
+      promptReload();
+    } else if (registration.installing) {
+      // Wait for installing to finish
+      registration.installing.addEventListener('statechange', () => {
+        if (registration.waiting) promptReload();
+      });
+    } else {
+      Swal.fire('Info', 'Aplikasi sudah versi terbaru', 'info');
+    }
+  } catch (err) {
+    console.error('PWA update check failed:', err);
+    Swal.fire('Error', 'Gagal cek update: ' + err.message, 'error');
+  }
+}
+
+function promptReload() {
+  Swal.fire({
+    title: 'Update Tersedia',
+    text: 'Versi baru aplikasi siap. Reload halaman untuk menerapkan update?',
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: 'Reload Sekarang',
+    cancelButtonText: 'Nanti',
+    confirmButtonColor: '#3730a3'
+  }).then((result) => {
+    if (result.isConfirmed) {
+      if (navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({ type: 'SKIP_WAITING' });
+      }
+      window.location.reload();
+    }
+  });
+}
+
+function showUpdateBadge() {
+  document.getElementById('pwaUpdateBadge')?.style.setProperty('display', 'inline-block');
+  document.getElementById('mobilePwaUpdateBadge')?.style.setProperty('display', 'inline-block');
+}
+
+// Auto-check on page load
+window.addEventListener('load', () => {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.ready.then(reg => {
+      if (reg.waiting) {
+        showUpdateBadge();
+      }
+    });
+  }
+});
+
+// Listen for SW updates while page is open
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    // SW updated - could show toast
+    console.log('[PWA] Service worker updated');
+  });
+}
+
 // ==================== SPMB PANITIA ACCESS ====================
 async function checkSpmbPanitia() {
   try {

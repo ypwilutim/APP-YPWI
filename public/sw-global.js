@@ -1,15 +1,17 @@
-const CACHE_VERSION = 'sekolah-app-v2';
+const CACHE_VERSION = 'sekolah-app-v3';
 const CACHE_NAME = CACHE_VERSION;
 const OFFLINE_URL = '/offline.html';
 
 const PRECACHE_ASSETS = [
   '/',
   '/dashboard.html',
+  '/admqu.html',
   '/login.html',
   '/offline.html',
   '/manifest.json',
   '/pwa-register.js',
   '/js/dashboard.js',
+  '/js/admqu.js',
   '/css/style.css',
   '/assets/images/YPWI LOGO HITAM.png'
 ];
