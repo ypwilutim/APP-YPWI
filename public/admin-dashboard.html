@@ -3198,6 +3198,34 @@
         <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
             <div>
+              <h3 class="text-lg font-semibold text-gray-900">Pengajuan SK Guru (Menunggu Persetujuan)</h3>
+              <p class="text-gray-600 text-sm">Guru mengajukan SK, admin menyetujui dan generate</p>
+            </div>
+            <button onclick="loadPendingSkRequests()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm flex items-center gap-2">
+              <i class="fas fa-sync-alt"></i> Refresh
+            </button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full">
+              <thead class="bg-gray-50 border-b border-gray-100">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Nama Guru</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Sekolah</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Jenis</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Tanggal</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="skRequestTable" class="divide-y divide-gray-100">
+                <tr><td colspan="5" class="px-4 py-8 text-center text-gray-500">Memuat pengajuan...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+          <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+            <div>
               <h3 class="text-lg font-semibold text-gray-900">Approval Pengajuan SK Manual</h3>
               <p class="text-gray-600 text-sm">Review dan setujui SK yang diajukan guru (menggunakan daftar SK existing)</p>
             </div>

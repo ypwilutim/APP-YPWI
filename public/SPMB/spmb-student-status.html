@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cek Status Pendaftaran SPMB</title>
+  <link rel="stylesheet" href="/SPMB/css/tailwind.css">
+  <link rel="stylesheet" href="/SPMB/css/spmb-theme.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="spmb-page min-h-screen flex items-center justify-center p-4">
+  <div class="spmb-card spmb-w-full spmb-max-w-md spmb-p-6">
+    <div class="spmb-text-center spmb-mb-6">
+      <div class="spmb-mb-4" style="width: 64px; height: 64px; background: var(--spmb-primary-light); color: var(--spmb-primary); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto; font-size: 1.5rem;">
+        <i class="fa-solid fa-clipboard-check"></i>
+      </div>
+      <h1 class="text-xl font-bold text-slate-900">Cek Status Pendaftaran</h1>
+      <p class="spmb-text-muted spmb-mt-1">Masukkan nomor pendaftaran dan nomor WA orang tua</p>
+    </div>
+
+    <form id="statusForm" class="spmb-flex spmb-flex-col spmb-gap-4" onsubmit="event.preventDefault(); check()">
+      <div>
+        <label for="appId" class="spmb-label">Nomor Pendaftaran</label>
+        <input id="appId" type="text" placeholder="Contoh: 123" class="spmb-input" required>
+      </div>
+      <div>
+        <label for="phone" class="spmb-label">No WA Orang Tua</label>
+        <input id="phone" type="tel" placeholder="08xxxxxxxxxx" class="spmb-input" required>
+      </div>
+      <button type="submit" class="spmb-btn spmb-btn-primary spmb-btn-lg spmb-mt-2">
+        <i class="fa-solid fa-search"></i> Cek Status
+      </button>
+    </form>
+
+    <div id="result" class="spmb-hidden"></div>
+  </div>
+
+  <footer class="spmb-footer">
+    <div class="spmb-container">
+      <p>&copy; <span id="year"></span> SPMB - Sistem Penerimaan Murid Baru. All rights reserved.</p>
+    </div>
+  </footer>
+
+  <script>
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toast-container') || (() => {
+        const c = document.createElement('div');
+        c.id = 'toast-container';
+        c.className = 'spmb-toast-container';
+        document.body.appendChild(c);
+        return c;
+      })();
+      const toast = document.createElement('div');
+      toast.className = `spmb-toast spmb-toast-${type}`;
+      toast.innerHTML = `<span class="spmb-toast-content"><strong class="spmb-toast-title">${type === 'success' ? 'Berhasil' : type === 'error' ? 'Gagal' : 'Info'}</strong><p class="spmb-toast-message">${message}</p></span><button class="spmb-toast-close" onclick="this.parentElement.remove()"><i class="fa-solid fa-xmark"></i></button>`;
+      container.appendChild(toast);
+      setTimeout(() => toast.remove(), 5000);
+    }
+
+    async function check() {
+      const id = document.getElementById('appId').value.trim();
+      const phone = document.getElementById('phone').value.trim();
+      const resultEl = document.getElementById('result');
+      
+      if (!id || !phone) {
+        showToast('Mohon isi nomor pendaftaran dan nomor WA', 'warning');
+        return;
+      }
+
+      resultEl.classList.add('spmb-hidden');
+      resultEl.innerHTML = '';
+
+      try {
+        const res = await fetch('/api/spmb/student/status/' + encodeURIComponent(id) + '?phone=' + encodeURIComponent(phone));
+        const data = await res.json();
+        
+        if (data.success) {
+          const d = data.data;
+          const statusClass = {
+            pending: 'spmb-badge-pending',
+            verified: 'spmb-badge-verified',
+            accepted: 'spmb-badge-accepted',
+            rejected: 'spmb-badge-rejected',
+            enrolled: 'spmb-badge-enrolled'
+          }[d.status] || '';
+          
+          const payClass = {
+            unpaid: 'spmb-badge-unpaid',
+            paid: 'spmb-badge-paid'
+          }[d.payment_status] || '';
+          
+          resultEl.innerHTML = `
+            <div class="spmb-card spmb-p-4 spmb-mt-4 animate-fadeIn">
+              <div class="spmb-flex spmb-items-center spmb-justify-between spmb-mb-3">
+                <h3 class="text-lg font-semibold text-slate-900">${d.nama}</h3>
+                <span class="spmb-badge ${statusClass}">${d.status}</span>
+              </div>
+              <div class="spmb-flex spmb-flex-wrap spmb-gap-4 spmb-text-sm spmb-text-muted spmb-mb-3">
+                <div class="spmb-flex spmb-items-center spmb-gap-1"><i class="fa-solid fa-hashtag"></i> ID: ${d.id}</div>
+                <div class="spmb-flex spmb-items-center spmb-gap-1"><i class="fa-solid fa-phone"></i> ${d.phone || '-'}</div>
+              </div>
+              <div class="spmb-flex spmb-items-center spmb-gap-2 spmb-mb-3">
+                <span class="spmb-text-sm spmb-text-muted">Pembayaran:</span>
+                <span class="spmb-badge ${payClass}">${d.payment_status}</span>
+                ${d.payment_amount ? `<span class="spmb-text-sm spmb-text-muted">(Rp ${Number(d.payment_amount).toLocaleString()})</span>` : ''}
+              </div>
+              <div class="spmb-flex spmb-items-center spmb-gap-2">
+                <span class="spmb-text-sm spmb-text-muted">Terdaftar:</span>
+                <span class="spmb-text-sm">${new Date(d.created_at).toLocaleDateString('id-ID')}</span>
+              </div>
+            </div>
+          `;
+          resultEl.classList.remove('spmb-hidden');
+        } else {
+          showToast(data.message || 'Pendaftaran tidak ditemukan', 'error');
+        }
+      } catch (e) {
+        showToast('Terjadi kesalahan: ' + e.message, 'error');
+      }
+    }
+
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toast-container') || (() => {
+        const c = document.createElement('div');
+        c.id = 'toast-container';
+        c.className = 'spmb-toast-container';
+        document.body.appendChild(c);
+        return c;
+      })();
+      const toast = document.createElement('div');
+      toast.className = `spmb-toast spmb-toast-${type}`;
+      toast.innerHTML = `<span class="spmb-toast-content"><strong class="spmb-toast-title">${type === 'success' ? 'Berhasil' : type === 'error' ? 'Gagal' : type === 'warning' ? 'Peringatan' : 'Info'}</strong><p class="spmb-toast-message">${message}</p></span><button class="spmb-toast-close" onclick="this.parentElement.remove()"><i class="fa-solid fa-xmark"></i></button>`;
+      container.appendChild(toast);
+      setTimeout(() => toast.remove(), 5000);
+    }
+
+    document.getElementById('year').textContent = new Date().getFullYear();
+  </script>
+
+  <style>
+    .animate-fadeIn { animation: fadeIn 0.3s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    .spmb-hidden { display: none; }
+  </style>
+</body>
+</html>

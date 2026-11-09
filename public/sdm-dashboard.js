@@ -113,7 +113,7 @@ const tabSubtitles = {
   'kpi': 'Penilaian kinerja pegawai & evaluasi',
   'attendance': 'Rekap log absensi guru',
   'recapAbsensi': 'Rekap absensi bulanan per sekolah',
-  
+  'manualAttendance': 'Input absensi manual per guru',
   'payroll': 'Perhitungan gaji & potongan absensi',
   'sk-guru': 'Dokumen resmi kepegawaian guru',
   'rules': 'Aturan status kepegawaian & absensi',
@@ -129,7 +129,7 @@ const tabTitles = {
   'kpi': 'KPI & Evaluasi',
   'attendance': 'Log Kehadiran',
   'recapAbsensi': 'Rekap Absensi',
-  
+  'manualAttendance': 'Input Absensi Manual',
   'payroll': 'Penggajian',
   'sk-guru': 'Dokumen SK Guru',
   'rules': 'Aturan Kepegawaian',
@@ -155,7 +155,7 @@ async function showTab(tabName) {
   if (tabName === 'kpi') { await loadKpiPeriods(); loadKpiTemplates(); await loadKpiOverview(); applyKpiAccessControl(); }
   if (tabName === 'attendance') { loadAttendanceLogs(); initMonthlyRecapSelectors(); }
   if (tabName === 'recapAbsensi') { loadAttendanceRecap(); initMonthlyRecapSelectors(); }
- 
+  if (tabName === 'manualAttendance') { loadManualAttendanceSelectors(); loadManualAttendance(); }
   if (tabName === 'payroll') { loadPayrollYears(); initPayrollSelectors(); initMonthlyRecapSelectors(); }
 }
 
@@ -274,8 +274,8 @@ async function loadDashboardStats() {
             ? '<span class="px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-800 rounded-full">Cukup</span>'
             : '<span class="px-2 py-1 text-xs font-medium bg-red-100 text-red-800 rounded-full">Perhatian</span>';
           return `
-            <tr>
-              <td class="px-4 py-3 text-sm font-medium text-gray-900">${escapeHtml(s.nama_sekolah)}</td>
+            <tr class="cursor-pointer hover:bg-gray-50" onclick="showSchoolDetail('${s.tenant_id || ''}', '${escapeHtml(s.nama_sekolah)}')">
+              <td class="px-4 py-3 text-sm font-medium text-gray-900">${escapeHtml(s.nama_sekolah)} <button onclick="event.stopPropagation();showSchoolDetail('${s.tenant_id || ''}','${escapeHtml(s.nama_sekolah)}')" class="ml-2 text-xs text-indigo-600 hover:underline">Detail</button></td>
               <td class="px-4 py-3 text-sm text-gray-700">${s.teachers || 0}</td>
               <td class="px-4 py-3">
                 <div class="flex items-center">
@@ -687,9 +687,11 @@ async function loadTeachers() {
             <td class="px-4 py-3 text-sm text-gray-700">${escapeHtml(t.nama_sekolah || '-')}</td>
             <td class="px-4 py-3 text-sm text-gray-700">${escapeHtml(t.status_kepegawaian || '-')}</td>
             <td class="px-4 py-3">${presentBadge}</td>
-            <td class="px-4 py-3">
-              <button onclick="viewTeacherDetail(${t.id})" class="text-indigo-600 hover:text-indigo-800 text-sm"><i class="fas fa-eye"></i></button>
-            </td>
+             <td class="px-4 py-3">
+               <button onclick="viewTeacherDetail(${t.id})" class="text-indigo-600 hover:text-indigo-800 text-sm mr-2"><i class="fas fa-eye"></i></button>
+               <button onclick="editTeacher(${t.id})" class="text-amber-600 hover:text-amber-800 text-sm mr-2"><i class="fas fa-edit"></i></button>
+               <button onclick="deleteTeacher(${t.id})" class="text-red-600 hover:text-red-800 text-sm"><i class="fas fa-trash"></i></button>
+             </td>
           </tr>`;
       }).join('');
       document.getElementById('teacherPaginationInfo').textContent = `Menampilkan ${data.data.data.length} dari ${data.data.total} data`;
@@ -716,13 +718,36 @@ function handleTeacherSearch(e) {
   searchDebounce = setTimeout(() => { teacherCurrentPage = 1; loadTeachers(); }, 500);
 }
 
-function viewTeacherDetail(id) {
-  Swal.fire({
-    title: 'Detail Guru',
-    html: `<p class="text-sm text-gray-600">ID Guru: ${id}</p><p class="text-sm text-gray-500 mt-2">Detail lengkap tersedia di database SDM.</p>`,
-    confirmButtonText: 'Tutup',
-    confirmButtonColor: '#4f46e5'
-  });
+async function viewTeacherDetail(id) {
+  try {
+    let teacher = null;
+    // try current page data first
+    const data = await api('/sdm-dashboard/teacher-list?page=1&limit=200');
+    teacher = (data.data?.data || []).find(t => t.id === id);
+    if (!teacher) {
+      Swal.fire('Error', 'Data guru tidak ditemukan', 'error');
+      return;
+    }
+    const foto = teacher.link_foto ? `<img src="${escapeHtml(teacher.link_foto)}" alt="Foto" class="w-24 h-24 rounded-full object-cover mx-auto mb-4 border">` : `<div class="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center mx-auto mb-4"><i class="fas fa-user text-3xl text-gray-400"></i></div>`;
+    const html = `
+      <div class="text-center">
+        ${foto}
+        <h3 class="text-lg font-semibold text-gray-900">${escapeHtml(teacher.nama || '-')}</h3>
+        <p class="text-sm text-gray-500">${escapeHtml(teacher.jabatan_di_unit || '-')}</p>
+      </div>
+      <div class="mt-4 text-left text-sm space-y-1">
+        <p><span class="font-medium">NIK:</span> ${escapeHtml(teacher.nik || '-')}</p>
+        <p><span class="font-medium">NIP:</span> ${escapeHtml(teacher.nip || '-')}</p>
+        <p><span class="font-medium">Sekolah:</span> ${escapeHtml(teacher.nama_sekolah || '-')}</p>
+        <p><span class="font-medium">Status:</span> ${escapeHtml(teacher.status_kepegawaian || '-')}</p>
+        <p><span class="font-medium">No WA:</span> ${escapeHtml(teacher.no_wa || '-')}</p>
+        <p><span class="font-medium">Email:</span> ${escapeHtml(teacher.email || '-')}</p>
+      </div>
+    `;
+    Swal.fire({ title: 'Detail Guru', html, confirmButtonText: 'Tutup', confirmButtonColor: '#4f46e5', width: 420 });
+  } catch (err) {
+    Swal.fire('Error', err.message || 'Gagal memuat detail guru', 'error');
+  }
 }
 
 // ============================================================
@@ -1498,3 +1523,281 @@ function formatDateTime(dateStr) {
 function formatRupiah(num) {
   return 'Rp ' + (parseFloat(num) || 0).toLocaleString('id-ID');
 }
+
+// ============================================================
+// MANAJEMEN GURU - CRUD
+// ============================================================
+function openTeacherModal(editId) {
+  document.getElementById('teacherEditId').value = editId || '';
+  document.getElementById('teacherModalTitle').textContent = editId ? 'Edit Guru' : 'Tambah Guru';
+  // populate tenants
+  const sel = document.getElementById('teacherTenant');
+  sel.innerHTML = '';
+  api('/sdm-dashboard/tenants').then(data => {
+    if (data.success && data.data) {
+      data.data.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.tenant_id;
+        opt.textContent = t.nama_sekolah || t.tenant_id;
+        sel.appendChild(opt);
+      });
+    }
+  }).catch(() => {});
+  if (!editId) {
+    ['teacherNama','teacherNik','teacherNip','teacherJabatan','teacherNoWa','teacherEmail'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('teacherTmt').value = '';
+    document.getElementById('teacherStatusKepeg').value = '';
+  }
+  document.getElementById('teacherModal').classList.add('show');
+}
+
+function closeTeacherModal() {
+  document.getElementById('teacherModal').classList.remove('show');
+}
+
+async function saveTeacher() {
+  const editId = document.getElementById('teacherEditId').value;
+  const body = {
+    nama: document.getElementById('teacherNama').value.trim(),
+    nik: document.getElementById('teacherNik').value.trim(),
+    nip: document.getElementById('teacherNip').value.trim(),
+    tenant_id: document.getElementById('teacherTenant').value,
+    jabatan_di_unit: document.getElementById('teacherJabatan').value.trim(),
+    status_kepegawaian: document.getElementById('teacherStatusKepeg').value,
+    tmt: document.getElementById('teacherTmt').value,
+    no_wa: document.getElementById('teacherNoWa').value.trim(),
+    email: document.getElementById('teacherEmail').value.trim()
+  };
+  if (!body.nama || !body.nik || !body.tenant_id) {
+    Swal.fire('Validasi', 'Nama, NIK, dan Sekolah wajib diisi', 'warning');
+    return;
+  }
+  try {
+    if (editId) {
+      await api('/sdm-dashboard/teachers/' + editId, { method: 'PUT', body: JSON.stringify(body) });
+    } else {
+      await api('/sdm-dashboard/teachers', { method: 'POST', body: JSON.stringify(body) });
+    }
+    closeTeacherModal();
+    loadTeachers();
+    Swal.fire('Berhasil', 'Data guru tersimpan', 'success');
+  } catch (err) {
+    Swal.fire('Error', err.message || 'Gagal menyimpan guru', 'error');
+  }
+}
+
+async function editTeacher(id) {
+  try {
+    const data = await api('/sdm-dashboard/teacher-list?page=1&limit=200');
+    const t = (data.data?.data || []).find(x => x.id === id);
+    if (!t) { Swal.fire('Error', 'Data guru tidak ditemukan', 'error'); return; }
+    openTeacherModal(id);
+    // fill after tenants loaded delay
+    setTimeout(() => {
+      document.getElementById('teacherNama').value = t.nama || '';
+      document.getElementById('teacherNik').value = t.nik || '';
+      document.getElementById('teacherNip').value = t.nip || '';
+      document.getElementById('teacherJabatan').value = t.jabatan_di_unit || '';
+      document.getElementById('teacherStatusKepeg').value = t.status_kepegawaian || '';
+      document.getElementById('teacherNoWa').value = t.no_wa || '';
+      document.getElementById('teacherEmail').value = t.email || '';
+      if (t.tenant_ids) document.getElementById('teacherTenant').value = t.tenant_ids.split(',')[0].trim();
+    }, 300);
+  } catch (err) {
+    Swal.fire('Error', err.message || 'Gagal memuat data guru', 'error');
+  }
+}
+
+async function deleteTeacher(id) {
+  const ok = await Swal.fire({ title: 'Nonaktifkan guru?', icon: 'warning', showCancelButton: true, confirmButtonText: 'Ya', cancelButtonText: 'Batal' });
+  if (!ok.isConfirmed) return;
+  try {
+    await api('/sdm-dashboard/teachers/' + id, { method: 'DELETE' });
+    loadTeachers();
+    Swal.fire('Berhasil', 'Guru dinonaktifkan', 'success');
+  } catch (err) {
+    Swal.fire('Error', err.message || 'Gagal menonaktifkan guru', 'error');
+  }
+}
+
+// ============================================================
+// INPUT ABSENSI MANUAL
+// ============================================================
+function loadManualAttendanceSelectors() {
+  const tenantSel = document.getElementById('manualTenantSelect');
+  const modalTenantSel = document.getElementById('manualModalTenant');
+  const tahunSel = document.getElementById('manualTahun');
+  const modalBulan = document.getElementById('manualBulan');
+  if (tahunSel && tahunSel.options.length === 0) {
+    const y = new Date().getFullYear();
+    for (let i = y; i >= y - 2; i--) {
+      const opt = document.createElement('option'); opt.value = i; opt.textContent = i;
+      tahunSel.appendChild(opt);
+    }
+    tahunSel.value = y;
+  }
+  if (modalBulan) {
+    // reuse month names not needed
+  }
+  api('/sdm-dashboard/tenants').then(data => {
+    if (data.success && data.data) {
+      const opts = data.data.map(t => `<option value="${t.tenant_id}">${t.nama_sekolah || t.tenant_id}</option>`).join('');
+      if (tenantSel) tenantSel.innerHTML = opts;
+      if (modalTenantSel) modalTenantSel.innerHTML = opts;
+    }
+  }).catch(() => {});
+  // modal year
+  const modalTahun = document.getElementById('manualModalTanggal');
+  if (modalTahun && !modalTahun.value) {
+    modalTahun.value = new Date().toISOString().split('T')[0];
+  }
+}
+
+async function loadManualAttendance() {
+  const tenantId = document.getElementById('manualTenantSelect')?.value;
+  const bulan = document.getElementById('manualBulan')?.value;
+  const tahun = document.getElementById('manualTahun')?.value;
+  const content = document.getElementById('manualAttendanceContent');
+  if (!tenantId) { content.innerHTML = '<p class="text-center py-8 text-gray-500">Pilih sekolah</p>'; return; }
+  content.innerHTML = '<p class="text-center py-8"><i class="fas fa-spinner fa-spin"></i> Memuat...</p>';
+  try {
+    const res = await fetch(`/api/sdm-dashboard/manual-attendance-monthly?tenant_id=${tenantId}&bulan=${bulan}&tahun=${tahun}`, {
+      headers: { 'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json' }
+    });
+    const json = await res.json();
+    if (!json.success) { content.innerHTML = '<p class="text-center py-8 text-red-500">Gagal memuat data</p>'; return; }
+    const data = json.data || [];
+    const daysInMonth = json.daysInMonth || 30;
+    const activeDays = json.activeDays || [];
+    const monthNames = ['', 'Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+    let headerHtml = '<tr><th class="p-1 border">No</th><th class="p-1 border">Nama</th>';
+    for (let d = 1; d <= daysInMonth; d++) headerHtml += `<th class="p-1 border text-[10px]">${d}</th>`;
+    headerHtml += '<th class="p-1 border">H</th><th class="p-1 border">T</th><th class="p-1 border">I</th><th class="p-1 border">S</th><th class="p-1 border">DL</th><th class="p-1 border">C</th><th class="p-1 border">TK</th></tr>';
+    let bodyHtml = '';
+    data.forEach((d, i) => {
+      bodyHtml += `<tr><td class="p-1 text-center border">${i+1}</td><td class="p-1 border">${escapeHtml(d.nama || '')}</td>`;
+      for (let day = 1; day <= daysInMonth; day++) {
+        const val = d['tgl_' + day] || '';
+        const leave = d['tgl_' + day + '_leave'];
+        let cls = '';
+        let text = val;
+        if (val === 'TK') {
+          cls = 'bg-red-100 text-red-700 font-bold';
+        } else if (leave) {
+          if (leave.status === 'approved') cls = 'text-emerald-600 font-bold';
+          else cls = 'text-red-600 font-bold';
+        } else if (val) {
+          cls = 'text-gray-700';
+        }
+        let tooltip = '';
+        if (leave && leave.keterangan) tooltip = ` title="${escapeHtml(leave.keterangan)}"`;
+        bodyHtml += `<td class="p-1 text-center border text-[11px] ${cls}"${tooltip}>${text}</td>`;
+      }
+      bodyHtml += `<td class="p-1 text-center border text-[11px]">${d.hadir||0}</td>
+        <td class="p-1 text-center border text-[11px]">${d.terlambat||0}</td>
+        <td class="p-1 text-center border text-[11px]">${d.izin||0}</td>
+        <td class="p-1 text-center border text-[11px]">${d.sakit||0}</td>
+        <td class="p-1 text-center border text-[11px]">${d.dinas_luar||0}</td>
+        <td class="p-1 text-center border text-[11px]">${d.cuti||0}</td>
+        <td class="p-1 text-center border text-[11px] text-red-700 font-bold">${d.tanpa_keterangan||0}</td></tr>`;
+    });
+    content.innerHTML = `<div class="overflow-x-auto"><table class="w-full text-sm border-collapse"><thead>${headerHtml}</thead><tbody>${bodyHtml}</tbody></table></div>`;
+  } catch (err) {
+    content.innerHTML = '<p class="text-center py-8 text-red-500">Gagal memuat data</p>';
+  }
+}
+
+function openManualAttendanceModal() {
+  // populate teachers based on modal tenant
+  const tenantSel = document.getElementById('manualModalTenant');
+  const teacherSel = document.getElementById('manualModalTeacher');
+  const updateTeachers = () => {
+    const tid = tenantSel.value;
+    api(`/sdm-dashboard/teacher-list?tenant_id=${tid}&limit=200`).then(data => {
+      if (data.success && data.data?.data) {
+        teacherSel.innerHTML = data.data.data.map(t => `<option value="${t.id}">${escapeHtml(t.nama)}</option>`).join('');
+      }
+    }).catch(() => {});
+  };
+  tenantSel.onchange = updateTeachers;
+  updateTeachers();
+  document.getElementById('manualAttendanceModal').classList.add('show');
+}
+
+function closeManualAttendanceModal() {
+  document.getElementById('manualAttendanceModal').classList.remove('show');
+}
+
+async function saveManualAttendance() {
+  const body = {
+    teacher_id: document.getElementById('manualModalTeacher').value,
+    tenant_id: document.getElementById('manualModalTenant').value,
+    tanggal: document.getElementById('manualModalTanggal').value,
+    jenis: document.getElementById('manualModalJenis').value,
+    status: document.getElementById('manualModalStatus').value,
+    waktu: document.getElementById('manualModalWaktu').value.trim(),
+    keterangan: document.getElementById('manualModalKet').value.trim()
+  };
+  if (!body.teacher_id || !body.tenant_id || !body.tanggal) {
+    Swal.fire('Validasi', 'Guru, sekolah, dan tanggal wajib diisi', 'warning');
+    return;
+  }
+  try {
+    await api('/sdm-dashboard/manual-attendance', { method: 'POST', body: JSON.stringify(body) });
+    closeManualAttendanceModal();
+    loadManualAttendance();
+    Swal.fire('Berhasil', 'Absensi manual tersimpan', 'success');
+  } catch (err) {
+    Swal.fire('Error', err.message || 'Gagal menyimpan absensi', 'error');
+  }
+}
+
+// ============================================================
+// DETAIL SEKOLAH
+// ============================================================
+async function showSchoolDetail(tenantId, nama) {
+  if (!tenantId) return;
+  document.getElementById('schoolDetailTitle').textContent = 'Detail Sekolah: ' + (nama || tenantId);
+  const content = document.getElementById('schoolDetailContent');
+  content.innerHTML = '<p class="text-center py-8"><i class="fas fa-spinner fa-spin"></i> Memuat...</p>';
+  document.getElementById('schoolDetailModal').classList.add('show');
+  try {
+    const data = await api(`/sdm-dashboard/school-detail?tenant_id=${tenantId}&days=7`);
+    if (!data.success) { content.innerHTML = '<p class="text-center py-8 text-red-500">Gagal memuat detail</p>'; return; }
+    const d = data.data;
+    let html = `<p class="text-sm text-gray-600 mb-4">${escapeHtml(d.tenant.nama_sekolah || tenantId)} — ${d.days} hari terakhir</p>`;
+    html += '<div class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-gray-50"><tr>';
+    html += '<th class="px-3 py-2 text-left">Nama</th><th class="px-3 py-2 text-left">NIK</th><th class="px-3 py-2 text-center">Hadir</th><th class="px-3 py-2 text-center">Terlambat</th><th class="px-3 py-2 text-center">Izin Pending</th></tr></thead><tbody>';
+    (d.teachers || []).forEach(t => {
+      html += `<tr class="border-t">
+        <td class="px-3 py-2">${escapeHtml(t.nama)}</td>
+        <td class="px-3 py-2">${escapeHtml(t.nik || '-')}</td>
+        <td class="px-3 py-2 text-center">${t.present_days}</td>
+        <td class="px-3 py-2 text-center">${t.late_count}</td>
+        <td class="px-3 py-2 text-center">${t.pending_leaves}</td>
+      </tr>`;
+    });
+    html += '</tbody></table></div>';
+    content.innerHTML = html;
+  } catch (err) {
+    content.innerHTML = '<p class="text-center py-8 text-red-500">Gagal memuat detail</p>';
+  }
+}
+
+function closeSchoolDetailModal() {
+  document.getElementById('schoolDetailModal').classList.remove('show');
+}
+
+// Expose handlers globally for inline onclick
+window.openTeacherModal = openTeacherModal;
+window.closeTeacherModal = closeTeacherModal;
+window.saveTeacher = saveTeacher;
+window.editTeacher = editTeacher;
+window.deleteTeacher = deleteTeacher;
+window.viewTeacherDetail = viewTeacherDetail;
+window.showSchoolDetail = showSchoolDetail;
+window.closeSchoolDetailModal = closeSchoolDetailModal;
+window.loadManualAttendance = loadManualAttendance;
+window.openManualAttendanceModal = openManualAttendanceModal;
+window.closeManualAttendanceModal = closeManualAttendanceModal;
+window.saveManualAttendance = saveManualAttendance;

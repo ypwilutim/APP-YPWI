@@ -42,17 +42,30 @@ function loadUserInfo() {
     const payload = JSON.parse(decodeURIComponent(escape(atob(base64))));
     if (!payload || !payload.id) return handleUnauthorized();
 
-    currentUser = {
-      id: payload.id,
-      username: payload.username,
-      role: payload.role,
-      guru_id: payload.guru_id,
-      tenant_id: payload.tenant_id,
-      assignments: payload.assignments || []
-    };
+  // Check URL parameter for tenant_id
+  const urlParams = new URLSearchParams(window.location.search);
+  const urlTenantId = urlParams.get('tenant_id');
 
-    currentTeacherId = currentUser.guru_id || (currentUser.assignments[0]?.teacher_id || null);
-    currentTenantId = currentUser.tenant_id || (currentUser.assignments[0]?.tenant_id || null);
+  currentUser = {
+    id: payload.id,
+    username: payload.username,
+    role: payload.role,
+    guru_id: payload.guru_id,
+    tenant_id: payload.tenant_id,
+    assignments: payload.assignments || []
+  };
+
+  // Determine tenantId: URL param > token tenant_id > first assignment
+  let selectedTenantId = null;
+  if (urlTenantId) {
+    const valid = currentUser.assignments.some(a => a.tenant_id === urlTenantId);
+    if (valid) selectedTenantId = urlTenantId;
+  }
+  if (!selectedTenantId) {
+    selectedTenantId = currentUser.tenant_id || (currentUser.assignments[0]?.tenant_id || null);
+  }
+  currentTeacherId = currentUser.guru_id || (currentUser.assignments[0]?.teacher_id || null);
+  currentTenantId = selectedTenantId;
 
     console.log('[ADMQU] User loaded:', { teacherId: currentTeacherId, tenantId: currentTenantId });
   } catch (err) {
@@ -75,9 +88,11 @@ function logout() {
 
 function initPage() {
   populateYearSelects();
+  populateTenantSelects();
   setDefaultMonthYear();
   showTab('sk-guru');
   loadSkStatus();
+  loadSkRequestStatus();
   loadAbsensi();
   loadSlipGaji();
   loadSlipHistory();
@@ -100,6 +115,32 @@ function populateYearSelects() {
   });
 }
 
+function populateTenantSelects() {
+  const assignments = currentUser?.assignments || [];
+  const seen = new Set();
+  const options = assignments
+    .filter(a => a.tenant_id && !seen.has(a.tenant_id) && seen.add(a.tenant_id))
+    .map(a => `<option value="${a.tenant_id}">${a.nama_sekolah || a.tenant_id}</option>`)
+    .join('');
+
+  ['absensiTenant', 'slipTenant', 'skTenant'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (sel) sel.innerHTML = options;
+  });
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const urlTenantId = urlParams.get('tenant_id');
+  const selectedTenantId = (urlTenantId && [...(document.getElementById('absensiTenant')?.options || [])].some(o => o.value === urlTenantId))
+    ? urlTenantId
+    : currentTenantId;
+
+  ['absensiTenant', 'slipTenant', 'skTenant'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (sel && [...sel.options].some(o => o.value === selectedTenantId)) {
+      sel.value = selectedTenantId;
+    }
+  });
+}
 function setDefaultMonthYear() {
   const now = new Date();
   const month = now.getMonth() + 1;
@@ -142,13 +183,15 @@ async function api(endpoint, options = {}) {
 // ==================== SK GURU ====================
 async function loadSkStatus() {
   try {
-    const res = await api('/admqu/sk-status');
+    const res = await api('/admqu/sk-list');
     if (!res.success) throw new Error(res.message);
 
-    if (res.data.hasSk) {
-      showExistingSk(res.data.sk);
+    if (res.data && res.data.length) {
+      showSkList(res.data);
     } else {
-      showEmptySkState(res.data);
+      const statusRes = await api('/admqu/sk-status');
+      if (!statusRes.success) throw new Error(statusRes.message);
+      showEmptySkState(statusRes.data);
     }
   } catch (err) {
     console.error('Load SK status error:', err);
@@ -156,20 +199,116 @@ async function loadSkStatus() {
   }
 }
 
-function showExistingSk(sk) {
-  document.getElementById('skExistingCard').style.display = 'block';
+function showSkList(sks) {
+  document.getElementById('skListCard').style.display = 'block';
   document.getElementById('skEmptyCard').style.display = 'none';
 
-  document.getElementById('skNoSurat').textContent = sk.no_surat || '-';
-  document.getElementById('skTentang').textContent = sk.tentang || '-';
-  document.getElementById('skTanggal').textContent = sk.bm || '-';
-  const jenisBadge = document.getElementById('skJenis');
-  jenisBadge.textContent = SK_TYPE_LABELS[sk.tentag_type] || sk.tentag_type || '-';
-  jenisBadge.className = 'sk-type-badge ' + (SK_TYPE_BADGES[sk.tentag_type] || 'sk-type-baru');
+  const canViewDrive = ['admin', 'yayasan', 'direktur'].includes(currentUser?.role);
+  const tbody = document.getElementById('skListBody');
+  tbody.innerHTML = sks.map(sk => `
+    <tr>
+      <td>${sk.no_surat || '-'}</td>
+      <td>${sk.tentang || '-'}</td>
+      <td>${sk.bm || '-'}</td>
+      <td><span class="sk-type-badge ${SK_TYPE_BADGES[sk.tentag_type] || 'sk-type-baru'}">${SK_TYPE_LABELS[sk.tentag_type] || sk.tentag_type || '-'}</span></td>
+      <td>
+        <button class="btn btn-outline btn-sm" onclick="viewSkPdf(${sk.id})"><i class="fas fa-eye"></i> View</button>
+        <button class="btn btn-primary btn-sm" onclick="downloadSkPdf(${sk.id})"><i class="fas fa-file-pdf"></i> PDF</button>
+        ${canViewDrive && sk.drive_web_view_link ? `<a class="btn btn-outline btn-sm" href="${sk.drive_web_view_link}" target="_blank" rel="noopener"><i class="fab fa-google-drive"></i> Drive</a>` : ''}
+      </td>
+    </tr>
+  `).join('');
+
+  const mobile = document.getElementById('skListMobile');
+  mobile.innerHTML = sks.map(sk => `
+    <div class="sk-mobile-card">
+      <div class="sk-mobile-row"><span class="sk-mobile-label">Nomor</span><span class="sk-mobile-value">${sk.no_surat || '-'}</span></div>
+      <div class="sk-mobile-row"><span class="sk-mobile-label">Tentang</span><span class="sk-mobile-value">${sk.tentang || '-'}</span></div>
+      <div class="sk-mobile-row"><span class="sk-mobile-label">Tanggal</span><span class="sk-mobile-value">${sk.bm || '-'}</span></div>
+      <div class="sk-mobile-row"><span class="sk-mobile-label">Jenis</span><span class="sk-mobile-value"><span class="sk-type-badge ${SK_TYPE_BADGES[sk.tentag_type] || 'sk-type-baru'}">${SK_TYPE_LABELS[sk.tentag_type] || sk.tentag_type || '-'}</span></span></div>
+      <div class="sk-mobile-actions">
+        <button class="btn btn-outline btn-sm" onclick="viewSkPdf(${sk.id})"><i class="fas fa-eye"></i> View</button>
+        <button class="btn btn-primary btn-sm" onclick="downloadSkPdf(${sk.id})"><i class="fas fa-file-pdf"></i> PDF</button>
+        ${canViewDrive && sk.drive_web_view_link ? `<a class="btn btn-outline btn-sm" href="${sk.drive_web_view_link}" target="_blank" rel="noopener"><i class="fab fa-google-drive"></i> Drive</a>` : ''}
+      </div>
+    </div>
+  `).join('');
 }
 
+async function fetchSkFile(skId, format = 'pdf') {
+  const res = await fetch(`${API_BASE}/sk-guru/file/${skId}?format=${format}`, {
+    headers: { 'Authorization': `Bearer ${authToken}` }
+  });
+  if (!res.ok) throw new Error('Gagal memuat SK');
+  return await res.blob();
+}
+
+async function requestSk(type) {
+  if (!currentTeacherId) return;
+  const tentang_type = type === 'jabatan' ? 'jabatan' : 'baru';
+  const tenantId = document.getElementById('skTenant')?.value;
+  try {
+    Swal.fire({ title: 'Mengajukan SK...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    const res = await api('/admqu/sk-request', {
+      method: 'POST',
+      body: JSON.stringify({ tentang_type, tenant_id: tenantId })
+    });
+    if (!res.success) throw new Error(res.message);
+    Swal.fire('Berhasil', res.message || 'Pengajuan SK dikirim', 'success');
+    loadSkRequestStatus();
+  } catch (err) {
+    Swal.fire('Gagal', err.message || 'Gagal mengajukan SK', 'error');
+  }
+}
+async function loadSkRequestStatus() {
+  try {
+    const res = await api('/admqu/sk-request/status');
+    if (!res.success || !res.data || !res.data.length) {
+      document.getElementById('skRequestStatus').innerHTML = '';
+      return;
+    }
+    const latest = res.data[0];
+    const label = latest.status === 'approved' ? 'Disetujui (SK sedang dibuat)' :
+      latest.status === 'rejected' ? 'Ditolak' : 'Menunggu persetujuan admin';
+    const color = latest.status === 'approved' ? '#16a34a' : latest.status === 'rejected' ? '#dc2626' : '#d97706';
+    document.getElementById('skRequestStatus').innerHTML = `
+      <div style="padding: 0.75rem; border-radius: 0.5rem; background: #f8fafc; border: 1px solid #e2e8f0; font-size: 0.85rem;">
+        <strong>Pengajuan terakhir:</strong> ${latest.tentang_type === 'jabatan' ? 'Pengangkatan Jabatan' : 'Pengangkatan Guru'}
+        — <span style="color: ${color}; font-weight: 600;">${label}</span>
+        <span style="color: #64748b;">(${new Date(latest.created_at).toLocaleDateString('id-ID')})</span>
+      </div>
+    `;
+  } catch (err) {
+    console.error('Load SK request status error:', err);
+  }
+}
+async function viewSkPdf(skId) {
+  try {
+    const blob = await fetchSkFile(skId, 'pdf');
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+  } catch (err) {
+    Swal.fire('Error', err.message || 'Gagal view SK', 'error');
+  }
+}
+
+async function downloadSkPdf(skId) {
+  try {
+    const blob = await fetchSkFile(skId, 'pdf');
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `SK_Guru_${skId}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    Swal.fire('Error', err.message || 'Gagal download SK', 'error');
+  }
+}
 function showEmptySkState(data) {
-  document.getElementById('skExistingCard').style.display = 'none';
+  document.getElementById('skListCard').style.display = 'none';
   document.getElementById('skEmptyCard').style.display = 'block';
 
   document.getElementById('skEmptyText').innerHTML = `Belum ada SK untuk tahun <strong>${data.suggested?.hijri_year || '1446'}</strong> H. Anda dapat mengajukan penerbitan SK Guru baru.`;
@@ -187,7 +326,7 @@ function showEmptySkState(data) {
 }
 
 function showSkError(msg) {
-  document.getElementById('skExistingCard').style.display = 'none';
+  document.getElementById('skListCard').style.display = 'none';
   document.getElementById('skEmptyCard').style.display = 'block';
   document.getElementById('skEmptyText').innerHTML = 'Gagal memuat status SK: ' + msg;
 }
@@ -319,28 +458,14 @@ async function submitSk(previewData = null) {
   }
 }
 
-async function downloadSk(format) {
-  if (!currentTeacherId) return;
-  try {
-    const res = await api('/admqu/sk-list');
-    if (res.success && res.data?.length) {
-      const latestSk = res.data[0];
-      window.open(`${API_BASE}/sk-guru/file/${latestSk.id}?format=${format}`, '_blank');
-    } else {
-      Swal.fire('Info', 'Tidak ada SK yang tersedia', 'info');
-    }
-  } catch (err) {
-    Swal.fire('Error', 'Gagal download: ' + err.message, 'error');
-  }
-}
-
 // ==================== RINGKASAN ABSENSI ====================
 async function loadAbsensi() {
   const bulan = document.getElementById('absensiBulan').value;
   const tahun = document.getElementById('absensiTahun').value;
+  const tenantId = document.getElementById('absensiTenant')?.value;
 
   try {
-    const res = await api(`/admqu/absensi-ringkasan?bulan=${bulan}&tahun=${tahun}`);
+    const res = await api(`/admqu/absensi-ringkasan?bulan=${bulan}&tahun=${tahun}${tenantId ? '&tenant_id=' + encodeURIComponent(tenantId) : ''}`);
     if (!res.success) throw new Error(res.message);
 
     renderAbsensi(res.data);
@@ -407,9 +532,10 @@ function renderCalendar(daily, bulan, tahun) {
 async function loadSlipGaji() {
   const bulan = document.getElementById('slipBulan').value;
   const tahun = document.getElementById('slipTahun').value;
+  const tenantId = document.getElementById('slipTenant')?.value;
 
   try {
-    const res = await api(`/admqu/slip-gaji?bulan=${bulan}&tahun=${tahun}`);
+    const res = await api(`/admqu/slip-gaji?bulan=${bulan}&tahun=${tahun}${tenantId ? '&tenant_id=' + encodeURIComponent(tenantId) : ''}`);
     if (!res.success) throw new Error(res.message);
 
     renderSlipGaji(res.data);
@@ -461,8 +587,9 @@ function renderSlipGaji(data) {
 }
 
 async function loadSlipHistory() {
+  const tenantId = document.getElementById('slipTenant')?.value;
   try {
-    const res = await api('/admqu/slip-gaji/history');
+    const res = await api(`/admqu/slip-gaji/history${tenantId ? '?tenant_id=' + encodeURIComponent(tenantId) : ''}`);
     if (!res.success) throw new Error(res.message);
 
     const tbody = document.getElementById('slipHistoryBody');

@@ -59,8 +59,8 @@ router.get('/sk-status', authenticateToken, async (req, res) => {
           hasSk: true,
           sk: existingSk,
           hijriYear
-        }
-      });
+  }
+});
     }
 
     const [teacher] = await db.query(
@@ -121,10 +121,19 @@ router.get('/sk-status', authenticateToken, async (req, res) => {
 router.get('/absensi-ringkasan', authenticateToken, async (req, res) => {
   try {
     const teacherId = getTeacherIdFromUser(req.user);
-    const tenantId = getTenantIdFromUser(req.user);
 
     if (!teacherId) {
       return res.status(400).json({ success: false, message: 'Teacher ID tidak ditemukan di token' });
+    }
+
+    const assignments = req.user.assignments || [];
+    const requestedTenantId = req.query.tenant_id || null;
+    let selectedTenantId = requestedTenantId;
+    if (selectedTenantId) {
+      const ok = assignments.some(a => a.tenant_id === selectedTenantId);
+      if (!ok) return res.status(403).json({ success: false, message: 'Akses ditolak untuk tenant ini' });
+    } else if (assignments.length) {
+      selectedTenantId = assignments[0].tenant_id;
     }
 
     const bulan = parseInt(req.query.bulan) || (new Date().getMonth() + 1);
@@ -135,15 +144,15 @@ router.get('/absensi-ringkasan', authenticateToken, async (req, res) => {
     const firstDayOfMonth = String(tahun).padStart(4, '0') + '-' + String(bulan).padStart(2, '0') + '-01';
     const lastDayOfMonth = String(tahun).padStart(4, '0') + '-' + String(bulan).padStart(2, '0') + '-' + String(daysInMonth).padStart(2, '0');
 
-    const logs = await db.query(
-      'SELECT DAY(al.waktu_scan) as hari, al.status, al.jenis, al.dinas_luar, al.keterangan, al.waktu_scan FROM attendance_logs al WHERE MONTH(al.waktu_scan) = ? AND YEAR(al.waktu_scan) = ? AND al.teacher_id = ?',
-      [bulan, tahun, teacherId]
-    );
+    let logSql = 'SELECT DAY(al.waktu_scan) as hari, al.status, al.jenis, al.dinas_luar, al.keterangan, al.waktu_scan FROM attendance_logs al WHERE MONTH(al.waktu_scan) = ? AND YEAR(al.waktu_scan) = ? AND al.teacher_id = ?';
+    const logParams = [bulan, tahun, teacherId];
+    if (selectedTenantId) { logSql += ' AND al.tenant_id = ?'; logParams.push(selectedTenantId); }
+    const logs = await db.query(logSql, logParams);
 
-    const leaveLogs = await db.query(
-      'SELECT lr.jenis, lr.keterangan, lr.tanggal_mulai, lr.tanggal_selesai FROM leave_requests lr WHERE lr.status = ? AND lr.teacher_id = ? AND ((MONTH(lr.tanggal_mulai) = ? AND YEAR(lr.tanggal_mulai) = ?) OR (MONTH(lr.tanggal_selesai) = ? AND YEAR(lr.tanggal_selesai) = ?) OR (lr.tanggal_mulai <= ? AND lr.tanggal_selesai >= ?))',
-      ['approved', teacherId, bulan, tahun, bulan, tahun, firstDayOfMonth, lastDayOfMonth]
-    );
+    let leaveSql = 'SELECT lr.jenis, lr.keterangan, lr.tanggal_mulai, lr.tanggal_selesai FROM leave_requests lr WHERE lr.status = ? AND lr.teacher_id = ? AND ((MONTH(lr.tanggal_mulai) = ? AND YEAR(lr.tanggal_mulai) = ?) OR (MONTH(lr.tanggal_selesai) = ? AND YEAR(lr.tanggal_selesai) = ?) OR (lr.tanggal_mulai <= ? AND lr.tanggal_selesai >= ?))';
+    const leaveParams = ['approved', teacherId, bulan, tahun, bulan, tahun, firstDayOfMonth, lastDayOfMonth];
+    if (selectedTenantId) { leaveSql += ' AND lr.tenant_id = ?'; leaveParams.push(selectedTenantId); }
+    const leaveLogs = await db.query(leaveSql, leaveParams);
 
     const dailyRecord = {};
     let hadir = 0, terlambat = 0, izin = 0, sakit = 0, dinas_luar = 0, cuti = 0, tanpa_keterangan = 0;
@@ -282,37 +291,47 @@ router.get('/absensi-ringkasan', authenticateToken, async (req, res) => {
 router.get('/slip-gaji', authenticateToken, async (req, res) => {
   try {
     const teacherId = getTeacherIdFromUser(req.user);
-    const tenantId = getTenantIdFromUser(req.user);
 
     if (!teacherId) {
       return res.status(400).json({ success: false, message: 'Teacher ID tidak ditemukan di token' });
+    }
+
+    const assignments = req.user.assignments || [];
+    const requestedTenantId = req.query.tenant_id || null;
+    let selectedTenantId = requestedTenantId;
+    if (selectedTenantId) {
+      const ok = assignments.some(a => a.tenant_id === selectedTenantId);
+      if (!ok) return res.status(403).json({ success: false, message: 'Akses ditolak untuk tenant ini' });
+    } else if (assignments.length) {
+      selectedTenantId = assignments[0].tenant_id;
     }
 
     const bulan = parseInt(req.query.bulan) || (new Date().getMonth() + 1);
     const tahun = parseInt(req.query.tahun) || new Date().getFullYear();
     const periode = tahun + '-' + String(bulan).padStart(2, '0');
 
-    const [teacher] = await db.query(
-      `SELECT t.id, t.nama, t.nik, t.nip, t.email, t.status_kepegawaian, t.tmt, t.pendidikan_terakhir as pt,
+    let teacherSql = `SELECT t.id, t.nama, t.nik, t.nip, t.email, t.status_kepegawaian, t.tmt, t.pendidikan_terakhir as pt,
         ta.jabatan_di_unit, ta.tenant_id, tn.nama_sekolah
        FROM teachers t
        JOIN teacher_assignments ta ON t.id = ta.teacher_id
        JOIN tenants tn ON ta.tenant_id = tn.tenant_id
-       WHERE t.id = ? AND t.status_aktif = 1
-       ORDER BY ta.created_at ASC, ta.id ASC LIMIT 1`,
-      [teacherId]
-    );
+       WHERE t.id = ? AND t.status_aktif = 1`;
+    const teacherParams = [teacherId];
+    if (selectedTenantId) { teacherSql += ' AND ta.tenant_id = ?'; teacherParams.push(selectedTenantId); }
+    teacherSql += ' ORDER BY ta.created_at ASC, ta.id ASC LIMIT 1';
+    const [teacher] = await db.query(teacherSql, teacherParams);
 
     if (!teacher) {
       return res.status(404).json({ success: false, message: 'Data guru tidak ditemukan' });
     }
 
-    const [salaryData] = await db.query(
-      `SELECT Gaji_Pokok, Tunj_Kinerja, Tunj_Umum, Tunj_Istri, Tunj_Anak,
+    let salarySql = `SELECT Gaji_Pokok, Tunj_Kinerja, Tunj_Umum, Tunj_Istri, Tunj_Anak,
         Tunj_Kepala_Sekolah, Tunj_Wali_Kelas, Honor_Bendahara
-       FROM temp_teachers WHERE nama = ? LIMIT 1`,
-      [teacher.nama]
-    );
+       FROM temp_teachers WHERE nama = ?`;
+    const salaryParams = [teacher.nama];
+    if (selectedTenantId) { salarySql += ' AND (tenant_id = ? OR tenant_id IS NULL)'; salaryParams.push(selectedTenantId); }
+    salarySql += ' LIMIT 1';
+    const [salaryData] = await db.query(salarySql, salaryParams);
 
     const gajiPokok = parseFloat(salaryData?.Gaji_Pokok || 0);
     const tunjKinerja = parseFloat(salaryData?.Tunj_Kinerja || 0);
@@ -327,15 +346,15 @@ router.get('/slip-gaji', authenticateToken, async (req, res) => {
     const firstDayOfMonth = String(tahun).padStart(4, '0') + '-' + String(bulan).padStart(2, '0') + '-01';
     const lastDayOfMonth = String(tahun).padStart(4, '0') + '-' + String(bulan).padStart(2, '0') + '-' + String(daysInMonth).padStart(2, '0');
 
-    const logs = await db.query(
-      'SELECT DAY(al.waktu_scan) as hari, al.status, al.jenis, al.dinas_luar, al.keterangan, al.waktu_scan FROM attendance_logs al WHERE MONTH(al.waktu_scan) = ? AND YEAR(al.waktu_scan) = ? AND al.teacher_id = ?',
-      [bulan, tahun, teacherId]
-    );
+    let logSql = 'SELECT DAY(al.waktu_scan) as hari, al.status, al.jenis, al.dinas_luar, al.keterangan, al.waktu_scan FROM attendance_logs al WHERE MONTH(al.waktu_scan) = ? AND YEAR(al.waktu_scan) = ? AND al.teacher_id = ?';
+    const logParams = [bulan, tahun, teacherId];
+    if (selectedTenantId) { logSql += ' AND al.tenant_id = ?'; logParams.push(selectedTenantId); }
+    const logs = await db.query(logSql, logParams);
 
-    const leaveLogs = await db.query(
-      'SELECT lr.jenis, lr.keterangan, lr.tanggal_mulai, lr.tanggal_selesai FROM leave_requests lr WHERE lr.status = ? AND lr.teacher_id = ? AND ((MONTH(lr.tanggal_mulai) = ? AND YEAR(lr.tanggal_mulai) = ?) OR (MONTH(lr.tanggal_selesai) = ? AND YEAR(lr.tanggal_selesai) = ?) OR (lr.tanggal_mulai <= ? AND lr.tanggal_selesai >= ?))',
-      ['approved', teacherId, bulan, tahun, bulan, tahun, firstDayOfMonth, lastDayOfMonth]
-    );
+    let leaveSql = 'SELECT lr.jenis, lr.keterangan, lr.tanggal_mulai, lr.tanggal_selesai FROM leave_requests lr WHERE lr.status = ? AND lr.teacher_id = ? AND ((MONTH(lr.tanggal_mulai) = ? AND YEAR(lr.tanggal_mulai) = ?) OR (MONTH(lr.tanggal_selesai) = ? AND YEAR(lr.tanggal_selesai) = ?) OR (lr.tanggal_mulai <= ? AND lr.tanggal_selesai >= ?))';
+    const leaveParams = ['approved', teacherId, bulan, tahun, bulan, tahun, firstDayOfMonth, lastDayOfMonth];
+    if (selectedTenantId) { leaveSql += ' AND lr.tenant_id = ?'; leaveParams.push(selectedTenantId); }
+    const leaveLogs = await db.query(leaveSql, leaveParams);
 
     const allLogs = [
       ...logs.map(l => ({
@@ -508,10 +527,12 @@ router.get('/slip-gaji/history', authenticateToken, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Teacher ID tidak ditemukan di token' });
     }
 
-    const history = await db.query(
-      'SELECT periode, total_gaji, created_at FROM payroll WHERE teacher_id = ? ORDER BY created_at DESC LIMIT 24',
-      [teacherId]
-    );
+    const requestedTenantId = req.query.tenant_id || null;
+    let historySql = 'SELECT periode, total_gaji, created_at FROM payroll WHERE teacher_id = ?';
+    const historyParams = [teacherId];
+    if (requestedTenantId) { historySql += ' AND tenant_id = ?'; historyParams.push(requestedTenantId); }
+    historySql += ' ORDER BY created_at DESC LIMIT 24';
+    const history = await db.query(historySql, historyParams);
 
     res.json({
       success: true,
@@ -547,5 +568,67 @@ router.get('/sk-list', authenticateToken, async (req, res) => {
     res.status(500).json({ success: false, message: 'Error fetching SK list: ' + error.message });
   }
 });
+
+// ==================== SK REQUEST (PENGAJUAN) ====================
+
+router.post('/sk-request', authenticateToken, async (req, res) => {
+  try {
+    const teacherId = getTeacherIdFromUser(req.user);
+    const assignments = req.user.assignments || [];
+    const requestedTenantId = req.body.tenant_id || null;
+    let tenantId = requestedTenantId;
+    if (tenantId) {
+      const ok = assignments.some(a => a.tenant_id === tenantId);
+      if (!ok) return res.status(403).json({ success: false, message: 'Akses ditolak untuk tenant ini' });
+    } else {
+      tenantId = assignments[0]?.tenant_id || getTenantIdFromUser(req.user);
+    }
+
+    if (!teacherId || !tenantId) {
+      return res.status(400).json({ success: false, message: 'Data guru/tenant tidak ditemukan' });
+    }
+
+    const tentang_type = req.body.tentang_type === 'jabatan' ? 'jabatan' : 'baru';
+
+    const existing = await db.query(
+      'SELECT id, status FROM sk_approval_queue WHERE teacher_id = ? AND tenant_id = ? AND status = "pending" AND tentang_type = ? ORDER BY created_at DESC LIMIT 1',
+      [teacherId, tenantId, tentang_type]
+    );
+
+    if (existing.length) {
+      return res.json({ success: true, message: 'Pengajuan sudah ada dan menunggu persetujuan', data: existing[0] });
+    }
+
+    const result = await db.query(
+      'INSERT INTO sk_approval_queue (teacher_id, tenant_id, status, tentang_type) VALUES (?, ?, "pending", ?)',
+      [teacherId, tenantId, tentang_type]
+    );
+
+    res.json({ success: true, message: 'Pengajuan SK berhasil dikirim', data: { id: result.insertId, status: 'pending' } });
+  } catch (error) {
+    console.error('SK request error:', error);
+    res.status(500).json({ success: false, message: 'Error mengajukan SK: ' + error.message });
+  }
+});
+
+router.get('/sk-request/status', authenticateToken, async (req, res) => {
+  try {
+    const teacherId = getTeacherIdFromUser(req.user);
+    if (!teacherId) {
+      return res.status(400).json({ success: false, message: 'Teacher ID tidak ditemukan di token' });
+    }
+
+    const rows = await db.query(
+      'SELECT id, tenant_id, status, tentang_type, created_at, updated_at FROM sk_approval_queue WHERE teacher_id = ? ORDER BY created_at DESC LIMIT 10',
+      [teacherId]
+    );
+
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error('SK request status error:', error);
+    res.status(500).json({ success: false, message: 'Error mengambil status pengajuan: ' + error.message });
+  }
+});
+module.exports = router;
 
 module.exports = router;

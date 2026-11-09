@@ -1375,101 +1375,20 @@
          </div>
        </div>
 
-        <!-- SPMB Tab -->
+         <!-- SPMB Tab -->
         <div id="spmbTab" class="tab-content hidden">
           <div class="main-card p-6">
             <div class="flex justify-between items-center mb-6">
               <h3 class="text-lg font-semibold text-gray-900 flex items-center">
                 <i class="fas fa-file-alt text-indigo-600 mr-2"></i>SPMB - Penerimaan Siswa Baru
               </h3>
-              <a id="spmbViewPublicBtn" href="/SPMB/spmb-public.html?tenant=" target="_blank" class="px-3 py-1.5 bg-indigo-600 text-white text-xs rounded-lg hover:bg-indigo-700 transition">Lihat Halaman Publik</a>
-              <button id="spmbLandingManagerBtn" class="px-3 py-1.5 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 transition">Kelola Landing Page</button>
-            </div>
-            <div id="spmbContent">
-              <p class="text-gray-600">Memuat data SPMB...</p>
-            </div>
-            <div id="spmbSettings" class="mt-6 hidden">
-              <h4 class="text-base font-semibold text-gray-900 mb-3">Pengaturan SPMB</h4>
-              <form id="spmbSettingsForm" class="space-y-4">
-                <div class="flex items-center gap-3">
-                  <input type="checkbox" id="spmbIsOpen" class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500">
-                  <label for="spmbIsOpen" class="text-sm font-medium text-gray-700">Buka Pendaftaran SPMB</label>
-                </div>
-                <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-1">Judul Flyer</label>
-                  <input type="text" id="spmbJudulFlyer" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-                </div>
-                <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-1">Keterangan Flyer</label>
-                  <textarea id="spmbKeteranganFlyer" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"></textarea>
-                </div>
-                <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-1">No WA Pendaftaran</label>
-                  <input type="text" id="spmbNoWa" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-                </div>
-                <div class="flex justify-end">
-                  <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Simpan Pengaturan</button>
-                </div>
-              </form>
-            </div>
-            <div id="spmbLandingEditor" class="mt-6 hidden">
-              <h4 class="text-base font-semibold text-gray-900 mb-3">Editor Halaman Publik SPMB</h4>
-              <div class="space-y-6">
-                <div class="bg-white rounded-lg border border-gray-200 p-4">
-                  <h5 class="text-sm font-semibold text-gray-900 mb-2">Branding Sekolah</h5>
-                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label class="block text-xs font-medium text-gray-600 mb-1">Nama Sekolah</label>
-                      <input type="text" id="spmbSchoolName" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
-                    </div>
-                    <div>
-                      <label class="block text-xs font-medium text-gray-600 mb-1">Tagline</label>
-                      <input type="text" id="spmbSchoolTagline" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm">
-                    </div>
-                    <div>
-                      <label class="block text-xs font-medium text-gray-600 mb-1">Warna Utama</label>
-                      <input type="color" id="spmbPrimaryColor" class="w-full h-10 rounded-lg border border-gray-300">
-                    </div>
-                    <div>
-                      <label class="block text-xs font-medium text-gray-600 mb-1">Aksen</label>
-                      <input type="color" id="spmbAccentColor" class="w-full h-10 rounded-lg border border-gray-300">
-                    </div>
-                  </div>
-                </div>
-                <div class="bg-white rounded-lg border border-gray-200 p-4">
-                  <div class="flex items-center justify-between mb-2">
-                    <h5 class="text-sm font-semibold text-gray-900">Program Penerimaan</h5>
-                    <button type="button" id="spmbAddProgramBtn" class="px-3 py-1 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700">Tambah Program (nama/deskripsi/kuota)</button>
-                  </div>
-                  <div id="spmbProgramsList" class="space-y-2"></div>
-                </div>
-                <div class="bg-white rounded-lg border border-gray-200 p-4">
-                  <div class="flex items-center justify-between mb-2">
-                    <h5 class="text-sm font-semibold text-gray-900">Gelombang</h5>
-                    <button type="button" id="spmbAddWaveBtn" class="px-3 py-1 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700">Tambah Gelombang (nama/tanggal)</button>
-                  </div>
-                  <div id="spmbWavesList" class="space-y-2"></div>
-                </div>
-                <div class="bg-white rounded-lg border border-gray-200 p-4">
-                  <div class="flex items-center justify-between mb-2">
-                    <h5 class="text-sm font-semibold text-gray-900">FAQ</h5>
-                    <button type="button" id="spmbAddFaqBtn" class="px-3 py-1 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700">Tambah FAQ (pertanyaan/jawaban)</button>
-                  </div>
-                  <div id="spmbFaqsList" class="space-y-2"></div>
-                </div>
-                <div class="bg-white rounded-lg border border-gray-200 p-4">
-                  <div class="flex items-center justify-between mb-2">
-                    <h5 class="text-sm font-semibold text-gray-900">Statistik</h5>
-                    <button type="button" id="spmbAddStatBtn" class="px-3 py-1 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700">Tambah Statistik (label/nilai)</button>
-                  </div>
-                  <div id="spmbStatsList" class="space-y-2"></div>
-                </div>
-                <div class="flex justify-end gap-2">
-                  <button type="button" id="spmbResetLandingBtn" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">Reset</button>
-                  <button type="button" id="spmbSaveLandingBtn" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Simpan Halaman Publik</button>
-                </div>
+              <div class="flex gap-2">
+                <a id="spmbViewPublicBtn" href="/SPMB/spmb-public.html?tenant=" target="_blank" class="px-3 py-1.5 bg-indigo-600 text-white text-xs rounded-lg hover:bg-indigo-700 transition">Lihat Halaman Publik</a>
+                <button id="spmbLandingManagerBtn" class="px-3 py-1.5 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 transition">Kelola Landing Page</button>
+                <a id="spmbApplicantsBtn" href="/SPMB/spmb-applicants.html" target="_blank" class="px-3 py-1.5 bg-amber-600 text-white text-xs rounded-lg hover:bg-amber-700 transition">Kelola Pendaftar Siswa</a>
               </div>
             </div>
+            <p class="text-gray-600 text-sm">Pengaturan detail SPMB dan landing page dikelola di halaman Manager SPMB.</p>
           </div>
         </div>
 
@@ -4851,6 +4770,10 @@ console.log('[ATTENDANCE] Fetching:', url);
             const viewBtn = document.getElementById('spmbViewPublicBtn');
             if (viewBtn && tenantId) {
               viewBtn.href = '/SPMB/spmb-public.html?tenant=' + encodeURIComponent(tenantId);
+            }
+            const applicantsBtn = document.getElementById('spmbApplicantsBtn');
+            if (applicantsBtn && tenantId) {
+              applicantsBtn.href = '/SPMB/spmb-applicants.html?tenant=' + encodeURIComponent(tenantId);
             }
           } catch (e) {
             console.error('[SPMB]', e);

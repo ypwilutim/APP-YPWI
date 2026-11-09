@@ -580,10 +580,15 @@
             style="display: inline-flex; align-items: center; gap: 0.5rem; background: #f0fdf4; color: #15803d; padding: 0.6rem 1rem; border-radius: 0.5rem; font-weight: 600; font-size: 0.85rem; text-decoration: none; border: 1px solid #bbf7d0;">
             <i class="fas fa-comments"></i> Chat
           </a>
-          <a href="admqu.html" title="ADMQU - SK Guru, Absensi, Slip Gaji"
-            style="display: inline-flex; align-items: center; gap: 0.5rem; background: #fef3c7; color: #b45309; padding: 0.6rem 1rem; border-radius: 0.5rem; font-weight: 600; font-size: 0.85rem; text-decoration: none; border: 1px solid #fcd34d;">
+          <div id="spmbPanitiaBtnContainer" style="display: none; margin-left: 0.5rem;">
+            <button id="spmbPanitiaBtn" onclick="openSpmbPanitia()" title="Akses Panitia SPMB"
+              style="display: inline-flex; align-items: center; gap: 0.5rem; background: #ecfdf5; color: #047857; padding: 0.6rem 1rem; border-radius: 0.5rem; font-weight: 600; font-size: 0.85rem; text-decoration: none; border: 1px solid #a7f3d0; cursor: pointer;">
+              <i class="fas fa-users"></i> Panitia SPMB
+            </button>
+          </div>
+            style="display: inline-flex; align-items: center; gap: 0.5rem; background: #fef3c7; color: #b45309; padding: 0.6rem 1rem; border-radius: 0.5rem; font-weight: 600; font-size: 0.85rem; text-decoration: none; border: 1px solid #fcd34d; cursor: pointer;">
             <i class="fas fa-file-alt"></i> ADMQU
-          </a>
+          </button>
           <a href="#" onclick="logout(); return false;"
             style="display: inline-flex; align-items: center; gap: 0.5rem; background: #fee2e2; color: #dc2626; padding: 0.6rem 1.25rem; border-radius: 0.5rem; font-weight: 700; font-size: 0.85rem; text-decoration: none; border: 1px solid #fca5a5; transition: all 0.2s;">
             <i class="fas fa-sign-out-alt"></i> Keluar Sistem
@@ -934,12 +939,12 @@ style="font-size: 0.95rem; font-weight: 700; color: #0f172a; margin: 0 0 0.75rem
         <span style="font-size: 0.65rem; font-weight: 600;">Chat</span>
       </div>
     </a>
-    <a href="admqu.html" style="text-decoration: none;">
-      <div style="text-align: center; color: #b45309; cursor: pointer; -webkit-tap-highlight-color: transparent;">
-        <i class="fas fa-file-alt" style="font-size: 1.3rem; display: block; margin-bottom: 2px;"></i>
-        <span style="font-size: 0.65rem; font-weight: 600;">ADMQU</span>
-      </div>
-    </a>
+     <button onclick="navigateToADMQU()" style="text-decoration: none; border: none; background: transparent; cursor: pointer; padding: 0;">
+       <div style="text-align: center; color: #b45309; cursor: pointer; -webkit-tap-highlight-color: transparent;">
+         <i class="fas fa-file-alt" style="font-size: 1.3rem; display: block; margin-bottom: 2px;"></i>
+         <span style="font-size: 0.65rem; font-weight: 600;">ADMQU</span>
+       </div>
+     </button>
     
     <div id="mobileTreasurerNav" style="text-align: center; color: #64748b; cursor: pointer; display: none;">
       <i class="fas fa-wallet" style="font-size: 1.3rem; display: block; margin-bottom: 2px;"></i>

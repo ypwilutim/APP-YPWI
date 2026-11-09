@@ -5,20 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title id="pageTitle">Portal Resmi SPMB 2026</title>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/SPMB/css/tailwind.css">
+    <link rel="stylesheet" href="/SPMB/css/spmb-theme.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <style>
         :root {
-            --primary: #066e3a;
-            --primary-dark: #044e28;
-            --primary-light: #e8f5e9;
-            --accent: #f59e0b;
+            --primary: #4f46e5;
+            --primary-dark: #4338ca;
+            --primary-light: #eef2ff;
+            --accent: #0ea5e9;
             --text-main: #1e293b;
             --text-muted: #64748b;
             --bg-body: #f8fafc;
             --border-color: #e2e8f0;
             --shadow-sm: 0 1px 3px rgba(0,0,0,0.05);
-            --shadow-md: 0 10px 25px -5px rgba(6, 110, 58, 0.08);
+            --shadow-md: 0 10px 25px -5px rgba(79, 70, 229, 0.08);
             --radius-lg: 16px;
             --radius-md: 10px;
         }
@@ -61,7 +63,7 @@
         .logo-icon {
             width: 44px; height: 44px; background-color: var(--primary); color: white;
             border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center;
-            font-size: 1.25rem; box-shadow: 0 4px 12px rgba(6, 110, 58, 0.2);
+            font-size: 1.25rem; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2);
         }
 
         .logo-img {
@@ -83,7 +85,7 @@
         .btn-nav {
             background-color: var(--primary); color: white !important;
             padding: 10px 20px; border-radius: var(--radius-md);
-            box-shadow: 0 4px 12px rgba(6, 110, 58, 0.15); transition: all 0.2s ease !important;
+            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.15); transition: all 0.2s ease !important;
         }
 
         .btn-nav:hover { opacity: 0.92; transform: translateY(-1px); }
@@ -94,7 +96,7 @@
         }
 
         .hero {
-            background: linear-gradient(135deg, #044e28 0%, #066e3a 100%);
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
             color: #ffffff; padding: 100px 0 120px 0; position: relative; overflow: hidden;
         }
 
@@ -128,10 +130,10 @@
 
         .btn-primary {
             background-color: var(--accent); color: #ffffff;
-            box-shadow: 0 4px 14px rgba(245, 158, 11, 0.3);
+            box-shadow: 0 4px 14px rgba(14, 165, 233, 0.3);
         }
 
-        .btn-primary:hover { background-color: #d97706; transform: translateY(-2px); }
+        .btn-primary:hover { background-color: #0284c7; transform: translateY(-2px); }
 
         .btn-primary.disabled {
             background-color: #94a3b8; cursor: not-allowed; pointer-events: none;
@@ -152,7 +154,7 @@
             transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); position: relative;
         }
 
-        .card:hover { transform: translateY(-6px); box-shadow: var(--shadow-md); border-color: rgba(6, 110, 58, 0.2); }
+        .card:hover { transform: translateY(-6px); box-shadow: var(--shadow-md); border-color: rgba(79, 70, 229, 0.2); }
 
         .card-icon {
             width: 50px; height: 50px; background-color: var(--primary-light); color: var(--primary);
@@ -258,9 +260,14 @@
             </div>
             <h1 id="heroTitle">Seleksi Penerimaan Murid Baru</h1>
             <p id="heroDesc">Selamat datang di portal resmi pendaftaran murid baru secara terpadu. Wujudkan masa depan gemilang bersama institusi pendidikan pilihan terbaik.</p>
+            <div id="flyerContainer" style="display:none; margin: 1.5rem auto; max-width: 900px;">
+            </div>
             <div class="hero-buttons">
                 <a id="heroRegisterBtn" href="/SPMB/spmb-register.html" class="btn btn-primary">
-                    <i class="fa-solid fa-file-pen"></i> Isi Formulir Pendaftaran
+                    <i class="fa-solid fa-file-pen"></i> Daftar Panitia
+                </a>
+                <a id="heroStudentApplyBtn" href="/SPMB/spmb-student-apply.html" class="btn btn-secondary">
+                    <i class="fa-solid fa-user-graduate"></i> Daftar Siswa Baru
                 </a>
                 <a id="heroProgramBtn" href="#jalur" class="btn btn-secondary">
                     <i class="fa-solid fa-magnifying-glass"></i> Lihat Jalur Pendaftaran
@@ -274,7 +281,6 @@
         <p class="section-subtitle">Pilih jalur pendaftaran yang sesuai dengan kriteria dan prestasi calon peserta didik.</p>
         
         <div class="grid-jalur" id="programsGrid">
-            <!-- Data default statis (akan diperbarui dinamis jika tenant valid) -->
             <div class="card">
                 <div class="card-icon"><i class="fa-solid fa-map-location-dot"></i></div>
                 <h3>Zonasi / Domisili</h3>
@@ -415,19 +421,30 @@
                 document.getElementById('heroTitle').textContent = school.name ? `Penerimaan Siswa Baru - ${school.name}` : 'Seleksi Penerimaan Murid Baru';
                 document.getElementById('heroDesc').textContent = school.tagline || 'Selamat datang di portal resmi pendaftaran murid baru secara terpadu.';
 
-                // Apply dynamic colors
                 if (school.primary_color || school.accent_color) {
-                    applyDynamicColors(school.primary_color || '#066e3a', school.accent_color || '#f59e0b');
+                    applyDynamicColors(school.primary_color || '#4f46e5', school.accent_color || '#0ea5e9');
                 }
 
-                // School logo
                 const logoContainer = document.getElementById('logoContainer');
                 if (school.logo_url && logoContainer) {
                     logoContainer.innerHTML = `<img class="logo-img" src="${school.logo_url}" alt="${school.name || 'Logo Sekolah'}">`;
                 }
 
-                // Registration open/closed state
-                const isOpen = config.is_open === true;
+                const flyerContainer = document.getElementById('flyerContainer');
+                if (school.flyer_url && flyerContainer) {
+                    flyerContainer.innerHTML = `<img src="${school.flyer_url}" alt="Flyer SPMB" style="width:100%;max-height:520px;object-fit:contain;border-radius:12px;">`;
+                    flyerContainer.style.display = 'block';
+                } else if (flyerContainer) {
+                    flyerContainer.style.display = 'none';
+                }
+
+                const now = new Date();
+                const isOpen = waves.some(w => {
+                    const start = w.registration_start ? new Date(w.registration_start) : null;
+                    const end = w.registration_end ? new Date(w.registration_end) : null;
+                    if (!start || !end) return false;
+                    return now >= start && now <= end;
+                });
                 const badge = document.getElementById('heroBadge');
                 if (badge) {
                     badge.innerHTML = isOpen
@@ -437,21 +454,22 @@
                     badge.style.background = isOpen ? 'rgba(255,255,255,0.1)' : 'rgba(255,0,0,0.1)';
                 }
 
-                // Register buttons with tenant param
-                const registerUrl = buildRegisterUrl('/SPMB/spmb-register.html');
                 const heroRegisterBtn = document.getElementById('heroRegisterBtn');
                 if (heroRegisterBtn) {
-                    heroRegisterBtn.href = registerUrl;
-                    setRegisterButtonState(heroRegisterBtn, isOpen);
+                    heroRegisterBtn.style.display = 'none';
+                }
+
+                const studentApplyUrl = buildRegisterUrl('/SPMB/spmb-student-apply.html');
+                const heroStudentApplyBtn = document.getElementById('heroStudentApplyBtn');
+                if (heroStudentApplyBtn) {
+                    heroStudentApplyBtn.href = studentApplyUrl;
                 }
 
                 const navCta = document.getElementById('navCta');
                 if (navCta) {
-                    navCta.href = registerUrl;
-                    setRegisterButtonState(navCta, isOpen);
+                    navCta.style.display = 'none';
                 }
 
-                // Programs
                 const programsGrid = document.getElementById('programsGrid');
                 if (programsGrid && programs.length > 0) {
                     programsGrid.innerHTML = programs.map(prog => `
@@ -476,7 +494,6 @@
                     `;
                 }
 
-                // Waves
                 const wavesGrid = document.getElementById('wavesGrid');
                 if (wavesGrid) {
                     if (waves.length > 0) {
@@ -512,7 +529,6 @@
                     }
                 }
 
-                // Stats
                 const statsGrid = document.getElementById('statsGrid');
                 if (statsGrid) {
                     if (stats.length > 0) {
@@ -535,7 +551,6 @@
                     }
                 }
 
-                // FAQs
                 const faqsList = document.getElementById('faqsList');
                 if (faqsList) {
                     if (faqs.length > 0) {
@@ -558,13 +573,11 @@
                     }
                 }
 
-                // WhatsApp float
                 if (config.no_wa) {
                     const waFloat = document.getElementById('waFloat');
                     if (waFloat) waFloat.href = `https://wa.me/${config.no_wa}`;
                 }
 
-                // Footer
                 const footerText = document.getElementById('footerText');
                 if (footerText && school.name) {
                     footerText.textContent = `© ${new Date().getFullYear()} ${school.name}. All rights reserved.`;

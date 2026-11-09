@@ -7333,3 +7333,50 @@ document.addEventListener('DOMContentLoaded', function() {
 
 
 });
+// ==================== SK REQUEST APPROVAL ====================
+async function loadPendingSkRequests() {
+  try {
+    const res = await fetch('/api/sk-guru/pending-requests', { headers: skGuruAuthHdr() });
+    const data = await res.json();
+    const tableEl = document.getElementById('skRequestTable');
+    if (!tableEl) return;
+    if (!data.success || !data.data || data.data.length === 0) {
+      tableEl.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-gray-500">Tidak ada pengajuan SK</td></tr>';
+      return;
+    }
+    tableEl.innerHTML = data.data.map(r => `
+      <tr>
+        <td class="px-4 py-3 text-sm">${r.nama || '-'}</td>
+        <td class="px-4 py-3 text-sm">${r.nama_sekolah || '-'}</td>
+        <td class="px-4 py-3 text-sm">${r.tentang_type === 'jabatan' ? 'Pengangkatan Jabatan' : 'Pengangkatan Guru'}</td>
+        <td class="px-4 py-3 text-sm">${r.created_at ? new Date(r.created_at).toLocaleDateString('id-ID') : '-'}</td>
+        <td class="px-4 py-3 text-sm">
+          <button onclick="approveSkRequest(${r.id})" class="px-3 py-1 bg-green-600 text-white rounded text-xs hover:bg-green-700">Setujui & Generate</button>
+        </td>
+      </tr>
+    `).join('');
+  } catch (err) {
+    console.error('Load pending SK requests error:', err);
+    const tableEl = document.getElementById('skRequestTable');
+    if (tableEl) tableEl.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-red-500">Gagal memuat pengajuan</td></tr>';
+  }
+}
+
+async function approveSkRequest(requestId) {
+  try {
+    const res = await fetch('/api/sk-guru/approve-request', {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, skGuruAuthHdr()),
+      body: JSON.stringify({ request_id: requestId })
+    });
+    const data = await res.json();
+    if (data.success) {
+      Swal.fire('Berhasil', data.message, 'success');
+      loadPendingSkRequests();
+    } else {
+      Swal.fire('Gagal', data.message, 'error');
+    }
+  } catch (err) {
+    Swal.fire('Error', err.message, 'error');
+  }
+}

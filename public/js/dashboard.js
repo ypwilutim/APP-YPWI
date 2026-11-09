@@ -4306,3 +4306,61 @@ if (typeof window !== 'undefined') {
     `;
     document.head.appendChild(style);
 })();
+
+// ==================== ADMQU NAVIGATION ====================
+function navigateToADMQU() {
+  const assignments = window.userAssignments || [];
+  const uniqueTenants = [...new Map(assignments.map(a => [a.tenant_id, a])).values()];
+
+  if (uniqueTenants.length === 0) {
+    Swal.fire('Error', 'Tidak ada data assignment', 'error');
+    return;
+  }
+
+  if (uniqueTenants.length === 1) {
+    window.location.href = 'admqu.html?tenant_id=' + encodeURIComponent(uniqueTenants[0].tenant_id);
+    return;
+  }
+
+  const options = uniqueTenants.map(a =>
+    '<option value="' + a.tenant_id + '">' + (a.nama_sekolah || a.tenant_id) + ' (' + (a.jabatan_di_unit || '-') + ')</option>'
+  ).join('');
+
+  Swal.fire({
+    title: 'Pilih Sekolah/Tenant',
+    html: '<select id="swalTenantSelect" class="swal2-select" style="width:100%;">' + options + '</select>',
+    showCancelButton: true,
+    confirmButtonText: 'Lanjut ke ADMQU',
+    preConfirm: () => {
+      const sel = document.getElementById('swalTenantSelect');
+      return sel ? sel.value : null;
+    }
+  }).then(result => {
+    if (result.isConfirmed && result.value) {
+      window.location.href = 'admqu.html?tenant_id=' + encodeURIComponent(result.value);
+    }
+  });
+}
+
+// ==================== SPMB PANITIA ACCESS ====================
+async function checkSpmbPanitia() {
+  try {
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    if (!token) return;
+    const res = await fetch('/api/spmb/panitia-status', { headers: { 'Authorization': 'Bearer ' + token } });
+    const data = await res.json();
+    if (data.success && data.is_panitia) {
+      const container = document.getElementById('spmbPanitiaBtnContainer');
+      if (container) container.style.display = 'inline-block';
+      window.spmbPanitiaTenant = data.tenant_id;
+    }
+  } catch (e) {
+    console.error('Check SPMB panitia error:', e);
+  }
+}
+
+function openSpmbPanitia() {
+  const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+  if (!token) { alert('Token tidak ditemukan'); return; }
+  window.open('/SPMB/spmb-dashboard.html?token=' + encodeURIComponent(token), '_blank');
+}

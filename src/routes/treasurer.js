@@ -5520,7 +5520,7 @@ router.get('/treasurer/spmb-transactions', authenticateOperator, async (req, res
 // POST /treasurer/spmb-transactions - Create SPMB transaction
 router.post('/treasurer/spmb-transactions', authenticateOperator, async (req, res) => {
   try {
-    const { tenant_id, transaction_type, category, amount, description, transaction_date } = req.body;
+    const { tenant_id, transaction_type, category, amount, description, transaction_date, application_id } = req.body;
     if (!tenant_id || !transaction_type || !category || !amount || !transaction_date) {
       return res.status(400).json({ success: false, message: 'tenant_id, transaction_type, category, amount, transaction_date required' });
     }
@@ -5532,9 +5532,12 @@ router.post('/treasurer/spmb-transactions', authenticateOperator, async (req, re
 
     const createdBy = req.user.guru_id || null;
     await db.query(
-      'INSERT INTO spmb_transactions (tenant_id, transaction_type, category, amount, description, transaction_date, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [tenant_id, transaction_type, category, amount, description || null, transaction_date, createdBy]
+      'INSERT INTO spmb_transactions (tenant_id, transaction_type, category, amount, description, transaction_date, created_by, application_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [tenant_id, transaction_type, category, amount, description || null, transaction_date, createdBy, application_id || null]
     );
+    if (application_id && transaction_type === 'income') {
+      await db.query("UPDATE spmb_student_applications SET payment_status = 'paid', payment_amount = ? WHERE id = ?", [amount, application_id]);
+    }
     res.json({ success: true, message: 'Transaksi SPMB berhasil disimpan' });
   } catch (e) {
     console.error('SPMB transaction create error:', e);

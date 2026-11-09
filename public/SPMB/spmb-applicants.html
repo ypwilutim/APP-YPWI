@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Manajemen Pendaftar SPMB</title>
+  <link rel="stylesheet" href="/SPMB/css/tailwind.css">
+  <link rel="stylesheet" href="/SPMB/css/spmb-theme.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="spmb-page min-h-screen">
+  <header class="spmb-header">
+    <div class="spmb-container spmb-header-inner">
+      <a href="/school-admin.html" class="spmb-logo">
+        <div class="spmb-logo-icon"><i class="fa-solid fa-graduation-cap"></i></div>
+        <span>SPMB</span>
+      </a>
+      <div class="spmb-user-menu">
+        <h1 class="text-lg font-semibold text-slate-900">Manajemen Pendaftar Siswa SPMB</h1>
+        <a href="/school-admin.html" class="spmb-btn spmb-btn-ghost spmb-btn-sm">Kembali</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="spmb-container spmb-py-8">
+    <div class="spmb-card spmb-p-6 spmb-mb-6">
+      <div class="spmb-flex spmb-flex-wrap spmb-gap-3 spmb-mb-4">
+        <input id="tenantFilter" placeholder="Tenant ID" class="spmb-input spmb-flex-1 spmb-min-w-[200px]" value="">
+        <select id="statusFilter" class="spmb-select spmb-min-w-[180px]">
+          <option value="">Semua Status</option>
+          <option value="pending">Pending</option>
+          <option value="verified">Verified</option>
+          <option value="accepted">Accepted</option>
+          <option value="rejected">Rejected</option>
+          <option value="enrolled">Enrolled</option>
+        </select>
+        <button onclick="load()" class="spmb-btn spmb-btn-primary spmb-btn-lg" aria-label="Muat Data Pendaftar">
+          <i class="fa-solid fa-refresh"></i> Muat Data
+        </button>
+      </div>
+      <div class="spmb-flex spmb-flex-wrap spmb-gap-3 spmb-text-sm spmb-text-muted">
+        <span id="statsTotal" class="spmb-bg-muted spmb-px-3 spmb-py-1 spmb-rounded-sm">Total: 0</span>
+        <span id="statsPending" class="spmb-badge-pending">Pending: 0</span>
+        <span id="statsVerified" class="spmb-badge-verified">Verified: 0</span>
+        <span id="statsAccepted" class="spmb-badge-accepted">Accepted: 0</span>
+        <span id="statsRejected" class="spmb-badge-rejected">Rejected: 0</span>
+        <span id="statsEnrolled" class="spmb-badge-enrolled">Enrolled: 0</span>
+      </div>
+    </div>
+
+           <div class="spmb-card spmb-overflow-x-auto">
+           <table class="spmb-table" role="grid" aria-label="Daftar Pendaftar SPMB">
+             <thead>
+               <tr role="row">
+                 <th class="spmb-w-[60px]" role="columnheader">ID</th>
+                 <th role="columnheader">Nama</th>
+                 <th class="spmb-w-[100px]" role="columnheader">NISN</th>
+                 <th class="spmb-w-[150px]" role="columnheader">Program</th>
+                 <th class="spmb-w-[120px]" role="columnheader">Status</th>
+                 <th class="spmb-w-[120px]" role="columnheader">Pembayaran</th>
+                 <th class="spmb-w-[200px]" role="columnheader">Aksi</th>
+               </tr>
+             </thead>
+             <tbody id="tbody" role="rowgroup">
+               <tr role="row">
+                 <td colspan="7" class="spmb-text-center spmb-py-8 spmb-text-muted" role="cell">Klik "Muat Data" untuk menampilkan daftar pendaftar</td>
+               </tr>
+             </tbody>
+           </table>
+         </div>
+
+    <div id="emptyState" class="spmb-empty spmb-hidden">
+      <i class="fa-solid fa-inbox spmb-empty-icon"></i>
+      <p class="spmb-empty-title">Tidak Ada Data</p>
+      <p class="spmb-text-muted">Tidak ada pendaftar yang sesuai dengan filter.</p>
+    </div>
+  </main>
+
+  <footer class="spmb-footer">
+    <div class="spmb-container">
+      <p>&copy; <span id="year"></span> SPMB - Sistem Penerimaan Murid Baru. All rights reserved.</p>
+    </div>
+  </footer>
+
+  <script>
+    const token = localStorage.getItem('token') || localStorage.getItem('spmb_token');
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('tenant')) document.getElementById('tenantFilter').value = params.get('tenant');
+
+    async function api(path, opts={}) {
+      const res = await fetch(path, { ...opts, headers: { ...(opts.headers||{}), 'Authorization': 'Bearer ' + token } });
+      return res.json();
+    }
+
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toast-container') || (() => {
+        const c = document.createElement('div');
+        c.id = 'toast-container';
+        c.className = 'spmb-toast-container';
+        document.body.appendChild(c);
+        return c;
+      })();
+      const toast = document.createElement('div');
+      toast.className = `spmb-toast spmb-toast-${type}`;
+      toast.innerHTML = `<span class="spmb-toast-content"><strong class="spmb-toast-title">${type === 'success' ? 'Berhasil' : type === 'error' ? 'Gagal' : 'Info'}</strong><p class="spmb-toast-message">${message}</p></span><button class="spmb-toast-close" onclick="this.parentElement.remove()"><i class="fa-solid fa-xmark"></i></button>`;
+      container.appendChild(toast);
+      setTimeout(() => toast.remove(), 5000);
+    }
+
+    async function load() {
+      const tenant = document.getElementById('tenantFilter').value;
+      const status = document.getElementById('statusFilter').value;
+      if (!tenant) { showToast('Masukkan Tenant ID', 'warning'); return; }
+
+      let url = '/api/admin/spmb/students?tenant_id=' + encodeURIComponent(tenant);
+      if (status) url += '&status=' + encodeURIComponent(status);
+
+      const tbody = document.getElementById('tbody');
+      const emptyState = document.getElementById('emptyState');
+      tbody.innerHTML = '<tr><td colspan="7" class="spmb-text-center spmb-py-8"><div class="spmb-skeleton spmb-h-6 spmb-w-1/4 spmb-mx-auto spmb-mb-2"></div><div class="spmb-skeleton spmb-h-4 spmb-w-1/2 spmb-mx-auto"></div></td></tr>';
+
+      const data = await api(url);
+      if (!data.success) {
+        tbody.innerHTML = '<tr><td colspan="7" class="spmb-text-center spmb-py-4 spmb-text-red-500">' + (data.message||'error') + '</td></tr>';
+        return;
+      }
+
+      const rows = data.data || [];
+      if (rows.length === 0) {
+        tbody.innerHTML = '';
+        emptyState.classList.remove('spmb-hidden');
+      } else {
+        emptyState.classList.add('spmb-hidden');
+        tbody.innerHTML = rows.map(a => {
+          const statusClass = {
+            pending: 'spmb-badge-pending',
+            verified: 'spmb-badge-verified',
+            accepted: 'spmb-badge-accepted',
+            rejected: 'spmb-badge-rejected',
+            enrolled: 'spmb-badge-enrolled'
+          }[a.status] || '';
+          
+          const payClass = {
+            unpaid: 'spmb-badge-unpaid',
+            paid: 'spmb-badge-paid'
+          }[a.payment_status] || '';
+
+          let actions = '';
+          if (a.foto_path) actions += `<a href="/${a.foto_path}" target="_blank" class="spmb-btn spmb-btn-ghost spmb-btn-sm spmb-btn-icon" title="Lihat Foto" aria-label="Lihat Foto Panitia"><i class="fa-solid fa-image"></i></a>`;
+          if (a.status === 'pending') actions += `<button onclick="act(${a.id},'verify')" class="spmb-btn spmb-btn-ghost spmb-btn-sm text-emerald-600 hover:bg-emerald-50" title="Verifikasi" aria-label="Verifikasi ${a.nama}">Verifikasi</button>`;
+          if (a.status === 'verified' || a.status === 'pending') actions += `<button onclick="act(${a.id},'accept')" class="spmb-btn spmb-btn-ghost spmb-btn-sm text-indigo-600 hover:bg-indigo-50" title="Terima" aria-label="Terima ${a.nama}">Terima</button>`;
+          if (a.status !== 'rejected' && a.status !== 'enrolled') actions += `<button onclick="act(${a.id},'reject')" class="spmb-btn spmb-btn-ghost spmb-btn-sm text-red-600 hover:bg-red-50" title="Tolak" aria-label="Tolak ${a.nama}">Tolak</button>`;
+
+          return `
+            <tr class="border-t">
+              <td class="spmb-px-3 spmb-py-2">${a.id}</td>
+              <td class="spmb-px-3 spmb-py-2 spmb-font-medium">${a.nama}</td>
+              <td class="spmb-px-3 spmb-py-2 spmb-text-sm">${a.nisn || '-'}</td>
+              <td class="spmb-px-3 spmb-py-2 spmb-text-sm">${a.program_name || '-'}</td>
+              <td class="spmb-px-3 spmb-py-2"><span class="spmb-badge ${statusClass}">${a.status}</span></td>
+              <td class="spmb-px-3 spmb-py-2"><span class="spmb-badge ${payClass}">${a.payment_status}</span></td>
+              <td class="spmb-px-3 spmb-py-2 spmb-flex spmb-items-center spmb-gap-1">${actions}</td>
+            </tr>
+          `;
+        }).join('');
+
+        // Update stats
+        const stats = { total: rows.length, pending: 0, verified: 0, accepted: 0, rejected: 0, enrolled: 0 };
+        rows.forEach(r => { if (stats[r.status] !== undefined) stats[r.status]++; });
+        document.getElementById('statsTotal').textContent = `Total: ${stats.total}`;
+        document.getElementById('statsPending').textContent = `Pending: ${stats.pending}`;
+        document.getElementById('statsVerified').textContent = `Verified: ${stats.verified}`;
+        document.getElementById('statsAccepted').textContent = `Accepted: ${stats.accepted}`;
+        document.getElementById('statsRejected').textContent = `Rejected: ${stats.rejected}`;
+        document.getElementById('statsEnrolled').textContent = `Enrolled: ${stats.enrolled}`;
+      }
+    }
+
+    async function act(id, action) {
+      let path = '/api/admin/spmb/students/' + id + '/' + action;
+      const opts = { method: 'POST' };
+      if (action === 'reject') { opts.headers = { 'Content-Type': 'application/json' }; opts.body = JSON.stringify({ notes: 'Ditolak admin' }); }
+      const data = await api(path, opts);
+      if (data.success) {
+        showToast(data.message || 'OK', 'success');
+        load();
+      } else {
+        showToast(data.message || 'Gagal', 'error');
+      }
+    }
+
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toast-container') || (() => {
+        const c = document.createElement('div');
+        c.id = 'toast-container';
+        c.className = 'spmb-toast-container';
+        document.body.appendChild(c);
+        return c;
+      })();
+      const toast = document.createElement('div');
+      toast.className = `spmb-toast spmb-toast-${type}`;
+      toast.innerHTML = `<span class="spmb-toast-content"><strong class="spmb-toast-title">${type === 'success' ? 'Berhasil' : type === 'error' ? 'Gagal' : type === 'warning' ? 'Peringatan' : 'Info'}</strong><p class="spmb-toast-message">${message}</p></span><button class="spmb-toast-close" onclick="this.parentElement.remove()"><i class="fa-solid fa-xmark"></i></button>`;
+      container.appendChild(toast);
+      setTimeout(() => toast.remove(), 5000);
+    }
+
+    document.getElementById('year').textContent = new Date().getFullYear();
+    load();
+  </script>
+</body>
+</html>

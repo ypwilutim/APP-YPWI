@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pendaftaran Siswa Baru - SPMB</title>
+  <link rel="stylesheet" href="/SPMB/css/tailwind.css">
+  <link rel="stylesheet" href="/SPMB/css/spmb-theme.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="spmb-page">
+  <header class="spmb-header">
+    <div class="spmb-container spmb-header-inner">
+      <a href="/SPMB/spmb-public.html" class="spmb-logo">
+        <div class="spmb-logo-icon"><i class="fa-solid fa-graduation-cap"></i></div>
+        <span>SPMB</span>
+      </a>
+    </div>
+  </header>
+
+  <main class="spmb-container-narrow spmb-py-8">
+    <div class="spmb-text-center spmb-mb-8">
+      <h1 class="text-2xl font-bold text-slate-900">Pendaftaran Siswa Baru</h1>
+      <p class="spmb-text-muted spmb-mt-1">Isi formulir dan unggah dokumen persyaratan</p>
+    </div>
+
+    <div class="spmb-card spmb-p-6">
+      <form id="applyForm" class="spmb-flex spmb-flex-col spmb-gap-4" novalidate>
+        <div class="spmb-grid spmb-grid-cols-1 md:spmb-grid-cols-2 spmb-gap-4">
+          <div class="md:col-span-2">
+            <label for="tenant_id" class="spmb-label">Tenant ID <span class="text-red-500">*</span></label>
+            <input name="tenant_id" id="tenant_id" required class="spmb-input" placeholder="Masukkan kode tenant sekolah">
+          </div>
+          <div class="md:col-span-2">
+            <label for="nama" class="spmb-label">Nama Lengkap <span class="text-red-500">*</span></label>
+            <input name="nama" id="nama" required class="spmb-input" placeholder="Nama lengkap sesuai KTP/Akta">
+          </div>
+          <div>
+            <label for="nik" class="spmb-label">NIK</label>
+            <input name="nik" id="nik" class="spmb-input" placeholder="16 digit NIK" maxlength="16">
+          </div>
+          <div>
+            <label for="nisn" class="spmb-label">NISN</label>
+            <input name="nisn" id="nisn" class="spmb-input" placeholder="Nomor Induk Siswa Nasional" maxlength="20">
+          </div>
+          <div>
+            <label for="jenis_kelamin" class="spmb-label">Jenis Kelamin <span class="text-red-500">*</span></label>
+            <select name="jenis_kelamin" id="jenis_kelamin" required class="spmb-select">
+              <option value="">Pilih</option>
+              <option value="L">Laki-laki</option>
+              <option value="P">Perempuan</option>
+            </select>
+          </div>
+          <div>
+            <label for="tempat_lahir" class="spmb-label">Tempat Lahir <span class="text-red-500">*</span></label>
+            <input name="tempat_lahir" id="tempat_lahir" required class="spmb-input" placeholder="Kota/Kabupaten">
+          </div>
+          <div>
+            <label for="tanggal_lahir" class="spmb-label">Tanggal Lahir <span class="text-red-500">*</span></label>
+            <input type="date" name="tanggal_lahir" id="tanggal_lahir" required class="spmb-input">
+          </div>
+        </div>
+        <div>
+          <label for="alamat" class="spmb-label">Alamat Lengkap <span class="text-red-500">*</span></label>
+          <textarea name="alamat" id="alamat" rows="3" required class="spmb-textarea" placeholder="Alamat lengkap sesuai KK"></textarea>
+        </div>
+        <div class="spmb-grid spmb-grid-cols-1 md:spmb-grid-cols-2 spmb-gap-4">
+          <div>
+            <label for="program_id" class="spmb-label">Program <span class="text-red-500">*</span></label>
+            <select name="program_id" id="program_id" required class="spmb-select"><option value="">Pilih program</option></select>
+          </div>
+          <div>
+            <label for="wave_id" class="spmb-label">Gelombang <span class="text-red-500">*</span></label>
+            <select name="wave_id" id="wave_id" required class="spmb-select"><option value="">Pilih gelombang</option></select>
+          </div>
+        </div>
+        <div class="spmb-grid spmb-grid-cols-1 md:spmb-grid-cols-2 spmb-gap-4">
+          <div class="md:col-span-2">
+            <label for="nama_orang_tua" class="spmb-label">Nama Orang Tua/Wali <span class="text-red-500">*</span></label>
+            <input name="nama_orang_tua" id="nama_orang_tua" required class="spmb-input" placeholder="Nama ayah/ibu/wali">
+          </div>
+          <div>
+            <label for="no_wa_ortu" class="spmb-label">No WA Orang Tua <span class="text-red-500">*</span></label>
+            <input name="no_wa_ortu" id="no_wa_ortu" required class="spmb-input" placeholder="08xxxxxxxxxx">
+          </div>
+          <div>
+            <label for="email_ortu" class="spmb-label">Email Orang Tua</label>
+            <input type="email" name="email_ortu" id="email_ortu" class="spmb-input" placeholder="email@domain.com">
+          </div>
+          <div>
+            <label for="pendidikan_terakhir" class="spmb-label">Pendidikan Terakhir</label>
+            <input name="pendidikan_terakhir" id="pendidikan_terakhir" class="spmb-input" placeholder="Contoh: SMA, SMK, D3, S1">
+          </div>
+          <div>
+            <label for="nama_sekolah_asal" class="spmb-label">Sekolah Asal</label>
+            <input name="nama_sekolah_asal" id="nama_sekolah_asal" class="spmb-input" placeholder="Nama sekolah sebelumnya">
+          </div>
+          <div>
+            <label for="tahun_lulus" class="spmb-label">Tahun Lulus</label>
+            <input name="tahun_lulus" id="tahun_lulus" class="spmb-input" placeholder="2024" maxlength="4">
+          </div>
+        </div>
+        <div class="spmb-grid spmb-grid-cols-1 md:spmb-grid-cols-2 spmb-gap-4">
+          <div>
+            <label class="spmb-label">Foto <span class="text-red-500">*</span></label>
+            <div class="spmb-file-dropzone" data-field="foto">
+              <div class="spmb-file-dropzone-icon"><i class="fa-solid fa-image"></i></div>
+              <p class="spmb-font-medium">Klik atau tarik file ke sini</p>
+              <p class="spmb-hint">JPG/PNG/GIF, max 5MB</p>
+              <input type="file" id="foto" name="foto" accept="image/*" required hidden>
+            </div>
+            <div class="spmb-file-list" id="foto-file-list"></div>
+          </div>
+          <div>
+            <label class="spmb-label">KK <span class="text-red-500">*</span></label>
+            <div class="spmb-file-dropzone" data-field="kk">
+              <div class="spmb-file-dropzone-icon"><i class="fa-solid fa-users"></i></div>
+              <p class="spmb-font-medium">Klik atau tarik file ke sini</p>
+              <p class="spmb-hint">JPG/PNG/PDF, max 5MB</p>
+              <input type="file" id="kk" name="kk" accept="image/*,.pdf" required hidden>
+            </div>
+            <div class="spmb-file-list" id="kk-file-list"></div>
+          </div>
+          <div>
+            <label class="spmb-label">Ijazah <span class="text-red-500">*</span></label>
+            <div class="spmb-file-dropzone" data-field="ijazah">
+              <div class="spmb-file-dropzone-icon"><i class="fa-solid fa-graduation-cap"></i></div>
+              <p class="spmb-font-medium">Klik atau tarik file ke sini</p>
+              <p class="spmb-hint">JPG/PNG/PDF, max 5MB</p>
+              <input type="file" id="ijazah" name="ijazah" accept="image/*,.pdf" required hidden>
+            </div>
+            <div class="spmb-file-list" id="ijazah-file-list"></div>
+          </div>
+          <div>
+            <label class="spmb-label">Akta (opsional)</label>
+            <div class="spmb-file-dropzone" data-field="akta">
+              <div class="spmb-file-dropzone-icon"><i class="fa-solid fa-file-lines"></i></div>
+              <p class="spmb-font-medium">Klik atau tarik file ke sini</p>
+              <p class="spmb-hint">JPG/PNG/PDF, max 5MB</p>
+              <input type="file" id="akta" name="akta" accept="image/*,.pdf" hidden>
+            </div>
+            <div class="spmb-file-list" id="akta-file-list"></div>
+          </div>
+          <div>
+            <label class="spmb-label">Rapor (opsional)</label>
+            <div class="spmb-file-dropzone" data-field="rapor">
+              <div class="spmb-file-dropzone-icon"><i class="fa-solid fa-file-lines"></i></div>
+              <p class="spmb-font-medium">Klik atau tarik file ke sini</p>
+              <p class="spmb-hint">JPG/PNG/PDF, max 5MB</p>
+              <input type="file" id="rapor" name="rapor" accept="image/*,.pdf" hidden>
+            </div>
+            <div class="spmb-file-list" id="rapor-file-list"></div>
+          </div>
+        </div>
+        <div class="spmb-flex spmb-justify-end spmb-pt-4">
+          <button type="submit" class="spmb-btn spmb-btn-primary spmb-btn-lg">
+            <i class="fa-solid fa-paper-plane"></i> Kirim Pendaftaran
+          </button>
+        </div>
+        <div id="result" class="spmb-text-sm spmb-text-center"></div>
+      </form>
+    </div>
+  </main>
+
+  <footer class="spmb-footer">
+    <div class="spmb-container">
+      <p>&copy; <span id="year"></span> SPMB - Sistem Penerimaan Murid Baru. All rights reserved.</p>
+    </div>
+  </footer>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const t = params.get('tenant');
+    if (t) document.getElementById('tenant_id').value = t;
+
+    async function loadOptions() {
+      const tenantId = document.getElementById('tenant_id').value;
+      if (!tenantId) return;
+      try {
+        const res = await fetch('/api/spmb/landing/' + encodeURIComponent(tenantId));
+        const data = await res.json();
+        if (data.success) {
+          const pSel = document.getElementById('program_id');
+          pSel.innerHTML = '<option value="">Pilih program</option>' + (data.data.programs || []).map(p => `<option value="${p.id}">${p.name || p.program_name}</option>`).join('');
+          const wSel = document.getElementById('wave_id');
+          wSel.innerHTML = '<option value="">Pilih gelombang</option>' + (data.data.waves || []).map(w => `<option value="${w.id}">${w.name || w.wave_name}</option>`).join('');
+        }
+      } catch (e) { console.error(e); }
+    }
+    document.getElementById('tenant_id').addEventListener('change', loadOptions);
+    loadOptions();
+
+    // File dropzone handling
+    document.querySelectorAll('.spmb-file-dropzone').forEach(dz => {
+      const input = dz.querySelector('input[type="file"]');
+      const list = document.getElementById(input.id + '-file-list');
+
+      dz.addEventListener('click', () => input.click());
+      dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('drag-active'); });
+      dz.addEventListener('dragleave', () => dz.classList.remove('drag-active'));
+      dz.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dz.classList.remove('drag-active');
+        if (e.dataTransfer.files.length) {
+          input.files = e.dataTransfer.files;
+          updateFileList(input, list);
+        }
+      });
+      input.addEventListener('change', () => updateFileList(input, list));
+    });
+
+    function updateFileList(input, list) {
+      if (!input.files.length) { list.innerHTML = ''; return; }
+      const file = input.files[0];
+      const sizeMB = (file.size / 1024 / 1024).toFixed(2);
+      list.innerHTML = `
+        <div class="spmb-file-item">
+          <div class="spmb-flex spmb-items-center spmb-gap-2">
+            <i class="fa-solid fa-file"></i>
+            <span class="spmb-text-sm">${file.name}</span>
+            <span class="spmb-text-muted spmb-text-sm">(${sizeMB} MB)</span>
+          </div>
+          <button type="button" class="spmb-text-sm text-red-500 hover:text-red-700" onclick="this.closest('.spmb-file-item').remove(); document.getElementById('${input.id}').value='';">Hapus</button>
+        </div>
+      `;
+    }
+
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toast-container') || (() => {
+        const c = document.createElement('div');
+        c.id = 'toast-container';
+        c.className = 'spmb-toast-container';
+        document.body.appendChild(c);
+        return c;
+      })();
+      const toast = document.createElement('div');
+      toast.className = `spmb-toast spmb-toast-${type}`;
+      toast.innerHTML = `<span class="spmb-toast-content"><strong class="spmb-toast-title">${type === 'success' ? 'Berhasil' : type === 'error' ? 'Gagal' : 'Info'}</strong><p class="spmb-toast-message">${message}</p></span><button class="spmb-toast-close" onclick="this.parentElement.remove()"><i class="fa-solid fa-xmark"></i></button>`;
+      container.appendChild(toast);
+      setTimeout(() => toast.remove(), 5000);
+    }
+
+    document.getElementById('applyForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const fd = new FormData(form);
+      const submitBtn = form.querySelector('button[type="submit"]');
+      const originalText = submitBtn.innerHTML;
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<div class="spmb-flex spmb-items-center spmb-gap-2"><div class="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>Mengirim...</div>';
+
+      try {
+        const res = await fetch('/api/spmb/student/apply', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (data.success) {
+          showToast(`Berhasil. Nomor pendaftaran: ${data.data.id}`, 'success');
+          form.reset();
+          document.querySelectorAll('.spmb-file-list').forEach(el => el.innerHTML = '');
+        } else {
+          showToast(data.message || 'Terjadi kesalahan', 'error');
+        }
+      } catch (err) {
+        showToast('Tidak dapat terhubung ke server', 'error');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalText;
+      }
+    });
+
+    document.getElementById('year').textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>

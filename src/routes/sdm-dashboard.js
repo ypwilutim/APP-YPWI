@@ -866,4 +866,432 @@ router.delete('/sdm-dashboard/access/:assignmentId', authenticateOperator, async
   }
 });
 
+// POST /api/sdm-dashboard/teachers - Tambah guru baru (CRUD)
+router.post('/sdm-dashboard/teachers', authenticateOperator, async (req, res) => {
+  try {
+    const allowedTenants = await getSdmAllowedTenants(req);
+    const {
+      nama, nik, nip, tenant_id, jabatan_di_unit, status_kepegawaian,
+      tmt, no_wa, email, status_aktif = 1
+    } = req.body || {};
+
+    if (!nama || !nik || !tenant_id) {
+      return res.status(400).json({ success: false, message: 'nama, nik, dan tenant_id wajib diisi' });
+    }
+    if (!allowedTenants.includes(tenant_id)) {
+      return res.status(403).json({ success: false, message: 'Tenant tidak diizinkan' });
+    }
+
+    // Validasi NIP jika TMT >= 2 tahun
+    if (tmt) {
+      const tmtDate = new Date(tmt);
+      const twoYearsAgo = new Date();
+      twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+      if (tmtDate <= twoYearsAgo && (!nip || nip === '' || nip === '-')) {
+        return res.status(400).json({ success: false, message: 'NIP wajib diisi jika TMT sudah 2 tahun atau lebih' });
+      }
+    }
+
+    const result = await db.query(
+      `INSERT INTO teachers (nama, nik, nip, no_wa, email, status_kepegawaian, tmt, status_aktif)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [nama, nik, nip || null, no_wa || null, email || null, status_kepegawaian || null, tmt || null, status_aktif ? 1 : 0]
+    );
+    const teacherId = result.insertId;
+
+    await db.query(
+      `INSERT INTO teacher_assignments (teacher_id, tenant_id, jabatan_di_unit)
+       VALUES (?, ?, ?)`,
+      [teacherId, tenant_id, jabatan_di_unit || null]
+    );
+
+    res.json({ success: true, message: 'Guru berhasil ditambahkan', data: { id: teacherId } });
+  } catch (error) {
+    console.error('SDM add teacher error:', error);
+    res.status(500).json({ success: false, message: 'Gagal menambah guru', error: error.message });
+  }
+});
+
+// PUT /api/sdm-dashboard/teachers/:id - Update guru
+router.put('/sdm-dashboard/teachers/:id', authenticateOperator, async (req, res) => {
+  try {
+    const allowedTenants = await getSdmAllowedTenants(req);
+    const teacherId = parseInt(req.params.id);
+    const {
+      nama, nik, nip, tenant_id, jabatan_di_unit, status_kepegawaian,
+      tmt, no_wa, email, status_aktif
+    } = req.body || {};
+
+    if (tenant_id && !allowedTenants.includes(tenant_id)) {
+      return res.status(403).json({ success: false, message: 'Tenant tidak diizinkan' });
+    }
+
+    if (tmt) {
+      const tmtDate = new Date(tmt);
+      const twoYearsAgo = new Date();
+      twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+      if (tmtDate <= twoYearsAgo && (!nip || nip === '' || nip === '-')) {
+        return res.status(400).json({ success: false, message: 'NIP wajib diisi jika TMT sudah 2 tahun atau lebih' });
+      }
+    }
+
+    await db.query(
+      `UPDATE teachers SET
+        nama = COALESCE(?, nama),
+        nik = COALESCE(?, nik),
+        nip = COALESCE(?, nip),
+        no_wa = COALESCE(?, no_wa),
+        email = COALESCE(?, email),
+        status_kepegawaian = COALESCE(?, status_kepegawaian),
+        tmt = COALESCE(?, tmt),
+        status_aktif = COALESCE(?, status_aktif)
+       WHERE id = ?`,
+      [nama || null, nik || null, nip || null, no_wa || null, email || null,
+       status_kepegawaian || null, tmt || null,
+       (status_aktif === undefined ? null : (status_aktif ? 1 : 0)), teacherId]
+    );
+
+    if (tenant_id) {
+      // update assignment tenant/jabatan for allowed tenants
+      const placeholders = allowedTenants.map(() => '?').join(',');
+      const assign = await db.query(
+        `SELECT id FROM teacher_assignments WHERE teacher_id = ? AND tenant_id IN (${placeholders})`,
+        [teacherId, ...allowedTenants]
+      );
+      // update first matching assignment
+      if (assign.length) {
+        await db.query(
+          'UPDATE teacher_assignments SET tenant_id = ?, jabatan_di_unit = COALESCE(?, jabatan_di_unit) WHERE id = ?',
+          [tenant_id, jabatan_di_unit || null, assign[0].id]
+        );
+      } else {
+        await db.query(
+          'INSERT INTO teacher_assignments (teacher_id, tenant_id, jabatan_di_unit) VALUES (?, ?, ?)',
+          [teacherId, tenant_id, jabatan_di_unit || null]
+        );
+      }
+    } else if (jabatan_di_unit) {
+      const placeholders2 = allowedTenants.map(() => '?').join(',');
+      await db.query(
+        `UPDATE teacher_assignments SET jabatan_di_unit = ? WHERE teacher_id = ? AND tenant_id IN (${placeholders2})`,
+        [jabatan_di_unit, teacherId, ...allowedTenants]
+      );
+    }
+
+    res.json({ success: true, message: 'Guru berhasil diperbarui' });
+  } catch (error) {
+    console.error('SDM update teacher error:', error);
+    res.status(500).json({ success: false, message: 'Gagal memperbarui guru', error: error.message });
+  }
+});
+
+// DELETE (soft) /api/sdm-dashboard/teachers/:id
+router.delete('/sdm-dashboard/teachers/:id', authenticateOperator, async (req, res) => {
+  try {
+    const allowedTenants = await getSdmAllowedTenants(req);
+    const teacherId = parseInt(req.params.id);
+    await db.query('UPDATE teachers SET status_aktif = 0 WHERE id = ?', [teacherId]);
+    res.json({ success: true, message: 'Guru dinonaktifkan' });
+  } catch (error) {
+    console.error('SDM delete teacher error:', error);
+    res.status(500).json({ success: false, message: 'Gagal menonaktifkan guru', error: error.message });
+  }
+});
+
+// GET /api/sdm-dashboard/manual-attendance-monthly
+router.get('/sdm-dashboard/manual-attendance-monthly', authenticateOperator, async (req, res) => {
+  try {
+    const allowedTenants = await getSdmAllowedTenants(req);
+    let tenantId = req.query.tenant_id;
+    const bulan = parseInt(req.query.bulan || new Date().getMonth() + 1);
+    const tahun = parseInt(req.query.tahun || new Date().getFullYear());
+
+    if (!tenantId || !allowedTenants.includes(tenantId)) {
+      // fallback first allowed
+      tenantId = allowedTenants[0];
+    }
+    if (!tenantId) {
+      return res.json({ success: true, data: [], daysInMonth: 0, activeDays: [], leave_requests: [] });
+    }
+
+    const teachers = await db.query(
+      'SELECT t.id, t.nama FROM teachers t WHERE t.id IN (SELECT teacher_id FROM teacher_assignments WHERE tenant_id = ?) AND t.status_aktif = 1',
+      [tenantId]
+    );
+
+    const logs = await db.query(
+      'SELECT al.teacher_id, DAY(al.waktu_scan) as hari, al.status, al.dinas_luar, al.keterangan, al.waktu_scan, al.jenis, al.metode FROM attendance_logs al WHERE MONTH(al.waktu_scan) = ? AND YEAR(al.waktu_scan) = ? AND al.teacher_id IN (SELECT teacher_id FROM teacher_assignments WHERE tenant_id = ?)',
+      [bulan, tahun, tenantId]
+    );
+
+    const daysInMonth = new Date(tahun, bulan, 0).getDate();
+    const firstDayOfMonth = String(tahun).padStart(4, '0') + '-' + String(bulan).padStart(2, '0') + '-01';
+    const lastDayOfMonth = String(tahun).padStart(4, '0') + '-' + String(bulan).padStart(2, '0') + '-' + String(daysInMonth).padStart(2, '0');
+
+    const leaveLogs = await db.query(
+      'SELECT lr.id, lr.teacher_id, lr.jenis, lr.keterangan, lr.tanggal_mulai, lr.tanggal_selesai, lr.status FROM leave_requests lr WHERE lr.teacher_id IN (SELECT teacher_id FROM teacher_assignments WHERE tenant_id = ?) AND ((MONTH(lr.tanggal_mulai) = ? AND YEAR(lr.tanggal_mulai) = ?) OR (MONTH(lr.tanggal_selesai) = ? AND YEAR(lr.tanggal_selesai) = ?) OR (lr.tanggal_mulai <= ? AND lr.tanggal_selesai >= ?))',
+      [tenantId, bulan, tahun, bulan, tahun, firstDayOfMonth, lastDayOfMonth]
+    );
+
+    // activeDays hanya dari attendance_logs
+    const dayRecordCount = {};
+    logs.forEach(l => {
+      const day = parseInt(l.hari);
+      if (day >= 1 && day <= daysInMonth) dayRecordCount[day] = (dayRecordCount[day] || 0) + 1;
+    });
+    const activeDays = Object.keys(dayRecordCount).filter(d => dayRecordCount[d] > 0).map(d => parseInt(d));
+
+    const weekendDays = [];
+    for (let d = 1; d <= daysInMonth; d++) {
+      const date = new Date(tahun, bulan - 1, d);
+      if (date.getDay() === 0 || date.getDay() === 6) weekendDays.push(d);
+    }
+
+    const result = teachers.map(t => {
+      const row = { id: t.id, nama: t.nama };
+      for (let d = 1; d <= daysInMonth; d++) { row['tgl_' + d] = ''; row['tgl_' + d + '_masuk'] = ''; row['tgl_' + d + '_pulang'] = ''; row['tgl_' + d + '_leave'] = null; }
+      const allLogs = [
+        ...logs.filter(l => l.teacher_id === t.id).map(l => ({
+          teacher_id: l.teacher_id, hari: l.hari, status: l.status, dinas_luar: l.dinas_luar,
+          keterangan: l.keterangan, waktu_scan: l.waktu_scan, jenis: l.jenis
+        })),
+        ...leaveLogs.filter(l => l.teacher_id === t.id).map(l => {
+          const entries = [];
+          const startDate = new Date(l.tanggal_mulai);
+          const endDate = new Date(l.tanggal_selesai);
+          if (startDate.getMonth() === bulan - 1 && startDate.getFullYear() === tahun ||
+              endDate.getMonth() === bulan - 1 && endDate.getFullYear() === tahun ||
+              (startDate.getMonth() < bulan - 1 && endDate.getMonth() > bulan - 1)) {
+            let current = new Date(startDate);
+            while (current <= endDate) {
+              if (current.getMonth() === bulan - 1 && current.getFullYear() === tahun) {
+                entries.push({
+                  teacher_id: l.teacher_id, hari: current.getDate(), status: l.jenis,
+                  dinas_luar: l.jenis === 'dinas_luar' ? 1 : 0, keterangan: l.keterangan,
+                  waktu_scan: current, leave_id: l.id, leave_status: l.status
+                });
+              }
+              current = new Date(current.getTime() + 24 * 60 * 60 * 1000);
+            }
+          }
+          return entries;
+        }).flat()
+      ];
+
+      allLogs.sort((a, b) => {
+        const timeA = a.waktu_scan ? new Date(a.waktu_scan).getTime() : 0;
+        const timeB = b.waktu_scan ? new Date(b.waktu_scan).getTime() : 0;
+        return timeA - timeB;
+      });
+
+      const dailyBest = {};
+      allLogs.forEach(l => {
+        const day = parseInt(l.hari);
+        if (day < 1 || day > daysInMonth) return;
+        if (!dailyBest[day]) dailyBest[day] = { masuk: null, pulang: null, masukStatus: null, leave: null };
+        const waktu = l.waktu_scan ? new Date(l.waktu_scan) : null;
+        const jam = waktu ? waktu.getHours() * 60 + waktu.getMinutes() : -1;
+        if (l.leave_id) {
+          dailyBest[day].leave = { id: l.leave_id, jenis: l.status, status: l.leave_status, keterangan: l.keterangan };
+        }
+        if (l.jenis === 'masuk') {
+          if (!dailyBest[day].masuk || (jam >= 240 && jam < dailyBest[day].masuk) || (dailyBest[day].masuk < 240 && jam >= 240)) {
+            dailyBest[day].masuk = jam;
+            dailyBest[day].masukStatus = l.status;
+          }
+        } else if (l.jenis === 'pulang') {
+          if (!dailyBest[day].pulang || jam > dailyBest[day].pulang) {
+            dailyBest[day].pulang = jam;
+          }
+        }
+      });
+
+      let hadir = 0, terlambat = 0, izin = 0, cuti = 0, dinas_luar = 0, sakit = 0, tanpa_keterangan = 0;
+      for (let d = 1; d <= daysInMonth; d++) {
+        const best = dailyBest[d];
+        const date = new Date(tahun, bulan - 1, d);
+        const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+        if (isWeekend) continue;
+        if (best && best.leave) {
+          row['tgl_' + d] = best.leave.jenis === 'izin' ? 'I' : best.leave.jenis === 'sakit' ? 'S' : best.leave.jenis === 'cuti' ? 'C' : best.leave.jenis === 'dinas_luar' ? 'DL' : best.leave.jenis;
+          row['tgl_' + d + '_leave'] = best.leave;
+          if (best.leave.jenis === 'izin') izin++;
+          else if (best.leave.jenis === 'sakit') sakit++;
+          else if (best.leave.jenis === 'cuti') cuti++;
+          else if (best.leave.jenis === 'dinas_luar') dinas_luar++;
+        } else if (best && best.masuk !== null) {
+          const h = Math.floor(best.masuk / 60).toString().padStart(2, '0');
+          const m = (best.masuk % 60).toString().padStart(2, '0');
+          row['tgl_' + d + '_masuk'] = h + ':' + m;
+          if (best.masukStatus === 'tepat_waktu') { row['tgl_' + d] = 'H'; hadir++; }
+          else if (best.masukStatus === 'terlambat') { row['tgl_' + d] = 'T'; terlambat++; }
+          else if (best.masukStatus === 'dinas_luar') { row['tgl_' + d] = 'DL'; dinas_luar++; }
+          else if (best.masukStatus === 'izin') { row['tgl_' + d] = 'I'; izin++; }
+          else if (best.masukStatus === 'cuti') { row['tgl_' + d] = 'C'; cuti++; }
+          else if (best.masukStatus === 'sakit') { row['tgl_' + d] = 'S'; sakit++; }
+        }
+      }
+      for (let d = 1; d <= daysInMonth; d++) {
+        if (!row['tgl_' + d]) {
+          const date = new Date(tahun, bulan - 1, d);
+          const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+          if (isWeekend || !activeDays.includes(d)) {
+            row['tgl_' + d] = '';
+          } else {
+            row['tgl_' + d] = 'TK';
+            tanpa_keterangan++;
+          }
+        }
+      }
+      row.hadir = hadir; row.terlambat = terlambat; row.izin = izin; row.cuti = cuti;
+      row.dinas_luar = dinas_luar; row.sakit = sakit; row.tanpa_keterangan = tanpa_keterangan;
+      row.weekendDays = weekendDays;
+      return row;
+    });
+
+    res.json({ success: true, data: result, daysInMonth, activeDays, leave_requests: leaveLogs });
+  } catch (error) {
+    console.error('Manual attendance monthly error:', error);
+    res.status(500).json({ success: false, message: 'Gagal memuat absensi manual', error: error.message });
+  }
+});
+
+// POST /api/sdm-dashboard/manual-attendance - Tambah absensi manual
+router.post('/sdm-dashboard/manual-attendance', authenticateOperator, async (req, res) => {
+  try {
+    const allowedTenants = await getSdmAllowedTenants(req);
+    const { teacher_id, tenant_id, tanggal, jenis, status, waktu, keterangan } = req.body || {};
+    if (!teacher_id || !tenant_id || !tanggal || !jenis) {
+      return res.status(400).json({ success: false, message: 'teacher_id, tenant_id, tanggal, jenis wajib diisi' });
+    }
+    if (!allowedTenants.includes(tenant_id)) {
+      return res.status(403).json({ success: false, message: 'Tenant tidak diizinkan' });
+    }
+    const assign = await db.query(
+      'SELECT id FROM teacher_assignments WHERE teacher_id = ? AND tenant_id = ? LIMIT 1',
+      [teacher_id, tenant_id]
+    );
+    if (!assign.length) {
+      return res.status(400).json({ success: false, message: 'Guru tidak terdaftar di tenant ini' });
+    }
+
+    const leaveTypes = ['izin', 'sakit', 'cuti', 'dinas_luar'];
+    if (leaveTypes.includes(jenis)) {
+      // create approved leave_request
+      const lr = await db.query(
+        `INSERT INTO leave_requests (teacher_id, jenis, keterangan, tanggal_mulai, tanggal_selesai, status, tenant_id, created_at)
+         VALUES (?, ?, ?, ?, ?, 'approved', ?, NOW())`,
+        [teacher_id, jenis, keterangan || '', tanggal, tanggal, tenant_id]
+      );
+      const leaveId = lr.insertId;
+      // create attendance_logs
+      const waktuScan = tanggal + ' ' + (waktu || '00:00:00');
+      const note = (jenis.charAt(0).toUpperCase() + jenis.slice(1)) + ': ' + (keterangan || '');
+      await db.query(
+        `INSERT INTO attendance_logs (teacher_id, tenant_id, waktu_scan, waktu_absen, jenis, metode, status, keterangan, dinas_luar)
+         VALUES (?, ?, ?, ?, 'masuk', 'dashboard', ?, ?, ?)`,
+        [teacher_id, tenant_id, waktuScan, waktuScan, status || 'tepat_waktu', note, jenis === 'dinas_luar' ? 1 : 0]
+      );
+      return res.json({ success: true, message: 'Absensi manual (izin) tersimpan', data: { leave_id: leaveId } });
+    }
+
+    // masuk/pulang
+    const jenisAbsen = (jenis === 'pulang') ? 'pulang' : 'masuk';
+    const waktuScan = tanggal + ' ' + (waktu || (jenisAbsen === 'masuk' ? '07:00:00' : '15:00:00'));
+    await db.query(
+      `INSERT INTO attendance_logs (teacher_id, tenant_id, waktu_scan, waktu_absen, jenis, metode, status, keterangan, dinas_luar)
+       VALUES (?, ?, ?, ?, ?, 'dashboard', ?, ?, 0)`,
+      [teacher_id, tenant_id, waktuScan, waktuScan, jenisAbsen, status || 'tepat_waktu', keterangan || 'Input manual SDM']
+    );
+    res.json({ success: true, message: 'Absensi manual tersimpan' });
+  } catch (error) {
+    console.error('SDM manual attendance create error:', error);
+    res.status(500).json({ success: false, message: 'Gagal menyimpan absensi manual', error: error.message });
+  }
+});
+
+// DELETE /api/sdm-dashboard/manual-attendance/:id
+router.delete('/sdm-dashboard/manual-attendance/:id', authenticateOperator, async (req, res) => {
+  try {
+    const allowedTenants = await getSdmAllowedTenants(req);
+    const id = parseInt(req.params.id);
+    const rows = await db.query(
+      'SELECT id, tenant_id, metode FROM attendance_logs WHERE id = ?',
+      [id]
+    );
+    if (!rows.length) return res.status(404).json({ success: false, message: 'Record tidak ditemukan' });
+    if (!allowedTenants.includes(rows[0].tenant_id)) {
+      return res.status(403).json({ success: false, message: 'Tenant tidak diizinkan' });
+    }
+    if (rows[0].metode !== 'dashboard') {
+      return res.status(400).json({ success: false, message: 'Hanya record manual (dashboard) yang bisa dihapus' });
+    }
+    await db.query('DELETE FROM attendance_logs WHERE id = ?', [id]);
+    res.json({ success: true, message: 'Record dihapus' });
+  } catch (error) {
+    console.error('SDM manual attendance delete error:', error);
+    res.status(500).json({ success: false, message: 'Gagal menghapus record', error: error.message });
+  }
+});
+
+// GET /api/sdm-dashboard/school-detail
+router.get('/sdm-dashboard/school-detail', authenticateOperator, async (req, res) => {
+  try {
+    const allowedTenants = await getSdmAllowedTenants(req);
+    const tenantId = req.query.tenant_id;
+    const days = parseInt(req.query.days || 7);
+    if (!tenantId || !allowedTenants.includes(tenantId)) {
+      return res.status(403).json({ success: false, message: 'Tenant tidak diizinkan' });
+    }
+    const tenantRows = await db.query('SELECT tenant_id, nama_sekolah, tipe_unit FROM tenants WHERE tenant_id = ?', [tenantId]);
+    const tenant = tenantRows[0] || { tenant_id: tenantId, nama_sekolah: tenantId };
+
+    const teachers = await db.query(
+      `SELECT t.id, t.nama, t.nik, t.status_kepegawaian
+       FROM teachers t JOIN teacher_assignments ta ON t.id = ta.teacher_id
+       WHERE ta.tenant_id = ? AND t.status_aktif = 1 ORDER BY t.nama`,
+      [tenantId]
+    );
+
+    const since = new Date();
+    since.setDate(since.getDate() - (days - 1));
+    const sinceStr = since.toISOString().split('T')[0];
+
+    const logs = await db.query(
+      `SELECT teacher_id, DATE(waktu_scan) as tgl, status, jenis
+       FROM attendance_logs
+       WHERE tenant_id = ? AND DATE(waktu_scan) >= ?`,
+      [tenantId, sinceStr]
+    );
+
+    const pendingLeaves = await db.query(
+      `SELECT teacher_id, COUNT(*) as total FROM leave_requests
+       WHERE tenant_id = ? AND status = 'pending'
+       GROUP BY teacher_id`,
+      [tenantId]
+    );
+    const pendingMap = {};
+    pendingLeaves.forEach(r => { pendingMap[r.teacher_id] = r.total; });
+
+    const teacherDetails = teachers.map(t => {
+      const tLogs = logs.filter(l => l.teacher_id === t.id);
+      const presentDays = new Set(tLogs.filter(l => l.jenis === 'masuk').map(l => l.tgl)).size;
+      const lateCount = tLogs.filter(l => l.status === 'terlambat').length;
+      return {
+        id: t.id, nama: t.nama, nik: t.nik, status_kepegawaian: t.status_kepegawaian,
+        present_days: presentDays, late_count: lateCount,
+        pending_leaves: pendingMap[t.id] || 0
+      };
+    });
+
+    res.json({
+      success: true,
+      data: { tenant, days, teachers: teacherDetails }
+    });
+  } catch (error) {
+    console.error('SDM school detail error:', error);
+    res.status(500).json({ success: false, message: 'Gagal memuat detail sekolah', error: error.message });
+  }
+});
+
 module.exports = router;

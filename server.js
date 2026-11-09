@@ -1202,8 +1202,26 @@ async function startServer() {
     await ensureColumn('teachers', 'potongan', 'DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER honor_bendahara');
     await ensureColumn('teachers', 'pending_password_hash', 'VARCHAR(255) DEFAULT NULL AFTER link_foto');
 
+// --- teachers: Google Drive backup metadata for profile photos/documents ---
+await ensureColumn('teachers', 'drive_profile_folder_id', 'VARCHAR(255) DEFAULT NULL AFTER pending_password_hash');
+await ensureColumn('teachers', 'drive_foto_file_id', 'VARCHAR(255) DEFAULT NULL AFTER drive_profile_folder_id');
+await ensureColumn('teachers', 'drive_foto_web_view_link', 'VARCHAR(500) DEFAULT NULL AFTER drive_foto_file_id');
+await ensureColumn('teachers', 'drive_ktp_file_id', 'VARCHAR(255) DEFAULT NULL AFTER drive_foto_web_view_link');
+await ensureColumn('teachers', 'drive_ktp_web_view_link', 'VARCHAR(500) DEFAULT NULL AFTER drive_ktp_file_id');
+await ensureColumn('teachers', 'drive_kk_file_id', 'VARCHAR(255) DEFAULT NULL AFTER drive_ktp_web_view_link');
+await ensureColumn('teachers', 'drive_kk_web_view_link', 'VARCHAR(500) DEFAULT NULL AFTER drive_kk_file_id');
+await ensureColumn('teachers', 'drive_ijazah_file_id', 'VARCHAR(255) DEFAULT NULL AFTER drive_kk_web_view_link');
+await ensureColumn('teachers', 'drive_ijazah_web_view_link', 'VARCHAR(500) DEFAULT NULL AFTER drive_ijazah_file_id');
+
     // --- sk_guru: flag verifikasi manual untuk bulk generate guru yang belum layak ---
     await ensureColumn('sk_guru', 'manual_verified', 'TINYINT(1) NOT NULL DEFAULT 0 COMMENT "1=SK dibuat via verifikasi manual operator (belum memenuhi syarat masa kerja)" AFTER tentag_type');
+
+// --- sk_guru: Google Drive archive metadata ---
+await ensureColumn('sk_guru', 'drive_file_id', 'VARCHAR(255) DEFAULT NULL AFTER manual_verified');
+await ensureColumn('sk_guru', 'drive_file_name', 'VARCHAR(255) DEFAULT NULL AFTER drive_file_id');
+await ensureColumn('sk_guru', 'drive_folder_id', 'VARCHAR(255) DEFAULT NULL AFTER drive_file_name');
+await ensureColumn('sk_guru', 'drive_web_view_link', 'VARCHAR(500) DEFAULT NULL AFTER drive_folder_id');
+await ensureColumn('sk_guru', 'drive_uploaded_at', 'DATETIME DEFAULT NULL AFTER drive_web_view_link');
 
     // --- teacher_assignments: kolom payroll override + is_paid ---
     await ensureColumn('teacher_assignments', 'is_paid', 'TINYINT(1) NOT NULL DEFAULT 1 COMMENT "1=digaji, 0=tidak"');
@@ -1363,20 +1381,64 @@ async function startServer() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `, 'spmb_registrations');
 
-    await ensureTable(`
-      CREATE TABLE IF NOT EXISTS spmb_committees (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        tenant_id VARCHAR(50) NOT NULL,
-        teacher_id INT DEFAULT NULL,
-        nama VARCHAR(255) DEFAULT NULL,
-        spmb_role VARCHAR(100) DEFAULT NULL,
-        is_active TINYINT(1) DEFAULT 1,
-        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        KEY idx_spmb_committees_tenant (tenant_id),
-        KEY idx_spmb_committees_teacher (teacher_id),
-        CONSTRAINT fk_spmb_committees_teacher FOREIGN KEY (teacher_id) REFERENCES teachers (id) ON DELETE SET NULL
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    `, 'spmb_committees');
+     await ensureTable(`
+       CREATE TABLE IF NOT EXISTS spmb_committees (
+         id INT AUTO_INCREMENT PRIMARY KEY,
+         tenant_id VARCHAR(50) NOT NULL,
+         teacher_id INT DEFAULT NULL,
+         nama VARCHAR(255) DEFAULT NULL,
+         spmb_role VARCHAR(100) DEFAULT NULL,
+         is_active TINYINT(1) DEFAULT 1,
+         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+         KEY idx_spmb_committees_tenant (tenant_id),
+         KEY idx_spmb_committees_teacher (teacher_id),
+         CONSTRAINT fk_spmb_committees_teacher FOREIGN KEY (teacher_id) REFERENCES teachers (id) ON DELETE SET NULL
+       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+     `, 'spmb_committees');
+
+     await ensureTable(`
+       CREATE TABLE IF NOT EXISTS spmb_student_applications (
+         id INT AUTO_INCREMENT PRIMARY KEY,
+         tenant_id VARCHAR(50) NOT NULL,
+         program_id INT DEFAULT NULL,
+         wave_id INT DEFAULT NULL,
+         nama VARCHAR(255) NOT NULL,
+         nik VARCHAR(20) DEFAULT NULL,
+         nisn VARCHAR(50) DEFAULT NULL,
+         tempat_lahir VARCHAR(255) DEFAULT NULL,
+         tanggal_lahir DATE DEFAULT NULL,
+         jenis_kelamin ENUM('L','P') DEFAULT NULL,
+         alamat TEXT DEFAULT NULL,
+         nama_orang_tua VARCHAR(255) DEFAULT NULL,
+         no_wa_ortu VARCHAR(20) DEFAULT NULL,
+         email_ortu VARCHAR(255) DEFAULT NULL,
+         pendidikan_terakhir VARCHAR(50) DEFAULT NULL,
+         nama_sekolah_asal VARCHAR(255) DEFAULT NULL,
+         tahun_lulus VARCHAR(10) DEFAULT NULL,
+         status ENUM('pending','verified','accepted','rejected','enrolled') DEFAULT 'pending',
+         payment_status ENUM('unpaid','paid') DEFAULT 'unpaid',
+         payment_amount DECIMAL(14,2) DEFAULT 0,
+         foto_path VARCHAR(500) DEFAULT NULL,
+         kk_path VARCHAR(500) DEFAULT NULL,
+         akta_path VARCHAR(500) DEFAULT NULL,
+         ijazah_path VARCHAR(500) DEFAULT NULL,
+         rapor_path VARCHAR(500) DEFAULT NULL,
+         notes TEXT DEFAULT NULL,
+         reviewed_by INT DEFAULT NULL,
+         reviewed_at TIMESTAMP NULL DEFAULT NULL,
+         student_id INT DEFAULT NULL,
+         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+         KEY idx_spmb_sa_tenant (tenant_id),
+         KEY idx_spmb_sa_status (status),
+         KEY idx_spmb_sa_wave (wave_id),
+         KEY idx_spmb_sa_nisn (nisn)
+       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+     `, 'spmb_student_applications');
+
+     await ensureColumn('spmb_waves', 'registration_fee', 'DECIMAL(14,2) DEFAULT 0');
+     await ensureColumn('spmb_transactions', 'application_id', 'INT DEFAULT NULL');
+
 
     // --- Kafalah tables ---
     await ensureTable(`

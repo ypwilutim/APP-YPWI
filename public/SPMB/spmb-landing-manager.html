@@ -1,902 +1,887 @@
 <!DOCTYPE html>
-<html lang="id" class="scroll-smooth">
+<html lang="id" class="scroll-smooth h-full bg-slate-50">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Manager Halaman Publik SPMB - YPWI Lutim</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
-    <style>
-        :root {
-            --primary: #066e3a;
-            --primary-dark: #044e28;
-            --primary-light: #e8f5e9;
-            --accent: #f59e0b;
-            --success: #10b981;
-            --warning: #f59e0b;
-            --text-main: #1e293b;
-            --text-muted: #64748b;
-            --bg-light: #f8fafc;
-            --border-color: #e2e8f0;
-            --card-bg: #ffffff;
-            --modal-bg: rgba(0,0,0,0.5);
-        }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Manager Halaman Publik SPMB</title>
+  <link rel="stylesheet" href="/SPMB/css/tailwind.css">
+  <link rel="stylesheet" href="/SPMB/css/spmb-theme.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <style>
+    .tab-content { display: none; }
+    .tab-content.active { display: block; animation: fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
+    @keyframes fadeIn { 
+      from { opacity: 0; transform: translateY(6px); } 
+      to { opacity: 1; transform: translateY(0); } 
+    }
 
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+    /* Custom Glassmorphism Header */
+    .glass-header {
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
 
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: var(--bg-light);
-            color: var(--text-main);
-            -webkit-font-smoothing: antialiased;
-        }
+    /* Custom Scrollbar for Horizontal Tabs */
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-        .container { width: 100%; max-width: 1400px; margin: 0 auto; padding: 0 24px; }
+    /* Custom Input Focus Ring */
+    .spmb-input-modern {
+      width: 100%;
+      border-radius: 0.5rem;
+      border: 1px solid #cbd5e1;
+      background-color: #ffffff;
+      padding: 0.625rem 0.875rem;
+      font-size: 0.875rem;
+      line-height: 1.25rem;
+      color: #0f172a;
+      transition: all 0.15s ease-in-out;
+    }
+    .spmb-input-modern:focus {
+      outline: none;
+      border-color: #6366f1;
+      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    }
 
-        /* ============================================
-           HEADER
-        ============================================ */
+    /* Tab Button Styles */
+    .spmb-tab-btn-modern {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.875rem 1.25rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #64748b;
+      border-bottom: 2px solid transparent;
+      white-space: nowrap;
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+    .spmb-tab-btn-modern:hover {
+      color: #4f46e5;
+      background-color: #f8fafc;
+    }
+    .spmb-tab-btn-modern.active {
+      color: #4f46e5;
+      border-bottom-color: #4f46e5;
+      background-color: #ffffff;
+      font-weight: 600;
+    }
 
-        .page-header {
-            background: var(--card-bg);
-            padding: 32px 24px;
-            border-radius: 1rem;
-            box-shadow: 0 4px 14px rgba(0,0,0,0.08);
-            margin-bottom: 24px;
-            border: 1px solid var(--border-color);
-            display: flex;
-            align-items: center;
-            gap: 24px;
-        }
-
-        .page-header .container {
-            display: flex;
-            align-items: center;
-            gap: 32px;
-            flex-wrap: wrap;
-        }
-
-        .page-header .tenant-info {
-            flex: 1;
-            min-width: 280px;
-        }
-
-        .tenant-id {
-            background: var(--bg-light);
-            padding: 8px 16px;
-            border-radius: 0.5rem;
-            font-family: 'Inter', monospace;
-            font-size: 0.9rem;
-            color: var(--text-muted);
-        }
-
-        .page-header .branding {
-            display: flex;
-            align-items: center;
-            gap: 24px;
-            flex: 1;
-        }
-
-        .logo-preview {
-            width: 56px;
-            height: 56px;
-            border-radius: 0.75rem;
-            object-fit: cover;
-            border: 2px solid var(--primary);
-            transition: border-color 0.2s;
-        }
-
-        .page-header .brand-name {
-            font-weight: 700;
-            font-size: 1.5rem;
-        }
-
-        .page-header .brand-tagline {
-            font-size: 1rem;
-            color: var(--text-muted);
-        }
-
-        /* ============================================
-           TABS NAVIGASI
-        ============================================ */
-
-        .section-tabs {
-            background: var(--card-bg);
-            padding: 0 24px 4px;
-            margin-bottom: 0;
-            border-radius: 0 0 0.75rem 0.75rem;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.03);
-            display: flex;
-            gap: 1px;
-        }
-
-        .tab-btn {
-            flex: 1;
-            padding: 16px 20px;
-            background: transparent;
-            border: none;
-            color: var(--text-muted);
-            font-size: 0.9rem;
-            font-weight: 500;
-            cursor: pointer;
-            border-radius: 0;
-            transition: all 0.2s ease;
-            border-bottom: 2px solid transparent;
-            position: relative;
-        }
-
-        .tab-btn.active {
-            color: var(--primary);
-            background: var(--bg-light);
-            border-bottom: 2px solid var(--primary);
-        }
-
-        .tab-btn:hover:not(.active) {
-            color: var(--text-muted);
-        }
-
-        .tab-btn.active::after {
-            content: '';
-            position: absolute;
-            bottom: -2px;
-            left: 0;
-            right: 0;
-            height: 3px;
-            background: var(--primary);
-            border-radius: 2px 2px 0 0;
-        }
-
-        /* ============================================
-           EDITOR PANEL
-        ============================================ */
-
-        .editor-panel {
-            background: var(--card-bg);
-            border-radius: 1rem;
-            box-shadow: 0 4px 14px rgba(0,0,0,0.08);
-            padding: 32px;
-            min-height: 700px;
-            margin-bottom: 32px;
-        }
-
-        .form-group { margin-bottom: 32px; }
-
-        .form-group .label {
-            display: block;
-            font-size: 0.875rem;
-            font-weight: 500;
-            color: var(--text-muted);
-            margin-bottom: 12px;
-        }
-
-        .form-group .field {
-            width: 100%;
-            padding: 14px 18px;
-            border: 1px solid var(--border-color);
-            border-radius: 0.5rem;
-            font-size: 0.9rem;
-            transition: all 0.2s ease;
-        }
-
-        .form-group .field:focus {
-            outline: none;
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(6,110,58,0.1);
-        }
-
-        .form-group .field:disabled {
-            background: var(--bg-light);
-            cursor: not-allowed;
-        }
-
-        .form-group .field.inline { width: auto; }
-
-        .color-picker-container { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
-
-        .color-preview {
-            width: 32px;
-            height: 32px;
-            border-radius: 0.375rem;
-            flex-shrink: 0;
-            border: 1px solid var(--border-color);
-        }
-
-        .color-input { display: none; }
-
-        .color-preset {
-            width: 24px;
-            height: 24px;
-            border-radius: 0.375rem;
-            flex-shrink: 0;
-            border: 2px solid #fff;
-            cursor: pointer;
-        }
-
-        .program-row { padding: 16px 0; border-bottom: 1px solid var(--border-color); display: flex; gap: 16px; align-items: center; }
-
-        .program-row:last-child { border-bottom: none; }
-
-        .program-field { padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 0.375rem; font-size: 0.875rem; flex: 1; }
-
-        .program-row .action { font-size: 0.8rem; color: var(--text-muted); cursor: pointer; white-space: nowrap; }
-
-        .wave-row { padding: 16px 0; border-bottom: 1px solid var(--border-color); display: flex; gap: 16px; align-items: center; }
-
-        .wave-row .field { padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 0.375rem; font-size: 0.875rem; flex: 1; }
-
-        .wave-row .date-wrapper { display: flex; gap: 12px; align-items: center; flex: 2; }
-
-        .wave-row .date-wrapper input { flex: 1; }
-
-        .wave-status {
-            padding: 6px 12px;
-            border-radius: 0.375rem;
-            font-size: 0.75rem;
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-
-        .status-open { background: #d1fae5; color: #059669; }
-        .status-upcoming { background: #fcd34d; color: #d97706; }
-        .status-closed { background: #fecaca; color: #b91c1c; }
-
-        .faq-row { padding: 16px 0; border-bottom: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 12px; }
-
-        .faq-row .field { padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 0.375rem; font-size: 0.875rem; }
-
-        .stat-row { padding: 16px 0; border-bottom: 1px solid var(--border-color); display: flex; gap: 16px; align-items: center; }
-
-        .stat-row .field { padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 0.375rem; font-size: 0.875rem; flex: 1; }
-
-        .btn { padding: 12px 24px; border: none; border-radius: 0.5rem; font-size: 0.9rem; font-weight: 500; cursor: pointer; }
-        .btn-primary { background: var(--primary); color: white; }
-        .btn-primary:hover { background: var(--primary-dark); }
-        .btn-secondary { background: var(--bg-light); color: var(--text-muted); border: 1px solid var(--border-color); border-radius: 0.5rem; }
-        .btn-secondary:hover { background: #e2e8f0; }
-        .btn-add { padding: 10px 18px; background: var(--primary); color: white; border: none; border-radius: 0.375rem; font-size: 0.875rem; cursor: pointer; margin-right: 8px; }
-        .btn-remove { padding: 6px 12px; background: transparent; color: #ef4444; border: none; font-size: 0.8rem; cursor: pointer; }
-        .btn-cancel { padding: 10px 18px; background: transparent; color: var(--text-muted); border: 1px solid var(--border-color); border-radius: 0.5rem; font-size: 0.875rem; cursor: pointer; margin-left: 12px; }
-
-        .toast { position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%); background: var(--primary); color: white; padding: 16px 28px; border-radius: 0.5rem; box-shadow: 0 6px 20px rgba(0,0,0,0.15); z-index: 1000; display: none; min-width: 320px; }
-        .toast.success { background: var(--success); }
-        .toast.error { background: #ef4444; }
-
-        @media (max-width: 768px) {
-            .page-header .actions { flex-direction: column; align-items: flex-start; gap: 16px; }
-            .page-header .tenant-info { margin-bottom: 20px; }
-            .editor-panel { padding: 24px; }
-            .form-group .field { padding: 10px 14px; font-size: 0.85rem; }
-            .program-row, .wave-row, .stat-row { flex-direction: column; align-items: stretch; }
-            .program-row .action, .wave-row .action { display: none; }
-        }
-
-        /* Reduced motion for accessibility */
-        @media (prefers-reduced-motion: reduce) {
-            * { transition: none !important; }
-        }
-    </style>
+    /* Preview Card Styling */
+    .browser-frame {
+      border: 1px solid #e2e8f0;
+      border-radius: 0.75rem;
+      overflow: hidden;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
+    }
+  </style>
 </head>
-
-<body class="min-h-screen">
-
-    <header class="page-header">
-        <div class="container">
-            <div class="page-header .actions">
-                <div class="page-header .tenant-info">
-                    <h2 id="pageTitle" class="font-semibold text-lg">Editor Halaman Publik SPMB</h2>
-                    <p id="tenantInfo" class="text-sm text-gray-500">Tenant ID: <span id="displayTenantId">-</span></p>
-                </div>
-                <div class="page-header .actions-right">
-                    <button id="saveBtn" class="btn-primary w-full sm:w-auto">Simpan Halaman Publik</button>
-                    <button id="closeBtn" class="btn-cancel w-full sm:w-auto">Batal</button>
-                </div>
-            </div>
+<body class="spmb-page flex flex-col min-h-screen text-slate-800 antialiased">
+  
+  <!-- Header -->
+  <header class="glass-header sticky top-0 z-40 border-b border-slate-200 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-md shadow-indigo-200">
+          <i class="fa-solid fa-graduation-cap text-lg"></i>
         </div>
-    </header>
-
-    <div class="container">
-        <div class="section-tabs" id="sectionTabs">
-            <button class="tab-btn active" data-tab="branding">Branding</button>
-            <button class="tab-btn" data-tab="programs">Programs</button>
-            <button class="tab-btn" data-tab="waves">Waves</button>
-            <button class="tab-btn" data-tab="faqs">FAQs</button>
-            <button class="tab-btn" data-tab="stats">Stats</button>
+        <div>
+          <h1 class="text-base sm:text-lg font-bold text-slate-900 leading-tight">Manager Halaman Publik SPMB</h1>
+          <p class="text-xs text-slate-500 font-medium" id="tenantInfo">Tenant ID: <span id="displayTenantId" class="font-semibold text-slate-700">-</span></p>
         </div>
+      </div>
+      <div class="flex items-center gap-2.5">
+        <label class="flex items-center gap-2 text-xs sm:text-sm text-slate-700">
+          <input type="checkbox" id="spmbIsOpenToggle" class="w-4 h-4">
+          Buka Pendaftaran
+        </label>
+        <button id="closeBtn" type="button" class="px-4 py-2 text-xs sm:text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-200 transition">
+          Batal
+        </button>
+        <button id="saveBtn" type="button" class="px-4 py-2 text-xs sm:text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm shadow-indigo-200 transition flex items-center gap-2">
+          <i class="fa-solid fa-floppy-disk"></i> Simpan
+        </button>
+      </div>
+    </div>
+  </header>
 
-        <div class="editor-panel" id="editorPanel">
-
-            <div id="tabBranding" class="form-group">
-                <label class="label">Nama Sekolah</label>
-                <input type="text" id="schoolName" class="field" placeholder="Nama Sekolah">
-                <label class="label mt-4">Tagline</label>
-                <input type="text" id="schoolTagline" class="field" placeholder="Tagline Sekolah">
-                <label class="label mt-4">Logo URL</label>
-                <div class="color-picker-container">
-                    <input type="text" id="logoUrl" class="field" placeholder="https://example.com/logo.png">
-                    <div class="color-preview" id="logoPreview" style="background: #6366f1;"></div>
-                </div>
-                <label class="label mt-4">Warna Utama</label>
-                <div class="color-picker-container">
-                    <input type="color" id="primaryColor" class="field" value="#066e3a">
-                    <div class="color-preset" style="background: #066e3a;" data-value="#066e3a" title="YPWI Primary"></div>
-                    <div class="color-preset" style="background: #2563eb;" data-value="#2563eb" title="YPWI Blue"></div>
-                    <div class="color-preset" style="background: #dc2626;" data-value="#dc2626" title="Red"></div>
-                    <div class="color-preset" style="background: #7c3aed;" data-value="#7c3aed" title="Purple"></div>
-                    <div class="color-preset" style="background: #0891b2;" data-value="#0891b2" title="Cyan"></div>
-                    <div class="color-preset" style="background: #ca8a04;" data-value="#ca8a04" title="Amber"></div>
-                </div>
-                <label class="label mt-4">Warna Aksen</label>
-                <div class="color-picker-container">
-                    <input type="color" id="accentColor" class="field" value="#f59e0b">
-                    <div class="color-preset" style="background: #f59e0b;" data-value="#f59e0b" title="YPWI Amber"></div>
-                    <div class="color-preset" style="background: #10b981;" data-value="#10b981" title="Teal"></div>
-                    <div class="color-preset" style="background: #ec4899;" data-value="#ec4899" title="Pink"></div>
-                    <div class="color-preset" style="background: #f97316;" data-value="#f97316" title="Orange"></div>
-                    <div class="color-preset" style="background: #6366f1;" data-value="#6366f1" title="Violet"></div>
-                    <div class="color-preset" style="background: #84cc16;" data-value="#84cc16" title="Lime"></div>
-                </div>
-            </div>
-
-            <div id="tabPrograms" class="form-group">
-                <div class="mb-4">
-                    <button class="btn-add" onclick="addProgramRow()">Tambah Program</button>
-                </div>
-                <div id="programsList">
-                </div>
-            </div>
-
-            <div id="tabWaves" class="form-group">
-                <div class="mb-4">
-                    <button class="btn-add" onclick="addWaveRow()">Tambah Gelombang</button>
-                </div>
-                <div id="wavesList">
-                </div>
-            </div>
-
-            <div id="tabFAQs" class="form-group">
-                <div class="mb-4">
-                    <button class="btn-add" onclick="addFaqRow()">Tambah FAQ</button>
-                </div>
-                <div id="faqsList">
-                </div>
-            </div>
-
-            <div id="tabStats" class="form-group">
-                <div class="mb-4">
-                    <button class="btn-add" onclick="addStatRow()">Tambah Statistik</button>
-                </div>
-                <div id="statsList">
-                </div>
-            </div>
-
-        </div>
-
-        <div class="preview-panel">
-            <div class="preview-header">
-                <span class="tenant">Tenant: <span id="previewTenant">-</span></span>
-                <span class="status" id="previewStatus">-</span>
-            </div>
-            <div id="previewContent">
-                <p class="text-gray-500 text-sm">Memuat preview...</p>
-            </div>
-        </div>
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full space-y-6">
+    
+    <!-- Tab Navigasi -->
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <nav class="flex border-b border-slate-200 no-scrollbar overflow-x-auto" id="sectionTabs" role="tablist">
+        <button class="spmb-tab-btn-modern active" data-tab="branding" role="tab" aria-selected="true">
+          <i class="fa-solid fa-palette text-indigo-500"></i> Branding & Visual
+        </button>
+        <button class="spmb-tab-btn-modern" data-tab="programs" role="tab" aria-selected="false">
+          <i class="fa-solid fa-graduation-cap text-indigo-500"></i> Program Studi
+        </button>
+        <button class="spmb-tab-btn-modern" data-tab="waves" role="tab" aria-selected="false">
+          <i class="fa-solid fa-calendar-days text-indigo-500"></i> Gelombang
+        </button>
+        <button class="spmb-tab-btn-modern" data-tab="faqs" role="tab" aria-selected="false">
+          <i class="fa-solid fa-circle-question text-indigo-500"></i> FAQ
+        </button>
+        <button class="spmb-tab-btn-modern" data-tab="stats" role="tab" aria-selected="false">
+          <i class="fa-solid fa-chart-simple text-indigo-500"></i> Statistik
+        </button>
+      </nav>
     </div>
 
-    <div id="toastContainer"></div>
+    <!-- Panel Form Editor -->
+    <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6" id="editorPanel">
+      
+      <!-- Branding Tab -->
+      <div id="tabBranding" class="tab-content active space-y-6">
+        <div>
+          <h3 class="text-base font-semibold text-slate-900">Identitas & Tema Visual</h3>
+          <p class="text-xs text-slate-500">Atur profil dasar dan warna identitas sekolah untuk halaman depan.</p>
+        </div>
+        <hr class="border-slate-100">
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="space-y-1.5">
+            <label for="schoolName" class="block text-xs font-semibold text-slate-700">Nama Sekolah <span class="text-red-500">*</span></label>
+            <input type="text" id="schoolName" class="spmb-input-modern" placeholder="Contoh: SDIT Insan Rabbani">
+          </div>
+          <div class="space-y-1.5">
+            <label for="schoolTagline" class="block text-xs font-semibold text-slate-700">Tagline / Slogan</label>
+            <input type="text" id="schoolTagline" class="spmb-input-modern" placeholder="Contoh: Mendidik Generasi Rabbani Berakhlaq Mulia">
+          </div>
+          <div class="md:col-span-2 space-y-1.5">
+            <label class="block text-xs font-semibold text-slate-700">Logo Sekolah (Upload)</label>
+            <div class="flex gap-2 items-center">
+              <input type="file" id="logoFile" accept="image/*" class="spmb-input-modern flex-1">
+              <button type="button" id="logoUploadBtn" class="px-3 py-2 bg-indigo-600 text-white text-xs rounded-lg">Upload</button>
+            </div>
+            <div id="logoPreview" class="mt-2"></div>
+          </div>
 
-    <script>
-        // ============================================
-        // CONFIGURATION
-        // ============================================
+          <div class="md:col-span-2 space-y-1.5">
+            <label class="block text-xs font-semibold text-slate-700">Flyer SPMB (Upload, tampil besar di landing)</label>
+            <div class="flex gap-2 items-center">
+              <input type="file" id="flyerFile" accept="image/*" class="spmb-input-modern flex-1">
+              <button type="button" id="flyerUploadBtn" class="px-3 py-2 bg-indigo-600 text-white text-xs rounded-lg">Upload</button>
+            </div>
+            <div id="flyerPreview" class="mt-2"></div>
+          </div>
+          
+          <div class="space-y-1.5">
+            <label for="primaryColor" class="block text-xs font-semibold text-slate-700">Warna Utama <span class="text-red-500">*</span></label>
+            <div class="flex items-center gap-3">
+              <input type="color" id="primaryColor" class="h-10 w-16 p-0.5 rounded-lg border border-slate-300 cursor-pointer bg-white" value="#4f46e5">
+              <span class="text-xs font-mono text-slate-500" id="primaryColorHex">#4f46e5</span>
+            </div>
+          </div>
+          <div class="space-y-1.5">
+            <label for="accentColor" class="block text-xs font-semibold text-slate-700">Warna Aksen <span class="text-red-500">*</span></label>
+            <div class="flex items-center gap-3">
+              <input type="color" id="accentColor" class="h-10 w-16 p-0.5 rounded-lg border border-slate-300 cursor-pointer bg-white" value="#0ea5e9">
+              <span class="text-xs font-mono text-slate-500" id="accentColorHex">#0ea5e9</span>
+            </div>
+          </div>
+        </div>
 
-        const YPWI_COLORS = {
-            primary: ['#066e3a', '#2563eb', '#dc2626', '#7c3aed', '#0891b2', '#ca8a04'],
-            accent: ['#f59e0b', '#10b981', '#ec4899', '#f97316', '#6366f1', '#84cc16']
+        <div class="pt-4 border-t border-slate-100">
+          <label class="block text-xs font-semibold text-slate-700 mb-2">Preset Kombinasi Warna Sekolah:</label>
+          <div class="flex flex-wrap gap-2" id="colorPresets"></div>
+        </div>
+      </div>
+
+      <!-- Programs Tab -->
+      <div id="tabPrograms" class="tab-content space-y-4">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div>
+             <h3 class="text-base font-semibold text-slate-900">Program Unggulan</h3>
+            <p class="text-xs text-slate-500">Kelola daftar jenjang atau jalur kelas yang dibuka.</p>
+          </div>
+          <button type="button" onclick="addProgramRow()" class="px-3 py-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition flex items-center gap-1.5">
+            <i class="fa-solid fa-plus"></i> Tambah Program
+          </button>
+        </div>
+
+        <div id="programsList" class="space-y-3">
+          <div class="text-center py-12 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50" id="programsEmpty">
+            <div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3 text-slate-400">
+              <i class="fa-solid fa-folder-open text-xl"></i>
+            </div>
+            <p class="text-sm font-semibold text-slate-700">Belum Ada Program Unggulan</p>
+            <p class="text-xs text-slate-500">Klik tombol "Tambah Program" di atas untuk menambahkan jalur baru.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Waves Tab -->
+      <div id="tabWaves" class="tab-content space-y-4">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div>
+            <h3 class="text-base font-semibold text-slate-900">Gelombang Pendaftaran</h3>
+            <p class="text-xs text-slate-500">Atur periode tanggal buka dan kuota penerimaan.</p>
+          </div>
+          <button type="button" onclick="addWaveRow()" class="px-3 py-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition flex items-center gap-1.5">
+            <i class="fa-solid fa-plus"></i> Tambah Gelombang
+          </button>
+        </div>
+
+        <div id="wavesList" class="space-y-3">
+          <div class="text-center py-12 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50" id="wavesEmpty">
+            <div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3 text-slate-400">
+              <i class="fa-solid fa-calendar-xmark text-xl"></i>
+            </div>
+            <p class="text-sm font-semibold text-slate-700">Belum Ada Gelombang</p>
+            <p class="text-xs text-slate-500">Klik tombol "Tambah Gelombang" untuk mengatur periode pendaftaran.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- FAQs Tab -->
+      <div id="tabFAQs" class="tab-content space-y-4">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div>
+            <h3 class="text-base font-semibold text-slate-900">Pertanyaan Umum (FAQ)</h3>
+            <p class="text-xs text-slate-500">Bantu calon pendaftar menemukan jawaban dengan cepat.</p>
+          </div>
+          <button type="button" onclick="addFaqRow()" class="px-3 py-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition flex items-center gap-1.5">
+            <i class="fa-solid fa-plus"></i> Tambah FAQ
+          </button>
+        </div>
+
+        <div id="faqsList" class="space-y-3">
+          <div class="text-center py-12 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50" id="faqsEmpty">
+            <div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3 text-slate-400">
+              <i class="fa-solid fa-circle-question text-xl"></i>
+            </div>
+            <p class="text-sm font-semibold text-slate-700">Belum Ada FAQ</p>
+            <p class="text-xs text-slate-500">Klik tombol "Tambah FAQ" untuk mengisi informasi pertanyaan umum.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Stats Tab -->
+      <div id="tabStats" class="tab-content space-y-4">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div>
+            <h3 class="text-base font-semibold text-slate-900">Statistik Keunggulan</h3>
+            <p class="text-xs text-slate-500">Tampilkan angka pencapaian sekolah untuk menarik calon siswa.</p>
+          </div>
+          <button type="button" onclick="addStatRow()" class="px-3 py-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition flex items-center gap-1.5">
+            <i class="fa-solid fa-plus"></i> Tambah Statistik
+          </button>
+        </div>
+
+        <div id="statsList" class="space-y-3">
+          <div class="text-center py-12 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50" id="statsEmpty">
+            <div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3 text-slate-400">
+              <i class="fa-solid fa-chart-simple text-xl"></i>
+            </div>
+            <p class="text-sm font-semibold text-slate-700">Belum Ada Statistik</p>
+            <p class="text-xs text-slate-500">Klik tombol "Tambah Statistik" untuk memasukkan data seperti Jumlah Kelulusan/Guru.</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Live Preview Panel (Mockup Browser Frame) -->
+    <div class="browser-frame bg-white">
+      <div class="bg-slate-100 px-4 py-3 border-b border-slate-200 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <div class="w-3 h-3 rounded-full bg-red-400"></div>
+          <div class="w-3 h-3 rounded-full bg-amber-400"></div>
+          <div class="w-3 h-3 rounded-full bg-emerald-400"></div>
+          <span class="ml-2 text-xs font-mono text-slate-400 hidden sm:inline-block">Live Preview Mode</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-medium text-slate-600">Status Gelombang 1:</span>
+          <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800" id="previewStatus">Memuat...</span>
+        </div>
+      </div>
+      
+      <div id="previewContent" class="p-6 bg-slate-50/30 min-h-[320px]">
+        <div class="flex flex-col items-center justify-center h-64 text-slate-400">
+          <i class="fa-solid fa-spinner fa-spin text-3xl mb-3 text-indigo-500"></i>
+          <p class="text-xs font-medium">Memuat pratinjau halaman...</p>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-white border-t border-slate-200 py-4 mt-auto">
+    <div class="max-w-7xl mx-auto px-4 text-center text-xs text-slate-500">
+      <p>&copy; <span id="year"></span> SPMB - Sistem Penerimaan Murid Baru. All rights reserved.</p>
+    </div>
+  </footer>
+
+  <!-- Script Logic (Tetap Menjaga Seluruh Kode Asli & API) -->
+  <script>
+    const YPWI_COLORS = {
+      primary: ['#4f46e5', '#2563eb', '#dc2626', '#7c3aed', '#0891b2', '#ca8a04'],
+      accent: ['#0ea5e9', '#10b981', '#ec4899', '#f97316', '#6366f1', '#84cc16']
+    };
+
+    let tenantId = new URLSearchParams(window.location.search).get('tenant') || 'demo';
+    let landingData = { school: { name: '', tagline: '', logo_url: '', primary_color: '#4f46e5', accent_color: '#0ea5e9' }, programs: [], waves: [], faqs: [], stats: [] };
+    let previewTimeout = null;
+
+    function $(id) { return document.getElementById(id); }
+
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toast-container') || (() => {
+        const c = document.createElement('div');
+        c.id = 'toast-container';
+        c.className = 'fixed bottom-4 right-4 z-50 flex flex-col gap-2';
+        document.body.appendChild(c);
+        return c;
+      })();
+      const toast = document.createElement('div');
+      const bgClass = type === 'success' ? 'bg-emerald-600' : type === 'error' ? 'bg-red-600' : 'bg-slate-800';
+      toast.className = `${bgClass} text-white px-4 py-3 rounded-lg shadow-lg flex items-center justify-between gap-4 text-xs font-medium transition-all duration-300`;
+      toast.innerHTML = `<span>${message}</span><button class="opacity-70 hover:opacity-100" onclick="this.parentElement.remove()"><i class="fa-solid fa-xmark"></i></button>`;
+      container.appendChild(toast);
+      setTimeout(() => toast.remove(), 4000);
+    }
+
+    function debounce(fn, wait) {
+      let t; return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), wait); };
+    }
+
+    async function loadLandingData() {
+      if (!tenantId) { $('tenantInfo').textContent = 'Tenant ID: -'; return; }
+      $('tenantInfo').textContent = 'Tenant ID: ' + tenantId;
+       try {
+         const res = await fetch(`/api/spmb/landing/${encodeURIComponent(tenantId)}`, {
+           headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+         });
+         const d = await res.json();
+         if (d.success && d.data) {
+           landingData = d.data;
+           populateForm();
+           renderPreview();
+         } else { showToast('Gagal memuat data: ' + (d.message || 'Unknown'), 'error'); }
+
+         // Load open/close status
+         try {
+           const cfgRes = await fetch(`/api/admin/spmb/config/${encodeURIComponent(tenantId)}`, { headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` } });
+           const cfg = await cfgRes.json();
+           if (cfg.success && cfg.data) {
+             const toggle = document.getElementById('spmbIsOpenToggle');
+             if (toggle) toggle.checked = !!cfg.data.is_open;
+           }
+         } catch (e) {}
+       } catch (e) { console.error('[LANDING MANAGER]', e); showToast('Error: ' + e.message, 'error'); }
+    }
+
+    function populateForm() {
+      const s = landingData.school;
+        $('schoolName').value = s.name || '';
+        $('schoolTagline').value = s.tagline || '';
+        $('primaryColor').value = s.primary_color || '#4f46e5';
+        $('accentColor').value = s.accent_color || '#0ea5e9';
+        if (s.logo_url) $('logoPreview').innerHTML = `<img src="${s.logo_url}" class="h-16 object-contain" alt="Logo">`;
+        if (s.flyer_url) $('flyerPreview').innerHTML = `<img src="${s.flyer_url}" class="w-full max-h-64 object-contain rounded-lg" alt="Flyer">`;
+      $('primaryColorHex').textContent = s.primary_color || '#4f46e5';
+      $('accentColorHex').textContent = s.accent_color || '#0ea5e9';
+      renderColorPresets();
+      renderPrograms();
+      renderWaves();
+      renderFAQs();
+      renderStats();
+    }
+
+    $('primaryColor').addEventListener('input', (e) => {
+      $('primaryColorHex').textContent = e.target.value;
+      updatePreviewDebounced();
+    });
+
+    $('accentColor').addEventListener('input', (e) => {
+      $('accentColorHex').textContent = e.target.value;
+      updatePreviewDebounced();
+    });
+
+    function renderColorPresets() {
+      const container = $('colorPresets');
+      container.innerHTML = '';
+      [...YPWI_COLORS.primary, ...YPWI_COLORS.accent].forEach(c => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'w-7 h-7 rounded-md border-2 border-white shadow-sm hover:scale-110 cursor-pointer transition-transform';
+        btn.style.background = c;
+        btn.title = c;
+        btn.onclick = () => {
+          $('primaryColor').value = c; 
+          $('primaryColorHex').textContent = c;
+          $('primaryColor').dispatchEvent(new Event('input'));
+          $('accentColor').value = c; 
+          $('accentColorHex').textContent = c;
+          $('accentColor').dispatchEvent(new Event('input'));
         };
+        container.appendChild(btn);
+      });
+    }
 
-        const STATUS_COLORS = {
-            open: { bg: '#d1fae5', color: '#059669' },
-            upcoming: { bg: '#fcd34d', color: '#d97706' },
-            closed: { bg: '#fecaca', color: '#b91c1c' }
+    // --- Tabs ---
+    document.querySelectorAll('.spmb-tab-btn-modern').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.spmb-tab-btn-modern').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        const tabMap = { branding: 'Branding', programs: 'Programs', waves: 'Waves', faqs: 'FAQs', stats: 'Stats' };
+        const tabId = 'tab' + (tabMap[btn.dataset.tab] || btn.dataset.tab.charAt(0).toUpperCase() + btn.dataset.tab.slice(1));
+        const tabEl = document.getElementById(tabId);
+        if (tabEl) tabEl.classList.add('active');
+      });
+    });
+
+    // --- Programs ---
+    function renderPrograms() {
+      const container = $('programsList');
+      const empty = $('programsEmpty');
+      if (landingData.programs.length === 0) { container.innerHTML = ''; if (empty) empty.classList.remove('hidden'); return; }
+      if (empty) empty.classList.add('hidden');
+      container.innerHTML = landingData.programs.map((p, i) => `
+        <div class="bg-slate-50 border border-slate-200 rounded-lg p-4 flex items-center justify-between gap-3 transition hover:border-slate-300">
+          <div>
+            <p class="font-semibold text-slate-800">${p.name || '-'}</p>
+            <p class="text-xs text-slate-500">${p.description || '-'}</p>
+            <p class="text-xs text-slate-500">Kuota: ${p.quota || 0}</p>
+          </div>
+          <div class="flex gap-2">
+            <button type="button" class="px-3 py-1 bg-indigo-600 text-white text-xs rounded-lg" onclick="editProgramRow(${i})">Edit</button>
+            <button type="button" class="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg" onclick="removeProgramRow(${i})" title="Hapus"><i class="fa-solid fa-trash-can"></i></button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function addProgramRow() {
+      const { value: formValues } = await Swal.fire({
+        title: 'Tambah Program Unggulan',
+        html: `
+          <input id="swalProgramName" class="swal2-input" placeholder="Nama Program">
+          <input id="swalProgramDesc" class="swal2-input" placeholder="Deskripsi Singkat">
+          <input id="swalProgramQuota" type="number" class="swal2-input" placeholder="Kuota Siswa">
+        `,
+        focusConfirm: false,
+        preConfirm: () => ({
+          name: document.getElementById('swalProgramName').value,
+          description: document.getElementById('swalProgramDesc').value,
+          quota: parseInt(document.getElementById('swalProgramQuota').value || '0', 10)
+        })
+      });
+      if (!formValues) return;
+      landingData.programs.push({ name: formValues.name, description: formValues.description, quota: formValues.quota, is_active: 1 });
+      renderPrograms();
+      updatePreviewDebounced();
+    }
+
+    async function editProgramRow(i) {
+      const p = landingData.programs[i] || {};
+      const { value: formValues } = await Swal.fire({
+        title: 'Edit Program Unggulan',
+        html: `
+          <input id="swalProgramName" class="swal2-input" placeholder="Nama Program" value="${p.name || ''}">
+          <input id="swalProgramDesc" class="swal2-input" placeholder="Deskripsi Singkat" value="${p.description || ''}">
+          <input id="swalProgramQuota" type="number" class="swal2-input" placeholder="Kuota Siswa" value="${p.quota || 0}">
+        `,
+        focusConfirm: false,
+        preConfirm: () => ({
+          name: document.getElementById('swalProgramName').value,
+          description: document.getElementById('swalProgramDesc').value,
+          quota: parseInt(document.getElementById('swalProgramQuota').value || '0', 10)
+        })
+      });
+      if (!formValues) return;
+      landingData.programs[i] = { ...p, ...formValues };
+      renderPrograms();
+      updatePreviewDebounced();
+    }
+
+    // --- Waves ---
+    function renderWaves() {
+      const container = $('wavesList');
+      const empty = $('wavesEmpty');
+      if (landingData.waves.length === 0) { container.innerHTML = ''; if (empty) empty.classList.remove('hidden'); return; }
+      if (empty) empty.classList.add('hidden');
+      container.innerHTML = landingData.waves.map((w, i) => {
+        const status = computeWaveStatus(w);
+        const badgeStyle = status === 'open' ? 'bg-emerald-100 text-emerald-800' : status === 'upcoming' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800';
+        return `
+          <div class="bg-slate-50 border border-slate-200 rounded-lg p-4 flex items-center justify-between gap-3 transition hover:border-slate-300">
+            <div>
+              <p class="font-semibold text-slate-800">${w.name || '-'}</p>
+              <p class="text-xs text-slate-500">${w.registration_start || '-'} s/d ${w.registration_end || '-'}</p>
+              <p class="text-xs text-slate-500">Kuota: ${w.max_participants || 0} • <span class="px-2 py-0.5 rounded text-xs ${badgeStyle}">${status === 'open' ? 'Dibuka' : status === 'upcoming' ? 'Akan Datang' : 'Ditutup'}</span></p>
+            </div>
+            <div class="flex gap-2">
+              <button type="button" class="px-3 py-1 bg-indigo-600 text-white text-xs rounded-lg" onclick="editWaveRow(${i})">Edit</button>
+              <button type="button" class="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg" onclick="removeWaveRow(${i})" title="Hapus"><i class="fa-solid fa-trash-can"></i></button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function addWaveRow() {
+      const { value: formValues } = await Swal.fire({
+        title: 'Tambah Gelombang',
+        html: `
+          <input id="swalWaveName" class="swal2-input" placeholder="Nama Gelombang">
+          <input id="swalWaveStart" type="date" class="swal2-input">
+          <input id="swalWaveEnd" type="date" class="swal2-input">
+          <input id="swalWaveQuota" type="number" class="swal2-input" placeholder="Kuota">
+        `,
+        focusConfirm: false,
+        preConfirm: () => ({
+          name: document.getElementById('swalWaveName').value,
+          registration_start: document.getElementById('swalWaveStart').value,
+          registration_end: document.getElementById('swalWaveEnd').value,
+          max_participants: parseInt(document.getElementById('swalWaveQuota').value || '0', 10)
+        })
+      });
+      if (!formValues) return;
+      landingData.waves.push({ ...formValues, is_active: 1 });
+      renderWaves();
+      updatePreviewDebounced();
+    }
+
+    async function editWaveRow(i) {
+      const w = landingData.waves[i] || {};
+      const { value: formValues } = await Swal.fire({
+        title: 'Edit Gelombang',
+        html: `
+          <input id="swalWaveName" class="swal2-input" placeholder="Nama Gelombang" value="${w.name || ''}">
+          <input id="swalWaveStart" type="date" class="swal2-input" value="${w.registration_start || ''}">
+          <input id="swalWaveEnd" type="date" class="swal2-input" value="${w.registration_end || ''}">
+          <input id="swalWaveQuota" type="number" class="swal2-input" placeholder="Kuota" value="${w.max_participants || 0}">
+        `,
+        focusConfirm: false,
+        preConfirm: () => ({
+          name: document.getElementById('swalWaveName').value,
+          registration_start: document.getElementById('swalWaveStart').value,
+          registration_end: document.getElementById('swalWaveEnd').value,
+          max_participants: parseInt(document.getElementById('swalWaveQuota').value || '0', 10)
+        })
+      });
+      if (!formValues) return;
+      landingData.waves[i] = { ...w, ...formValues };
+      renderWaves();
+      updatePreviewDebounced();
+    }
+
+    function removeWaveRow(i) {
+      landingData.waves.splice(i, 1);
+      renderWaves();
+      updatePreviewDebounced();
+    }
+
+    function computeWaveStatus(w) {
+      if (!w || !w.registration_start || !w.registration_end) return 'upcoming';
+      const now = new Date(), s = new Date(w.registration_start), e = new Date(w.registration_end);
+      if (now >= s && now <= e) return 'open';
+       if (now < s) return 'upcoming';
+      return 'closed';
+    }
+
+    // --- FAQs ---
+    function renderFAQs() {
+      const container = $('faqsList');
+      const empty = $('faqsEmpty');
+      if (landingData.faqs.length === 0) { container.innerHTML = ''; if (empty) empty.classList.remove('hidden'); return; }
+      if (empty) empty.classList.add('hidden');
+      container.innerHTML = landingData.faqs.map((f, i) => `
+        <div class="bg-slate-50 border border-slate-200 rounded-lg p-4 flex items-center justify-between gap-3 transition hover:border-slate-300">
+          <div>
+            <p class="font-semibold text-slate-800">${f.question || '-'}</p>
+            <p class="text-xs text-slate-500">${f.answer || '-'}</p>
+            <p class="text-xs text-slate-500">Urutan: ${f.sort_order || 0}</p>
+          </div>
+          <div class="flex gap-2">
+            <button type="button" class="px-3 py-1 bg-indigo-600 text-white text-xs rounded-lg" onclick="editFaqRow(${i})">Edit</button>
+            <button type="button" class="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg" onclick="removeFaqRow(${i})" title="Hapus"><i class="fa-solid fa-trash-can"></i></button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function addFaqRow() {
+      const { value: formValues } = await Swal.fire({
+        title: 'Tambah FAQ',
+        html: `
+          <input id="swalFaqQ" class="swal2-input" placeholder="Pertanyaan">
+          <textarea id="swalFaqA" class="swal2-textarea" placeholder="Jawaban"></textarea>
+          <input id="swalFaqSort" type="number" class="swal2-input" placeholder="Urutan">
+        `,
+        focusConfirm: false,
+        preConfirm: () => ({
+          question: document.getElementById('swalFaqQ').value,
+          answer: document.getElementById('swalFaqA').value,
+          sort_order: parseInt(document.getElementById('swalFaqSort').value || '0', 10)
+        })
+      });
+      if (!formValues) return;
+      landingData.faqs.push({ ...formValues });
+      renderFAQs();
+      updatePreviewDebounced();
+    }
+
+    async function editFaqRow(i) {
+      const f = landingData.faqs[i] || {};
+      const { value: formValues } = await Swal.fire({
+        title: 'Edit FAQ',
+        html: `
+          <input id="swalFaqQ" class="swal2-input" placeholder="Pertanyaan" value="${f.question || ''}">
+          <textarea id="swalFaqA" class="swal2-textarea" placeholder="Jawaban">${f.answer || ''}</textarea>
+          <input id="swalFaqSort" type="number" class="swal2-input" placeholder="Urutan" value="${f.sort_order || 0}">
+        `,
+        focusConfirm: false,
+        preConfirm: () => ({
+          question: document.getElementById('swalFaqQ').value,
+          answer: document.getElementById('swalFaqA').value,
+          sort_order: parseInt(document.getElementById('swalFaqSort').value || '0', 10)
+        })
+      });
+      if (!formValues) return;
+      landingData.faqs[i] = { ...f, ...formValues };
+      renderFAQs();
+      updatePreviewDebounced();
+    }
+
+    function removeFaqRow(i) {
+      landingData.faqs.splice(i, 1);
+      renderFAQs();
+      updatePreviewDebounced();
+    }
+
+
+    // --- Stats ---
+    function renderStats() {
+      const container = $('statsList');
+      const empty = $('statsEmpty');
+      if (landingData.stats.length === 0) { container.innerHTML = ''; if (empty) empty.classList.remove('hidden'); return; }
+      if (empty) empty.classList.add('hidden');
+      container.innerHTML = landingData.stats.map((st, i) => `
+        <div class="bg-slate-50 border border-slate-200 rounded-lg p-4 flex items-center justify-between gap-3 transition hover:border-slate-300">
+          <div>
+            <p class="font-semibold text-slate-800">${st.label || '-'}</p>
+            <p class="text-xs text-slate-500">Nilai: ${st.value || 0} • Urutan: ${st.sort_order || 0}</p>
+          </div>
+          <div class="flex gap-2">
+            <button type="button" class="px-3 py-1 bg-indigo-600 text-white text-xs rounded-lg" onclick="editStatRow(${i})">Edit</button>
+            <button type="button" class="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg" onclick="removeStatRow(${i})" title="Hapus"><i class="fa-solid fa-trash-can"></i></button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function addStatRow() {
+      const { value: formValues } = await Swal.fire({
+        title: 'Tambah Statistik',
+        html: `
+          <input id="swalStatLabel" class="swal2-input" placeholder="Label">
+          <input id="swalStatValue" type="number" class="swal2-input" placeholder="Nilai">
+          <input id="swalStatSort" type="number" class="swal2-input" placeholder="Urutan">
+        `,
+        focusConfirm: false,
+        preConfirm: () => ({
+          label: document.getElementById('swalStatLabel').value,
+          value: parseInt(document.getElementById('swalStatValue').value || '0', 10),
+          sort_order: parseInt(document.getElementById('swalStatSort').value || '0', 10)
+        })
+      });
+      if (!formValues) return;
+      landingData.stats.push({ ...formValues });
+      renderStats();
+      updatePreviewDebounced();
+    }
+
+    async function editStatRow(i) {
+      const st = landingData.stats[i] || {};
+      const { value: formValues } = await Swal.fire({
+        title: 'Edit Statistik',
+        html: `
+          <input id="swalStatLabel" class="swal2-input" placeholder="Label" value="${st.label || ''}">
+          <input id="swalStatValue" type="number" class="swal2-input" placeholder="Nilai" value="${st.value || 0}">
+          <input id="swalStatSort" type="number" class="swal2-input" placeholder="Urutan" value="${st.sort_order || 0}">
+        `,
+        focusConfirm: false,
+        preConfirm: () => ({
+          label: document.getElementById('swalStatLabel').value,
+          value: parseInt(document.getElementById('swalStatValue').value || '0', 10),
+          sort_order: parseInt(document.getElementById('swalStatSort').value || '0', 10)
+        })
+      });
+      if (!formValues) return;
+      landingData.stats[i] = { ...st, ...formValues };
+      renderStats();
+      updatePreviewDebounced();
+    }
+
+    function removeStatRow(i) {
+      landingData.stats.splice(i, 1);
+      renderStats();
+      updatePreviewDebounced();
+    }
+
+
+    // --- Row Listeners ---
+    function attachRowListeners(type) {
+      const fields = { program: ['name','description','quota'], wave: ['name','registration_start','registration_end','max_participants'], faq: ['question','answer','sort_order'], stat: ['label','value','sort_order'] };
+      const flds = fields[type];
+      document.querySelectorAll(`[data-field]`).forEach(el => {
+        if (!flds.includes(el.dataset.field)) return;
+        el.oninput = () => {
+          const idx = parseInt(el.dataset.idx);
+          const field = el.dataset.field;
+          if (landingData[type + 's'][idx]) {
+            landingData[type + 's'][idx][field] = el.value;
+            updatePreviewDebounced();
+          }
         };
+      });
+    }
 
-        // ============================================
-        // STATE
-        // ============================================
+    // --- Preview Render ---
+    const updatePreviewDebounced = (() => { let t; return () => { clearTimeout(t); t = setTimeout(renderPreview, 300); }; })();
 
-        let tenantId = getTenantFromURL();
-        let landingData = {
-            school: { name: '', tagline: '', logo_url: '', primary_color: '#2563eb', accent_color: '#10b981' },
-            programs: [],
-            waves: [],
-            faqs: [],
-            stats: []
-        };
+    function renderPreview() {
+      const s = landingData.school;
+      const status = computeWaveStatus(landingData.waves[0]);
 
-        let previewTimeout = null;
+      let html = `
+        <div class="bg-white rounded-xl border border-slate-200 p-6 mb-6 shadow-sm">
+          <div class="flex items-center gap-4">
+            ${s.logo_url ? `<img src="${s.logo_url}" alt="Logo" class="w-16 h-16 object-contain rounded-lg border border-slate-100 p-1">` : ''}
+            <div>
+              <p class="text-2xl font-bold tracking-tight" style="color: ${s.primary_color || '#4f46e5'}">${s.name || 'Nama Sekolah Belum Diisi'}</p>
+              <p class="text-sm text-slate-500 font-medium mt-0.5">${s.tagline || 'Portal Resmi Penerimaan Murid Baru'}</p>
+            </div>
+          </div>
+        </div>
+      `;
 
-        // ============================================
-        // DOM ELEMENTS
-        // ============================================
-
-        const elements = {
-            tenantInfo: document.getElementById('displayTenantId'),
-            schoolName: document.getElementById('schoolName'),
-            schoolTagline: document.getElementById('schoolTagline'),
-            logoUrl: document.getElementById('logoUrl'),
-            logoPreview: document.getElementById('logoPreview'),
-            primaryColor: document.getElementById('primaryColor'),
-            accentColor: document.getElementById('accentColor'),
-            programsList: document.getElementById('programsList'),
-            wavesList: document.getElementById('wavesList'),
-            faqsList: document.getElementById('faqsList'),
-            statsList: document.getElementById('statsList'),
-            saveBtn: document.getElementById('saveBtn'),
-            closeBtn: document.getElementById('closeBtn'),
-            previewContent: document.getElementById('previewContent'),
-            previewTenant: document.getElementById('previewTenant'),
-            previewStatus: document.getElementById('previewStatus')
-        };
-
-        // ============================================
-        // UTILITY FUNCTIONS
-        // ============================================
-
-        function getTenantFromURL() {
-            const params = new URLSearchParams(window.location.search);
-            return params.get('tenant') || 'demo';
-        }
-
-        function $(el) { return document.getElementById(el); }
-
-        function alertToast(message, type = 'success') {
-            const container = document.getElementById('toastContainer');
-            if (!container) {
-                const c = document.createElement('div');
-                container.id = 'toastContainer';
-                document.body.appendChild(container);
-            }
-            const toast = document.createElement('div');
-            toast.id = 'toast' + Date.now();
-            toast.className = 'toast ' + type;
-            toast.innerHTML = `<strong>${type === 'success' ? '✓' : '✗'}</strong> ${message}`;
-            document.getElementById('toastContainer').appendChild(toast);
-            setTimeout(() => document.getElementById('toast' + Date.now()).remove(), 3000);
-        }
-
-        function debounce(fn, wait) {
-            return function(...args) {
-                clearTimeout(landingData.debounceTimer);
-                landingData.debounceTimer = setTimeout(fn, wait);
-            };
-        }
-
-        // ============================================
-        // DATA FUNCTIONS
-        // ============================================
-
-        async function loadLandingData() {
-            if (!tenantId) {
-                showEmptyState('Parameter tenant tidak ditemukan');
-                return;
-            }
-
-            showLoadingState();
-
-            try {
-                const r = await fetch(`/api/spmb/landing/${encodeURIComponent(tenantId)}`, {
-                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-                });
-
-                if (!r.ok) throw new Error('HTTP ' + r.status);
-
-                const d = await r.json();
-                if (!d.success) throw new Error(d.message || 'Gagal memuat data');
-
-                landingData = d.data || landingData;
-                populateForm();
-                renderPreview();
-                hideLoadingState();
-
-            } catch (e) {
-                console.error('[LANDING MANAGER]', e);
-                showErrorState(e.message || 'Gagal memuat data');
-                hideLoadingState();
-            }
-        }
-
-        function showLoadingState() {
-            previewContent.innerHTML = '<p class="text-gray-500 text-sm">Memuat data...</p>';
-            previewStatus.textContent = 'Loading...';
-        }
-
-        function showEmptyState(message) {
-            previewContent.innerHTML = `<p class="text-gray-500 text-center py-12">${message}</p>`;
-            previewStatus.textContent = '';
-        }
-
-        function showErrorState(message) {
-            previewContent.innerHTML = `<p class="text-red-500 text-center py-12">Error: ${message}</p>`;
-            previewStatus.textContent = 'Error';
-        }
-
-        function populateForm() {
-            $('#schoolName').value = landingData.school.name || '';
-            $('#schoolTagline').value = landingData.school.tagline || '';
-            $('#logoUrl').value = landingData.school.logo_url || '';
-            $('#logoPreview').style.background = landingData.school.primary_color || '#2563eb';
-            $('#primaryColor').value = landingData.school.primary_color || '#2563eb';
-            $('#accentColor').value = landingData.school.accent_color || '#10b981';
-
-            renderPrograms();
-            renderWaves();
-            renderFAQs();
-            renderStats();
-        }
-
-        function renderPrograms() {
-            const html = landingData.programs.length > 0
-                ? landingData.programs.map((p, idx) => `
-                    <div class="program-row">
-                        <input type="text" class="program-field" value="${p.name || ''}" data-idx="${idx}" data-field="name" placeholder="Nama program">
-                        <input type="text" class="program-field" value="${p.description || ''}" data-idx="${idx}" data-field="description" placeholder="Deskripsi singkat">
-                        <input type="number" class="program-field" value="${p.quota || ''}" data-idx="${idx}" data-field="quota" placeholder="Kuota">
-                        <button type="button" class="program-row .action text-red-600 text-xs hover:text-red-700" onclick="removeProgramRow(${idx})">Hapus</button>
-                    </div>
-                `).join('')
-                : '<p class="text-gray-500 text-sm center">Belum ada program. Klik <button class="btn-add text-blue-600 text-sm hover:text-blue-800" onclick="addProgramRow()">Tambah Program</button> untuk menambah.</p>';
-            $('#programsList').innerHTML = html;
-        }
-
-        function addProgramRow() {
-            landingData.programs.push({ name: '', description: '', quota: 0, is_active: true, sort_order: landingData.programs.length });
-            renderPrograms();
-        }
-
-        function removeProgramRow(idx) {
-            landingData.programs.splice(idx, 1);
-            renderPrograms();
-        }
-
-        function renderWaves() {
-            const html = landingData.waves.length > 0
-                ? landingData.waves.map((w, idx) => {
-                    const status = computeWaveStatus(w);
-                    return `
-                        <div class="wave-row">
-                            <input type="text" class="field" value="${w.name || ''}" data-idx="${idx}" data-field="name" placeholder="Nama gelombang">
-                            <div class="date-wrapper">
-                                <input type="date" class="field" value="${w.registration_start || ''}" data-idx="${idx}" data-field="start_date">
-                                <input type="date" class="field" value="${w.registration_end || ''}" data-idx="${idx}" data-field="end_date">
-                            </div>
-                            <input type="number" class="field" value="${w.max_participants || ''}" data-idx="${idx}" data-field="max_participants" placeholder="Kuota">
-                            <span class="wave-status ${status.status}">${status.text}</span>
-                            <button type="button" class="program-row .action text-red-600 text-xs hover:text-red-700" onclick="removeWaveRow(${idx})">Hapus</button>
-                        </div>
-                    `;
-                }).join('')
-                : '<p class="text-gray-500 text-sm center">Belum ada gelombang. Klik <button class="btn-add text-blue-600 text-sm hover:text-blue-800" onclick="addWaveRow()">Tambah Gelombang</button> untuk menambah.</p>';
-            $('#wavesList').innerHTML = html;
-        }
-
-        function computeWaveStatus(wave) {
-            if (!wave.registration_start || !wave.registration_end) return { status: 'upcoming', text: 'Akan Datang' };
-            const now = new Date();
-            const start = new Date(wave.registration_start);
-            const end = new Date(wave.registration_end);
-            if (now >= start && now <= end) return { status: 'open', text: 'Dibuka' };
-            if (now < start) return { status: 'upcoming', text: 'Akan Datang' };
-            return { status: 'closed', text: 'Ditutup' };
-        }
-
-        function addWaveRow() {
-            landingData.waves.push({ name: '', registration_start: '', registration_end: '', max_participants: 0, is_active: true, sort_order: landingData.waves.length });
-            renderWaves();
-        }
-
-        function removeWaveRow(idx) {
-            landingData.waves.splice(idx, 1);
-            renderWaves();
-        }
-
-        function renderFAQs() {
-            const html = landingData.faqs.length > 0
-                ? landingData.faqs.map((f, idx) => `
-                    <div class="faq-row">
-                        <input type="text" class="field" value="${f.question || ''}" data-idx="${idx}" data-field="question" placeholder="Pertanyaan umum">
-                        <textarea class="field" rows="3" data-idx="${idx}" data-field="answer">${f.answer || ''}</textarea>
-                        <input type="number" class="field" value="${f.sort_order || ''}" data-idx="${idx}" data-field="sort_order" placeholder="Urutan">
-                        <button type="button" class="text-red-600 text-xs hover:text-red-700" onclick="removeFaqRow(${idx})">Hapus</button>
-                    </div>
-                `).join('')
-                : '<p class="text-gray-500 text-sm center">Belum ada FAQ. Klik <button class="btn-add text-blue-600 text-sm hover:text-blue-800" onclick="addFaqRow()">Tambah FAQ</button> untuk menambah.</p>';
-            $('#faqsList').innerHTML = html;
-        }
-
-        function addFaqRow() {
-            landingData.faqs.push({ question: '', answer: '', sort_order: landingData.faqs.length });
-            renderFAQs();
-        }
-
-        function removeFaqRow(idx) {
-            landingData.faqs.splice(idx, 1);
-            renderFAQs();
-        }
-
-        function renderStats() {
-            const html = landingData.stats.length > 0
-                ? landingData.stats.map((s, idx) => `
-                    <div class="stat-row">
-                        <input type="text" class="field" value="${s.label || ''}" data-idx="${idx}" data-field="label" placeholder="Label statistik">
-                        <input type="number" class="field" value="${s.value || ''}" data-idx="${idx}" data-field="value" placeholder="Nilai">
-                        <input type="number" class="field" value="${s.sort_order || ''}" data-idx="${idx}" data-field="sort_order" placeholder="Urutan">
-                        <button type="button" class="text-red-600 text-xs hover:text-red-700" onclick="removeStatRow(${idx})">Hapus</button>
-                    </div>
-                `).join('')
-                : '<p class="text-gray-500 text-sm center">Belum ada statistik. Klik <button class="btn-add text-blue-600 text-sm hover:text-blue-800" onclick="addStatRow()">Tambah Statistik</button> untuk menambah.</p>';
-            $('#statsList').innerHTML = html;
-        }
-
-        function addStatRow() {
-            landingData.stats.push({ label: '', value: 0, sort_order: landingData.stats.length });
-            renderStats();
-        }
-
-        function removeStatRow(idx) {
-            landingData.stats.splice(idx, 1);
-            renderStats();
-        }
-
-        // ============================================
-        // PREVIEW RENDER
-        // ============================================
-
-        function renderPreview() {
-            const school = landingData.school;
-            const programs = landingData.programs;
-            const waves = landingData.waves;
-            const faqs = landingData.faqs;
-            const stats = landingData.stats;
-
-            const waveStatuses = waves.map(w => {
-                if (!w.registration_start || !w.registration_end) return 'upcoming';
-                const now = new Date();
-                const start = new Date(w.registration_start);
-                const end = new Date(w.registration_end);
-                if (now >= start && now <= end) return 'open';
-                if (now < start) return 'upcoming';
-                return 'closed';
-            });
-
-            let html = '';
-
-            html += `<div class="bg-white rounded-lg p-6 mb-6 shadow-sm">
-                <h3 class="text-lg font-semibold text-gray-900 mb-4">Selamat Datang</h3>
-                <p class="text-xl font-bold" style="color: ${school.primary_color || '#066e3a'}">${school.name || 'SPMB 2026'}</p>
-                <p class="text-base text-gray-600">${school.tagline || 'Portal Resmi Pendaftaran'}</p>
-                ${school.logo_url ? `<img src="${school.logo_url}" alt="Logo" style="width: 80px; margin-top: 12px;">` : ''}
-            </div>`;
-
-            if (programs.length > 0) {
-                html += `<h3 class="text-lg font-semibold text-gray-900 mb-3">Jalur Pendaftaran</h3>`;
-                html += `<div class="grid grid-cols-1 gap-4 md:grid-cols-2">`;
-                programs.forEach(p => {
-                    html += `<div class="card p-4">
-                        <div class="card-icon"><i class="fa-solid fa-graduation-cap"></i></div>
-                        <h3 class="font-medium">${p.name || ''}</h3>
-                        <p class="text-sm text-gray-500">${p.description || ''}</p>
-                    </div>`;
-                });
-                html += `</div>`;
-            }
-
-            if (waves.length > 0) {
-                html += `<h3 class="text-lg font-semibold text-gray-900 mb-3">Gelombang Pendaftaran</h3>`;
-                html += `<div class="grid grid-cols-1 gap-4 md:grid-cols-2">`;
-                waves.forEach((w, i) => {
-                    const status = computeWaveStatus(w);
-                    html += `<div class="card p-4">
-                        <span class="status ${status}">${computeWaveStatus(w).text}</span>
-                        <h3 class="font-medium">${w.name || 'Gelombang ' + (i + 1)}</h3>
-                        <p><i class="fa-solid fa-calendar-days"></i> ${formatDate(w.registration_start)} - ${formatDate(w.registration_end)}</p>
-                        <p><i class="fa-solid fa-users"></i> Kuota: ${w.max_participants || 0}</p>
-                    </div>`;
-                });
-                html += `</div>`;
-            }
-
-            if (faqs.length > 0) {
-                html += `<h3 class="text-lg font-semibold text-gray-900 mb-3">Pertanyaan Umum</h3>`;
-                html += `<div class="grid grid-cols-1 gap-4 md:grid-cols-2">`;
-                faqs.forEach(f => {
-                    html += `<div class="card p-4"><h3 class="font-medium">${f.question || ''}</h3><p>${f.answer || ''}</p></div>`;
-                });
-                html += `</div>`;
-            }
-
-            if (stats.length > 0) {
-                html += `<h3 class="text-lg font-semibold text-gray-900 mb-3">Statistik</h3>`;
-                html += `<div class="grid grid-cols-2 gap-4">`;
-                stats.forEach(s => {
-                    html += `<div class="card p-4">
-                        <div class="font-medium" style="color: var(--primary)">${typeof s.value === 'number' ? s.value.toLocaleString() : s.value}</div>
-                        <div class="text-sm text-gray-500">${s.label || ''}</div>
-                    </div>`;
-                });
-                html += `</div>`;
-            }
-
-            previewContent.innerHTML = html || '<p class="text-gray-500 text-sm">Belum ada data untuk preview.</p>';
-
-            const status = computeWaveStatus(landingData.waves[0]) || 'upcoming';
-            const statusColor = STATUS_COLORS[status];
-            $('#previewStatus').style.background = statusColor.bg;
-            $('#previewStatus').style.color = statusColor.color;
-            $('#previewStatus').textContent = computeWaveStatus(landingData.waves[0]) || 'Akan Datang';
-        }
-
-        function formatDate(dateStr) {
-            if (!dateStr) return '-';
-            const d = new Date(dateStr);
-            return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
-        }
-
-        // ============================================
-        // EVENT HANDLERS
-        // ============================================
-
-        document.querySelectorAll('.color-preset').forEach(btn => {
-            btn.addEventListener('click', function() {
-                const color = this.dataset.value;
-                const input = this.closest('.color-picker-container').querySelector('input');
-                if (input) {
-                    input.value = color;
-                    input.dispatchEvent(new Event('input'));
-                }
-                const otherInput = this.closest('.color-picker-container').parentElement.querySelector('input');
-                if (otherInput && otherInput !== input) {
-                    otherInput.value = color;
-                    otherInput.dispatchEvent(new Event('input'));
-                }
-            });
+      if (landingData.programs.length) {
+        html += `<h4 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Jalur / Program Pendaftaran</h4><div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">`;
+        landingData.programs.forEach(p => {
+          html += `<div class="bg-white border border-slate-200 rounded-lg p-4 shadow-sm"><h5 class="font-semibold text-slate-800 text-sm">${p.name || 'Nama Program'}</h5><p class="text-xs text-slate-500 mt-1">${p.description || '-'}</p></div>`;
         });
+        html += `</div>`;
+      }
 
-        const updatePreviewDebounced = debounce(renderPreview, 300);
-
-        $('#schoolName').addEventListener('input', () => { landingData.school.name = $('#schoolName').value; updatePreviewDebounced(); });
-        $('#schoolTagline').addEventListener('input', () => { landingData.school.tagline = $('#schoolTagline').value; updatePreviewDebounced(); });
-        $('#logoUrl').addEventListener('input', () => { landingData.school.logo_url = $('#logoUrl').value; $('#logoPreview').style.background = $('#primaryColor').value; updatePreviewDebounced(); });
-        $('#primaryColor').addEventListener('input', () => { landingData.school.primary_color = $('#primaryColor').value; $('#logoPreview').style.background = $('#primaryColor').value; updatePreviewDebounced(); });
-        $('#accentColor').addEventListener('input', () => { landingData.school.accent_color = $('#accentColor').value; updatePreviewDebounced(); });
-
-        document.querySelectorAll('.program-field').forEach(field => {
-            field.addEventListener('input', (e) => {
-                const idx = e.target.dataset.idx;
-                const field = e.target.dataset.field;
-                if (landingData.programs[idx]) {
-                    landingData.programs[idx][field] = e.target.value;
-                    updatePreviewDebounced();
-                }
-            });
+      if (landingData.waves.length) {
+        html += `<h4 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Gelombang Pendaftaran</h4><div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">`;
+        landingData.waves.forEach(w => {
+          const st = computeWaveStatus(w);
+          const badgeClass = st === 'open' ? 'bg-emerald-100 text-emerald-800' : st === 'upcoming' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800';
+          html += `<div class="bg-white border border-slate-200 rounded-lg p-4 shadow-sm"><div class="flex justify-between items-center mb-2"><h5 class="font-semibold text-slate-800 text-sm">${w.name || 'Gelombang'}</h5><span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase ${badgeClass}">${st === 'open' ? 'Dibuka' : st === 'upcoming' ? 'Akan Datang' : 'Ditutup'}</span></div><p class="text-xs text-slate-500"><i class="fa-regular fa-calendar mr-1"></i> ${formatDate(w.registration_start)} - ${formatDate(w.registration_end)}</p></div>`;
         });
+        html += `</div>`;
+      }
 
-        document.querySelectorAll('.wave-row').forEach(row => {
-            row.querySelectorAll('.field').forEach(field => {
-                field.addEventListener('input', (e) => {
-                    const idx = e.target.dataset.idx;
-                    const field = e.target.dataset.field;
-                    if (landingData.waves[idx]) {
-                        landingData.waves[idx][field] = e.target.value;
-                        if (field === 'start_date' || field === 'end_date') {
-                            renderPreview();
-                        }
-                    }
-                });
-            });
+      if (landingData.faqs.length) {
+        html += `<h4 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Pertanyaan Umum</h4><div class="space-y-2 mb-6">`;
+        landingData.faqs.forEach(f => { 
+          html += `<div class="bg-white border border-slate-200 rounded-lg p-3 shadow-sm"><h5 class="font-semibold text-slate-800 text-xs"><i class="fa-regular fa-circle-question mr-1.5 text-indigo-500"></i>${f.question || 'Pertanyaan'}</h5><p class="text-xs text-slate-500 mt-1 pl-5">${f.answer || '-'}</p></div>`; 
         });
+        html += `</div>`;
+      }
 
-        document.querySelectorAll('.faq-row').forEach(row => {
-            row.querySelectorAll('.field').forEach(field => {
-                field.addEventListener('input', (e) => {
-                    const idx = e.target.dataset.idx;
-                    const field = e.target.dataset.field;
-                    if (landingData.faqs[idx]) {
-                        landingData.faqs[idx][field] = e.target.value;
-                        updatePreviewDebounced();
-                    }
-                });
-            });
+      if (landingData.stats.length) {
+        html += `<h4 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Statistik Pencapaian</h4><div class="grid grid-cols-2 sm:grid-cols-4 gap-3">`;
+        landingData.stats.forEach(st => { 
+          html += `<div class="bg-white border border-slate-200 rounded-lg p-3 text-center shadow-sm"><div class="text-xl font-extrabold" style="color: ${landingData.school.primary_color || '#4f46e5'}">${typeof st.value === 'number' ? st.value.toLocaleString() : st.value}</div><div class="text-[11px] font-medium text-slate-500 mt-0.5">${st.label || '-'}</div></div>`; 
         });
+        html += `</div>`;
+      }
 
-        document.querySelectorAll('.stat-row').forEach(row => {
-            row.querySelectorAll('.field').forEach(field => {
-                field.addEventListener('input', (e) => {
-                    const idx = e.target.dataset.idx;
-                    const field = e.target.dataset.field;
-                    if (landingData.stats[idx]) {
-                        landingData.stats[idx][field] = e.target.value;
-                        updatePreviewDebounced();
-                    }
-                });
-            });
+      $('previewContent').innerHTML = html || '<p class="text-center text-slate-400 py-12 text-xs">Belum ada data untuk ditampilkan pada pratinjau.</p>';
+      
+      const waveStatus = computeWaveStatus(landingData.waves[0]);
+      const badgeEl = $('previewStatus');
+      badgeEl.textContent = waveStatus === 'open' ? 'Dibuka' : waveStatus === 'upcoming' ? 'Akan Datang' : 'Ditutup';
+      badgeEl.className = `px-2.5 py-0.5 rounded-full text-xs font-semibold ${waveStatus === 'open' ? 'bg-emerald-100 text-emerald-800' : waveStatus === 'upcoming' ? 'bg-amber-100 text-amber-800' : 'bg-red-100 text-red-800'}`;
+    }
+
+    function formatDate(d) { if (!d) return '-'; return new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }); }
+
+    // --- Save Handler ---
+     // Upload handlers
+     async function uploadSpmbFile(type) {
+       const input = $(type === 'logo' ? 'logoFile' : 'flyerFile');
+       const preview = $(type === 'logo' ? 'logoPreview' : 'flyerPreview');
+       if (!input || !input.files || !input.files[0]) { showToast('Pilih file terlebih dahulu', 'error'); return; }
+       const fd = new FormData();
+       fd.append('file', input.files[0]);
+       try {
+         const r = await fetch(`/api/admin/spmb/upload-${type}/${encodeURIComponent(tenantId)}`, {
+           method: 'POST',
+           headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+           body: fd
+         });
+         const d = await r.json();
+         if (!d.success) throw new Error(d.message || 'Gagal upload');
+         if (type === 'logo') landingData.school.logo_url = d.url; else landingData.school.flyer_url = d.url;
+         if (preview) preview.innerHTML = `<img src="${d.url}" class="${type === 'logo' ? 'h-16' : 'w-full max-h-64'} object-contain rounded-lg" alt="${type}">`;
+         showToast('Upload berhasil', 'success');
+       } catch (e) {
+         showToast('Gagal upload: ' + e.message, 'error');
+       }
+     }
+
+     const logoUploadBtn = $('logoUploadBtn');
+     if (logoUploadBtn) logoUploadBtn.onclick = () => uploadSpmbFile('logo');
+     const flyerUploadBtn = $('flyerUploadBtn');
+     if (flyerUploadBtn) flyerUploadBtn.onclick = () => uploadSpmbFile('flyer');
+
+     $('saveBtn').onclick = async () => {
+      if (!$('schoolName').value.trim()) { showToast('Nama sekolah wajib diisi', 'error'); return; }
+      if (!$('primaryColor').value) { showToast('Warna utama wajib diisi', 'error'); return; }
+      if (!$('accentColor').value) { showToast('Warna aksen wajib diisi', 'error'); return; }
+
+       landingData.school = { name: $('schoolName').value.trim(), tagline: $('schoolTagline').value.trim(), logo_url: landingData.school.logo_url || null, flyer_url: landingData.school.flyer_url || null, primary_color: $('primaryColor').value, accent_color: $('accentColor').value };
+      landingData.programs = landingData.programs.filter(p => p.name || p.description);
+      landingData.waves = landingData.waves.filter(w => w.name || w.registration_start);
+      landingData.faqs = landingData.faqs.filter(f => f.question || f.answer);
+      landingData.stats = landingData.stats.filter(s => s.label || s.value);
+
+      $('saveBtn').disabled = true; 
+      $('saveBtn').innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Menyimpan...';
+       try {
+         // Save open/close status
+         await fetch(`/api/admin/spmb/config/${encodeURIComponent(tenantId)}`, {
+           method: 'PUT',
+           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+           body: JSON.stringify({ is_open: document.getElementById('spmbIsOpenToggle')?.checked ? 1 : 0 })
+         });
+
+         const r = await fetch(`/api/admin/spmb/landing/${encodeURIComponent(tenantId)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+          body: JSON.stringify(landingData)
         });
+        const d = await r.json();
+        if (d.success) { 
+          showToast('Halaman Publik berhasil disimpan', 'success'); 
+          setTimeout(() => window.close(), 1500); 
+        } else {
+          showToast('Gagal: ' + (d.message || 'Unknown'), 'error');
+        }
+      } catch (e) { 
+        showToast('Error: ' + e.message, 'error'); 
+      } finally { 
+        $('saveBtn').disabled = false; 
+        $('saveBtn').innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Simpan'; 
+      }
+    };
 
-        document.querySelectorAll('.tab-btn').forEach(btn => {
-            btn.addEventListener('click', function() {
-                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-                this.classList.add('active');
-                document.querySelectorAll('.editor-panel > div').forEach(p => p.classList.add('hidden'));
-                if (tab === 'branding') $('#tabBranding').classList.remove('hidden');
-                if (tab === 'programs') $('#tabPrograms').classList.remove('hidden');
-                if (tab === 'waves') $('#tabWaves').classList.remove('hidden');
-                if (tab === 'faqs') $('#tabFAQs').classList.remove('hidden');
-                if (tab === 'stats') $('#tabStats').classList.remove('hidden');
-            });
-        });
+    $('closeBtn').onclick = () => window.close();
 
-        $('#saveBtn').addEventListener('click', async function() {
-            let valid = true;
-
-            if (!$('#schoolName').value.trim()) {
-                showToast('Nama sekolah wajib diisi', 'error');
-                valid = false;
-            }
-            if (!$('#primaryColor').value) {
-                showToast('Warna utama wajib diisi', 'error');
-                valid = false;
-            }
-            if (!$('#accentColor').value) {
-                showToast('Warna aksen wajib diisi', 'error');
-                valid = false;
-            }
-
-            if (!valid) return;
-
-            landingData.school = {
-                name: $('#schoolName').value.trim(),
-                tagline: $('#schoolTagline').value.trim(),
-                logo_url: $('#logoUrl').value.trim() || null,
-                primary_color: $('#primaryColor').value,
-                accent_color: $('#accentColor').value
-            };
-
-            landingData.programs = landingData.programs.filter(p => p.name || p.description);
-            landingData.waves = landingData.waves.filter(w => w.name || w.registration_start);
-            landingData.faqs = landingData.faqs.filter(f => f.question || f.answer);
-            landingData.stats = landingData.stats.filter(s => s.label || s.value);
-
-            $('#saveBtn').disabled = true;
-            $('#saveBtn').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menyimpan...';
-
-            try {
-                const r = await fetch(`/api/spmb/landing/${encodeURIComponent(tenantId)}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-                    body: JSON.stringify(landingData)
-                });
-
-                if (!r.ok) throw new Error('HTTP ' + r.status);
-
-                const d = await r.json();
-                if (d.success) {
-                    showToast('✓ Halaman Publik berhasil disimpan', 'success');
-                    renderPreview();
-                    setTimeout(() => window.close(), 1500);
-                } else {
-                    showToast('❌ ' + (d.message || 'Gagal menyimpan'), 'error');
-                }
-            } catch (e) {
-                showToast('❌ Error: ' + e.message, 'error');
-            } finally {
-                $('#saveBtn').disabled = false;
-                $('#saveBtn').innerHTML = 'Simpan Halaman Publik';
-            }
-        });
-
-        $('#closeBtn').addEventListener('click', () => window.close());
-
-        loadLandingData();
-    </script>
+    document.addEventListener('DOMContentLoaded', loadLandingData);
+    document.getElementById('year').textContent = new Date().getFullYear();
+  </script>
 </body>
 </html>

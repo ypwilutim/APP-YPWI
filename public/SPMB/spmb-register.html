@@ -3,190 +3,261 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pendaftaran SPMB - Penerimaan Siswa</title>
+  <title>Pendaftaran Panitia SPMB - Penerimaan Siswa</title>
   <link rel="stylesheet" href="/SPMB/css/tailwind.css">
+  <link rel="stylesheet" href="/SPMB/css/spmb-theme.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
     .step { display: none; }
-    .step.active { display: block; }
-    .step-indicator { transition: all 0.3s ease; }
-    .step-indicator.active { background: #2563eb; color: white; }
-    .step-indicator.completed { background: #10b981; color: white; }
+    .step.active { display: block; animation: fadeIn 0.3s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
   </style>
 </head>
-<body class="min-h-screen bg-slate-50 text-slate-900 antialiased py-8">
-  <div class="max-w-3xl mx-auto px-4">
-    <div class="text-center mb-8">
-      <h1 class="text-3xl font-bold text-slate-900 mb-2">Pendaftaran SPMB</h1>
-      <p class="text-slate-600">Lengkapi data untuk mendaftar sebagai panitia penerimaan siswa baru</p>
-    </div>
+<body class="spmb-page">
 
-    <div class="flex justify-between mb-8">
-      <div class="step-indicator active w-10 h-10 rounded-full flex items-center justify-center font-bold" data-step="1">1</div>
-      <div class="step-indicator w-10 h-10 rounded-full flex items-center justify-center font-bold bg-slate-200" data-step="2">2</div>
-      <div class="step-indicator w-10 h-10 rounded-full flex items-center justify-center font-bold bg-slate-200" data-step="3">3</div>
+  <header class="spmb-header">
+    <div class="spmb-container spmb-header-inner">
+      <a href="/SPMB/spmb-public.html" class="spmb-logo">
+        <div class="spmb-logo-icon"><i class="fa-solid fa-graduation-cap"></i></div>
+        <span>SPMB</span>
+      </a>
+      <div class="spmb-user-menu">
+        <a href="/SPMB/spmb-login.html" class="spmb-btn spmb-btn-ghost spmb-btn-sm">Login</a>
+      </div>
     </div>
+  </header>
 
-    <form id="spmbRegistrationForm">
-      <!-- Step 1: Data Pribadi -->
-      <div class="step active bg-white rounded-xl shadow-sm p-6 mb-6" data-step="1">
-        <h2 class="text-xl font-semibold mb-4">Data Pribadi</h2>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div class="md:col-span-2">
-            <label class="block text-sm font-medium text-slate-700 mb-1">Nama Lengkap *</label>
-            <input type="text" id="nama" name="nama" required class="w-full px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">NIK *</label>
-            <input type="text" id="nik" name="nik" required maxlength="16" class="w-full px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Email *</label>
-            <input type="email" id="email" name="email" required class="w-full px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">No WhatsApp *</label>
-            <input type="tel" id="no_wa" name="no_wa" required placeholder="08xxxxxxxxxx" class="w-full px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Tempat Lahir *</label>
-            <input type="text" id="tempat_lahir" name="tempat_lahir" required class="w-full px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Tanggal Lahir *</label>
-            <input type="date" id="tanggal_lahir" name="tanggal_lahir" required class="w-full px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Jenis Kelamin *</label>
-            <select id="jenis_kelamin" name="jenis_kelamin" required class="w-full px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20">
-              <option value="">Pilih</option>
-              <option value="L">Laki-laki</option>
-              <option value="P">Perempuan</option>
-            </select>
-          </div>
-          <div class="md:col-span-2">
-            <label class="block text-sm font-medium text-slate-700 mb-1">Alamat Lengkap *</label>
-            <textarea id="alamat" name="alamat" rows="3" required class="w-full px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20"></textarea>
-          </div>
-        </div>
-        <div class="flex justify-end mt-6">
-          <button type="button" onclick="nextStep(2)" class="px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700">Selanjutnya</button>
+  <main class="spmb-container spmb-flex spmb-flex-col" style="min-height: calc(100vh - 12rem); padding: var(--spmb-space-8) 0;">
+    <div class="spmb-card spmb-w-full">
+      <div class="spmb-flex spmb-items-center spmb-justify-between spmb-mb-6">
+        <div>
+          <h1 class="text-2xl font-bold text-slate-900">Pendaftaran Panitia SPMB</h1>
+          <p class="spmb-text-muted spmb-mt-1">Lengkapi data untuk mendaftar sebagai panitia penerimaan siswa baru</p>
         </div>
       </div>
 
-      <!-- Step 2: Data Pendidikan & Assignment -->
-      <div class="step bg-white rounded-xl shadow-sm p-6 mb-6" data-step="2">
-        <h2 class="text-xl font-semibold mb-4">Data Pendidikan & Penempatan</h2>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Pendidikan Terakhir *</label>
-            <select id="pendidikan_terakhir" name="pendidikan_terakhir" required class="w-full px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20">
-              <option value="">Pilih</option>
-              <option value="SMA">SMA/SMK</option>
-              <option value="D3">D3</option>
-              <option value="D4">D4</option>
-              <option value="S1">S1</option>
-              <option value="S2">S2</option>
-              <option value="S3">S3</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Jurusan *</label>
-            <input type="text" id="jurusan" name="jurusan" required class="w-full px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Nama Sekolah Pendidikan *</label>
-            <input type="text" id="nama_sekolah_pendidikan" name="nama_sekolah_pendidikan" required class="w-full px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Tahun Angkatan *</label>
-            <input type="text" id="tahun_angkatan" name="tahun_angkatan" required placeholder="2024" class="w-full px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Sekolah Penempatan *</label>
-            <select id="tenant_id" name="tenant_id" required class="w-full px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20">
-              <option value="">Pilih Sekolah</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Jabatan di Unit *</label>
-            <select id="jabatan_di_unit" name="jabatan_di_unit" required class="w-full px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20">
-              <option value="">Pilih</option>
-              <option value="Ketua">Ketua</option>
-              <option value="Pimpinan">Pimpinan</option>
-              <option value="Pimpinan Pondok">Pimpinan Pondok</option>
-              <option value="Kepala Sekolah">Kepala Sekolah</option>
-              <option value="Wakasek">Wakasek</option>
-              <option value="Guru">Guru</option>
-              <option value="Guru Mapel">Guru Mapel</option>
-              <option value="Guru Mengaji">Guru Mengaji</option>
-              <option value="Wali Kelas">Wali Kelas</option>
-              <option value="Muhaffiz">Muhaffiz</option>
-              <option value="Muhaffizah">Muhaffizah</option>
-              <option value="Bendahara">Bendahara</option>
-              <option value="TU">TU</option>
-              <option value="Tata Usaha">Tata Usaha</option>
-              <option value="Operator">Operator</option>
-              <option value="Admin">Admin</option>
-              <option value="Media">Media</option>
-              <option value="Security">Security</option>
-              <option value="Cleaning Service">Cleaning Service</option>
-              <option value="Bag. Dapur">Bag. Dapur</option>
-              <option value="Bag. Kantin">Bag. Kantin</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Password *</label>
-            <input type="password" id="password" name="password" required minlength="6" class="w-full px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500/20" placeholder="Minimal 6 karakter">
-          </div>
+      <!-- Progress Steps -->
+      <div class="spmb-steps spmb-mb-8">
+        <div class="spmb-step active" data-step="1">
+          <div class="spmb-step-circle">1</div>
+          <span class="spmb-step-label">Data Pribadi</span>
         </div>
-        <div class="flex justify-between mt-6">
-          <button type="button" onclick="prevStep(1)" class="px-6 py-2 bg-slate-200 text-slate-700 rounded-xl hover:bg-slate-300">Kembali</button>
-          <button type="button" onclick="nextStep(3)" class="px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700">Selanjutnya</button>
+        <div class="spmb-step" data-step="2">
+          <div class="spmb-step-circle">2</div>
+          <span class="spmb-step-label">Pendidikan & Penempatan</span>
+        </div>
+        <div class="spmb-step" data-step="3">
+          <div class="spmb-step-circle">3</div>
+          <span class="spmb-step-label">Upload Berkas</span>
         </div>
       </div>
 
-      <!-- Step 3: Upload Berkas -->
-      <div class="step bg-white rounded-xl shadow-sm p-6 mb-6" data-step="3">
-        <h2 class="text-xl font-semibold mb-4">Upload Berkas</h2>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Pas Foto *</label>
-            <input type="file" id="foto" name="foto" accept="image/*" required class="w-full px-4 py-2 border border-slate-300 rounded-xl">
+      <form id="spmbRegistrationForm" novalidate>
+        <!-- Step 1: Data Pribadi -->
+        <div class="step active" data-step="1">
+          <h2 class="text-xl font-semibold spmb-mb-6">Data Pribadi</h2>
+          <div class="spmb-flex spmb-flex-col spmb-gap-4">
+            <div>
+              <label for="nama" class="spmb-label">Nama Lengkap <span class="text-red-500">*</span></label>
+              <input type="text" id="nama" name="nama" required class="spmb-input" placeholder="Nama lengkap sesuai KTP">
+            </div>
+            <div class="spmb-flex spmb-gap-4">
+              <div class="spmb-flex-1">
+                <label for="nik" class="spmb-label">NIK <span class="text-red-500">*</span></label>
+                <input type="text" id="nik" name="nik" required maxlength="16" class="spmb-input" placeholder="16 digit NIK">
+              </div>
+              <div class="spmb-flex-1">
+                <label for="email" class="spmb-label">Email <span class="text-red-500">*</span></label>
+                <input type="email" id="email" name="email" required class="spmb-input" placeholder="email@domain.com">
+              </div>
+            </div>
+            <div class="spmb-flex spmb-gap-4">
+              <div class="spmb-flex-1">
+                <label for="no_wa" class="spmb-label">No WhatsApp <span class="text-red-500">*</span></label>
+                <input type="tel" id="no_wa" name="no_wa" required placeholder="08xxxxxxxxxx" class="spmb-input">
+              </div>
+              <div class="spmb-flex-1">
+                <label for="tempat_lahir" class="spmb-label">Tempat Lahir <span class="text-red-500">*</span></label>
+                <input type="text" id="tempat_lahir" name="tempat_lahir" required class="spmb-input" placeholder="Kota/Kabupaten">
+              </div>
+            </div>
+            <div class="spmb-flex spmb-gap-4">
+              <div class="spmb-flex-1">
+                <label for="tanggal_lahir" class="spmb-label">Tanggal Lahir <span class="text-red-500">*</span></label>
+                <input type="date" id="tanggal_lahir" name="tanggal_lahir" required class="spmb-input">
+              </div>
+              <div class="spmb-flex-1">
+                <label for="jenis_kelamin" class="spmb-label">Jenis Kelamin <span class="text-red-500">*</span></label>
+                <select id="jenis_kelamin" name="jenis_kelamin" required class="spmb-select">
+                  <option value="">Pilih</option>
+                  <option value="L">Laki-laki</option>
+                  <option value="P">Perempuan</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label for="alamat" class="spmb-label">Alamat Lengkap <span class="text-red-500">*</span></label>
+              <textarea id="alamat" name="alamat" rows="3" required class="spmb-textarea" placeholder="Alamat lengkap sesuai KTP"></textarea>
+            </div>
           </div>
-          <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">KTP *</label>
-            <input type="file" id="ktp" name="ktp" accept="image/*,.pdf" required class="w-full px-4 py-2 border border-slate-300 rounded-xl">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">KK *</label>
-            <input type="file" id="kk" name="kk" accept="image/*,.pdf" required class="w-full px-4 py-2 border border-slate-300 rounded-xl">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1">Ijazah Terakhir *</label>
-            <input type="file" id="ijazah" name="ijazah" accept="image/*,.pdf" required class="w-full px-4 py-2 border border-slate-300 rounded-xl">
+          <div class="spmb-flex spmb-justify-end spmb-mt-6">
+            <button type="button" onclick="nextStep(2)" class="spmb-btn spmb-btn-primary spmb-btn-lg">
+              Selanjutnya <i class="fa-solid fa-chevron-right"></i>
+            </button>
           </div>
         </div>
-        <div class="flex justify-between mt-6">
-          <button type="button" onclick="prevStep(2)" class="px-6 py-2 bg-slate-200 text-slate-700 rounded-xl hover:bg-slate-300">Kembali</button>
-          <button type="submit" class="px-6 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700">Kirim Pendaftaran</button>
-        </div>
-      </div>
-    </form>
 
-    <div class="text-center mt-6">
-      <p class="text-sm text-slate-600">
-        Sudah punya akun? 
-        <a href="/SPMB/spmb-login.html" class="text-blue-600 hover:text-blue-700 font-medium">Login di sini</a>
-      </p>
+        <!-- Step 2: Data Pendidikan & Penempatan -->
+        <div class="step" data-step="2">
+          <h2 class="text-xl font-semibold spmb-mb-6">Data Pendidikan & Penempatan</h2>
+          <div class="spmb-flex spmb-flex-col spmb-gap-4">
+            <div class="spmb-flex spmb-gap-4">
+              <div class="spmb-flex-1">
+                <label for="pendidikan_terakhir" class="spmb-label">Pendidikan Terakhir <span class="text-red-500">*</span></label>
+                <select id="pendidikan_terakhir" name="pendidikan_terakhir" required class="spmb-select">
+                  <option value="">Pilih</option>
+                  <option value="SMA">SMA/SMK</option>
+                  <option value="D3">D3</option>
+                  <option value="D4">D4</option>
+                  <option value="S1">S1</option>
+                  <option value="S2">S2</option>
+                  <option value="S3">S3</option>
+                </select>
+              </div>
+              <div class="spmb-flex-1">
+                <label for="jurusan" class="spmb-label">Jurusan <span class="text-red-500">*</span></label>
+                <input type="text" id="jurusan" name="jurusan" required class="spmb-input" placeholder="Jurusan/program studi">
+              </div>
+            </div>
+            <div class="spmb-flex spmb-gap-4">
+              <div class="spmb-flex-1">
+                <label for="nama_sekolah_pendidikan" class="spmb-label">Nama Sekolah Pendidikan <span class="text-red-500">*</span></label>
+                <input type="text" id="nama_sekolah_pendidikan" name="nama_sekolah_pendidikan" required class="spmb-input" placeholder="Nama universitas/sekolah terakhir">
+              </div>
+              <div class="spmb-flex-1">
+                <label for="tahun_angkatan" class="spmb-label">Tahun Angkatan <span class="text-red-500">*</span></label>
+                <input type="text" id="tahun_angkatan" name="tahun_angkatan" required placeholder="2024" class="spmb-input" maxlength="4">
+              </div>
+            </div>
+            <div class="spmb-flex spmb-gap-4">
+              <div class="spmb-flex-1">
+                <label for="tenant_id" class="spmb-label">Sekolah Penempatan <span class="text-red-500">*</span></label>
+                <select id="tenant_id" name="tenant_id" required class="spmb-select">
+                  <option value="">Pilih Sekolah</option>
+                </select>
+              </div>
+              <div class="spmb-flex-1">
+                <label for="jabatan_di_unit" class="spmb-label">Jabatan di Unit <span class="text-red-500">*</span></label>
+                <select id="jabatan_di_unit" name="jabatan_di_unit" required class="spmb-select">
+                  <option value="">Pilih</option>
+                  <option value="Ketua">Ketua</option>
+                  <option value="Pimpinan">Pimpinan</option>
+                  <option value="Pimpinan Pondok">Pimpinan Pondok</option>
+                  <option value="Kepala Sekolah">Kepala Sekolah</option>
+                  <option value="Wakasek">Wakasek</option>
+                  <option value="Guru">Guru</option>
+                  <option value="Guru Mapel">Guru Mapel</option>
+                  <option value="Guru Mengaji">Guru Mengaji</option>
+                  <option value="Wali Kelas">Wali Kelas</option>
+                  <option value="Muhaffiz">Muhaffiz</option>
+                  <option value="Muhaffizah">Muhaffizah</option>
+                  <option value="Bendahara">Bendahara</option>
+                  <option value="TU">TU</option>
+                  <option value="Tata Usaha">Tata Usaha</option>
+                  <option value="Operator">Operator</option>
+                  <option value="Admin">Admin</option>
+                  <option value="Media">Media</option>
+                  <option value="Security">Security</option>
+                  <option value="Cleaning Service">Cleaning Service</option>
+                  <option value="Bag. Dapur">Bag. Dapur</option>
+                  <option value="Bag. Kantin">Bag. Kantin</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label for="password" class="spmb-label">Password <span class="text-red-500">*</span></label>
+              <input type="password" id="password" name="password" required minlength="6" class="spmb-input" placeholder="Minimal 6 karakter">
+              <p class="spmb-hint">Gunakan password yang mudah diingat tapi aman</p>
+            </div>
+          </div>
+          <div class="spmb-flex spmb-justify-between spmb-mt-6">
+            <button type="button" onclick="prevStep(1)" class="spmb-btn spmb-btn-secondary spmb-btn-lg">Kembali</button>
+            <button type="button" onclick="nextStep(3)" class="spmb-btn spmb-btn-primary spmb-btn-lg">Selanjutnya <i class="fa-solid fa-chevron-right"></i></button>
+          </div>
+        </div>
+
+        <!-- Step 3: Upload Berkas -->
+        <div class="step" data-step="3">
+          <h2 class="text-xl font-semibold spmb-mb-6">Upload Berkas</h2>
+          <p class="spmb-text-muted spmb-mb-4">Format: JPG, PNG, GIF, atau PDF. Maksimal 5MB per file.</p>
+          <div class="spmb-flex spmb-flex-col spmb-gap-4">
+            <div>
+              <label class="spmb-label">Pas Foto <span class="text-red-500">*</span></label>
+              <div class="spmb-file-dropzone" data-field="foto">
+                <div class="spmb-file-dropzone-icon"><i class="fa-solid fa-image"></i></div>
+                <p class="spmb-font-medium">Klik atau tarik file ke sini</p>
+                <p class="spmb-hint">JPG/PNG/GIF, max 5MB</p>
+                <input type="file" id="foto" name="foto" accept="image/*" required hidden>
+              </div>
+              <div class="spmb-file-list" id="foto-file-list"></div>
+            </div>
+            <div>
+              <label class="spmb-label">KTP <span class="text-red-500">*</span></label>
+              <div class="spmb-file-dropzone" data-field="ktp">
+                <div class="spmb-file-dropzone-icon"><i class="fa-solid fa-id-card"></i></div>
+                <p class="spmb-font-medium">Klik atau tarik file ke sini</p>
+                <p class="spmb-hint">JPG/PNG/PDF, max 5MB</p>
+                <input type="file" id="ktp" name="ktp" accept="image/*,.pdf" required hidden>
+              </div>
+              <div class="spmb-file-list" id="ktp-file-list"></div>
+            </div>
+            <div>
+              <label class="spmb-label">KK <span class="text-red-500">*</span></label>
+              <div class="spmb-file-dropzone" data-field="kk">
+                <div class="spmb-file-dropzone-icon"><i class="fa-solid fa-users"></i></div>
+                <p class="spmb-font-medium">Klik atau tarik file ke sini</p>
+                <p class="spmb-hint">JPG/PNG/PDF, max 5MB</p>
+                <input type="file" id="kk" name="kk" accept="image/*,.pdf" required hidden>
+              </div>
+              <div class="spmb-file-list" id="kk-file-list"></div>
+            </div>
+            <div>
+              <label class="spmb-label">Ijazah Terakhir <span class="text-red-500">*</span></label>
+              <div class="spmb-file-dropzone" data-field="ijazah">
+                <div class="spmb-file-dropzone-icon"><i class="fa-solid fa-graduation-cap"></i></div>
+                <p class="spmb-font-medium">Klik atau tarik file ke sini</p>
+                <p class="spmb-hint">JPG/PNG/PDF, max 5MB</p>
+                <input type="file" id="ijazah" name="ijazah" accept="image/*,.pdf" required hidden>
+              </div>
+              <div class="spmb-file-list" id="ijazah-file-list"></div>
+            </div>
+          </div>
+          <div class="spmb-flex spmb-justify-between spmb-mt-6">
+            <button type="button" onclick="prevStep(2)" class="spmb-btn spmb-btn-secondary spmb-btn-lg">Kembali</button>
+            <button type="submit" class="spmb-btn spmb-btn-primary spmb-btn-lg"><i class="fa-solid fa-paper-plane"></i> Kirim Pendaftaran</button>
+          </div>
+        </div>
+      </form>
+
+      <div class="spmb-text-center spmb-mt-6 spmb-p-4 spmb-bg-muted spmb-rounded">
+        <p class="spmb-text-sm spmb-text-muted">
+          Sudah punya akun? 
+          <a href="/SPMB/spmb-login.html" class="spmb-text-sm text-indigo-600 hover:text-indigo-700 font-medium">Login di sini</a>
+        </p>
+      </div>
     </div>
-  </div>
+  </main>
+
+  <footer class="spmb-footer">
+    <div class="spmb-container">
+      <p>&copy; <span id="year"></span> SPMB - Sistem Penerimaan Murid Baru. All rights reserved.</p>
+    </div>
+  </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script>
-    let currentStep = 1;
-    const totalSteps = 3;
     const STORAGE_KEY = 'spmb_pendaftaran_draft';
+    let currentStep = 1;
 
     function saveDraft() {
       const form = document.getElementById('spmbRegistrationForm');
@@ -208,7 +279,7 @@
         const data = JSON.parse(saved);
         if (!data || !data.fields) return;
         Object.keys(data.fields).forEach(id => { const el = document.getElementById(id); if (el && data.fields[id]) el.value = data.fields[id]; });
-        if (data.fileNames) Object.keys(data.fileNames).forEach(id => { const el = document.getElementById(id); if (el && el.parentElement) { const note = document.createElement('p'); note.className = 'text-xs text-slate-500 mt-1'; note.textContent = 'File sebelumnya: ' + data.fileNames[id] + ' (perlu diupload ulang)'; note.id = id + '_draft_note'; if (!el.parentElement.querySelector('#' + id + '_draft_note')) el.parentElement.appendChild(note); } });
+        if (data.fileNames) Object.keys(data.fileNames).forEach(id => { const el = document.getElementById(id); if (el && el.parentElement) { const note = document.createElement('p'); note.className = 'spmb-hint spmb-mt-1'; note.textContent = 'File sebelumnya: ' + data.fileNames[id] + ' (perlu diupload ulang)'; note.id = id + '_draft_note'; if (!el.parentElement.querySelector('#' + id + '_draft_note')) el.parentElement.appendChild(note); } });
         if (data.step && data.step > 1) showStep(data.step);
       } catch (e) { console.error('Failed to load draft:', e); }
     }
@@ -218,25 +289,73 @@
     function showStep(step) {
       document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
       document.querySelector(`.step[data-step="${step}"]`).classList.add('active');
-      document.querySelectorAll('.step-indicator').forEach(ind => {
+      document.querySelectorAll('.spmb-step').forEach(ind => {
         ind.classList.remove('active', 'completed');
         if (parseInt(ind.dataset.step) < step) ind.classList.add('completed');
         if (parseInt(ind.dataset.step) === step) ind.classList.add('active');
       });
       currentStep = step;
       saveDraft();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function validateStep(step) {
+      const stepEl = document.querySelector(`.step[data-step="${step}"]`);
+      const required = stepEl.querySelectorAll('[required]');
+      let valid = true;
+      required.forEach(field => {
+        if (!field.value.trim()) {
+          valid = false;
+          field.classList.add('spmb-input-error');
+        } else {
+          field.classList.remove('spmb-input-error');
+        }
+      });
+      if (!valid) Swal.fire('Error', 'Mohon lengkapi semua field yang wajib diisi', 'error');
+      return valid;
     }
 
     function nextStep(step) {
-      const stepEl = document.querySelector(`.step[data-step="${currentStep}"]`);
-      const required = stepEl.querySelectorAll('[required]');
-      let valid = true;
-      required.forEach(field => { if (!field.value.trim()) { valid = false; field.classList.add('border-red-500'); } else field.classList.remove('border-red-500'); });
-      if (!valid) { Swal.fire('Error', 'Mohon lengkapi semua field yang wajib diisi', 'error'); return; }
-      showStep(step);
+      if (validateStep(currentStep)) showStep(step);
     }
 
     function prevStep(step) { showStep(step); }
+
+    // File dropzone handling
+    document.querySelectorAll('.spmb-file-dropzone').forEach(dz => {
+      const input = dz.querySelector('input[type="file"]');
+      const list = document.getElementById(input.id + '-file-list');
+
+      dz.addEventListener('click', () => input.click());
+      dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('drag-active'); });
+      dz.addEventListener('dragleave', () => dz.classList.remove('drag-active'));
+      dz.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dz.classList.remove('drag-active');
+        if (e.dataTransfer.files.length) {
+          input.files = e.dataTransfer.files;
+          updateFileList(input, list);
+        }
+      });
+      input.addEventListener('change', () => updateFileList(input, list));
+    });
+
+    function updateFileList(input, list) {
+      if (!input.files.length) { list.innerHTML = ''; return; }
+      const file = input.files[0];
+      const sizeMB = (file.size / 1024 / 1024).toFixed(2);
+      list.innerHTML = `
+        <div class="spmb-file-item">
+          <div class="spmb-flex spmb-items-center spmb-gap-2">
+            <i class="fa-solid fa-file"></i>
+            <span class="spmb-text-sm">${file.name}</span>
+            <span class="spmb-text-muted spmb-text-sm">(${sizeMB} MB)</span>
+          </div>
+          <button type="button" class="spmb-text-sm text-red-500 hover:text-red-700" onclick="this.closest('.spmb-file-item').remove(); document.getElementById('${input.id}').value='';">Hapus</button>
+        </div>
+      `;
+      saveDraft();
+    }
 
     async function loadTenants() {
       try {
@@ -261,36 +380,19 @@
       if (!validateStep(3)) return;
 
       const formData = new FormData();
-      formData.append('nama', document.getElementById('nama').value);
-      formData.append('nik', document.getElementById('nik').value);
-      formData.append('email', document.getElementById('email').value);
-      formData.append('no_wa', document.getElementById('no_wa').value);
-      formData.append('tempat_lahir', document.getElementById('tempat_lahir').value);
-      formData.append('tanggal_lahir', document.getElementById('tanggal_lahir').value);
-      formData.append('jenis_kelamin', document.getElementById('jenis_kelamin').value);
-      formData.append('alamat', document.getElementById('alamat').value);
-      formData.append('pendidikan_terakhir', document.getElementById('pendidikan_terakhir').value);
-      formData.append('jurusan', document.getElementById('jurusan').value);
-      formData.append('nama_sekolah_pendidikan', document.getElementById('nama_sekolah_pendidikan').value);
-      formData.append('tahun_angkatan', document.getElementById('tahun_angkatan').value);
-      formData.append('tenant_id', document.getElementById('tenant_id').value);
-      formData.append('jabatan_di_unit', document.getElementById('jabatan_di_unit').value);
-      formData.append('password', document.getElementById('password').value);
-      formData.append('foto', document.getElementById('foto').files[0]);
-      formData.append('ktp', document.getElementById('ktp').files[0]);
-      formData.append('kk', document.getElementById('kk').files[0]);
-      formData.append('ijazah', document.getElementById('ijazah').files[0]);
+      const fields = ['nama','nik','email','no_wa','tempat_lahir','tanggal_lahir','jenis_kelamin','alamat',
+                      'pendidikan_terakhir','jurusan','nama_sekolah_pendidikan','tahun_angkatan',
+                      'tenant_id','jabatan_di_unit','password'];
+      fields.forEach(f => { const el = document.getElementById(f); if (el) formData.append(f, el.value); });
+      ['foto','ktp','kk','ijazah'].forEach(f => {
+        const el = document.getElementById(f);
+        if (el && el.files[0]) formData.append(f, el.files[0]);
+      });
 
       try {
-        const response = await fetch('/api/spmb/register', {
-          method: 'POST',
-          body: formData,
-        });
-
+        const response = await fetch('/api/spmb/register', { method: 'POST', body: formData });
         if (!response.ok) throw new Error(`Server error: ${response.status}`);
-
         const data = await response.json();
-
         if (data.success) {
           clearDraft();
           Swal.fire({ title: 'Pendaftaran Berhasil!', text: 'Pendaftaran panitia SPMB telah dikirim. Menunggu persetujuan admin.', icon: 'success', timer: 2000, showConfirmButton: false }).then(() => {
@@ -305,16 +407,8 @@
       }
     });
 
-    function validateStep(step) {
-      const stepEl = document.querySelector(`.step[data-step="${step}"]`);
-      const required = stepEl.querySelectorAll('[required]');
-      let valid = true;
-      required.forEach(field => { if (!field.value.trim()) { valid = false; field.classList.add('border-red-500'); } else field.classList.remove('border-red-500'); });
-      if (!valid) Swal.fire('Error', 'Mohon lengkapi semua field yang wajib diisi', 'error');
-      return valid;
-    }
-
     document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('year').textContent = new Date().getFullYear();
       loadDraft();
       loadTenants();
     });

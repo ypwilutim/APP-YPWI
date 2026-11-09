@@ -222,6 +222,32 @@ const excelUpload = multer({
   }
 });
 
+// Helper: store Google Drive backup metadata for a profile document
+async function updateTeacherDriveProfileMetadata(teacherId, docType, meta) {
+  if (!meta) return;
+  if (docType === 'foto') {
+    await db.query(
+      'UPDATE teachers SET drive_profile_folder_id = COALESCE(?, drive_profile_folder_id), drive_foto_file_id = ?, drive_foto_web_view_link = ? WHERE id = ?',
+      [meta.folderId, meta.fileId, meta.webViewLink, teacherId]
+    );
+  } else if (docType === 'ktp') {
+    await db.query(
+      'UPDATE teachers SET drive_profile_folder_id = COALESCE(?, drive_profile_folder_id), drive_ktp_file_id = ?, drive_ktp_web_view_link = ? WHERE id = ?',
+      [meta.folderId, meta.fileId, meta.webViewLink, teacherId]
+    );
+  } else if (docType === 'kk') {
+    await db.query(
+      'UPDATE teachers SET drive_profile_folder_id = COALESCE(?, drive_profile_folder_id), drive_kk_file_id = ?, drive_kk_web_view_link = ? WHERE id = ?',
+      [meta.folderId, meta.fileId, meta.webViewLink, teacherId]
+    );
+  } else if (docType === 'ijazah') {
+    await db.query(
+      'UPDATE teachers SET drive_profile_folder_id = COALESCE(?, drive_profile_folder_id), drive_ijazah_file_id = ?, drive_ijazah_web_view_link = ? WHERE id = ?',
+      [meta.folderId, meta.fileId, meta.webViewLink, teacherId]
+    );
+  }
+}
+
 // POST /api/upload-profile-photo - Upload profile photo for logged-in guru (dashboard)
 router.post('/upload-profile-photo', authenticateToken, teacherUpload.single('photo'), async (req, res) => {
   try {
@@ -234,6 +260,22 @@ router.post('/upload-profile-photo', authenticateToken, teacherUpload.single('ph
 
     const photoUrl = `/uploads/${req.file.filename}`;
     await db.query('UPDATE teachers SET link_foto = ? WHERE id = ?', [photoUrl, req.user.guru_id]);
+
+    // Backup to Google Drive (non-blocking for response)
+    try {
+      const { isDriveEnabled, archiveProfileFileToDrive } = require('../utils/googleDrive');
+      if (isDriveEnabled()) {
+        const [teacherRow] = await db.query(
+          'SELECT t.id, t.nama, ta.tenant_id, tn.nama_sekolah FROM teachers t LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id LEFT JOIN tenants tn ON ta.tenant_id = tn.tenant_id WHERE t.id = ? LIMIT 1',
+          [req.user.guru_id]
+        );
+        const teacher = teacherRow || { id: req.user.guru_id, nama: '', nama_sekolah: 'Tenant' };
+        const meta = await archiveProfileFileToDrive({ teacher, docType: 'foto', localPath: photoUrl });
+        await updateTeacherDriveProfileMetadata(req.user.guru_id, 'foto', meta);
+      }
+    } catch (driveErr) {
+      console.error('Drive profile photo backup error:', driveErr.message);
+    }
 
     res.json({ success: true, photoUrl, message: 'Foto profil berhasil diperbarui' });
   } catch (error) {
@@ -6237,6 +6279,23 @@ router.post('/public/teachers/:teacherId/upload-document', berkasUpload.single('
     }
     const fileUrl = `/uploads/${req.file.filename}`;
     await db.query(`UPDATE teachers SET ${docTypeMap[docType]} = ? WHERE id = ?`, [fileUrl, teacherId]);
+
+    // Backup to Google Drive
+    try {
+      const { isDriveEnabled, archiveProfileFileToDrive } = require('../utils/googleDrive');
+      if (isDriveEnabled()) {
+        const [teacherRow] = await db.query(
+          'SELECT t.id, t.nama, ta.tenant_id, tn.nama_sekolah FROM teachers t LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id LEFT JOIN tenants tn ON ta.tenant_id = tn.tenant_id WHERE t.id = ? LIMIT 1',
+          [teacherId]
+        );
+        const teacher = teacherRow || { id: teacherId, nama: '', nama_sekolah: 'Tenant' };
+        const meta = await archiveProfileFileToDrive({ teacher, docType, localPath: fileUrl });
+        await updateTeacherDriveProfileMetadata(teacherId, docType, meta);
+      }
+    } catch (driveErr) {
+      console.error('Drive profile document backup error:', driveErr.message);
+    }
+
     res.json({ success: true, url: fileUrl, field: docTypeMap[docType], message: 'Dokumen berhasil diupload' });
   } catch (error) {
     console.error('Upload document error:', error);
@@ -6489,6 +6548,36 @@ if (foto || bodyLinkFoto) {
       if (typeof global.sendEmail === 'function') {
         await global.sendEmail(email, 'Profil Akun Aktif - YPWI Lutim', htmlMessage, '', [], 'account_activation');
       }
+    }
+
+    // Backup uploaded profile documents to Google Drive
+    try {
+      const { isDriveEnabled, archiveProfileFileToDrive } = require('../utils/googleDrive');
+      if (isDriveEnabled()) {
+        const [teacherRow] = await db.query(
+          'SELECT t.id, t.nama, ta.tenant_id, tn.nama_sekolah FROM teachers t LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id LEFT JOIN tenants tn ON ta.tenant_id = tn.tenant_id WHERE t.id = ? LIMIT 1',
+          [teacherId]
+        );
+        const teacher = teacherRow || { id: teacherId, nama: '', nama_sekolah: 'Tenant' };
+        if (foto) {
+          const meta = await archiveProfileFileToDrive({ teacher, docType: 'foto', localPath: foto });
+          await updateTeacherDriveProfileMetadata(teacherId, 'foto', meta);
+        }
+        if (ktp) {
+          const meta = await archiveProfileFileToDrive({ teacher, docType: 'ktp', localPath: ktp });
+          await updateTeacherDriveProfileMetadata(teacherId, 'ktp', meta);
+        }
+        if (kk) {
+          const meta = await archiveProfileFileToDrive({ teacher, docType: 'kk', localPath: kk });
+          await updateTeacherDriveProfileMetadata(teacherId, 'kk', meta);
+        }
+        if (ijazah) {
+          const meta = await archiveProfileFileToDrive({ teacher, docType: 'ijazah', localPath: ijazah });
+          await updateTeacherDriveProfileMetadata(teacherId, 'ijazah', meta);
+        }
+      }
+    } catch (driveErr) {
+      console.error('Drive complete profile backup error:', driveErr.message);
     }
 
     // Return teacher data for WhatsApp notification (handled by frontend)
@@ -7590,6 +7679,59 @@ router.get('/public/lookup-nik', async (req, res) => {
   } catch (error) {
     console.error('Lookup NIK error:', error);
     res.status(500).json({ success: false, message: 'Error looking up NIK' });
+  }
+});
+
+// POST /api/admin/sync-profile-drive/:teacherId - Backfill profile photos/documents to Google Drive
+router.post('/admin/sync-profile-drive/:teacherId', authenticateOperator, async (req, res) => {
+  try {
+    const teacherId = req.params.teacherId;
+    const [teacher] = await db.query(
+      'SELECT t.id, t.nama, t.link_foto, t.link_ktp, t.link_kk, t.link_ijazah, ta.tenant_id, tn.nama_sekolah FROM teachers t LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id LEFT JOIN tenants tn ON ta.tenant_id = tn.tenant_id WHERE t.id = ? LIMIT 1',
+      [teacherId]
+    );
+    if (!teacher) {
+      return res.status(404).json({ success: false, message: 'Guru tidak ditemukan' });
+    }
+    if (!verifyTenantAccess(req, teacher.tenant_id)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak untuk tenant ini' });
+    }
+
+    const { isDriveEnabled, archiveProfileFileToDrive } = require('../utils/googleDrive');
+    if (!isDriveEnabled()) {
+      return res.status(400).json({ success: false, message: 'Google Drive belum diaktifkan' });
+    }
+
+    const docMap = {
+      foto: teacher.link_foto,
+      ktp: teacher.link_ktp,
+      kk: teacher.link_kk,
+      ijazah: teacher.link_ijazah
+    };
+
+    const results = {};
+    for (const [docType, link] of Object.entries(docMap)) {
+      if (!link) {
+        results[docType] = { skipped: true, reason: 'Tidak ada file lokal' };
+        continue;
+      }
+      try {
+        const meta = await archiveProfileFileToDrive({ teacher, docType, localPath: link });
+        if (meta) {
+          await updateTeacherDriveProfileMetadata(teacherId, docType, meta);
+          results[docType] = { success: true, fileId: meta.fileId, link: meta.webViewLink };
+        } else {
+          results[docType] = { success: false, reason: 'Upload gagal' };
+        }
+      } catch (err) {
+        results[docType] = { success: false, reason: err.message };
+      }
+    }
+
+    res.json({ success: true, data: results });
+  } catch (error) {
+    console.error('Sync profile drive error:', error);
+    res.status(500).json({ success: false, message: 'Error sync profile ke Drive: ' + error.message });
   }
 });
 
