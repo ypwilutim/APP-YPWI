@@ -271,6 +271,8 @@ if (process.env.WHATSAPP_ENABLED === 'true') {
   require('./src/utils/whatsappBaileys').initWhatsAppBaileys().catch(err => {
     console.error('[WAHA] Failed to initialize:', err.message);
   });
+} else {
+  console.log('[WAHA] WhatsApp initialization disabled (set WHATSAPP_ENABLED=true to enable)');
 }
 
 app.use('/api', absensiRoutes);
