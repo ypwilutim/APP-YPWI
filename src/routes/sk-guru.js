@@ -1059,8 +1059,10 @@ router.get('/bulk-candidates', authenticateOperator, async (req, res) => {
       }
     }
 
-    const employmentRules = await db.query('SELECT * FROM employment_rules');
-    const statusRules = await db.query('SELECT * FROM employment_status_rules');
+    const employmentRulesRaw = await db.query('SELECT * FROM employment_rules');
+    const employmentRules = Array.isArray(employmentRulesRaw) ? employmentRulesRaw : [];
+    const statusRulesRaw = await db.query('SELECT * FROM employment_status_rules');
+    const statusRules = Array.isArray(statusRulesRaw) ? statusRulesRaw : [];
     const hijriToday = gregorianToHijri(new Date());
 
     const baseQuery = 'SELECT t.id as teacher_id, t.nama, t.nik, t.nip, t.tempat_lahir, t.tanggal_lahir, t.status_kepegawaian, t.tmt, t.pendidikan_terakhir as pt, ta.id as assignment_id, ta.created_at as assignment_created_at, ta.jabatan_di_unit as jabatan_di_unit, ta.tenant_id, tn.nama_sekolah, tn.id as tenant_pk FROM teachers t JOIN teacher_assignments ta ON t.id = ta.teacher_id JOIN tenants tn ON ta.tenant_id = tn.tenant_id';
@@ -1070,9 +1072,15 @@ router.get('/bulk-candidates', authenticateOperator, async (req, res) => {
     } else {
       teachers = await db.query(baseQuery + ' WHERE ta.tenant_id = ? AND t.status_aktif = 1 ORDER BY t.nama ASC, ta.created_at ASC, ta.id ASC LIMIT 500', [tenantId]);
     }
+    // Defensive: ensure teachers is always an array
+    if (!Array.isArray(teachers)) {
+      console.error('[BULK CANDIDATES] teachers query returned non-array:', teachers);
+      teachers = [];
+    }
 
     const existingSkRows = await db.query('SELECT DISTINCT teacher_id, tenant_id FROM sk_guru');
-    const existingSkSet = new Set(existingSkRows.map(r => (r.teacher_id || '') + '|' + (r.tenant_id || '')));
+    const existingSkRowsArr = Array.isArray(existingSkRows) ? existingSkRows : [];
+    const existingSkSet = new Set(existingSkRowsArr.map(r => (r.teacher_id || '') + '|' + (r.tenant_id || '')));
 
     const tenantPeekBase = {};
     const tenantSeqCounter = {};
