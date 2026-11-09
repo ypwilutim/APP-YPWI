@@ -1,10 +1,19 @@
 // ADMQU Page Logic
 const API_BASE = '/api';
-let authToken = localStorage.getItem('token') || sessionStorage.getItem('token');
+let authToken = getAuthToken();
 let currentUser = null;
 let currentTeacherId = null;
 let currentTenantId = null;
 let skPreviewData = null;
+
+// Token helper for PWA context
+function getAuthToken() {
+  return localStorage.getItem('token') 
+    || sessionStorage.getItem('token')
+    || window.token
+    || (window.opener && window.opener.localStorage && window.opener.localStorage.getItem('token'))
+    || (window.parent && window.parent !== window && window.parent.localStorage && window.parent.localStorage.getItem('token'));
+}
 
 const SK_TYPE_LABELS = {
   'baru': 'Pengangkatan Guru Baru',

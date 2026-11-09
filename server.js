@@ -1592,6 +1592,20 @@ await ensureColumn('sk_guru', 'drive_uploaded_at', 'DATETIME DEFAULT NULL AFTER 
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `, 'kafalah_teacher_overrides');
 
+    await ensureTable(`
+      CREATE TABLE IF NOT EXISTS sk_approval_queue (
+        id INT(11) NOT NULL AUTO_INCREMENT,
+        teacher_id INT(11) NOT NULL,
+        tenant_id VARCHAR(50) NOT NULL,
+        status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
+        tentang_type ENUM('baru','jabatan') NOT NULL DEFAULT 'baru',
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        INDEX idx_teacher_tenant (teacher_id, tenant_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `, 'sk_approval_queue');
+
     // Migration: Add new columns to existing kafalah_teacher_overrides table.
     // Each column is guarded via information_schema so this is safe to run on
     // every start and on both MySQL and MariaDB (ADD COLUMN IF NOT EXISTS is

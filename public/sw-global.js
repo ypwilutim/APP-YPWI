@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'sekolah-app-v3';
+const CACHE_VERSION = 'sekolah-app-v4';
 const CACHE_NAME = CACHE_VERSION;
 const OFFLINE_URL = '/offline.html';
 

@@ -2,6 +2,37 @@
 const path = require('path');
 const fs = require('fs');
 
+// Global error handlers for WhatsApp connection failures
+process.on('unhandledRejection', (reason, promise) => {
+  if (reason && reason.message && 
+      (reason.message.includes('Connection Failure') || 
+       reason.message.includes('WebSocket') ||
+       reason.message.includes('baileys') ||
+       reason.message.includes('WhatsApp') ||
+       reason.message.includes('decodeFrame') ||
+       reason.message.includes('noise-handler') ||
+       reason.message.includes('WebSocketClient'))) {
+    console.error('[WAHA] Handled WhatsApp connection failure:', reason.message);
+    return; // Prevent process exit
+  }
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  if (err.message && 
+      (err.message.includes('Connection Failure') || 
+       err.message.includes('WebSocket') ||
+       err.message.includes('baileys') ||
+       err.message.includes('WhatsApp') ||
+       err.message.includes('decodeFrame') ||
+       err.message.includes('noise-handler') ||
+       err.message.includes('WebSocketClient'))) {
+    console.error('[WAHA] Handled WhatsApp uncaught exception:', err.message);
+    return; // Prevent process exit
+  }
+  console.error('Uncaught Exception:', err);
+});
+
 let makeWASocket, useMultiFileAuthState, DisconnectReason;
 let sock = null;
 let isReady = false;
@@ -21,41 +52,8 @@ async function loadBaileys() {
 }
 
 async function initWhatsAppBaileys() {
-  await loadBaileys();
-  
-  const WAHA_AUTH_DIR = path.join(__dirname, '../waha-auth');
-  
-  if (!fs.existsSync(WAHA_AUTH_DIR)) {
-    fs.mkdirSync(WAHA_AUTH_DIR, { recursive: true });
-  }
-  
-  const { state, saveCreds } = await useMultiFileAuthState(WAHA_AUTH_DIR);
-  
-  sock = makeWASocket({
-    auth: state,
-    browser: ['YPWI-Lutim', 'Chrome', '3.0']
-  });
-
-  sock.ev.on('connection.update', (update) => {
-    const { connection, qr, lastDisconnect } = update;
-    
-    if (qr) {
-      qrString = qr;
-    }
-    
-    if (connection === 'close') {
-      const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-      if (shouldReconnect) {
-        setTimeout(initWhatsAppBaileys, 5000);
-      }
-      isReady = false;
-    } else if (connection === 'open') {
-      isReady = true;
-      console.log('[WAHA] WhatsApp connected and ready');
-    }
-  });
-  
-  sock.ev.on('creds.update', saveCreds);
+  console.log('[WAHA] WhatsApp initialization skipped (disabled for stability)');
+  return;
 }
 
 async function sendWhatsAppBaileys(to, text) {

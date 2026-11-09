@@ -755,7 +755,8 @@ router.get('/file/:skId', authenticateToken, async (req, res) => {
     }
 
     if (!isPrivilegedOperator(req.user)) {
-      if (parseInt(sk.teacher_id, 10) !== parseInt(req.user.guru_id, 10)) {
+      const teacherId = req.user.guru_id || (req.user.assignments?.[0]?.teacher_id);
+      if (!teacherId || parseInt(sk.teacher_id, 10) !== parseInt(teacherId, 10)) {
         return res.status(403).json({ success: false, message: 'Akses ditolak untuk SK ini' });
       }
     } else if (!verifyTenantAccess(req, sk.tenant_id)) {

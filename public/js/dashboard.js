@@ -2270,9 +2270,9 @@ async function initializeDashboard() {
       // loadAttendanceRules() dan loadRecentAttendance() dipanggil dari requestLocationPermission setelah lokasi didapatkan
       initQuranWidget(); // Initialize Quran widget
 
-     window.attendanceInterval = setInterval(function () {
-         checkActiveLeave(); // Cek izin setiap detik
-     }, 1000);
+window.attendanceInterval = setInterval(function () {
+          checkActiveLeave(); // Cek izin setiap 30 detik
+      }, 30000);
 
      window.addEventListener('online', syncOfflineAttendance);
 window.addEventListener('offline', showOfflineMessage);
@@ -4423,7 +4423,7 @@ if ('serviceWorker' in navigator) {
 // ==================== SPMB PANITIA ACCESS ====================
 async function checkSpmbPanitia() {
   try {
-    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    const token = getAuthToken();
     if (!token) return;
     const res = await fetch('/api/spmb/panitia-status', { headers: { 'Authorization': 'Bearer ' + token } });
     const data = await res.json();
@@ -4438,7 +4438,16 @@ async function checkSpmbPanitia() {
 }
 
 function openSpmbPanitia() {
-  const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+  const token = getAuthToken();
   if (!token) { alert('Token tidak ditemukan'); return; }
   window.open('/SPMB/spmb-dashboard.html?token=' + encodeURIComponent(token), '_blank');
+}
+
+// ==================== PWA TOKEN HELPER ====================
+function getAuthToken() {
+  return localStorage.getItem('token') 
+    || sessionStorage.getItem('token')
+    || window.token
+    || (window.opener && window.opener.localStorage && window.opener.localStorage.getItem('token'))
+    || (window.parent && window.parent !== window && window.parent.localStorage && window.parent.localStorage.getItem('token'));
 }

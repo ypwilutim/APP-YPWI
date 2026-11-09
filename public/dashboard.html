@@ -310,6 +310,15 @@
       }
     }
 
+    @keyframes pulse-red {
+      0% {
+        box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.6);
+      }
+      100% {
+        box-shadow: 0 0 0 10px rgba(220, 38, 38, 0);
+      }
+    }
+
     @keyframes spin {
       100% {
         transform: rotate(360deg);
@@ -591,10 +600,10 @@
             <i class="fas fa-file-alt"></i> ADMQU
           </a>
           <button id="pwaUpdateBtn" onclick="checkPwaUpdate()" title="Cek Update Aplikasi"
-            style="display: inline-flex; align-items: center; gap: 0.5rem; background: #e0e7ff; color: #3730a3; padding: 0.6rem 1rem; border-radius: 0.5rem; font-weight: 600; font-size: 0.85rem; border: 1px solid #c7d2fe; cursor: pointer; transition: all 0.2s;">
-            <i class="fas fa-sync-alt"></i> Update
+            style="display: inline-flex; align-items: center; gap: 0.5rem; background: #e0e7ff; color: #3730a3; padding: 0.6rem 1rem; border-radius: 0.5rem; font-weight: 600; font-size: 0.85rem; border: 1px solid #c7d2fe; cursor: pointer; transition: all 0.2s; position: relative;">
+            <i class="fas fa-sync-alt" id="pwaUpdateIcon"></i> Update
+            <span id="pwaUpdateBadge" style="display:none; position: absolute; top: -4px; right: -4px; background: #dc2626; color: white; padding: 0.1rem 0.4rem; border-radius: 999px; font-size: 0.55rem; font-weight: 700; animation: pulse-red 1.5s infinite;">Baru</span>
           </button>
-          <span id="pwaUpdateBadge" style="display:none; margin-left: 0.5rem; background: #22c55e; color: white; padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.7rem;">Baru</span>
           <a href="#" onclick="logout(); return false;"
             style="display: inline-flex; align-items: center; gap: 0.5rem; background: #fee2e2; color: #dc2626; padding: 0.6rem 1.25rem; border-radius: 0.5rem; font-weight: 700; font-size: 0.85rem; text-decoration: none; border: 1px solid #fca5a5; transition: all 0.2s;">
             <i class="fas fa-sign-out-alt"></i> Keluar Sistem
@@ -945,13 +954,13 @@ style="font-size: 0.95rem; font-weight: 700; color: #0f172a; margin: 0 0 0.75rem
         <span style="font-size: 0.65rem; font-weight: 600;">Chat</span>
       </div>
     </a>
-    <button id="mobilePwaUpdateBtn" onclick="checkPwaUpdate()" style="text-decoration: none; border: none; background: transparent; cursor: pointer; padding: 0;">
+    <button id="mobilePwaUpdateBtn" onclick="checkPwaUpdate()" style="text-decoration: none; border: none; background: transparent; cursor: pointer; padding: 0; position: relative;">
       <div style="text-align: center; color: #3730a3; cursor: pointer; -webkit-tap-highlight-color: transparent;">
-        <i class="fas fa-sync-alt" style="font-size: 1.3rem; display: block; margin-bottom: 2px;"></i>
+        <i class="fas fa-sync-alt" id="mobilePwaUpdateIcon" style="font-size: 1.3rem; display: block; margin-bottom: 2px;"></i>
         <span style="font-size: 0.65rem; font-weight: 600;">Update</span>
       </div>
+      <span id="mobilePwaUpdateBadge" style="display:none; position: absolute; top: -4px; right: -4px; background: #dc2626; color: white; padding: 0.1rem 0.4rem; border-radius: 999px; font-size: 0.55rem; font-weight: 700; animation: pulse-red 1.5s infinite;">Baru</span>
     </button>
-    <span id="mobilePwaUpdateBadge" style="display:none; background: #22c55e; color: white; padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.6rem; margin-left: 0.3rem;">Baru</span>
      <button onclick="navigateToADMQU()" style="text-decoration: none; border: none; background: transparent; cursor: pointer; padding: 0;">
        <div style="text-align: center; color: #b45309; cursor: pointer; -webkit-tap-highlight-color: transparent;">
          <i class="fas fa-file-alt" style="font-size: 1.3rem; display: block; margin-bottom: 2px;"></i>
