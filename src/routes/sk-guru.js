@@ -1,6 +1,6 @@
 const express = require('express');
 const db = require('../../db');
-const { authenticateToken, authenticateOperator, verifyTenantAccess, isPrivilegedOperator } = require('../middleware/auth');
+const { authenticateToken, authenticateOperator, verifyTenantAccess, isPrivilegedOperator, getUserTeacherIds } = require('../middleware/auth');
 const fs = require('fs');
 const path = require('path');
 const PizZip = require('pizzip');
@@ -127,7 +127,7 @@ router.get('/teachers/:id/data', authenticateOperator, async (req, res) => {
      const hijriMonthIndex = hijriMonths.indexOf(currentHijri.month);
      const romanMonth = hijriMonthIndex >= 0 ? romanize(hijriMonthIndex + 1) : 'VII';
      
-     const nextSkNumber = await peekNextSkNumber(teacher.tenant_id, currentHijri.year);
+     const nextSkNumber = await peekActualNextSkNumber(teacher.tenant_id, currentHijri.year);
      const noSurat = 'QR.' + String(nextSkNumber).padStart(3, '0') + '/02/YPWI-LT/' + romanMonth + '/' + currentHijri.year;
 
      let tmtFormatted = '';
@@ -179,38 +179,84 @@ router.get('/teachers/:id/data', authenticateOperator, async (req, res) => {
    }
  });
 
-async function peekNextSkNumber(tenantId, hijriYear) {
-  const existing = await db.query(
+async function peekActualNextSkNumber(tenantId, hijriYear) {
+  const [skMax] = await db.query(
+    `SELECT MAX(CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(no_surat, '/', 1), '.', -1) AS UNSIGNED)) as max_num
+     FROM sk_guru 
+     WHERE tenant_id = ? AND no_surat LIKE ?`,
+    [tenantId, 'QR.%/' + hijriYear + '%']
+  );
+  const maxFromSk = skMax.max_num || 0;
+
+  const [seq] = await db.query(
     'SELECT last_number FROM sk_sequence WHERE tenant_id = ? AND hijri_year = ?',
     [tenantId, hijriYear]
   );
+  const seqNum = seq.length > 0 ? seq[0].last_number : 0;
 
-  if (existing.length > 0) {
-    return existing[0].last_number + 1;
-  }
-  return 1;
+  return Math.max(maxFromSk, seqNum) + 1;
 }
 
-async function getNextSkNumber(tenantId, hijriYear) {
-  const existing = await db.query(
+async function getActualNextSkNumber(tenantId, hijriYear) {
+  const [skMax] = await db.query(
+    `SELECT MAX(CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(no_surat, '/', 1), '.', -1) AS UNSIGNED)) as max_num
+     FROM sk_guru 
+     WHERE tenant_id = ? AND no_surat LIKE ?`,
+    [tenantId, 'QR.%/' + hijriYear + '%']
+  );
+  const maxFromSk = skMax.max_num || 0;
+
+  const [seq] = await db.query(
     'SELECT last_number FROM sk_sequence WHERE tenant_id = ? AND hijri_year = ?',
     [tenantId, hijriYear]
   );
-  
-  if (existing.length > 0) {
-    const newNumber = existing[0].last_number + 1;
+  const seqNum = seq.length > 0 ? seq[0].last_number : 0;
+
+  const nextNum = Math.max(maxFromSk, seqNum) + 1;
+
+  if (seq.length > 0) {
     await db.query(
       'UPDATE sk_sequence SET last_number = ? WHERE tenant_id = ? AND hijri_year = ?',
-      [newNumber, tenantId, hijriYear]
+      [nextNum, tenantId, hijriYear]
     );
-    return newNumber;
   } else {
     await db.query(
-      'INSERT INTO sk_sequence (tenant_id, hijri_year, hijri_month, last_number) VALUES (?, ?, ?, 1)',
-      [tenantId, hijriYear, hijriMonths[0]]
+      'INSERT INTO sk_sequence (tenant_id, hijri_year, hijri_month, last_number) VALUES (?, ?, ?, ?)',
+      [tenantId, hijriYear, hijriMonths[0], nextNum]
     );
-    return 1;
   }
+  return nextNum;
+}
+
+async function getActualNextSkNumberWithLock(tenantId, hijriYear, connection) {
+  const [skMax] = await connection.query(
+    `SELECT MAX(CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(no_surat, '/', 1), '.', -1) AS UNSIGNED)) as max_num
+     FROM sk_guru 
+     WHERE tenant_id = ? AND no_surat LIKE ?`,
+    [tenantId, 'QR.%/' + hijriYear + '%']
+  );
+  const maxFromSk = skMax.max_num || 0;
+
+  const [seq] = await connection.query(
+    'SELECT last_number FROM sk_sequence WHERE tenant_id = ? AND hijri_year = ? FOR UPDATE',
+    [tenantId, hijriYear]
+  );
+  const seqNum = seq.length > 0 ? seq[0].last_number : 0;
+
+  const nextNum = Math.max(maxFromSk, seqNum) + 1;
+
+  if (seq.length > 0) {
+    await connection.query(
+      'UPDATE sk_sequence SET last_number = ? WHERE tenant_id = ? AND hijri_year = ?',
+      [nextNum, tenantId, hijriYear]
+    );
+  } else {
+    await connection.query(
+      'INSERT INTO sk_sequence (tenant_id, hijri_year, hijri_month, last_number) VALUES (?, ?, ?, ?)',
+      [tenantId, hijriYear, hijriMonths[0], nextNum]
+    );
+  }
+  return nextNum;
 }
 
 function getStatusKepegawaian(status) {
@@ -543,7 +589,7 @@ router.post('/generate', authenticateToken, async (req, res) => {
      
 const today = new Date();
       const hijriToday = gregorianToHijri(today);
-      const nomorUrut = await getNextSkNumber(teacher.tenant_id, hijriToday.year);
+const nomorUrut = await getActualNextSkNumber(teacher.tenant_id, hijriToday.year);
 
       const skData = await buildSkData(teacher, tentang_type, pt, tmt_custom, nomorUrut, hijriToday.year, no_surat, tgl_mulai_custom, tgl_selesai_custom, tentang, periodeCustomValue, undefined);
 
@@ -754,12 +800,20 @@ router.get('/file/:skId', authenticateToken, async (req, res) => {
       return res.status(404).json({ success: false, message: 'SK tidak ditemukan' });
     }
 
-    if (!isPrivilegedOperator(req.user)) {
-      const teacherId = req.user.guru_id || (req.user.assignments?.[0]?.teacher_id);
-      if (!teacherId || parseInt(sk.teacher_id, 10) !== parseInt(teacherId, 10)) {
-        return res.status(403).json({ success: false, message: 'Akses ditolak untuk SK ini' });
-      }
-    } else if (!verifyTenantAccess(req, sk.tenant_id)) {
+    // Get all teacher_ids user has access to via assignments
+    const userTeacherIds = getUserTeacherIds(req.user);
+
+    if (!userTeacherIds.length) {
+      return res.status(400).json({ success: false, message: 'Teacher ID tidak ditemukan di token' });
+    }
+
+    // Check if SK belongs to one of user's assigned teachers
+    if (!userTeacherIds.includes(sk.teacher_id)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak untuk SK ini' });
+    }
+
+    // Still validate tenant access for cross-tenant security
+    if (!verifyTenantAccess(req, sk.tenant_id)) {
       return res.status(403).json({ success: false, message: 'Akses ditolak untuk tenant ini' });
     }
 
@@ -887,7 +941,7 @@ router.post('/preview', authenticateToken, async (req, res) => {
 
 const today = new Date();
       const hijriToday = gregorianToHijri(today);
-      const nomorUrut = await peekNextSkNumber(teacher.tenant_id, hijriToday.year);
+      const nomorUrut = await peekActualNextSkNumber(teacher.tenant_id, hijriToday.year);
 
       const skData = await buildSkData(teacher, tentang_type, pt, tmt_custom, nomorUrut, hijriToday.year, no_surat, tgl_mulai_custom, tgl_selesai_custom, tentang, periodeCustomValue, undefined);
 
@@ -1046,7 +1100,7 @@ router.get('/bulk-candidates', authenticateOperator, async (req, res) => {
       });
       const tId = teacher.tenant_id || 'unknown';
       if (!(tId in tenantPeekBase)) {
-        tenantPeekBase[tId] = await peekNextSkNumber(tId, hijriToday.year);
+        tenantPeekBase[tId] = await peekActualNextSkNumber(tId, hijriToday.year);
         tenantSeqCounter[tId] = 0;
       }
       tenantSeqCounter[tId] += 1;
@@ -1243,80 +1297,128 @@ router.post('/bulk-generate', authenticateOperator, async (req, res) => {
 
     // Pass 2: Assign nomorUrut and insert for valid rows only
     const previewCounters = {};
-    for (const v of validRows) {
-      try {
-        let nomorUrut;
-        if (preview_only) {
+
+    if (preview_only) {
+      for (const v of validRows) {
+        try {
           const tId = v.teacher.tenant_id;
           if (!(tId in previewCounters)) {
-            previewCounters[tId] = await peekNextSkNumber(tId, hijriToday.year) - 1;
+            previewCounters[tId] = await peekActualNextSkNumber(tId, hijriToday.year) - 1;
           }
           previewCounters[tId] += 1;
-          nomorUrut = previewCounters[tId];
-        } else {
-          nomorUrut = await getNextSkNumber(v.teacher.tenant_id, hijriToday.year);
-        }
-        const skData = await buildSkData(v.teacher, v.tentang_type, v.pt, v.tmt_custom, nomorUrut, hijriToday.year, v.no_surat, v.tgl_mulai_custom, v.tgl_selesai_custom, v.tentang, v.periode_custom, v.jabatan);
-
-        if (preview_only) {
-          // Store proposed surat number in the valid row for response
+          const nomorUrut = previewCounters[tId];
+          const skData = await buildSkData(v.teacher, v.tentang_type, v.pt, v.tmt_custom, nomorUrut, hijriToday.year, v.no_surat, v.tgl_mulai_custom, v.tgl_selesai_custom, v.tentang, v.periode_custom, v.jabatan);
           v.proposed_no_surat = skData.noSurat;
-          continue;
+        } catch (err) {
+          console.error('[SK BULK PREVIEW] error:', err);
+          errors.push({ teacher_id: v.teacher_id, nama: v.teacher.nama, reason: err.message });
         }
+      }
+    } else {
+      // Group validRows by tenant_id to process each tenant in its own transaction
+      const rowsByTenant = new Map();
+      for (const v of validRows) {
+        const tId = v.teacher.tenant_id;
+        if (!rowsByTenant.has(tId)) rowsByTenant.set(tId, []);
+        rowsByTenant.get(tId).push(v);
+      }
 
-        const insertResult = await db.query(
-          'INSERT INTO sk_guru (teacher_id, tenant_id, tahun_ajaran_id, no_surat, tentang, ttl, tmt, pt, niy, unit, bh, bm, jabatan, status, tentag_type, tgl_mulai, tgl_selesai, manual_verified, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())',
-          [v.teacher_id, v.teacher.tenant_id, req.activeTahunAjaran?.id || null, skData.noSurat, skData.tentang, skData.ttl, skData.tmtFormatted, skData.ptFormatted, skData.niy, skData.unit, skData.bhFormatted, skData.bmFormatted, skData.jabatan, skData.status, v.tentang_type, skData.tglMulai, skData.tglSelesai, v.manualOverride ? 1 : 0]
-        );
-        const newSkId = insertResult && insertResult.insertId ? insertResult.insertId : null;
+      // Process each tenant group in a single transaction with lock held
+      for (const [tenantId, tenantRows] of rowsByTenant) {
+        let connection = null;
+        const tenantSkData = []; // Store skData for later PDF generation
 
-        if ((!v.teacher.nip || v.teacher.nip === '-' || v.teacher.nip === '') && skData.niy) {
-          await db.query('UPDATE teachers SET nip = ? WHERE id = ?', [skData.niy, v.teacher_id]);
-        }
-
-        let driveMeta = null;
         try {
-          const htmlData = {
-            noSurat: skData.noSurat,
-            tentang: skData.tentang,
-            nama: v.teacher.nama,
-            ttl: skData.ttl,
-            tmtFormatted: skData.tmtFormatted,
-            ptFormatted: skData.ptFormatted,
-            niy: skData.niy,
-            unit: skData.unit,
-            jabatan: skData.jabatan,
-            tglMulai: skData.tglMulai,
-            status: skData.status,
-            tglSelesai: skData.tglSelesai,
-            bhFormatted: skData.bhFormatted,
-            bmFormatted: skData.bmFormatted,
-            periode: skData.periode
-          };
-          const pdfBuf = await generateSkPdf(htmlData);
-          driveMeta = await archiveSkPdfToDrive(v.teacher, skData, pdfBuf, v.tentang_type);
-          if (driveMeta && newSkId) {
-            await db.query(
-              'UPDATE sk_guru SET drive_file_id = ?, drive_file_name = ?, drive_folder_id = ?, drive_web_view_link = ?, drive_uploaded_at = NOW() WHERE id = ?',
-              [driveMeta.drive_file_id, driveMeta.drive_file_name, driveMeta.drive_folder_id, driveMeta.drive_web_view_link, newSkId]
-            );
-          }
-        } catch (driveErr) {
-          console.error('[SK BULK] Drive archive error:', driveErr.message);
-        }
+          connection = await db.getConnection();
+          await connection.beginTransaction();
 
-        generated.push({
-          teacher_id: v.teacher_id,
-          nama: v.teacher.nama,
-          no_surat: skData.noSurat,
-          niy: skData.niy,
-          manual_verified: v.manualOverride,
-          drive_file_id: driveMeta ? driveMeta.drive_file_id : null,
-          drive_web_view_link: driveMeta ? driveMeta.drive_web_view_link : null
-        });
-      } catch (insertErr) {
-        console.error('[SK BULK] insert error:', insertErr);
-        errors.push({ teacher_id: v.teacher_id, nama: v.teacher.nama, reason: insertErr.message });
+          // Lock the sequence row for this tenant/year (held until commit)
+          // First call to getActualNextSkNumberWithLock acquires FOR UPDATE lock
+          for (const v of tenantRows) {
+            try {
+              const nomorUrut = await getActualNextSkNumberWithLock(tenantId, hijriToday.year, connection);
+              const skData = await buildSkData(v.teacher, v.tentang_type, v.pt, v.tmt_custom, nomorUrut, hijriToday.year, v.no_surat, v.tgl_mulai_custom, v.tgl_selesai_custom, v.tentang, v.periode_custom, v.jabatan);
+
+              const insertResult = await connection.query(
+                'INSERT INTO sk_guru (teacher_id, tenant_id, tahun_ajaran_id, no_surat, tentang, ttl, tmt, pt, niy, unit, bh, bm, jabatan, status, tentag_type, tgl_mulai, tgl_selesai, manual_verified, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())',
+                [v.teacher_id, v.teacher.tenant_id, req.activeTahunAjaran?.id || null, skData.noSurat, skData.tentang, skData.ttl, skData.tmtFormatted, skData.ptFormatted, skData.niy, skData.unit, skData.bhFormatted, skData.bmFormatted, skData.jabatan, skData.status, v.tentang_type, skData.tglMulai, skData.tglSelesai, v.manualOverride ? 1 : 0]
+              );
+              const newSkId = insertResult && insertResult.insertId ? insertResult.insertId : null;
+
+              if ((!v.teacher.nip || v.teacher.nip === '-' || v.teacher.nip === '') && skData.niy) {
+                await connection.query('UPDATE teachers SET nip = ? WHERE id = ?', [skData.niy, v.teacher_id]);
+              }
+
+              // Store for PDF/Drive after commit (no lock held)
+              tenantSkData.push({ v, skData, newSkId, teacher: v.teacher });
+            } catch (insertErr) {
+              console.error('[SK BULK] insert error:', insertErr);
+              errors.push({ teacher_id: v.teacher_id, nama: v.teacher.nama, reason: insertErr.message });
+            }
+          }
+
+          // Commit ALL inserts for this tenant at once (lock released)
+          await connection.commit();
+          connection.release();
+          connection = null;
+
+          // Now generate PDFs and upload to Drive (outside transaction, no lock)
+          for (const { v, skData, newSkId, teacher } of tenantSkData) {
+            let driveMeta = null;
+            try {
+              const htmlData = {
+                noSurat: skData.noSurat,
+                tentang: skData.tentang,
+                nama: teacher.nama,
+                ttl: skData.ttl,
+                tmtFormatted: skData.tmtFormatted,
+                ptFormatted: skData.ptFormatted,
+                niy: skData.niy,
+                unit: skData.unit,
+                jabatan: skData.jabatan,
+                tglMulai: skData.tglMulai,
+                status: skData.status,
+                tglSelesai: skData.tglSelesai,
+                bhFormatted: skData.bhFormatted,
+                bmFormatted: skData.bmFormatted,
+                periode: skData.periode
+              };
+              const pdfBuf = await generateSkPdf(htmlData);
+              driveMeta = await archiveSkPdfToDrive(teacher, skData, pdfBuf, v.tentang_type);
+              if (driveMeta && newSkId) {
+                // Quick separate query for drive meta update
+                await db.query(
+                  'UPDATE sk_guru SET drive_file_id = ?, drive_file_name = ?, drive_folder_id = ?, drive_web_view_link = ?, drive_uploaded_at = NOW() WHERE id = ?',
+                  [driveMeta.drive_file_id, driveMeta.drive_file_name, driveMeta.drive_folder_id, driveMeta.drive_web_view_link, newSkId]
+                );
+              }
+            } catch (driveErr) {
+              console.error('[SK BULK] Drive archive error:', driveErr.message);
+            }
+
+            generated.push({
+              teacher_id: v.teacher_id,
+              nama: teacher.nama,
+              no_surat: skData.noSurat,
+              niy: skData.niy,
+              manual_verified: v.manualOverride,
+              drive_file_id: driveMeta ? driveMeta.drive_file_id : null,
+              drive_web_view_link: driveMeta ? driveMeta.drive_web_view_link : null
+            });
+          }
+        } catch (tenantErr) {
+          console.error('[SK BULK] tenant batch error:', tenantErr);
+          if (connection) {
+            try { await connection.rollback(); } catch (_) {}
+            try { connection.release(); } catch (_) {}
+          }
+          // Mark all rows in this tenant as errors
+          for (const v of tenantRows) {
+            if (!errors.some(e => e.teacher_id === v.teacher_id)) {
+              errors.push({ teacher_id: v.teacher_id, nama: v.teacher.nama, reason: tenantErr.message });
+            }
+          }
+        }
       }
     }
 
@@ -1778,7 +1880,7 @@ router.post('/approve-request', authenticateOperator, async (req, res) => {
 
     const today = new Date();
     const hijriToday = gregorianToHijri(today);
-    const nomorUrut = await getNextSkNumber(teacher.tenant_id, hijriToday.year);
+    const nomorUrut = await getActualNextSkNumber(teacher.tenant_id, hijriToday.year);
     const pt = teacher.pt;
     const skData = await buildSkData(teacher, tentang_type, pt, null, nomorUrut, hijriToday.year, undefined, undefined, undefined, undefined, undefined, undefined);
 

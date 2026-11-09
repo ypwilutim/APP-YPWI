@@ -1,0 +1,17 @@
+RewriteEngine On
+
+# Pass Authorization header to Node.js (cPanel/Apache strips it by default)
+RewriteCond %{HTTP:Authorization} ^(.+)$
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+# Proxy to Node.js app
+RewriteRule ^(.*)$ http://localhost:2000/$1 [P,L]
+
+# CORS headers
+Header always set Access-Control-Allow-Origin "*"
+Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+Header always set Access-Control-Allow-Headers "Authorization, Content-Type"
+
+# Handle preflight
+RewriteCond %{REQUEST_METHOD} OPTIONS
+RewriteRule ^(.*)$ $1 [R=200,L]

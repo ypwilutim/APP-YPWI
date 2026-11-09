@@ -85,5 +85,6 @@ module.exports = {
   query,
   runMultiple,
   transaction,
+  getConnection,
   getPool: () => pool
 };

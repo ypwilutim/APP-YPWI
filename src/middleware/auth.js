@@ -345,7 +345,10 @@ function verifyTenantAccess(req, requestedTenantId) {
   if (userRole === 'guru' && assignments.length > 0) {
     const adminRoles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin', 'ketua', 'kepala', 'pimpinan', 'kepalasekolah', 'bendahara', 'sdm'];
     const allowedTenants = assignments
-      .filter(a => adminRoles.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '')))
+      .filter(a => {
+        const normalized = (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '');
+        return adminRoles.includes(normalized) || normalized.includes('sdm');
+      })
       .map(a => a.tenant_id);
 
     // User YPWILUTIM bendahara boleh akses semua tenant
@@ -437,6 +440,17 @@ function isPrivilegedOperator(user) {
   return false;
 }
 
+function getUserTeacherIds(user) {
+  const ids = new Set();
+  if (user?.guru_id) ids.add(user.guru_id);
+  if (user?.assignments) {
+    user.assignments.forEach(a => {
+      if (a.teacher_id) ids.add(a.teacher_id);
+    });
+  }
+  return Array.from(ids);
+}
+
 module.exports = {
   authenticateToken,
   authenticateAdmin,
@@ -448,6 +462,7 @@ module.exports = {
   verifyTenantAccess,
   isPrivilegedOperator,
   getAllowedTenants,
+  getUserTeacherIds,
   isDayMatch,
   calculateDistance,
   formatIslamicMessage,
