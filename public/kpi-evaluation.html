@@ -314,11 +314,17 @@
                     const userData = JSON.parse(rawUser);
                     const assignments = userData.assignments || [];
                     
+                    const normJab = (v) => (v || "").trim().toLowerCase().replace(/[\s_]+/g, "");
+                    const isLeader = assignments.some(function(a) {
+                        const jabatan = normJab(a.jabatan_di_unit);
+                        return jabatan === "kepalasekolah" || jabatan === "pimpinan" || jabatan === "ketua";
+                    });
+
                     isSdmPusat = assignments.some(function(a) {
                         const jabatan = (a.jabatan_di_unit || "").trim().toLowerCase();
                         const tenant = (a.tenant_id || "").trim().toUpperCase();
                         return jabatan.includes("sdm pusat") && tenant === "YPWILUTIM";
-                    });
+                    }) || isLeader;
                 }
             } catch(e) {
                 console.error("Gagal membaca data pengguna:", e);

@@ -1565,7 +1565,8 @@ function showTab(tabName) {
         whatsapp: 'Pesan WhatsApp',
         email: 'Log Email',
         'qr-generator': 'QR Scanner & Generator',
-        'approval-reset': 'Approval & Reset'
+        'approval-reset': 'Approval & Reset',
+        'sk-guru': 'SK Guru'
     };
     setEl('pageTitle', titles[tabName]);
 
@@ -1584,6 +1585,7 @@ function showTab(tabName) {
         showSettingsTab('locations');
     }
     else if (tabName === 'approval-reset') initApprovalResetTab();
+    else if (tabName === 'sk-guru') loadSKList();
 }
 
 function showAddTeacherModal() {
@@ -4598,62 +4600,31 @@ window.submitSkBulkGenerate = async function () {
     });
     if (!confirmResult.isConfirmed) return;
 
-    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Generating...'; }
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Starting...'; }
+
+    // Generate unique jobId for this bulk generate
+    const jobId = 'sk-bulk-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
 
     try {
         const res = await fetch('/api/bulk-generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...skGuruAuthHdr() },
-            body: JSON.stringify(payload)
+            body: JSON.stringify({ ...payload, jobId })
         });
         const data = await res.json();
-        if (data.success) {
-            const d = data.data || {};
-            const gen = d.generated || [];
-            const skipped = d.skipped || [];
-            const errors = d.errors || [];
-            let html = '<p class="text-sm mb-2"><b>' + gen.length + ' SK berhasil dibuat</b></p>';
-            if (gen.length > 0) {
-                html += '<div class="max-h-40 overflow-y-auto text-left text-xs mb-2">' + gen.map(g => '<div>' + (g.nama || '-') + (g.manual_verified ? ' <span class="text-amber-600 font-medium">[verifikasi manual]</span>' : '') + ' → ' + (g.no_surat || '-') + '</div>').join('') + '</div>';
-            }
-            if (skipped.length > 0) {
-                html += '<p class="text-sm mb-1 text-yellow-600">' + skipped.length + ' dilewati:</p><div class="max-h-24 overflow-y-auto text-left text-xs mb-2">' + skipped.map(s => '<div>' + (s.nama || '-') + ': ' + (s.reason || '') + '</div>').join('') + '</div>';
-            }
-            if (errors.length > 0) {
-                html += '<p class="text-sm mb-1 text-red-600">' + errors.length + ' gagal:</p><div class="max-h-24 overflow-y-auto text-left text-xs">' + errors.map(e => '<div>' + (e.nama || '-') + ': ' + (e.reason || '') + '</div>').join('') + '</div>';
-            }
-
-            // Show result with ZIP download button if there are generated SKs
-            const genIds = gen.map(g => g.teacher_id); // We need SK IDs, but we only have teacher_ids
-            // We'll fetch the SK IDs from the list after generation
-            const result = await Swal.fire({
-                title: 'Bulk Generate Selesai',
-                html: html,
-                icon: gen.length > 0 ? 'success' : 'warning',
-                confirmButtonColor: '#3b82f6',
-                showCancelButton: gen.length > 0,
-                cancelButtonText: gen.length > 0 ? 'Download ZIP' : undefined,
-                cancelButtonColor: '#16a34a',
-                confirmButtonText: 'Tutup'
-            });
-
-            if (result.dismiss === Swal.DismissReason.cancel && gen.length > 0) {
-                // User clicked "Download ZIP" - fetch SK IDs and download
-                await downloadSkBulkZip(gen.map(g => g.teacher_id));
-            }
-
-            hideSkBulkModal();
-            if (typeof loadSkGuruList === 'function') loadSkGuruList();
-        } else {
-            showToast(data.message || 'Gagal bulk generate', 'error');
+        
+        if (!data.success) {
+            throw new Error(data.message || 'Gagal memulai generate');
         }
+
+        // Show progress modal and start polling
+        showBulkGenerateProgress(jobId, data.data?.total || selected.length, data.jobId);
+
     } catch (e) {
-        console.error('[SK BULK GENERATE]', e);
-        showToast('Terjadi kesalahan saat bulk generate', 'error');
-    } finally {
-        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-file-export mr-2"></i>Generate SK Terpilih (0)'; }
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-file-export mr-2"></i>Generate SK Terpilih (' + selected.length + ')'; }
+        showToast('Gagal memulai generate: ' + e.message, 'error');
     }
-};
+}
 
 window.downloadSkBulkZip = async function (teacherIds) {
     if (!Array.isArray(teacherIds) || teacherIds.length === 0) {
@@ -7379,4 +7350,291 @@ async function approveSkRequest(requestId) {
   } catch (err) {
     Swal.fire('Error', err.message, 'error');
   }
+}
+
+// ==================== BULK GENERATE PROGRESS ====================
+function showBulkGenerateProgress(jobId, total, serverJobId) {
+  const actualJobId = serverJobId || jobId;
+  let pollInterval = null;
+  let startTime = Date.now();
+
+  Swal.fire({
+    title: 'Generate SK Guru',
+    html: `
+      <div class="text-left space-y-4">
+        <div>
+          <div class="flex justify-between text-sm mb-1">
+            <span class="text-gray-600">Progress</span>
+            <span id="progressPercent" class="font-bold text-purple-600">0%</span>
+          </div>
+          <div class="w-full bg-gray-200 rounded-full h-3">
+            <div id="progressBar" class="bg-purple-600 h-3 rounded-full transition-all duration-300" style="width: 0%"></div>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-2 text-sm">
+          <div>
+            <span class="text-gray-500">Diproses:</span>
+            <span id="progressProcessed" class="font-bold text-gray-900">0</span> / <span id="progressTotal">${total}</span>
+          </div>
+          <div>
+            <span class="text-gray-500">Berhasil:</span>
+            <span id="progressGenerated" class="font-bold text-green-600">0</span>
+          </div>
+          <div>
+            <span class="text-gray-500">Dilewati:</span>
+            <span id="progressSkipped" class="font-bold text-yellow-600">0</span>
+          </div>
+          <div>
+            <span class="text-gray-500">Gagal:</span>
+            <span id="progressErrors" class="font-bold text-red-600">0</span>
+          </div>
+        </div>
+        <div class="text-sm text-gray-500">
+          Sedang memproses: <span id="progressCurrent" class="font-medium text-gray-900">-</span>
+        </div>
+        <div class="text-xs text-gray-400">
+          Waktu: <span id="progressElapsed">0s</span>
+        </div>
+      </div>
+    `,
+    showCancelButton: false,
+    showConfirmButton: false,
+    allowOutsideClick: false,
+    allowEscapeKey: false,
+    didOpen: () => {
+      const poll = async () => {
+        try {
+          const res = await fetch('/api/sk-guru/bulk-progress/' + actualJobId, {
+            headers: skGuruAuthHdr()
+          });
+          const data = await res.json();
+          
+          if (!data.success) {
+            console.warn('Progress fetch failed:', data.message);
+            return;
+          }
+          
+          const p = data.data;
+          
+          // Update UI
+          document.getElementById('progressPercent').textContent = p.percentage + '%';
+          document.getElementById('progressBar').style.width = p.percentage + '%';
+          document.getElementById('progressProcessed').textContent = p.processed;
+          document.getElementById('progressGenerated').textContent = p.generated?.length || 0;
+          document.getElementById('progressSkipped').textContent = p.skipped?.length || 0;
+          document.getElementById('progressErrors').textContent = p.errors?.length || 0;
+          document.getElementById('progressCurrent').textContent = p.current || '-';
+          
+          const elapsed = Math.round((Date.now() - startTime) / 1000);
+          document.getElementById('progressElapsed').textContent = elapsed + 's';
+          
+          if (p.status === 'completed' || p.status === 'failed') {
+            clearInterval(pollInterval);
+            
+            setTimeout(() => {
+              Swal.close();
+              showBulkGenerateResult(p);
+            }, 500);
+          }
+        } catch (e) {
+          console.error('Progress poll error:', e);
+        }
+      };
+      
+      pollInterval = setInterval(poll, 1500);
+      poll(); // Initial poll
+    },
+    willClose: () => {
+      if (pollInterval) clearInterval(pollInterval);
+    }
+  });
+}
+
+function showBulkGenerateResult(progress) {
+  const gen = progress.generated || [];
+  const skipped = progress.skipped || [];
+  const errors = progress.errors || [];
+  
+  let html = '<p class="text-sm mb-2"><b>' + gen.length + ' SK berhasil dibuat</b></p>';
+  if (gen.length > 0) {
+    html += '<div class="max-h-40 overflow-y-auto text-left text-xs mb-2">' + gen.map(g => '<div>' + (g.nama || '-') + (g.manual_verified ? ' <span class="text-amber-600 font-medium">[verifikasi manual]</span>' : '') + ' → ' + (g.no_surat || '-') + '</div>').join('') + '</div>';
+  }
+  if (skipped.length > 0) {
+    html += '<p class="text-sm mb-1 text-yellow-600">' + skipped.length + ' dilewati:</p><div class="max-h-24 overflow-y-auto text-left text-xs mb-2">' + skipped.map(s => '<div>' + (s.nama || '-') + ': ' + (s.reason || '') + '</div>').join('') + '</div>';
+  }
+  if (errors.length > 0) {
+    html += '<p class="text-sm mb-1 text-red-600">' + errors.length + ' gagal:</p><div class="max-h-24 overflow-y-auto text-left text-xs">' + errors.map(e => '<div>' + (e.nama || '-') + ': ' + (e.reason || '') + '</div>').join('') + '</div>';
+  }
+
+  Swal.fire({
+    title: progress.status === 'completed' ? 'Generate Selesai' : 'Generate Gagal',
+    html: html,
+    icon: progress.status === 'completed' ? 'success' : 'error',
+    confirmButtonText: 'OK',
+    confirmButtonColor: '#16a34a'
+  }).then(() => {
+    // Refresh the SK list
+    loadSKList();
+    // Clear selection
+    document.querySelectorAll('.sk-list-row-checkbox:checked').forEach(cb => cb.checked = false);
+    updateSkBulkActions();
+  });
+}
+async function loadSKList() {
+  const tableEl = document.getElementById('skGuruTable');
+  if (!tableEl) return;
+
+  // Get current filter values
+  const search = document.getElementById('skSearchInput')?.value || '';
+  const dateFrom = document.getElementById('skFilterDateFrom')?.value || '';
+  const dateTo = document.getElementById('skFilterDateTo')?.value || '';
+  const page = window.skCurrentPage || 1;
+  const limit = window.skPageLimit || 25;
+  const sortBy = window.skSortBy || 'created_at';
+  const sortOrder = window.skSortOrder || 'DESC';
+
+  tableEl.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-500"><i class="fas fa-spinner fa-spin text-xl mb-2"></i><p>Memuat data...</p></td></tr>';
+
+  try {
+    const params = new URLSearchParams({
+      tenant_id: window.tenantId || '',
+      page: page.toString(),
+      limit: limit.toString(),
+      sort_by: sortBy,
+      sort_order: sortOrder
+    });
+    if (search) params.append('q', search);
+    if (dateFrom) params.append('date_from', dateFrom);
+    if (dateTo) params.append('date_to', dateTo);
+
+    const res = await fetch('/api/sk-guru/list?' + params.toString(), {
+      headers: skGuruAuthHdr()
+    });
+    const data = await res.json();
+
+    if (!data.success) {
+      tableEl.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-red-500">Gagal memuat: ' + (data.message || 'Unknown error') + '</td></tr>';
+      return;
+    }
+
+    if (!data.data || data.data.length === 0) {
+      tableEl.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">Belum ada SK Guru</td></tr>';
+      renderSKPagination(null);
+      return;
+    }
+
+    tableEl.innerHTML = data.data.map(sk => `
+      <tr class="hover:bg-gray-50">
+        <td class="px-4 py-3 text-sm font-medium text-gray-900">${sk.no_surat || '-'}</td>
+        <td class="px-4 py-3 text-sm text-gray-900">${sk.teacher_name || '-'}</td>
+        <td class="px-4 py-3 text-sm text-gray-600 max-w-xs truncate block">${sk.tentang || '-'}</td>
+        <td class="px-4 py-3 text-sm text-gray-600 font-mono text-xs">${sk.niy || '-'}</td>
+        <td class="px-4 py-3 text-sm text-gray-600">${sk.tmt || '-'}</td>
+        <td class="px-4 py-3 text-sm text-gray-600">${sk.created_at ? new Date(sk.created_at).toLocaleDateString('id-ID') : '-'}</td>
+        <td class="px-4 py-3 text-sm">
+          <button onclick="viewSK(${sk.id})" class="px-3 py-1 bg-purple-600 text-white rounded text-xs hover:bg-purple-700"><i class="fas fa-eye mr-1"></i>Lihat</button>
+          <button onclick="downloadSK(${sk.id})" class="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 ml-1"><i class="fas fa-download mr-1"></i>PDF</button>
+        </td>
+      </tr>
+    `).join('');
+
+    renderSKPagination(data.pagination);
+  } catch (err) {
+    console.error('Load SK list error:', err);
+    tableEl.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-red-500">Gagal memuat data</td></tr>';
+  }
+}
+
+function renderSKPagination(pagination) {
+  const container = document.getElementById('skPagination');
+  if (!container) return;
+
+  if (!pagination || pagination.totalPages <= 1) {
+    container.innerHTML = '';
+    return;
+  }
+
+  const { page, totalPages, total, limit } = pagination;
+  let html = '<div class="flex items-center justify-between">';
+  
+  // Info
+  const start = (page - 1) * limit + 1;
+  const end = Math.min(page * limit, total);
+  html += `<div class="text-sm text-gray-700">Menampilkan ${start}-${end} dari ${total} data</div>`;
+  
+  // Pagination controls
+  html += '<div class="flex items-center space-x-2">';
+  html += `<select id="skPageLimitSelect" onchange="changeSKPageLimit(this.value)" class="px-2 py-1 border border-gray-300 rounded text-sm">`;
+  [25, 50, 100].forEach(l => {
+    html += `<option value="${l}" ${l === limit ? 'selected' : ''}>${l} per halaman</option>`;
+  });
+  html += '</select>';
+  
+  html += `<button id="skPrevPageBtn" onclick="changeSKPage(${page - 1})" class="px-3 py-1.5 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed" ${page <= 1 ? 'disabled' : ''}><i class="fas fa-chevron-left mr-1"></i>Sebelumnya</button>`;
+  
+  // Page numbers
+  let startPage = Math.max(1, page - 2);
+  let endPage = Math.min(totalPages, page + 2);
+  if (endPage - startPage < 4) {
+    if (startPage === 1) endPage = Math.min(5, totalPages);
+    else if (endPage === totalPages) startPage = Math.max(1, totalPages - 4);
+  }
+  
+  html += '<div class="flex items-center space-x-1">';
+  for (let p = startPage; p <= endPage; p++) {
+    html += `<button onclick="changeSKPage(${p})" class="w-8 h-8 rounded-md text-sm font-medium ${p === page ? 'bg-purple-600 text-white' : 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-50'}">${p}</button>`;
+  }
+  html += '</div>';
+  
+  html += `<button id="skNextPageBtn" onclick="changeSKPage(${page + 1})" class="px-3 py-1.5 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed" ${page >= totalPages ? 'disabled' : ''}>Selanjutnya<i class="fas fa-chevron-right ml-1"></i></button>`;
+  
+  html += '</div></div>';
+  container.innerHTML = html;
+}
+
+window.changeSKPage = function(page) {
+  window.skCurrentPage = page;
+  loadSKList();
+};
+
+window.changeSKPageLimit = function(limit) {
+  window.skPageLimit = parseInt(limit);
+  window.skCurrentPage = 1;
+  loadSKList();
+};
+
+window.changeSKSort = function(sortBy) {
+  if (window.skSortBy === sortBy) {
+    window.skSortOrder = window.skSortOrder === 'ASC' ? 'DESC' : 'ASC';
+  } else {
+    window.skSortBy = sortBy;
+    window.skSortOrder = 'DESC';
+  }
+  loadSKList();
+};
+
+// Search debounce
+let skSearchTimeout = null;
+window.handleSKSearch = function(event) {
+  clearTimeout(skSearchTimeout);
+  skSearchTimeout = setTimeout(() => {
+    window.skCurrentPage = 1;
+    loadSKList();
+  }, 300);
+};
+
+window.clearSKFilters = function() {
+  document.getElementById('skSearchInput').value = '';
+  document.getElementById('skFilterDateFrom').value = '';
+  document.getElementById('skFilterDateTo').value = '';
+  window.skCurrentPage = 1;
+  loadSKList();
+};
+
+function viewSK(skId) {
+  window.open('/api/sk-guru/file/' + skId + '?view=1', '_blank');
+}
+
+function downloadSK(skId) {
+  window.location.href = '/api/sk-guru/file/' + skId + '?format=pdf';
 }

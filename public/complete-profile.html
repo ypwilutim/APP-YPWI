@@ -938,6 +938,10 @@ if (__repTarget) __repTarget.reportValidity();
     }
 
     async function uploadDocument(docType, file) {
+      if (file.size > 5 * 1024 * 1024) {
+        Swal.fire('Error', 'Ukuran file melebihi 5MB. Perkecil file terlebih dahulu.', 'error');
+        return false;
+      }
       try {
         const fd = new FormData();
         fd.append('file', file);
@@ -946,7 +950,12 @@ if (__repTarget) __repTarget.reportValidity();
           method: 'POST',
           body: fd
         });
-        const data = await res.json();
+        let data = {};
+        try {
+          data = await res.json();
+        } catch (parseErr) {
+          data = { success: false, message: 'Server mengembalikan respons tidak valid (HTTP ' + res.status + ').' };
+        }
         if (data.success) {
           const linkInput = document.getElementById('link_' + docType);
           if (linkInput) linkInput.value = data.url;

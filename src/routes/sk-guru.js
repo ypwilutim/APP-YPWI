@@ -15,6 +15,55 @@ const {
 const router = express.Router();
 
 
+// Progress tracking for bulk generate
+const bulkProgress = new Map();
+const MAX_PROGRESS_ENTRIES = 100;
+const PROGRESS_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+function createProgressJob(total) {
+  const jobId = 'sk-bulk-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+  const progress = {
+    jobId,
+    total,
+    processed: 0,
+    percentage: 0,
+    current: '',
+    status: 'processing',
+    startedAt: Date.now(),
+    completedAt: null,
+    generated: [],
+    skipped: [],
+    errors: []
+  };
+  
+  // Cleanup old entries if over limit
+  if (bulkProgress.size >= MAX_PROGRESS_ENTRIES) {
+    const oldestKey = bulkProgress.keys().next().value;
+    bulkProgress.delete(oldestKey);
+  }
+  
+  bulkProgress.set(jobId, progress);
+  
+  // Auto-cleanup after TTL
+  setTimeout(() => bulkProgress.delete(jobId), PROGRESS_TTL_MS);
+  
+  return jobId;
+}
+
+function updateProgress(jobId, updates) {
+  const progress = bulkProgress.get(jobId);
+  if (!progress) return;
+  Object.assign(progress, updates);
+  if (progress.total > 0) {
+    progress.percentage = Math.round((progress.processed / progress.total) * 100);
+  }
+}
+
+function getProgress(jobId) {
+  return bulkProgress.get(jobId) || null;
+}
+
+
 const hijriMonths = ['Muharam', 'Safar', 'Rabiul Awal', 'Rabiul Akhir', 'Jumadil Awal', 'Jumadil Akhir', 'Rajab', 'Syaban', 'Ramadhan', 'Syawal', 'Dzul Qaidah', 'Dzul Hijjah'];
 
 const idnMonths = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
@@ -127,8 +176,9 @@ router.get('/teachers/:id/data', authenticateOperator, async (req, res) => {
      const hijriMonthIndex = hijriMonths.indexOf(currentHijri.month);
      const romanMonth = hijriMonthIndex >= 0 ? romanize(hijriMonthIndex + 1) : 'VII';
      
-     const nextSkNumber = await peekActualNextSkNumber(teacher.tenant_id, currentHijri.year);
-     const noSurat = 'QR.' + String(nextSkNumber).padStart(3, '0') + '/02/YPWI-LT/' + romanMonth + '/' + currentHijri.year;
+     const nextSkNumber = await peekActualNextSkNumber(currentHijri.year);
+     const tenantCode = teacher.tenant_pk || 'UNKNOWN';
+      const noSurat = 'QR.' + String(nextSkNumber).padStart(3, '0') + '/' + tenantCode + '/YPWI-LT/' + romanMonth + '/' + currentHijri.year;
 
      let tmtFormatted = '';
      const tmtDate = parseDate(teacher.tmt);
@@ -179,83 +229,84 @@ router.get('/teachers/:id/data', authenticateOperator, async (req, res) => {
    }
  });
 
-async function peekActualNextSkNumber(tenantId, hijriYear) {
-  const [skMax] = await db.query(
+async function peekActualNextSkNumber(hijriYear) {
+  const skMax = await db.query(
     `SELECT MAX(CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(no_surat, '/', 1), '.', -1) AS UNSIGNED)) as max_num
      FROM sk_guru 
-     WHERE tenant_id = ? AND no_surat LIKE ?`,
-    [tenantId, 'QR.%/' + hijriYear + '%']
+     WHERE no_surat LIKE ?`,
+    ['QR.%/' + hijriYear + '%']
   );
-  const maxFromSk = skMax.max_num || 0;
+  const maxFromSk = (skMax && skMax[0] && skMax[0].max_num) || 0;
 
-  const [seq] = await db.query(
-    'SELECT last_number FROM sk_sequence WHERE tenant_id = ? AND hijri_year = ?',
-    [tenantId, hijriYear]
+  const seq = await db.query(
+    'SELECT last_number FROM sk_global_sequence WHERE hijri_year = ?',
+    [hijriYear]
   );
-  const seqNum = seq.length > 0 ? seq[0].last_number : 0;
+  const seqNum = (seq && seq.length > 0 && seq[0].last_number) ? seq[0].last_number : 0;
 
   return Math.max(maxFromSk, seqNum) + 1;
 }
 
-async function getActualNextSkNumber(tenantId, hijriYear) {
-  const [skMax] = await db.query(
+async function getActualNextSkNumber(hijriYear) {
+  const skMax = await db.query(
     `SELECT MAX(CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(no_surat, '/', 1), '.', -1) AS UNSIGNED)) as max_num
      FROM sk_guru 
-     WHERE tenant_id = ? AND no_surat LIKE ?`,
-    [tenantId, 'QR.%/' + hijriYear + '%']
+     WHERE no_surat LIKE ?`,
+    ['QR.%/' + hijriYear + '%']
   );
-  const maxFromSk = skMax.max_num || 0;
+  const maxFromSk = (skMax && skMax[0] && skMax[0].max_num) || 0;
 
-  const [seq] = await db.query(
-    'SELECT last_number FROM sk_sequence WHERE tenant_id = ? AND hijri_year = ?',
-    [tenantId, hijriYear]
+  const seq = await db.query(
+    'SELECT last_number FROM sk_global_sequence WHERE hijri_year = ?',
+    [hijriYear]
   );
-  const seqNum = seq.length > 0 ? seq[0].last_number : 0;
+  const seqNum = (seq && seq.length > 0 && seq[0].last_number) ? seq[0].last_number : 0;
 
   const nextNum = Math.max(maxFromSk, seqNum) + 1;
 
-  if (seq.length > 0) {
+  if (seq && seq.length > 0) {
     await db.query(
-      'UPDATE sk_sequence SET last_number = ? WHERE tenant_id = ? AND hijri_year = ?',
-      [nextNum, tenantId, hijriYear]
+      'UPDATE sk_global_sequence SET last_number = ? WHERE hijri_year = ?',
+      [nextNum, hijriYear]
     );
   } else {
     await db.query(
-      'INSERT INTO sk_sequence (tenant_id, hijri_year, hijri_month, last_number) VALUES (?, ?, ?, ?)',
-      [tenantId, hijriYear, hijriMonths[0], nextNum]
+      'INSERT INTO sk_global_sequence (hijri_year, last_number) VALUES (?, ?)',
+      [hijriYear, nextNum]
     );
   }
   return nextNum;
 }
 
-async function getActualNextSkNumberWithLock(tenantId, hijriYear, connection) {
-  const [skMax] = await connection.query(
+async function getActualNextSkNumberWithLock(hijriYear, connection) {
+  const [skRows] = await connection.query(
     `SELECT MAX(CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(no_surat, '/', 1), '.', -1) AS UNSIGNED)) as max_num
-     FROM sk_guru 
-     WHERE tenant_id = ? AND no_surat LIKE ?`,
-    [tenantId, 'QR.%/' + hijriYear + '%']
+     FROM sk_guru
+     WHERE no_surat LIKE ?`,
+    ['QR.%/' + hijriYear + '%']
   );
-  const maxFromSk = skMax.max_num || 0;
+  const maxFromSk = (skRows && skRows[0] && skRows[0].max_num) || 0;
 
-  const [seq] = await connection.query(
-    'SELECT last_number FROM sk_sequence WHERE tenant_id = ? AND hijri_year = ? FOR UPDATE',
-    [tenantId, hijriYear]
+  const [seqRows] = await connection.query(
+    'SELECT last_number FROM sk_global_sequence WHERE hijri_year = ? FOR UPDATE',
+    [hijriYear]
   );
-  const seqNum = seq.length > 0 ? seq[0].last_number : 0;
+  const seqNum = (seqRows && seqRows.length > 0 && seqRows[0].last_number) ? seqRows[0].last_number : 0;
 
   const nextNum = Math.max(maxFromSk, seqNum) + 1;
 
-  if (seq.length > 0) {
+  if (seqRows && seqRows.length > 0) {
     await connection.query(
-      'UPDATE sk_sequence SET last_number = ? WHERE tenant_id = ? AND hijri_year = ?',
-      [nextNum, tenantId, hijriYear]
+      'UPDATE sk_global_sequence SET last_number = ? WHERE hijri_year = ?',
+      [nextNum, hijriYear]
     );
   } else {
     await connection.query(
-      'INSERT INTO sk_sequence (tenant_id, hijri_year, hijri_month, last_number) VALUES (?, ?, ?, ?)',
-      [tenantId, hijriYear, hijriMonths[0], nextNum]
+      'INSERT INTO sk_global_sequence (hijri_year, last_number) VALUES (?, ?)',
+      [hijriYear, nextNum]
     );
   }
+
   return nextNum;
 }
 
@@ -284,7 +335,8 @@ function getSkStatusLabel(tentangType) {
     'kontrak_pegawai': 'Pegawai Kontrak',
     'tetap_guru': 'Guru Tetap',
     'tetap_pegawai': 'Pegawai Tetap',
-    'pimpinan': 'Pimpinan'
+    'pimpinan': 'Pimpinan',
+    'jabatan': 'Jabatan'
   };
   return map[tentangType] || 'Guru';
 }
@@ -424,7 +476,8 @@ async function buildSkData(teacher, tentang_type, pt, tmt_custom, nomorUrut, hij
    const hijriToday = gregorianToHijri(today);
 
    const romanMonth = romanize(hijriMonths.indexOf(hijriToday.month) + 1);
-    const noSurat = noSuratCustom || ('QR.' + String(nomorUrut).padStart(3, '0') + '/02/YPWI-LT/' + romanMonth + '/' + hijriToday.year);
+    const tenantCode = teacher.tenant_pk || 'UNKNOWN';
+    const noSurat = noSuratCustom || ('QR.' + String(nomorUrut).padStart(3, '0') + '/' + tenantCode + '/YPWI-LT/' + romanMonth + '/' + hijriToday.year);
     console.log('[SK GURU NO_SURAT]', { noSuratCustom, nomorUrut, noSurat });
 
     const tentag_map = {
@@ -447,15 +500,14 @@ async function buildSkData(teacher, tentang_type, pt, tmt_custom, nomorUrut, hij
 
    const tmtFormatted = tmtDate ? tmtDate.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' }).toUpperCase() : '';
 
-   const birthDay = String(birthDate.getDate()).padStart(2, '0');
-   const birthMonth = String(birthDate.getMonth() + 1).padStart(2, '0');
-   const birthYear = String(birthDate.getFullYear());
- const tmtMonth = tmtDate ? String(tmtDate.getMonth() + 1).padStart(2, '0') : '01';
-   const tmtYear = tmtDate ? tmtDate.getFullYear() : today.getFullYear();
-   const tmtYear2digit = tmtDate ? String(tmtDate.getFullYear()).slice(-2) : String(today.getFullYear()).slice(-2);
-   const tenantId2digit = teacher.tenant_pk ? String(teacher.tenant_pk).padStart(2, '0') : (teacher.tenant_id || '').slice(-2);
-   const seq = String(nomorUrut).padStart(3, '0');
-   const niy = (teacher.nip && teacher.nip !== '-' && teacher.nip !== '') ? teacher.nip : (birthDay + birthMonth + birthYear + tmtMonth + tmtYear2digit + tenantId2digit + seq);
+const birthDay = String(birthDate.getDate()).padStart(2, '0');
+    const birthMonth = String(birthDate.getMonth() + 1).padStart(2, '0');
+    const birthYear = String(birthDate.getFullYear());
+    const tmtMonth = tmtDate ? String(tmtDate.getMonth() + 1).padStart(2, '0') : '01';
+    const tmtYear = tmtDate ? String(tmtDate.getFullYear()) : String(today.getFullYear());
+    const tenantId2digit = teacher.tenant_pk ? String(teacher.tenant_pk).padStart(2, '0') : (teacher.tenant_id || '').slice(-2);
+    const seq = String(nomorUrut).padStart(3, '0');
+    const niy = (teacher.nip && teacher.nip !== '-' && teacher.nip !== '') ? teacher.nip : (birthDay + birthMonth + birthYear + tmtMonth + tmtYear + tenantId2digit + seq);
 
     const ptFormatted = pt || teacher.pt || 'S1/PEND. SOSIOLOGI/UNM/2019';
 
@@ -504,21 +556,44 @@ async function buildSkData(teacher, tentang_type, pt, tmt_custom, nomorUrut, hij
         }
         tglMulai = '1 ' + idnMonths[startMonthIdx] + ' ' + startYear + ' M';
       }
-    } else {
-    const leaderSource = allJabatan.toLowerCase();
-    const isLeader = ['pimpinan', 'kepala', 'ketua'].some(k => leaderSource.includes(k));
-      const periodYears = isLeader ? 4 : 1;
-      const tglSelesaiCalculated = lastDayDec + ' ' + idnMonths[decMonthIdx] + ' ' + (currYear + periodYears - 1) + ' M';
-      let tglMulaiCalculated;
-      if (currMonthIdx === 0) {
-        tglMulaiCalculated = '1 ' + idnMonths[0] + ' ' + currYear + ' M';
-      } else {
-        tglMulaiCalculated = today.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) + ' M';
+} else {
+      // === NEW DEFAULT LOGIC BASED ON TMT ===
+      const tmt = tmtDate; // already parsed from teacher.tmt or tmt_custom
+      const today = new Date();
+      
+      // Calculate full years of service (TMT to today)
+      let yearsOfService = today.getFullYear() - tmt.getFullYear();
+      const monthDiff = today.getMonth() - tmt.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < tmt.getDate())) {
+        yearsOfService--;
       }
       
-     tglMulai = tglMulaiCalculated;
-       tglSelesai = tglSelesaiCalculated;
-     }
+      // Check if leader
+      const leaderSource = allJabatan.toLowerCase();
+      const isLeader = ['pimpinan', 'kepala', 'ketua'].some(k => leaderSource.includes(k));
+      
+      let tglMulaiCalc, tglSelesaiCalc;
+      
+      if (isLeader) {
+        // Leader: 4 years from Jan 1 current year
+        tglMulaiCalc = '1 Januari ' + today.getFullYear() + ' M';
+        const lastDayDec = new Date(today.getFullYear() + 3, 11, 31).getDate();
+        tglSelesaiCalc = lastDayDec + ' Desember ' + (today.getFullYear() + 3) + ' M';
+      } else if (yearsOfService < 1) {
+        // Less than 1 year: start from TMT, end Dec 31 of TMT year
+        tglMulaiCalc = tmt.getDate() + ' ' + idnMonths[tmt.getMonth()] + ' ' + tmt.getFullYear() + ' M';
+        const lastDayDec = new Date(tmt.getFullYear(), 11, 31).getDate();
+        tglSelesaiCalc = lastDayDec + ' Desember ' + tmt.getFullYear() + ' M';
+      } else {
+        // 1+ years: Jan 1 - Dec 31 current year
+        tglMulaiCalc = '1 Januari ' + today.getFullYear() + ' M';
+        const lastDayDec = new Date(today.getFullYear(), 11, 31).getDate();
+        tglSelesaiCalc = lastDayDec + ' Desember ' + today.getFullYear() + ' M';
+      }
+      
+      tglMulai = tglMulaiCalc;
+      tglSelesai = tglSelesaiCalc;
+    }
 
     const periode = (periodeCustom && String(periodeCustom).trim()) ? String(periodeCustom).trim() : computePeriode(tglMulai, tglSelesai);
 
@@ -756,6 +831,18 @@ router.get('/last-number', authenticateOperator, async (req, res) => {
 router.get('/list', authenticateOperator, async (req, res) => {
   try {
     let tenantId = req.query.tenant_id || null;
+    
+    // Pagination params
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 25));
+    const offset = (page - 1) * limit;
+    
+    // Search & filter params
+    const search = req.query.q ? req.query.q.trim() : '';
+    const dateFrom = req.query.date_from || '';
+    const dateTo = req.query.date_to || '';
+    const sortBy = req.query.sort_by || 'created_at';
+    const sortOrder = (req.query.sort_order || 'DESC').toUpperCase();
 
     if (req.user.role === 'guru' && !tenantId) {
       const adminAssignments = (req.user.assignments || []).filter(function(a) {
@@ -767,22 +854,76 @@ router.get('/list', authenticateOperator, async (req, res) => {
       }
     }
 
-    let skList;
+    // Build WHERE clause
+    const whereConditions = [];
+    const queryParams = [];
+
     if (tenantId) {
       if (!verifyTenantAccess(req, tenantId)) {
         return res.status(403).json({ success: false, message: 'Akses ditolak untuk tenant ini' });
       }
-      skList = await db.query(
-        'SELECT sg.*, t.nama as teacher_name FROM sk_guru sg JOIN teachers t ON sg.teacher_id = t.id WHERE sg.tenant_id = ? ORDER BY sg.created_at DESC LIMIT 100',
-        [tenantId]
-      );
-    } else {
-      skList = await db.query(
-        'SELECT sg.*, t.nama as teacher_name, tn.nama_sekolah as tenant_name FROM sk_guru sg JOIN teachers t ON sg.teacher_id = t.id JOIN tenants tn ON sg.tenant_id = tn.tenant_id ORDER BY sg.created_at DESC LIMIT 100'
-      );
+      whereConditions.push('sg.tenant_id = ?');
+      queryParams.push(tenantId);
     }
 
-    res.json({ success: true, data: skList });
+    if (search) {
+      whereConditions.push('(sg.no_surat LIKE ? OR t.nama LIKE ? OR sg.tentang LIKE ?)');
+      const searchTerm = `%${search}%`;
+      queryParams.push(searchTerm, searchTerm, searchTerm);
+    }
+
+    if (dateFrom) {
+      whereConditions.push('DATE(sg.created_at) >= ?');
+      queryParams.push(dateFrom);
+    }
+    if (dateTo) {
+      whereConditions.push('DATE(sg.created_at) <= ?');
+      queryParams.push(dateTo);
+    }
+
+    const whereClause = whereConditions.length > 0 ? 'WHERE ' + whereConditions.join(' AND ') : '';
+
+    // Validate sort
+    const allowedSort = ['created_at', 'no_surat', 'tentang', 'niy', 'tmt'];
+    const safeSortBy = allowedSort.includes(sortBy) ? sortBy : 'created_at';
+    const safeSortOrder = sortOrder === 'ASC' ? 'ASC' : 'DESC';
+
+    // Count total
+    let countQuery, countParams;
+    if (tenantId) {
+      countQuery = `SELECT COUNT(*) as total FROM sk_guru sg JOIN teachers t ON sg.teacher_id = t.id ${whereClause}`;
+      countParams = [...queryParams];
+    } else {
+      countQuery = `SELECT COUNT(*) as total FROM sk_guru sg JOIN teachers t ON sg.teacher_id = t.id JOIN tenants tn ON sg.tenant_id = tn.tenant_id ${whereClause}`;
+      countParams = [...queryParams];
+    }
+    const [countResult] = await db.query(countQuery, countParams);
+    const total = countResult[0]?.total || 0;
+    const totalPages = Math.ceil(total / limit);
+
+    // Get paginated data
+    let dataQuery, dataParams;
+    if (tenantId) {
+      dataQuery = `SELECT sg.*, t.nama as teacher_name FROM sk_guru sg JOIN teachers t ON sg.teacher_id = t.id ${whereClause} ORDER BY sg.${safeSortBy} ${safeSortOrder} LIMIT ? OFFSET ?`;
+      dataParams = [...queryParams, limit, offset];
+    } else {
+      dataQuery = `SELECT sg.*, t.nama as teacher_name, tn.nama_sekolah as tenant_name FROM sk_guru sg JOIN teachers t ON sg.teacher_id = t.id JOIN tenants tn ON sg.tenant_id = tn.tenant_id ${whereClause} ORDER BY sg.${safeSortBy} ${safeSortOrder} LIMIT ? OFFSET ?`;
+      dataParams = [...queryParams, limit, offset];
+    }
+    const skList = await db.query(dataQuery, dataParams);
+
+    res.json({ 
+      success: true, 
+      data: skList,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasNext: page < totalPages,
+        hasPrev: page > 1
+      }
+    });
   } catch (error) {
     console.error('Get SK list error:', error);
     res.status(500).json({ success: false, message: 'Error fetching SK list' });
@@ -800,21 +941,26 @@ router.get('/file/:skId', authenticateToken, async (req, res) => {
       return res.status(404).json({ success: false, message: 'SK tidak ditemukan' });
     }
 
-    // Get all teacher_ids user has access to via assignments
-    const userTeacherIds = getUserTeacherIds(req.user);
+    // Allow privileged operators (admin, operator, TU) to access any SK in their tenant
+    if (isPrivilegedOperator(req.user)) {
+      if (!verifyTenantAccess(req, sk.tenant_id)) {
+        return res.status(403).json({ success: false, message: 'Akses ditolak untuk tenant ini' });
+      }
+    } else {
+      // Regular guru: only access their own SK
+      const userTeacherIds = getUserTeacherIds(req.user);
 
-    if (!userTeacherIds.length) {
-      return res.status(400).json({ success: false, message: 'Teacher ID tidak ditemukan di token' });
-    }
+      if (!userTeacherIds.length) {
+        return res.status(400).json({ success: false, message: 'Teacher ID tidak ditemukan di token' });
+      }
 
-    // Check if SK belongs to one of user's assigned teachers
-    if (!userTeacherIds.includes(sk.teacher_id)) {
-      return res.status(403).json({ success: false, message: 'Akses ditolak untuk SK ini' });
-    }
+      if (!userTeacherIds.includes(sk.teacher_id)) {
+        return res.status(403).json({ success: false, message: 'Akses ditolak untuk SK ini' });
+      }
 
-    // Still validate tenant access for cross-tenant security
-    if (!verifyTenantAccess(req, sk.tenant_id)) {
-      return res.status(403).json({ success: false, message: 'Akses ditolak untuk tenant ini' });
+      if (!verifyTenantAccess(req, sk.tenant_id)) {
+        return res.status(403).json({ success: false, message: 'Akses ditolak untuk tenant ini' });
+      }
     }
 
     const [teacher] = await db.query(
@@ -941,7 +1087,7 @@ router.post('/preview', authenticateToken, async (req, res) => {
 
 const today = new Date();
       const hijriToday = gregorianToHijri(today);
-      const nomorUrut = await peekActualNextSkNumber(teacher.tenant_id, hijriToday.year);
+      const nomorUrut = await peekActualNextSkNumber(hijriToday.year);
 
       const skData = await buildSkData(teacher, tentang_type, pt, tmt_custom, nomorUrut, hijriToday.year, no_surat, tgl_mulai_custom, tgl_selesai_custom, tentang, periodeCustomValue, undefined);
 
@@ -1106,13 +1252,17 @@ router.get('/bulk-candidates', authenticateOperator, async (req, res) => {
         unit: formatJabatanList(g.jabatan.join(' / ')),
         jabatan_di_unit: primary.jabatan_di_unit
       });
-      const tId = teacher.tenant_id || 'unknown';
-      if (!(tId in tenantPeekBase)) {
-        tenantPeekBase[tId] = await peekActualNextSkNumber(tId, hijriToday.year);
-        tenantSeqCounter[tId] = 0;
+      // Skip teachers without valid tenant_id
+      if (!teacher.tenant_id) {
+        continue;
       }
-      tenantSeqCounter[tId] += 1;
-      const nomorUrut = tenantPeekBase[tId] + tenantSeqCounter[tId] - 1;
+      // Global sequence: single counter for all tenants
+      if (!('global' in tenantPeekBase)) {
+        tenantPeekBase['global'] = await peekActualNextSkNumber(hijriToday.year);
+        tenantSeqCounter['global'] = 0;
+      }
+      tenantSeqCounter['global'] += 1;
+      const nomorUrut = tenantPeekBase['global'] + tenantSeqCounter['global'] - 1;
 
       const skData = await buildSkData(teacher, 'baru', teacher.pt, null, nomorUrut, hijriToday.year, undefined, undefined, undefined, undefined, undefined, undefined);
 
@@ -1177,7 +1327,7 @@ router.get('/bulk-candidates', authenticateOperator, async (req, res) => {
 
 router.post('/bulk-generate', authenticateOperator, async (req, res) => {
   try {
-    const { rows, preview_only } = req.body;
+    const { rows, preview_only, jobId: clientJobId } = req.body;
     if (!Array.isArray(rows) || rows.length === 0) {
       return res.status(400).json({ success: false, message: 'Tidak ada guru yang dipilih' });
     }
@@ -1303,18 +1453,18 @@ router.post('/bulk-generate', authenticateOperator, async (req, res) => {
       }
     }
 
-    // Pass 2: Assign nomorUrut and insert for valid rows only
+// Pass 2: Assign nomorUrut and insert for valid rows only
     const previewCounters = {};
 
     if (preview_only) {
+      // Global sequence for preview
+      if (!('global' in previewCounters)) {
+        previewCounters['global'] = await peekActualNextSkNumber(hijriToday.year) - 1;
+      }
       for (const v of validRows) {
         try {
-          const tId = v.teacher.tenant_id;
-          if (!(tId in previewCounters)) {
-            previewCounters[tId] = await peekActualNextSkNumber(tId, hijriToday.year) - 1;
-          }
-          previewCounters[tId] += 1;
-          const nomorUrut = previewCounters[tId];
+          previewCounters['global'] += 1;
+          const nomorUrut = previewCounters['global'];
           const skData = await buildSkData(v.teacher, v.tentang_type, v.pt, v.tmt_custom, nomorUrut, hijriToday.year, v.no_surat, v.tgl_mulai_custom, v.tgl_selesai_custom, v.tentang, v.periode_custom, v.jabatan);
           v.proposed_no_surat = skData.noSurat;
         } catch (err) {
@@ -1322,116 +1472,7 @@ router.post('/bulk-generate', authenticateOperator, async (req, res) => {
           errors.push({ teacher_id: v.teacher_id, nama: v.teacher.nama, reason: err.message });
         }
       }
-    } else {
-      // Group validRows by tenant_id to process each tenant in its own transaction
-      const rowsByTenant = new Map();
-      for (const v of validRows) {
-        const tId = v.teacher.tenant_id;
-        if (!rowsByTenant.has(tId)) rowsByTenant.set(tId, []);
-        rowsByTenant.get(tId).push(v);
-      }
 
-      // Process each tenant group in a single transaction with lock held
-      for (const [tenantId, tenantRows] of rowsByTenant) {
-        let connection = null;
-        const tenantSkData = []; // Store skData for later PDF generation
-
-        try {
-          connection = await db.getConnection();
-          await connection.beginTransaction();
-
-          // Lock the sequence row for this tenant/year (held until commit)
-          // First call to getActualNextSkNumberWithLock acquires FOR UPDATE lock
-          for (const v of tenantRows) {
-            try {
-              const nomorUrut = await getActualNextSkNumberWithLock(tenantId, hijriToday.year, connection);
-              const skData = await buildSkData(v.teacher, v.tentang_type, v.pt, v.tmt_custom, nomorUrut, hijriToday.year, v.no_surat, v.tgl_mulai_custom, v.tgl_selesai_custom, v.tentang, v.periode_custom, v.jabatan);
-
-              const insertResult = await connection.query(
-                'INSERT INTO sk_guru (teacher_id, tenant_id, tahun_ajaran_id, no_surat, tentang, ttl, tmt, pt, niy, unit, bh, bm, jabatan, status, tentag_type, tgl_mulai, tgl_selesai, manual_verified, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())',
-                [v.teacher_id, v.teacher.tenant_id, req.activeTahunAjaran?.id || null, skData.noSurat, skData.tentang, skData.ttl, skData.tmtFormatted, skData.ptFormatted, skData.niy, skData.unit, skData.bhFormatted, skData.bmFormatted, skData.jabatan, skData.status, v.tentang_type, skData.tglMulai, skData.tglSelesai, v.manualOverride ? 1 : 0]
-              );
-              const newSkId = insertResult && insertResult.insertId ? insertResult.insertId : null;
-
-              if ((!v.teacher.nip || v.teacher.nip === '-' || v.teacher.nip === '') && skData.niy) {
-                await connection.query('UPDATE teachers SET nip = ? WHERE id = ?', [skData.niy, v.teacher_id]);
-              }
-
-              // Store for PDF/Drive after commit (no lock held)
-              tenantSkData.push({ v, skData, newSkId, teacher: v.teacher });
-            } catch (insertErr) {
-              console.error('[SK BULK] insert error:', insertErr);
-              errors.push({ teacher_id: v.teacher_id, nama: v.teacher.nama, reason: insertErr.message });
-            }
-          }
-
-          // Commit ALL inserts for this tenant at once (lock released)
-          await connection.commit();
-          connection.release();
-          connection = null;
-
-          // Now generate PDFs and upload to Drive (outside transaction, no lock)
-          for (const { v, skData, newSkId, teacher } of tenantSkData) {
-            let driveMeta = null;
-            try {
-              const htmlData = {
-                noSurat: skData.noSurat,
-                tentang: skData.tentang,
-                nama: teacher.nama,
-                ttl: skData.ttl,
-                tmtFormatted: skData.tmtFormatted,
-                ptFormatted: skData.ptFormatted,
-                niy: skData.niy,
-                unit: skData.unit,
-                jabatan: skData.jabatan,
-                tglMulai: skData.tglMulai,
-                status: skData.status,
-                tglSelesai: skData.tglSelesai,
-                bhFormatted: skData.bhFormatted,
-                bmFormatted: skData.bmFormatted,
-                periode: skData.periode
-              };
-              const pdfBuf = await generateSkPdf(htmlData);
-              driveMeta = await archiveSkPdfToDrive(teacher, skData, pdfBuf, v.tentang_type);
-              if (driveMeta && newSkId) {
-                // Quick separate query for drive meta update
-                await db.query(
-                  'UPDATE sk_guru SET drive_file_id = ?, drive_file_name = ?, drive_folder_id = ?, drive_web_view_link = ?, drive_uploaded_at = NOW() WHERE id = ?',
-                  [driveMeta.drive_file_id, driveMeta.drive_file_name, driveMeta.drive_folder_id, driveMeta.drive_web_view_link, newSkId]
-                );
-              }
-            } catch (driveErr) {
-              console.error('[SK BULK] Drive archive error:', driveErr.message);
-            }
-
-            generated.push({
-              teacher_id: v.teacher_id,
-              nama: teacher.nama,
-              no_surat: skData.noSurat,
-              niy: skData.niy,
-              manual_verified: v.manualOverride,
-              drive_file_id: driveMeta ? driveMeta.drive_file_id : null,
-              drive_web_view_link: driveMeta ? driveMeta.drive_web_view_link : null
-            });
-          }
-        } catch (tenantErr) {
-          console.error('[SK BULK] tenant batch error:', tenantErr);
-          if (connection) {
-            try { await connection.rollback(); } catch (_) {}
-            try { connection.release(); } catch (_) {}
-          }
-          // Mark all rows in this tenant as errors
-          for (const v of tenantRows) {
-            if (!errors.some(e => e.teacher_id === v.teacher_id)) {
-              errors.push({ teacher_id: v.teacher_id, nama: v.teacher.nama, reason: tenantErr.message });
-            }
-          }
-        }
-      }
-    }
-
-    if (preview_only) {
-      // Return proposed surat numbers without generating
       const proposed = validRows.map(v => ({
         teacher_id: v.teacher_id,
         nama: v.teacher.nama,
@@ -1443,16 +1484,172 @@ router.post('/bulk-generate', authenticateOperator, async (req, res) => {
         data: { proposed, skipped, errors, preview: true }
       });
       return;
-    }
+    } else {
+      // Create progress job for async processing
+      const jobId = clientJobId || createProgressJob(validRows.length);
+      const progress = getProgress(jobId);
+      
+      // Return jobId immediately, process in background
+      res.json({
+        success: true,
+        jobId,
+        message: `Bulk generate started for ${validRows.length} guru. Poll /api/sk-guru/bulk-progress/${jobId} for progress.`,
+        data: { jobId, total: validRows.length }
+      });
 
-    res.json({
-      success: true,
-      message: `Bulk generate selesai: ${generated.length} berhasil, ${skipped.length} dilewati, ${errors.length} gagal`,
-      data: { generated, skipped, errors }
-    });
+      // Process in background (non-blocking)
+      processBulkGenerateBackground(jobId, validRows, hijriToday, req, generated, skipped, errors);
+      return;
+    }
   } catch (error) {
     console.error('Bulk generate error:', error);
     res.status(500).json({ success: false, message: 'Error bulk generate: ' + error.message });
+  }
+});
+
+// Background processing function
+async function processBulkGenerateBackground(jobId, validRows, hijriToday, req, generated, skipped, errors) {
+  const progress = getProgress(jobId);
+  if (!progress) return;
+
+  try {
+    // Global sequence: single transaction for ALL tenants with ONE global lock
+    let connection = null;
+    const allSkData = []; // Store skData for later PDF generation
+
+    try {
+      connection = await db.getConnection();
+      await connection.beginTransaction();
+
+      // Lock the GLOBAL sequence row for this hijri year (held until commit)
+      for (const v of validRows) {
+        try {
+          const nomorUrut = await getActualNextSkNumberWithLock(hijriToday.year, connection);
+          const skData = await buildSkData(v.teacher, v.tentang_type, v.pt, v.tmt_custom, nomorUrut, hijriToday.year, v.no_surat, v.tgl_mulai_custom, v.tgl_selesai_custom, v.tentang, v.periode_custom, v.jabatan);
+
+          const insertResult = await connection.query(
+            'INSERT INTO sk_guru (teacher_id, tenant_id, tahun_ajaran_id, no_surat, tentang, ttl, tmt, pt, niy, unit, bh, bm, jabatan, status, tentag_type, tgl_mulai, tgl_selesai, manual_verified, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())',
+            [v.teacher_id, v.teacher.tenant_id, req.activeTahunAjaran?.id || null, skData.noSurat, skData.tentang, skData.ttl, skData.tmtFormatted, skData.ptFormatted, skData.niy, skData.unit, skData.bhFormatted, skData.bmFormatted, skData.jabatan, skData.status, v.tentang_type, skData.tglMulai, skData.tglSelesai, v.manualOverride ? 1 : 0]
+          );
+          const newSkId = insertResult && insertResult.insertId ? insertResult.insertId : null;
+
+          if ((!v.teacher.nip || v.teacher.nip === '-' || v.teacher.nip === '') && skData.niy) {
+            await connection.query('UPDATE teachers SET nip = ? WHERE id = ?', [skData.niy, v.teacher_id]);
+          }
+
+          // Store for PDF/Drive after commit (no lock held)
+          allSkData.push({ v, skData, newSkId, teacher: v.teacher });
+        } catch (insertErr) {
+          console.error('[SK BULK] insert error:', insertErr);
+          errors.push({ teacher_id: v.teacher_id, nama: v.teacher.nama, reason: insertErr.message });
+        }
+      }
+
+      // Commit ALL inserts at once (global lock released)
+      await connection.commit();
+      connection.release();
+      connection = null;
+
+      // Now generate PDFs and upload to Drive (outside transaction, no lock)
+      for (let i = 0; i < allSkData.length; i++) {
+        const { v, skData, newSkId, teacher } = allSkData[i];
+        let driveMeta = null;
+        try {
+          // Update progress before each PDF
+          progress.current = teacher?.nama || v.teacher?.nama || 'Processing...';
+          progress.processed = i + 1;
+          
+          const htmlData = {
+            noSurat: skData.noSurat,
+            tentang: skData.tentang,
+            nama: teacher.nama,
+            ttl: skData.ttl,
+            tmtFormatted: skData.tmtFormatted,
+            ptFormatted: skData.ptFormatted,
+            niy: skData.niy,
+            unit: skData.unit,
+            jabatan: skData.jabatan,
+            tglMulai: skData.tglMulai,
+            status: skData.status,
+            tglSelesai: skData.tglSelesai,
+            bhFormatted: skData.bhFormatted,
+            bmFormatted: skData.bmFormatted,
+            periode: skData.periode
+          };
+          const pdfBuf = await generateSkPdf(htmlData);
+          driveMeta = await archiveSkPdfToDrive(teacher, skData, pdfBuf, v.tentang_type);
+          if (driveMeta && newSkId) {
+            // Quick separate query for drive meta update
+            await db.query(
+              'UPDATE sk_guru SET drive_file_id = ?, drive_file_name = ?, drive_folder_id = ?, drive_web_view_link = ?, drive_uploaded_at = NOW() WHERE id = ?',
+              [driveMeta.drive_file_id, driveMeta.drive_file_name, driveMeta.drive_folder_id, driveMeta.drive_web_view_link, newSkId]
+            );
+          }
+        } catch (driveErr) {
+          console.error('[SK BULK] Drive archive error:', driveErr.message);
+        }
+
+        generated.push({
+          teacher_id: v.teacher_id,
+          nama: teacher.nama,
+          no_surat: skData.noSurat,
+          niy: skData.niy,
+          manual_verified: v.manualOverride,
+          drive_file_id: driveMeta ? driveMeta.drive_file_id : null,
+          drive_web_view_link: driveMeta ? driveMeta.drive_web_view_link : null
+        });
+      }
+
+      progress.status = 'completed';
+      progress.completedAt = Date.now();
+      progress.generated = generated;
+      progress.skipped = skipped;
+      progress.errors = errors;
+      progress.current = 'Selesai';
+
+    } catch (err) {
+      console.error('[SK BULK] batch error:', err);
+      if (connection) {
+        try { await connection.rollback(); } catch (_) {}
+        try { connection.release(); } catch (_) {}
+      }
+      // Mark all rows as errors
+      for (const v of validRows) {
+        if (!errors.some(e => e.teacher_id === v.teacher_id)) {
+          errors.push({ teacher_id: v.teacher_id, nama: v.teacher.nama, reason: err.message });
+        }
+      }
+      progress.status = 'failed';
+      progress.completedAt = Date.now();
+      progress.generated = generated;
+      progress.skipped = skipped;
+      progress.errors = errors;
+    }
+  } catch (error) {
+    console.error('[SK BULK] background error:', error);
+    const progress = getProgress(jobId);
+    if (progress) {
+      progress.status = 'failed';
+      progress.completedAt = Date.now();
+      progress.errors.push({ reason: error.message });
+    }
+  }
+}
+
+// GET /api/sk-guru/bulk-progress/:jobId - Get progress of bulk generate
+router.get('/bulk-progress/:jobId', authenticateOperator, async (req, res) => {
+  try {
+    const { jobId } = req.params;
+    const progress = getProgress(jobId);
+    
+    if (!progress) {
+      return res.status(404).json({ success: false, message: 'Job tidak ditemukan atau sudah expired' });
+    }
+    
+    res.json({ success: true, data: progress });
+  } catch (error) {
+    console.error('Get bulk progress error:', error);
+    res.status(500).json({ success: false, message: 'Error getting progress: ' + error.message });
   }
 });
 
@@ -1888,7 +2085,7 @@ router.post('/approve-request', authenticateOperator, async (req, res) => {
 
     const today = new Date();
     const hijriToday = gregorianToHijri(today);
-    const nomorUrut = await getActualNextSkNumber(teacher.tenant_id, hijriToday.year);
+const nomorUrut = await getActualNextSkNumber(hijriToday.year);
     const pt = teacher.pt;
     const skData = await buildSkData(teacher, tentang_type, pt, null, nomorUrut, hijriToday.year, undefined, undefined, undefined, undefined, undefined, undefined);
 
@@ -1906,5 +2103,846 @@ router.post('/approve-request', authenticateOperator, async (req, res) => {
   }
 });
 
+
+// ============================================================
+// PENUGASAN GURU
+// ============================================================
+
+function normalizeJabatan(str) {
+  return String(str || '').toLowerCase().replace(/[\s_]+/g, '');
+}
+
+function isPenugasanManagerAssignment(a) {
+  const j = normalizeJabatan(a.jabatan_di_unit);
+  return j.includes('sdm') || ['kepalasekolah', 'kepala', 'pimpinan', 'ketua'].includes(j);
+}
+
+async function getPenugasanAllowedTenants(req) {
+  const getAllTenants = async () => {
+    const rows = await db.query('SELECT tenant_id FROM tenants');
+    return rows.map(t => t.tenant_id);
+  };
+
+  if (req.user.role === 'admin') return getAllTenants();
+
+  const assignments = req.user.assignments || [];
+  const isSdmPusat = assignments.some(a =>
+    a.tenant_id === 'YPWILUTIM' && normalizeJabatan(a.jabatan_di_unit).includes('sdm')
+  );
+  if (isSdmPusat) return getAllTenants();
+
+  return [...new Set(
+    assignments
+      .filter(isPenugasanManagerAssignment)
+      .map(a => a.tenant_id)
+      .filter(Boolean)
+  )];
+}
+
+function formatISODate(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+async function getJabatanTunjanganMap() {
+  try {
+    const rows = await db.query('SELECT jabatan_key, jabatan_label, nominal FROM kafalah_jabatan_tunjangan');
+    const map = {};
+    (rows || []).forEach(r => {
+      map[normalizeJabatan(r.jabatan_key)] = Number(r.nominal) || 0;
+    });
+    return map;
+  } catch (error) {
+    console.warn('[PENUGASAN] Gagal memuat default tunjangan jabatan:', error.message);
+    return {};
+  }
+}
+
+function resolveTunjanganJabatan(jabatan, map) {
+  const key = normalizeJabatan(jabatan);
+  const result = {
+    tunj_kepala_sekolah: 0,
+    tunj_wali_kelas: 0,
+    honor_bendahara: 0
+  };
+  if (!key) return result;
+
+  const hasKey = Object.prototype.hasOwnProperty.call(map, key);
+  const nominal = hasKey ? (Number(map[key]) || 0) : 0;
+
+  if (key.includes('kepalasekolah') || key.includes('kepsek') || key.includes('wakasek') || key.includes('pimpinan') || key.includes('ketua')) {
+    result.tunj_kepala_sekolah = nominal;
+  } else if (key.includes('bendahara')) {
+    result.honor_bendahara = nominal;
+  } else if (key.includes('walikelas')) {
+    result.tunj_wali_kelas = nominal;
+  }
+  return result;
+}
+
+async function getPenugasanTeacher(teacherId) {
+  const rows = await db.query(
+    `SELECT id, nama, nik, nip, tempat_lahir, tanggal_lahir, status_kepegawaian, tmt,
+            pendidikan_terakhir as pt, status_aktif,
+            gaji_pokok, tunj_kinerja, tunj_umum, tunj_istri, tunj_anak,
+            tunj_kepala_sekolah, tunj_wali_kelas, honor_bendahara, tunj_kehadiran, potongan
+     FROM teachers WHERE id = ?`,
+    [teacherId]
+  );
+  return rows[0] || null;
+}
+
+async function getPenugasanAssignments(teacherId) {
+  return db.query(
+    `SELECT ta.*, tn.nama_sekolah, tn.id as tenant_pk
+     FROM teacher_assignments ta
+     LEFT JOIN tenants tn ON ta.tenant_id = tn.tenant_id
+     WHERE ta.teacher_id = ?
+     ORDER BY ta.is_paid DESC, ta.created_at ASC, ta.id ASC`,
+    [teacherId]
+  );
+}
+
+async function getPenugasanTenant(tenantId) {
+  const rows = await db.query(
+    'SELECT tenant_id, nama_sekolah, id FROM tenants WHERE tenant_id = ?',
+    [tenantId]
+  );
+  return rows[0] || null;
+}
+
+async function preparePenugasan(req) {
+  const b = req.body || {};
+  const teacherId = parseInt(b.teacher_id);
+  if (!teacherId) {
+    const err = new Error('teacher_id wajib diisi');
+    err.status = 400;
+    throw err;
+  }
+
+  const toTenantId = b.to_tenant_id;
+  const toJabatan = String(b.to_jabatan || '').trim();
+  if (!toTenantId || !toJabatan) {
+    const err = new Error('Sekolah tujuan dan jabatan baru wajib diisi');
+    err.status = 400;
+    throw err;
+  }
+  if (toJabatan.length > 100) {
+    const err = new Error('Jabatan baru maksimal 100 karakter');
+    err.status = 400;
+    throw err;
+  }
+
+  const startDate = parseDate(b.tanggal_mulai) || new Date();
+  let endDate = parseDate(b.tanggal_selesai);
+  if (!endDate) endDate = new Date(startDate.getFullYear(), 11, 31);
+  if (endDate.getTime() < startDate.getTime()) {
+    const err = new Error('Tanggal selesai tidak boleh sebelum tanggal mulai');
+    err.status = 400;
+    throw err;
+  }
+
+  const allowedTenants = await getPenugasanAllowedTenants(req);
+  if (!allowedTenants.includes(toTenantId)) {
+    const err = new Error('Akses ditolak untuk sekolah tujuan');
+    err.status = 403;
+    throw err;
+  }
+
+  const teacher = await getPenugasanTeacher(teacherId);
+  if (!teacher || !teacher.status_aktif) {
+    const err = new Error('Guru tidak ditemukan atau nonaktif');
+    err.status = 404;
+    throw err;
+  }
+
+  const assignments = await getPenugasanAssignments(teacherId);
+  const activeAssignments = assignments.filter(a => a.is_paid);
+
+  let fromAssignment = null;
+  if (b.from_assignment_id) {
+    fromAssignment = assignments.find(a => a.id === parseInt(b.from_assignment_id));
+    if (!fromAssignment) {
+      const err = new Error('Assignment asal tidak ditemukan');
+      err.status = 400;
+      throw err;
+    }
+    if (!fromAssignment.is_paid) {
+      const err = new Error('Assignment asal sudah tidak aktif');
+      err.status = 400;
+      throw err;
+    }
+    if (!allowedTenants.includes(fromAssignment.tenant_id)) {
+      const err = new Error('Akses ditolak untuk sekolah asal');
+      err.status = 403;
+      throw err;
+    }
+  } else if (activeAssignments.length > 0) {
+    const err = new Error('Pilih assignment asal terlebih dahulu');
+    err.status = 400;
+    throw err;
+  }
+
+  const toTenant = await getPenugasanTenant(toTenantId);
+  if (!toTenant) {
+    const err = new Error('Sekolah tujuan tidak ditemukan');
+    err.status = 400;
+    throw err;
+  }
+
+  let jenis;
+  if (!fromAssignment) {
+    jenis = 'baru';
+  } else if (fromAssignment.tenant_id !== toTenantId) {
+    jenis = 'mutasi';
+  } else if (normalizeJabatan(fromAssignment.jabatan_di_unit) !== normalizeJabatan(toJabatan)) {
+    jenis = 'beralih';
+  } else {
+    const err = new Error('Jabatan tidak berubah');
+    err.status = 400;
+    throw err;
+  }
+
+  const targetAssignment = assignments.find(a =>
+    a.tenant_id === toTenantId && normalizeJabatan(a.jabatan_di_unit) === normalizeJabatan(toJabatan)
+  );
+  if (targetAssignment && targetAssignment.is_paid) {
+    const err = new Error('Guru sudah memiliki jabatan aktif tersebut di sekolah tujuan');
+    err.status = 400;
+    throw err;
+  }
+
+  const tentangFinal = String(b.tentang || '').trim() || ('PENUGASAN JABATAN (' + toTenant.nama_sekolah + ')');
+  if (tentangFinal.length > 255) {
+    const err = new Error('Tentang SK maksimal 255 karakter');
+    err.status = 400;
+    throw err;
+  }
+
+  return {
+    b,
+    teacher,
+    assignments,
+    fromAssignment,
+    toTenant,
+    toJabatan,
+    jenis,
+    targetAssignment,
+    tentangFinal,
+    startDate,
+    endDate,
+    tanggalMulaiISO: formatISODate(startDate),
+    tanggalSelesaiISO: formatISODate(endDate)
+  };
+}
+
+router.get('/penugasan/jabatan-tunjangan', authenticateOperator, async (req, res) => {
+  try {
+    const rows = await db.query(
+      'SELECT id, jabatan_key, jabatan_label, nominal FROM kafalah_jabatan_tunjangan ORDER BY nominal DESC, jabatan_label'
+    );
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error('Get penugasan jabatan tunjangan error:', error);
+    res.status(500).json({ success: false, message: 'Error mengambil tunjangan jabatan', error: error.message });
+  }
+});
+
+router.get('/penugasan/candidates', authenticateOperator, async (req, res) => {
+  try {
+    const allowedTenants = await getPenugasanAllowedTenants(req);
+    if (!allowedTenants.length) {
+      return res.json({ success: true, data: [] });
+    }
+
+    const q = String(req.query.q || '').trim();
+    const tenantFilter = req.query.tenant_id || '';
+    const where = ['t.status_aktif = 1'];
+    const params = [];
+
+    if (tenantFilter && allowedTenants.includes(tenantFilter)) {
+      where.push('ta.tenant_id = ?');
+      params.push(tenantFilter);
+    } else {
+      const placeholders = allowedTenants.map(() => '?').join(',');
+      where.push(`(ta.tenant_id IN (${placeholders}) OR ta.tenant_id IS NULL)`);
+      params.push(...allowedTenants);
+    }
+
+    if (q) {
+      where.push('(t.nama LIKE ? OR t.nik LIKE ? OR t.nip LIKE ?)');
+      params.push(`%${q}%`, `%${q}%`, `%${q}%`);
+    }
+
+    const rows = await db.query(
+      `SELECT t.id as teacher_id, t.nama, t.nik, t.nip, t.status_kepegawaian, t.tmt,
+              t.pendidikan_terakhir as pt,
+              ta.id as assignment_id, ta.tenant_id, ta.jabatan_di_unit, ta.is_paid,
+              tn.nama_sekolah, tn.id as tenant_pk
+       FROM teachers t
+       LEFT JOIN teacher_assignments ta ON t.id = ta.teacher_id
+       LEFT JOIN tenants tn ON ta.tenant_id = tn.tenant_id
+       WHERE ${where.join(' AND ')}
+       ORDER BY t.nama ASC, ta.is_paid DESC, ta.id ASC
+       LIMIT 500`,
+      params
+    );
+
+    const map = new Map();
+    for (const r of rows) {
+      if (!map.has(r.teacher_id)) {
+        map.set(r.teacher_id, {
+          teacher_id: r.teacher_id,
+          nama: r.nama,
+          nik: r.nik,
+          nip: r.nip,
+          status_kepegawaian: r.status_kepegawaian,
+          tmt: r.tmt,
+          pt: r.pt,
+          assignments: []
+        });
+      }
+      if (r.assignment_id) {
+        map.get(r.teacher_id).assignments.push({
+          id: r.assignment_id,
+          tenant_id: r.tenant_id,
+          nama_sekolah: r.nama_sekolah,
+          tenant_pk: r.tenant_pk,
+          jabatan_di_unit: r.jabatan_di_unit,
+          is_paid: r.is_paid
+        });
+      }
+    }
+
+    res.json({ success: true, data: Array.from(map.values()) });
+  } catch (error) {
+    console.error('Get penugasan candidates error:', error);
+    res.status(500).json({ success: false, message: 'Error mengambil kandidat penugasan', error: error.message });
+  }
+});
+
+router.get('/penugasan', authenticateOperator, async (req, res) => {
+  try {
+    const allowedTenants = await getPenugasanAllowedTenants(req);
+    if (!allowedTenants.length) {
+      return res.json({ success: true, data: { data: [], total: 0, page: 1, pages: 1 } });
+    }
+
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 15));
+    const offset = (page - 1) * limit;
+    const q = String(req.query.q || '').trim();
+    const tenantId = String(req.query.tenant_id || '');
+    const jenis = String(req.query.jenis || '');
+    const status = String(req.query.status || '');
+
+    const placeholders = allowedTenants.map(() => '?').join(',');
+
+    // ---- Branch 1: riwayat penugasan (ada SK) ----
+    const where1 = [];
+    const params1 = [];
+    where1.push(`tp.to_tenant_id IN (${placeholders})`);
+    params1.push(...allowedTenants);
+    if (tenantId && allowedTenants.includes(tenantId)) {
+      where1.push('tp.to_tenant_id = ?');
+      params1.push(tenantId);
+    }
+    if (jenis) { where1.push('tp.jenis = ?'); params1.push(jenis); }
+    if (status) { where1.push('tp.status = ?'); params1.push(status); }
+    if (q) {
+      where1.push('(t.\`nama\` LIKE ? OR tp.no_surat LIKE ? OR tp.to_jabatan LIKE ? OR tp.from_jabatan LIKE ? OR ta.jabatan_di_unit LIKE ? OR tcr.jabatan_di_unit LIKE ?)');
+      params1.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
+    }
+    const whereClause1 = 'WHERE ' + where1.join(' AND ');
+
+    const sql1 = `SELECT tp.id as id, tp.id as pk, 1 as is_penugasan, t.id as teacher_id,
+              tp.from_assignment_id as from_assignment_id,
+              tp.from_tenant_id, tp.to_tenant_id, tp.from_jabatan, tp.to_jabatan,
+              tp.jenis, tp.tanggal_mulai, tp.tanggal_selesai, tp.periode,
+              tp.tentang, tp.no_surat, tp.sk_guru_id, tp.keterangan,
+              tp.status, tp.replaced_by_id, tp.created_by, tp.created_at, tp.updated_at,
+              t.\`nama\` as nama, t.nik, t.nip,
+              tf.id as from_tenant_pk, tf.tenant_id as from_tenant_id_raw, tf.nama_sekolah as from_unit,
+              tt.id as to_tenant_pk, tt.tenant_id as to_tenant_id_raw, tt.nama_sekolah as to_unit,
+              sg.no_surat as sk_no_surat, sg.tentang as sk_tentang,
+              sg.jabatan as sk_jabatan, sg.tgl_mulai as sk_tgl_mulai, sg.tgl_selesai as sk_tgl_selesai,
+              sg.drive_web_view_link
+       FROM teacher_penugasan tp
+       JOIN teachers t ON tp.teacher_id = t.id
+       LEFT JOIN tenants tf ON tp.from_tenant_id = tf.tenant_id
+       LEFT JOIN tenants tt ON tp.to_tenant_id = tt.tenant_id
+       LEFT JOIN sk_guru sg ON tp.sk_guru_id = sg.id
+       LEFT JOIN teacher_assignments ta ON ta.id = tp.to_assignment_id
+       LEFT JOIN teacher_assignments tcr ON tcr.id = tp.from_assignment_id
+       ${whereClause1}`;
+
+    // ---- Branch 2: assignment aktif yang belum punya riwayat penugasan ----
+    const where2 = [];
+    const params2 = [];
+    where2.push(`ta.tenant_id IN (${placeholders})`);
+    params2.push(...allowedTenants);
+    if (tenantId && allowedTenants.includes(tenantId)) {
+      where2.push('ta.tenant_id = ?');
+      params2.push(tenantId);
+    }
+    if (q) {
+      where2.push('(t.\`nama\` LIKE ? OR ta.jabatan_di_unit LIKE ? OR tn.\`nama_sekolah\` LIKE ?)');
+      params2.push(`%${q}%`, `%${q}%`, `%${q}%`);
+    }
+    const whereClause2 = 'WHERE ta.is_paid = 1 AND NOT EXISTS (SELECT 1 FROM teacher_penugasan tp WHERE tp.to_assignment_id = ta.id) AND ' + where2.join(' AND ');
+
+    const sql2 = `SELECT ta.id as id, ta.id as pk, 0 as is_penugasan, t.id as teacher_id,
+              NULL as from_assignment_id,
+              NULL as from_tenant_id, ta.tenant_id as to_tenant_id, NULL as from_jabatan,
+              ta.jabatan_di_unit as to_jabatan, NULL as jenis, NULL as tanggal_mulai,
+              NULL as tanggal_selesai, NULL as periode, NULL as tentang, NULL as no_surat,
+              NULL as sk_guru_id, NULL as keterangan, 'aktif' as status, NULL as replaced_by_id,
+              NULL as created_by, NULL as created_at, NULL as updated_at,
+              t.\`nama\` as nama, t.nik, t.nip,
+              NULL as from_tenant_pk, NULL as from_tenant_id_raw, NULL as from_unit,
+              tn.id as to_tenant_pk, tn.tenant_id as to_tenant_id_raw, tn.nama_sekolah as to_unit,
+              NULL as sk_no_surat, NULL as sk_tentang, NULL as sk_jabatan,
+              NULL as sk_tgl_mulai, NULL as sk_tgl_selesai, NULL as drive_web_view_link
+       FROM teacher_assignments ta
+       JOIN teachers t ON ta.teacher_id = t.id
+       JOIN tenants tn ON ta.tenant_id = tn.tenant_id
+       ${whereClause2}`;
+
+    const union = `(${sql1}) UNION ALL (${sql2})`;
+    const countRows = await db.query(
+      `SELECT COUNT(*) as total FROM (${union}) sub`,
+      [...params1, ...params2]
+    );
+    const total = countRows[0]?.total || 0;
+    const pages = Math.max(1, Math.ceil(total / limit));
+
+    const rows = await db.query(
+      `SELECT sub.* FROM (${union}) sub
+       ORDER BY sub.created_at IS NULL ASC, sub.created_at DESC, sub.pk DESC
+       LIMIT ${limit} OFFSET ${offset}`,
+      [...params1, ...params2]
+    );
+
+    res.json({ success: true, data: { data: rows, total, page, pages } });
+  } catch (error) {
+    console.error('Get penugasan list error:', error);
+    res.status(500).json({ success: false, message: 'Error mengambil daftar penugasan', error: error.message });
+  }
+});
+
+router.get('/penugasan/:id', authenticateOperator, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const rows = await db.query(
+      `SELECT tp.*, t.nama, t.nik, t.nip, t.status_kepegawaian, t.tmt,
+              t.pendidikan_terakhir as pt,
+              tf.nama_sekolah as from_unit, tt.nama_sekolah as to_unit,
+              sg.no_surat as sk_no_surat, sg.tentang as sk_tentang,
+              sg.jabatan as sk_jabatan, sg.tgl_mulai as sk_tgl_mulai, sg.tgl_selesai as sk_tgl_selesai,
+              sg.drive_web_view_link
+       FROM teacher_penugasan tp
+       JOIN teachers t ON tp.teacher_id = t.id
+       LEFT JOIN tenants tf ON tp.from_tenant_id = tf.tenant_id
+       LEFT JOIN tenants tt ON tp.to_tenant_id = tt.tenant_id
+       LEFT JOIN sk_guru sg ON tp.sk_guru_id = sg.id
+       WHERE tp.id = ?`,
+      [id]
+    );
+
+    if (!rows.length) {
+      return res.status(404).json({ success: false, message: 'Penugasan tidak ditemukan' });
+    }
+
+    const allowedTenants = await getPenugasanAllowedTenants(req);
+    if (!allowedTenants.includes(rows[0].to_tenant_id)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak untuk sekolah ini' });
+    }
+
+    res.json({ success: true, data: rows[0] });
+  } catch (error) {
+    console.error('Get penugasan detail error:', error);
+    res.status(500).json({ success: false, message: 'Error mengambil detail penugasan', error: error.message });
+  }
+});
+
+router.get('/penugasan/:id/sk', authenticateOperator, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const rows = await db.query(
+      'SELECT to_tenant_id, sk_guru_id FROM teacher_penugasan WHERE id = ?',
+      [id]
+    );
+    if (!rows.length) {
+      return res.status(404).json({ success: false, message: 'Penugasan tidak ditemukan' });
+    }
+
+    const allowedTenants = await getPenugasanAllowedTenants(req);
+    if (!allowedTenants.includes(rows[0].to_tenant_id)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak untuk sekolah ini' });
+    }
+    if (!rows[0].sk_guru_id) {
+      return res.status(404).json({ success: false, message: 'SK belum tersedia' });
+    }
+
+    return res.redirect(`/api/sk-guru/file/${rows[0].sk_guru_id}?view=1`);
+  } catch (error) {
+    console.error('Redirect penugasan SK error:', error);
+    res.status(500).json({ success: false, message: 'Error membuka SK penugasan', error: error.message });
+  }
+});
+
+router.post('/penugasan/preview', authenticateOperator, async (req, res) => {
+  try {
+    const prep = await preparePenugasan(req);
+    const { teacher, fromAssignment, toTenant, toJabatan, jenis, tentangFinal, tanggalMulaiISO, tanggalSelesaiISO } = prep;
+
+    const hijriToday = gregorianToHijri(new Date());
+    const nomorUrut = await peekActualNextSkNumber(hijriToday.year);
+
+    const teacherSynthetic = Object.assign({}, teacher, {
+      nama_sekolah: toTenant.nama_sekolah,
+      tenant_id: toTenant.tenant_id,
+      tenant_pk: toTenant.id,
+      unit: toJabatan,
+      jabatan_di_unit: toJabatan
+    });
+
+    const skData = await buildSkData(
+      teacherSynthetic,
+      'jabatan',
+      teacher.pt,
+      null,
+      nomorUrut,
+      hijriToday.year,
+      null,
+      tanggalMulaiISO,
+      tanggalSelesaiISO,
+      tentangFinal,
+      null,
+      toJabatan
+    );
+
+    res.json({
+      success: true,
+      data: {
+        no_surat: skData.noSurat,
+        tentang: skData.tentang,
+        nama: teacher.nama,
+        ttl: skData.ttl,
+        tmt: skData.tmtFormatted,
+        pt: skData.ptFormatted,
+        niy: skData.niy,
+        unit: skData.unit,
+        jabatan: skData.jabatan,
+        status: skData.status,
+        tgl_mulai: skData.tglMulai,
+        tgl_selesai: skData.tglSelesai,
+        periode: skData.periode,
+        bh: skData.bhFormatted,
+        bm: skData.bmFormatted,
+        jenis,
+        tanggal_mulai: tanggalMulaiISO,
+        tanggal_selesai: tanggalSelesaiISO,
+        from: fromAssignment ? {
+          assignment_id: fromAssignment.id,
+          tenant_id: fromAssignment.tenant_id,
+          nama_sekolah: fromAssignment.nama_sekolah,
+          jabatan: fromAssignment.jabatan_di_unit
+        } : null,
+        to: {
+          tenant_id: toTenant.tenant_id,
+          nama_sekolah: toTenant.nama_sekolah,
+          jabatan: toJabatan
+        }
+      }
+    });
+  } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ success: false, message: error.message });
+    }
+    console.error('Preview penugasan error:', error);
+    res.status(500).json({ success: false, message: 'Error preview penugasan: ' + error.message });
+  }
+});
+
+router.post('/penugasan', authenticateOperator, async (req, res) => {
+  try {
+    const prep = await preparePenugasan(req);
+    const { b, teacher, fromAssignment, toTenant, toJabatan, jenis, targetAssignment, tentangFinal, tanggalMulaiISO, tanggalSelesaiISO } = prep;
+
+    const jabatanMap = await getJabatanTunjanganMap();
+    const tunj = resolveTunjanganJabatan(toJabatan, jabatanMap);
+    const base = fromAssignment || teacher;
+
+    const tunjKepalaSekolah = (b.tunj_kepala_sekolah !== undefined && b.tunj_kepala_sekolah !== '')
+      ? (Number(b.tunj_kepala_sekolah) || 0)
+      : tunj.tunj_kepala_sekolah;
+    const tunjWaliKelas = (b.tunj_wali_kelas !== undefined && b.tunj_wali_kelas !== '')
+      ? (Number(b.tunj_wali_kelas) || 0)
+      : tunj.tunj_wali_kelas;
+    const honorBendahara = (b.honor_bendahara !== undefined && b.honor_bendahara !== '')
+      ? (Number(b.honor_bendahara) || 0)
+      : tunj.honor_bendahara;
+
+    const gajiPokok = Number(base.gaji_pokok) || 0;
+    const tunjKinerja = Number(base.tunj_kinerja) || 0;
+    const tunjUmum = Number(base.tunj_umum) || 0;
+    const tunjIstri = Number(base.tunj_istri) || 0;
+    const tunjAnak = Number(base.tunj_anak) || 0;
+    const tunjKehadiran = Number(base.tunj_kehadiran) || 0;
+    const potongan = Number(base.potongan) || 0;
+    const kpiCategory = base.kpi_category
+      || (normalizeJabatan(toJabatan).includes('guru') || normalizeJabatan(toJabatan).includes('walikelas') ? 'guru' : 'staf');
+
+    const result = await db.transaction(async (connection) => {
+      const [teacherRows] = await connection.query(
+        'SELECT id, nama, nip FROM teachers WHERE id = ? FOR UPDATE',
+        [teacher.id]
+      );
+      if (!teacherRows || !teacherRows.length) {
+        const err = new Error('Guru tidak ditemukan');
+        err.status = 404;
+        throw err;
+      }
+      const lockedTeacher = teacherRows[0];
+
+      const prevCondition = fromAssignment
+        ? 'teacher_id = ? AND status = "aktif" AND (from_assignment_id = ? OR to_assignment_id = ?)'
+        : 'teacher_id = ? AND status = "aktif"';
+      const prevParams = fromAssignment
+        ? [teacher.id, fromAssignment.id, fromAssignment.id]
+        : [teacher.id];
+
+      await connection.query(
+        `UPDATE teacher_penugasan SET status = "digantikan" WHERE ${prevCondition}`,
+        prevParams
+      );
+
+      const [insertTp] = await connection.query(
+        `INSERT INTO teacher_penugasan
+          (teacher_id, from_assignment_id, from_tenant_id, to_tenant_id, from_jabatan,
+           to_jabatan, jenis, tanggal_mulai, tanggal_selesai, tentang, keterangan, status, created_by)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "aktif", ?)`,
+        [
+          teacher.id,
+          fromAssignment ? fromAssignment.id : null,
+          fromAssignment ? fromAssignment.tenant_id : null,
+          toTenant.tenant_id,
+          fromAssignment ? fromAssignment.jabatan_di_unit : null,
+          toJabatan,
+          jenis,
+          tanggalMulaiISO,
+          tanggalSelesaiISO,
+          tentangFinal,
+          b.keterangan || null,
+          req.user.id || req.user.guru_id || null
+        ]
+      );
+      const penugasanId = insertTp.insertId;
+
+      if (fromAssignment) {
+        const crossTenant = fromAssignment.tenant_id !== toTenant.tenant_id;
+        await connection.query(
+          `UPDATE teacher_assignments
+           SET is_paid = 0, mutasi_status = NULL, mutasi_reason = ?, mutasi_date = NOW()
+           WHERE id = ? AND teacher_id = ?`,
+          [
+            crossTenant
+              ? ('Mutasi ke ' + toTenant.nama_sekolah + ' sebagai ' + toJabatan)
+              : ('Beralih jabatan: ' + (fromAssignment.jabatan_di_unit || '-') + ' -> ' + toJabatan),
+            fromAssignment.id,
+            teacher.id
+          ]
+        );
+      }
+
+      let toAssignmentId;
+      try {
+        if (targetAssignment) {
+          toAssignmentId = targetAssignment.id;
+          await connection.query(
+            `UPDATE teacher_assignments
+             SET tenant_id = ?, jabatan_di_unit = ?, is_paid = 1,
+                 gaji_pokok = ?, tunj_kinerja = ?, tunj_umum = ?, tunj_istri = ?, tunj_anak = ?,
+                 tunj_kepala_sekolah = ?, tunj_wali_kelas = ?, honor_bendahara = ?, tunj_kehadiran = ?, potongan = ?,
+                 kpi_category = ?, class_id = NULL,
+                 mutasi_status = NULL, mutasi_reason = NULL, mutasi_date = NULL
+             WHERE id = ?`,
+            [
+              toTenant.tenant_id, toJabatan,
+              gajiPokok, tunjKinerja, tunjUmum, tunjIstri, tunjAnak,
+              tunjKepalaSekolah, tunjWaliKelas, honorBendahara, tunjKehadiran, potongan,
+              kpiCategory, toAssignmentId
+            ]
+          );
+        } else {
+          const [insertTa] = await connection.query(
+            `INSERT INTO teacher_assignments
+              (teacher_id, tenant_id, jabatan_di_unit, class_id, is_paid,
+               gaji_pokok, tunj_kinerja, tunj_umum, tunj_istri, tunj_anak,
+               tunj_kepala_sekolah, tunj_wali_kelas, honor_bendahara, tunj_kehadiran, potongan, kpi_category)
+             VALUES (?, ?, ?, NULL, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              teacher.id, toTenant.tenant_id, toJabatan,
+              gajiPokok, tunjKinerja, tunjUmum, tunjIstri, tunjAnak,
+              tunjKepalaSekolah, tunjWaliKelas, honorBendahara, tunjKehadiran, potongan,
+              kpiCategory
+            ]
+          );
+          toAssignmentId = insertTa.insertId;
+        }
+      } catch (assignErr) {
+        if (assignErr.code === 'ER_DUP_ENTRY') {
+          const err = new Error('Guru sudah memiliki assignment tersebut di sekolah tujuan');
+          err.status = 409;
+          throw err;
+        }
+        throw assignErr;
+      }
+
+      await connection.query(
+        'UPDATE teacher_penugasan SET to_assignment_id = ? WHERE id = ?',
+        [toAssignmentId, penugasanId]
+      );
+
+      const hijriToday = gregorianToHijri(new Date());
+      const nomorUrut = await getActualNextSkNumberWithLock(hijriToday.year, connection);
+
+      const teacherSynthetic = Object.assign({}, teacher, {
+        nama_sekolah: toTenant.nama_sekolah,
+        tenant_id: toTenant.tenant_id,
+        tenant_pk: toTenant.id,
+        unit: toJabatan,
+        jabatan_di_unit: toJabatan
+      });
+
+      const skData = await buildSkData(
+        teacherSynthetic,
+        'jabatan',
+        teacher.pt,
+        null,
+        nomorUrut,
+        hijriToday.year,
+        null,
+        tanggalMulaiISO,
+        tanggalSelesaiISO,
+        tentangFinal,
+        null,
+        toJabatan
+      );
+
+      if (skData.niy) {
+        const [conflictRows] = await connection.query(
+          'SELECT id FROM teachers WHERE nip = ? AND id != ?',
+          [skData.niy, teacher.id]
+        );
+        if (conflictRows && conflictRows.length) {
+          const err = new Error('NIY sudah digunakan guru lain. Hubungi administrator.');
+          err.status = 409;
+          throw err;
+        }
+      }
+
+      let insertSk;
+      try {
+        [insertSk] = await connection.query(
+          `INSERT INTO sk_guru
+            (teacher_id, tenant_id, tahun_ajaran_id, no_surat, tentang, ttl, tmt, pt, niy,
+             unit, bh, bm, jabatan, status, tentag_type, tgl_mulai, tgl_selesai, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "jabatan", ?, ?, NOW())`,
+          [
+            teacher.id, toTenant.tenant_id, req.activeTahunAjaran?.id || null,
+            skData.noSurat, skData.tentang, skData.ttl, skData.tmtFormatted, skData.ptFormatted,
+            skData.niy, skData.unit, skData.bhFormatted, skData.bmFormatted,
+            skData.jabatan, skData.status, skData.tglMulai, skData.tglSelesai
+          ]
+        );
+      } catch (skErr) {
+        if (skErr.code === 'ER_DUP_ENTRY') {
+          const err = new Error('Nomor surat sudah digunakan. Silakan coba lagi.');
+          err.status = 409;
+          throw err;
+        }
+        throw skErr;
+      }
+      const skId = insertSk.insertId;
+
+      await connection.query(
+        'UPDATE teacher_penugasan SET sk_guru_id = ?, no_surat = ?, periode = ? WHERE id = ?',
+        [skId, skData.noSurat, skData.periode, penugasanId]
+      );
+
+      await connection.query(
+        `UPDATE teacher_penugasan SET replaced_by_id = ? WHERE ${prevCondition} AND replaced_by_id IS NULL`,
+        [penugasanId, ...prevParams]
+      );
+
+      if ((!lockedTeacher.nip || lockedTeacher.nip === '-' || lockedTeacher.nip === '') && skData.niy) {
+        await connection.query('UPDATE teachers SET nip = ? WHERE id = ?', [skData.niy, teacher.id]);
+      }
+
+      return {
+        penugasanId,
+        skId,
+        noSurat: skData.noSurat,
+        skData,
+        teacherSynthetic
+      };
+    });
+
+    let warning = null;
+    try {
+      const htmlData = {
+        noSurat: result.skData.noSurat,
+        tentang: result.skData.tentang,
+        nama: result.teacherSynthetic.nama,
+        ttl: result.skData.ttl,
+        tmtFormatted: result.skData.tmtFormatted,
+        ptFormatted: result.skData.ptFormatted,
+        niy: result.skData.niy,
+        unit: result.skData.unit,
+        jabatan: result.skData.jabatan,
+        tglMulai: result.skData.tglMulai,
+        status: result.skData.status,
+        tglSelesai: result.skData.tglSelesai,
+        bhFormatted: result.skData.bhFormatted,
+        bmFormatted: result.skData.bmFormatted,
+        periode: result.skData.periode
+      };
+      const pdfBuf = await generateSkPdf(htmlData);
+      const driveMeta = await archiveSkPdfToDrive(result.teacherSynthetic, result.skData, pdfBuf, 'jabatan');
+      if (driveMeta) {
+        await db.query(
+          `UPDATE sk_guru
+           SET drive_file_id = ?, drive_file_name = ?, drive_folder_id = ?, drive_web_view_link = ?, drive_uploaded_at = NOW()
+           WHERE id = ?`,
+          [driveMeta.drive_file_id, driveMeta.drive_file_name, driveMeta.drive_folder_id, driveMeta.drive_web_view_link, result.skId]
+        );
+      }
+    } catch (pdfErr) {
+      console.error('[PENUGASAN] PDF/Drive archive error:', pdfErr.message);
+      warning = 'SK tersimpan, tetapi arsip Drive gagal dibuat.';
+    }
+
+    res.json({
+      success: true,
+      data: {
+        penugasan_id: result.penugasanId,
+        sk_guru_id: result.skId,
+        no_surat: result.noSurat,
+        download_url: `/api/sk-guru/file/${result.skId}?view=1`,
+        warning
+      }
+    });
+  } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ success: false, message: error.message });
+    }
+    console.error('Save penugasan error:', error);
+    res.status(500).json({ success: false, message: 'Error menyimpan penugasan: ' + error.message });
+  }
+});
 
 module.exports = router;

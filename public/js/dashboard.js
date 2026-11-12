@@ -2620,17 +2620,26 @@ function setupTreasurerNav() {
         }
     }
 
+    const normJab = (v) => (v || '').toLowerCase().replace(/[\s_]+/g, '');
     const hasSdmRole = assignments.some(a => {
-        const jabatan = (a.jabatan_di_unit || '').toLowerCase().replace(/[\s_]+/g, '');
+        const jabatan = normJab(a.jabatan_di_unit);
         return jabatan === 'sdmpusat' || jabatan === 'sdmsekolah' || jabatan === 'sdm';
+    });
+    const isLeader = assignments.some(a => {
+        const jabatan = normJab(a.jabatan_di_unit);
+        return jabatan === 'kepalasekolah' || jabatan === 'pimpinan' || jabatan === 'ketua';
     });
     const desktopSdmBtn = document.getElementById('desktopSdmBtn');
     const mobileSdmNav = document.getElementById('mobileSdmNav');
-    if (hasSdmRole) {
-        if (desktopSdmBtn) desktopSdmBtn.style.display = 'block';
+    if (hasSdmRole || isLeader) {
+        const sdmTarget = hasSdmRole ? 'sdm-dashboard-v2.html' : 'kpi-evaluation.html';
+        if (desktopSdmBtn) {
+            desktopSdmBtn.style.display = 'block';
+            desktopSdmBtn.onclick = () => { window.location.href = sdmTarget; };
+        }
         if (mobileSdmNav) {
             mobileSdmNav.style.display = 'block';
-            mobileSdmNav.onclick = () => { window.location.href = 'sdm-dashboard.html'; };
+            mobileSdmNav.onclick = () => { window.location.href = sdmTarget; };
         }
     }
 

@@ -1,0 +1,1814 @@
+// ============================================================
+// SDM DASHBOARD V2 - Modular Architecture
+// ============================================================
+
+const SDMDashboard = (() => {
+  'use strict';
+
+  // ============================================================
+  // PRIVATE STATE
+  // ============================================================
+  const state = {
+    currentTab: 'dashboard',
+    currentTenant: '',
+    user: null,
+    isSdmPusat: false,
+    assignments: [],
+    charts: {
+      attendance: null,
+      kpi: null
+    },
+    chartType: 'weekly',
+    searchDebounce: {},
+    teacherPage: 1,
+    teacherFilters: {}
+  };
+
+  // Constants
+  const API_BASE = '/api';
+  const SDM_PUSAT_TENANT = 'YPWILUTIM';
+  const TABS = [
+    'dashboard', 'access', 'teacher', 'kpi', 'attendance',
+    'recapAbsensi', 'manualAttendance', 'payroll', 'sk-guru',
+    'rules', 'kafalah', 'qr-generator', 'idcard', 'settings'
+  ];
+
+  // ============================================================
+  // UTILITY FUNCTIONS
+  // ============================================================
+  const Utils = {
+    getAuthHeader() {
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+      return token ? { 'Authorization': 'Bearer ' + token } : {};
+    },
+
+    escapeHtml(text) {
+      if (!text) return '';
+      const map = {
+        '&': '&', '<': '<', '>': '>',
+        '"': '"', "'": '&#039;'
+      };
+      return text.replace(/[&<>"']/g, m => map[m]);
+    },
+
+    formatDate(dateStr) {
+      if (!dateStr) return '-';
+      try {
+        return new Date(dateStr).toLocaleDateString('id-ID', {
+          day: '2-digit', month: 'short', year: 'numeric'
+        });
+      } catch { return dateStr; }
+    },
+
+    formatRupiah(num) {
+      if (num === null || num === undefined || num === '') return 'Rp 0';
+      return new Intl.NumberFormat('id-ID', {
+        style: 'currency', currency: 'IDR', minimumFractionDigits: 0
+      }).format(num);
+    },
+
+    showToast(message, type = 'info') {
+      const Toast = Swal.mixin({
+        toast: true,
+        position: 'top-end',
+        showConfirmButton: false,
+        timer: 3000,
+        timerProgressBar: true,
+      });
+      Toast.fire({ icon: type, title: message });
+    },
+
+    setVal(id, val) {
+      const el = document.getElementById(id);
+      if (el) el.value = val ?? '';
+    },
+
+    $(id) {
+      return document.getElementById(id);
+    },
+
+    showModal(id) {
+      const el = document.getElementById(id);
+      if (el) {
+        el.classList.remove('hidden');
+        el.classList.add('show');
+      }
+    },
+
+    hideModal(id) {
+      const el = document.getElementById(id);
+      if (el) {
+        el.classList.add('hidden');
+        el.classList.remove('show');
+      }
+    },
+
+    debounce(fn, delay) {
+      let timeoutId;
+      return (...args) => {
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => fn.apply(this, args), delay);
+      };
+    },
+
+    parseJwt(token) {
+      try {
+        const base64Url = token.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => {
+          return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
+        return JSON.parse(jsonPayload);
+      } catch (e) {
+        return null;
+      }
+    }
+  };
+
+  // ============================================================
+  // API LAYER
+  // ============================================================
+  const Api = {
+    async request(endpoint, options = {}) {
+      try {
+        const res = await fetch(`${API_BASE}${endpoint}`, {
+          headers: {
+            'Authorization': `Bearer ${Utils.getAuthHeader().Authorization?.replace('Bearer ', '') || ''}`,
+            'Content-Type': 'application/json',
+            ...(options.headers || {})
+          },
+          ...options
+        });
+
+        if (res.status === 401 || res.status === 403) {
+          const data = await res.json().catch(() => ({}));
+          if (res.status === 401) Core.handleUnauthorized();
+          throw new Error(data.message || 'Akses ditolak');
+        }
+        return await res.json();
+      } catch (err) {
+        console.error(`API error ${endpoint}:`, err);
+        throw err;
+      }
+    },
+
+    get(endpoint) {
+      return this.request(endpoint, { method: 'GET' });
+    },
+
+    post(endpoint, body) {
+      return this.request(endpoint, { method: 'POST', body: JSON.stringify(body) });
+    },
+
+    put(endpoint, body) {
+      return this.request(endpoint, { method: 'PUT', body: JSON.stringify(body) });
+    },
+
+    delete(endpoint) {
+      return this.request(endpoint, { method: 'DELETE' });
+    }
+  };
+
+  // ============================================================
+  // CORE MODULE (arrow functions to preserve 'this' context)
+  // ============================================================
+  const Core = {
+    init: async () => {
+      console.log('Initializing SDM Dashboard v2');
+
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+      if (!token) {
+        window.location.href = 'login.html';
+        return;
+      }
+
+      await Core.loadUserInfo();
+      Core.setupEventListeners();
+      Core.setCurrentDate();
+
+      const today = new Date().toISOString().split('T')[0];
+      Utils.$('attendanceDateFilter').value = today;
+
+      await Core.loadTenantOptions();
+      await Core.showTab('dashboard');
+    },
+
+    loadUserInfo: () => {
+      try {
+        const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+        const payload = Utils.parseJwt(token);
+        if (!payload || !payload.id) return Core.handleUnauthorized();
+
+state.user = {
+          id: payload.id,
+          username: payload.username,
+          role: payload.role,
+          guru_id: payload.guru_id,
+          tenant_id: payload.tenant_id,
+          assignments: payload.assignments || []
+        };
+
+        state.assignments = state.user.assignments;
+        state.isSdmPusat = state.user.role === 'admin' || state.assignments.some(a =>
+          (a.jabatan_di_unit || '').toLowerCase().includes('sdm') && a.tenant_id === SDM_PUSAT_TENANT
+        );
+
+        const hasSdmAccess = state.user.role === 'admin' || state.assignments.some(a =>
+          (a.jabatan_di_unit || '').toLowerCase().includes('sdm')
+        );
+
+        if (!hasSdmAccess) {
+          Swal.fire({
+            title: 'Akses Ditolak',
+            text: 'Halaman ini hanya untuk Direktur SDM. Hubungi administrator jika Anda merasa ini keliru.',
+            icon: 'error',
+            confirmButtonText: 'Kembali ke Login',
+            confirmButtonColor: '#dc2626',
+            allowOutsideClick: false
+          }).then(() => Core.logout());
+          return;
+        }
+
+        const roleLabel = state.user.role === 'admin'
+          ? 'Administrator (Akses Penuh)'
+          : (state.isSdmPusat ? 'SDM Pusat (YPWI Lutim)' : 'SDM Sekolah');
+
+        Utils.$('sdmUserName').textContent = payload.username || 'User';
+        Utils.$('sdmUserRole').textContent = roleLabel;
+
+        if (state.isSdmPusat) {
+          Utils.$('tenantFilterWrap').classList.remove('hidden');
+        }
+      } catch (err) {
+        console.error('Token decode error:', err);
+        Core.handleUnauthorized();
+      }
+    },
+
+    handleUnauthorized: () => {
+      localStorage.removeItem('token');
+      sessionStorage.removeItem('token');
+      window.location.href = 'login.html';
+    },
+
+    logout: () => {
+      localStorage.removeItem('token');
+      sessionStorage.removeItem('token');
+      window.location.href = 'login.html';
+    },
+
+    setCurrentDate: () => {
+      Utils.$('currentDate').textContent = new Date().toLocaleDateString('id-ID', {
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+      });
+    },
+
+    setupEventListeners: () => {
+      document.querySelectorAll('.nav-item').forEach(btn => {
+        btn.addEventListener('click', () => Core.showTab(btn.dataset.tab));
+      });
+
+      Utils.$('tenantSelect').addEventListener('change', () => Core.onTenantChange());
+
+      Utils.$('kpiOverviewBtn')?.addEventListener('click', () => Kpi.switchView('overview'));
+      Utils.$('kpiTemplateBtn')?.addEventListener('click', () => Kpi.switchView('template'));
+      Utils.$('kpiPeriodBtn')?.addEventListener('click', () => Kpi.switchView('period'));
+
+      Utils.$('chartWeeklyBtn')?.addEventListener('click', () => Core.switchChart('weekly'));
+      Utils.$('chartMonthlyBtn')?.addEventListener('click', () => Core.switchChart('monthly'));
+    },
+
+    showTab: async (tabName) => {
+      if (!TABS.includes(tabName)) return;
+
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('.nav-item').forEach(el => {
+        el.classList.remove('nav-active');
+        el.classList.add('text-gray-600', 'hover:bg-gray-100');
+      });
+
+      const tabEl = Utils.$(tabName + 'Tab');
+      const btnEl = document.querySelector(`[data-tab="${tabName}"]`);
+      if (tabEl) tabEl.classList.remove('hidden');
+      if (btnEl) {
+        btnEl.classList.add('nav-active');
+        btnEl.classList.remove('text-gray-600', 'hover:bg-gray-100');
+      }
+
+      state.currentTab = tabName;
+
+      const titles = {
+        'dashboard': 'Dashboard', 'access': 'Akses SDM', 'teacher': 'Manajemen Guru',
+        'kpi': 'KPI & Evaluasi', 'attendance': 'Log Kehadiran', 'recapAbsensi': 'Rekap Absensi',
+        'manualAttendance': 'Input Absensi Manual', 'payroll': 'Penggajian',
+        'sk-guru': 'Dokumen SK Guru', 'rules': 'Aturan Kepegawaian',
+        'qr-generator': 'QR Scanner', 'idcard': 'Cetak ID Card', 'settings': 'Pengaturan'
+      };
+      const subtitles = {
+        'dashboard': 'Ringkasan data SDM & KPI',
+        'access': 'Kelola siapa saja yang berhak mengakses dashboard SDM',
+        'teacher': 'Kelola data guru: tambah, edit, detail, nonaktifkan',
+        'kpi': 'Penilaian kinerja pegawai & evaluasi',
+        'attendance': 'Rekap log absensi guru',
+        'recapAbsensi': 'Rekap absensi bulanan per sekolah',
+        'manualAttendance': 'Input absensi manual per guru',
+        'payroll': 'Perhitungan gaji & potongan absensi',
+        'sk-guru': 'Dokumen resmi kepegawaian guru',
+        'rules': 'Aturan status kepegawaian & absensi',
+        'qr-generator': 'Device scanner absensi',
+        'idcard': 'Cetak kartu identitas',
+        'settings': 'Konfigurasi sistem SDM'
+      };
+      Utils.$('pageTitle').textContent = titles[tabName] || tabName;
+      Utils.$('pageSubtitle').textContent = subtitles[tabName] || '';
+
+      await Core.loadTabData(tabName);
+    },
+
+    loadTabData: async (tabName) => {
+      try {
+        switch (tabName) {
+          case 'dashboard': await Dashboard.load(); break;
+          case 'access': await Access.load(); break;
+          case 'teacher': await Teacher.load(); break;
+          case 'kpi': await Kpi.load(); break;
+          case 'attendance': await Attendance.load(); break;
+          case 'recapAbsensi': await Recap.load(); break;
+          case 'manualAttendance': await ManualAttendance.load(); break;
+          case 'payroll': await Payroll.load(); break;
+          case 'kafalah': await Kafalah.load(); break;
+          case 'settings': await Settings.load(); break;
+        }
+      } catch (err) {
+        console.error(`Error loading tab ${tabName}:`, err);
+      }
+    },
+
+    onTenantChange: async () => {
+      state.currentTenant = Utils.$('tenantSelect').value;
+      const activeTab = state.currentTab;
+      if (activeTab === 'dashboard') await Dashboard.load();
+      if (activeTab === 'kpi') await Kpi.loadOverview();
+      if (activeTab === 'attendance') await Attendance.load();
+      if (activeTab === 'recapAbsensi') await Recap.load();
+      if (activeTab === 'manualAttendance') await ManualAttendance.load();
+      if (activeTab === 'payroll') await Payroll.load();
+      if (activeTab === 'kafalah') await Kafalah.loadSettings();
+    },
+
+    loadTenantOptions: async () => {
+      try {
+        const data = await Api.get('/sdm-dashboard/tenants');
+        const sel = Utils.$('tenantSelect');
+        if (data.success && data.data) {
+          data.data.forEach(t => {
+            const opt = document.createElement('option');
+            opt.value = t.tenant_id;
+            opt.textContent = t.nama_sekolah;
+            sel.appendChild(opt);
+          });
+
+          if (state.user?.assignments?.length) {
+            const sdmAssign = state.user.assignments.find(a =>
+              (a.jabatan_di_unit || '').toLowerCase().includes('sdm') &&
+              data.data.some(d => d.tenant_id === a.tenant_id)
+            );
+            if (sdmAssign) {
+              state.currentTenant = sdmAssign.tenant_id;
+              sel.value = state.currentTenant;
+            } else if (data.data.length > 0) {
+              state.currentTenant = data.data[0].tenant_id;
+              sel.value = state.currentTenant;
+            }
+          } else if (data.data.length > 0) {
+            state.currentTenant = data.data[0].tenant_id;
+            sel.value = state.currentTenant;
+          }
+        }
+      } catch (err) { /* silent */ }
+    },
+
+    switchChart: (type) => {
+      state.chartType = type;
+      Utils.$('chartWeeklyBtn').className = type === 'weekly'
+        ? 'px-3 py-1 text-xs font-medium bg-indigo-600 text-white rounded-md'
+        : 'px-3 py-1 text-xs font-medium bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300';
+      Utils.$('chartMonthlyBtn').className = type === 'monthly'
+        ? 'px-3 py-1 text-xs font-medium bg-indigo-600 text-white rounded-md'
+        : 'px-3 py-1 text-xs font-medium bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300';
+
+      const t = state.currentTenant;
+      Api.get(`/sdm-dashboard/attendance-chart?type=${type}${t ? `&tenant_id=${t}` : ''}`)
+        .then(res => res.success && Dashboard.renderAttendanceChart(res.data));
+    }
+  };
+
+  // ============================================================
+  // DASHBOARD MODULE
+  // ============================================================
+  const Dashboard = {
+    async load() {
+      try {
+        const t = state.currentTenant;
+        const [statsRes, chartRes, kpiRes] = await Promise.all([
+          Api.get(`/sdm-dashboard/stats${t ? `?tenant_id=${t}` : ''}`),
+          Api.get(`/sdm-dashboard/attendance-chart?type=${state.chartType}${t ? `&tenant_id=${t}` : ''}`),
+          Api.get(`/sdm-dashboard/kpi-summary${t ? `?tenant_id=${t}` : ''}`)
+        ]);
+
+        if (statsRes.success) {
+          const d = statsRes.data;
+          Utils.$('statTotalTeachers').textContent = d.total_teachers || 0;
+          Utils.$('statTotalTeachers').classList.remove('skeleton-loader');
+          Utils.$('statTodayPresent').textContent = d.today_attendance || 0;
+          Utils.$('statTodayLate').textContent = d.late_today || 0;
+          Utils.$('statAvgKpi').textContent = d.kpi_summary?.avg_score || 0;
+          Utils.$('kpiActivePeriod').textContent = d.kpi_summary?.active_period || 'Belum ada periode';
+          Utils.$('kpiCompletionRate').textContent = `${d.kpi_summary?.completion_rate || 0}%`;
+          Utils.$('kpiTotalTemplates').textContent = d.kpi_summary?.total_templates || 0;
+          Utils.$('kpiAssessedCount').textContent = d.kpi_summary?.completion_rate
+            ? Math.round((d.kpi_summary.completion_rate / 100) * (d.total_teachers || 0)) : 0;
+
+          const tbody = Utils.$('schoolRecapTable');
+          if (d.by_school?.length) {
+            tbody.innerHTML = d.by_school.map(s => {
+              const rate = parseFloat(s.attendance_rate) || 0;
+              const statusBadge = rate >= 90
+                ? '<span class="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">Baik</span>'
+                : rate >= 75
+                  ? '<span class="px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-800 rounded-full">Cukup</span>'
+                  : '<span class="px-2 py-1 text-xs font-medium bg-red-100 text-red-800 rounded-full">Perhatian</span>';
+              return `
+                <tr class="cursor-pointer hover:bg-gray-50" onclick="SDMDashboard.showSchoolDetail('${s.tenant_id || ''}', '${Utils.escapeHtml(s.nama_sekolah)}')">
+                  <td class="px-4 py-3 text-sm font-medium text-gray-900">${Utils.escapeHtml(s.nama_sekolah)} <button onclick="event.stopPropagation();SDMDashboard.showSchoolDetail('${s.tenant_id || ''}','${Utils.escapeHtml(s.nama_sekolah)}')" class="ml-2 text-xs text-indigo-600 hover:underline">Detail</button></td>
+                  <td class="px-4 py-3 text-sm text-gray-700">${s.teachers || 0}</td>
+                  <td class="px-4 py-3">
+                    <div class="flex items-center">
+                      <div class="w-24 bg-gray-200 rounded-full h-2 mr-2">
+                        <div class="bg-indigo-600 h-2 rounded-full kpi-progress-bar" style="width: ${rate}%"></div>
+                      </div>
+                      <span class="text-sm text-gray-700">${rate}%</span>
+                    </div>
+                  </td>
+                  <td class="px-4 py-3">${statusBadge}</td>
+                </tr>`;
+            }).join('');
+          } else {
+            tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-8 text-center text-gray-500">Tidak ada data</td></tr>';
+          }
+        }
+
+        if (chartRes.success) this.renderAttendanceChart(chartRes.data);
+        if (kpiRes.success) this.renderKpiChart(kpiRes.data);
+      } catch (err) {
+        console.error('Dashboard stats error:', err);
+      }
+    },
+
+    renderAttendanceChart(chartData) {
+      const ctx = Utils.$('attendanceChart');
+      if (!ctx) return;
+      if (state.charts.attendance) state.charts.attendance.destroy();
+      state.charts.attendance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: chartData.labels || [],
+          datasets: (chartData.datasets || []).map(ds => ({
+            label: ds.label,
+            data: ds.data,
+            borderColor: ds.borderColor,
+            backgroundColor: ds.backgroundColor,
+            fill: true,
+            tension: 0.3
+          }))
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { position: 'bottom' } },
+          scales: { y: { beginAtZero: true } }
+        }
+      });
+    },
+
+    renderKpiChart(kpiData) {
+      const ctx = Utils.$('kpiChart');
+      if (!ctx) return;
+      if (state.charts.kpi) state.charts.kpi.destroy();
+      const indicators = (kpiData.by_indicator || []);
+      indicators.sort((a, b) => (b.avg_achievement || 0) - (a.avg_achievement || 0));
+      state.charts.kpi = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: indicators.map(i => i.nama || 'Indikator #' + i.id),
+          datasets: [{
+            label: 'Avg Achievement (%)',
+            data: indicators.map(i => i.avg_achievement || 0),
+            backgroundColor: indicators.map(i => {
+              const ach = i.avg_achievement || 0;
+              return ach >= 90 ? '#22c55e' : ach >= 75 ? '#f59e0b' : '#ef4444';
+            }),
+            borderRadius: 4,
+            borderSkipped: false
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            y: { beginAtZero: true, max: 120, ticks: { callback: v => v + '%' } },
+            x: {
+              ticks: { maxRotation: 45, minRotation: 45, font: { size: 9 }, autoSkip: false },
+              grid: { display: false }
+            }
+          },
+          layout: { padding: { bottom: 20 } }
+        }
+      });
+    }
+  };
+
+  // ============================================================
+  // ACCESS MODULE
+  // ============================================================
+  const Access = {
+    selectedTeacherId: null,
+    searchDebounce: null,
+
+    async load() {
+      const assignCard = Utils.$('accessAssignCard');
+      if (assignCard) {
+        assignCard.style.display = state.isSdmPusat ? 'block' : 'none';
+      }
+
+      if (state.isSdmPusat) {
+        await this.loadTenantOptions();
+        await this.loadAccessList();
+      }
+    },
+
+    async loadTenantOptions() {
+      try {
+        const data = await Api.get('/sdm-dashboard/tenants');
+        const sel = Utils.$('accessTenantSelect');
+        if (!sel) return;
+        const current = sel.value;
+        sel.innerHTML = '<option value="">Pilih Sekolah</option>';
+        if (data.success && data.data) {
+          data.data.forEach(t => {
+            const opt = document.createElement('option');
+            opt.value = t.tenant_id;
+            opt.textContent = `${t.tenant_id === SDM_PUSAT_TENANT ? 'PUSAT - ' : ''}${t.nama_sekolah}`;
+            sel.appendChild(opt);
+          });
+        }
+        if (current) sel.value = current;
+        this.onTenantChange();
+      } catch (err) { /* silent */ }
+    },
+
+    onTenantChange() {
+      const sel = Utils.$('accessTenantSelect');
+      const preview = Utils.$('accessJabatanPreview');
+      if (!sel || !preview) return;
+
+      const tenantId = sel.value;
+      if (tenantId === SDM_PUSAT_TENANT) {
+        preview.value = 'SDM Pusat (akses semua sekolah)';
+        preview.classList.remove('text-gray-600');
+        preview.classList.add('text-indigo-700', 'font-semibold');
+      } else if (tenantId) {
+        preview.value = 'SDM (akses unit sekolah ini)';
+        preview.classList.remove('text-gray-600');
+        preview.classList.add('text-indigo-700', 'font-semibold');
+      } else {
+        preview.value = '—';
+        preview.classList.add('text-gray-600');
+        preview.classList.remove('text-indigo-700', 'font-semibold');
+      }
+      this.resetSelectedTeacher();
+    },
+
+    resetSelectedTeacher() {
+      this.selectedTeacherId = null;
+      const search = Utils.$('accessTeacherSearch');
+      if (search) search.value = '';
+      const resultWrap = Utils.$('accessTeacherResult');
+      if (resultWrap) resultWrap.classList.add('hidden');
+      const list = Utils.$('accessTeacherList');
+      if (list) list.innerHTML = '';
+    },
+
+    handleAccessTeacherSearch(e) {
+      clearTimeout(this.searchDebounce);
+      this.searchDebounce = setTimeout(() => this.searchTeachers(), 400);
+    },
+
+    async searchTeachers() {
+      const tenantId = Utils.$('accessTenantSelect')?.value;
+      const keyword = Utils.$('accessTeacherSearch')?.value?.trim() || '';
+
+      if (!tenantId) {
+        Utils.showToast('Pilih sekolah terlebih dahulu', 'warning');
+        return;
+      }
+      if (keyword.length < 2) {
+        Utils.$('accessTeacherResult')?.classList.add('hidden');
+        return;
+      }
+
+      try {
+        const params = new URLSearchParams({ tenant_id: tenantId, search: keyword, limit: 25 });
+        const data = await Api.get(`/sdm-dashboard/access/candidates?${params}`);
+        const wrap = Utils.$('accessTeacherResult');
+        const list = Utils.$('accessTeacherList');
+
+        if (data.success && data.data?.length) {
+          wrap.classList.remove('hidden');
+          list.innerHTML = data.data.map(t => `
+            <div class="flex items-center justify-between px-4 py-3 hover:bg-gray-50 cursor-pointer" onclick="SDMDashboard.Access.selectTeacher(${t.id}, '${Utils.escapeHtml(t.nama).replace(/'/g, "\\'")}')">
+              <div>
+                <p class="text-sm font-medium text-gray-900">${Utils.escapeHtml(t.nama)}</p>
+                <p class="text-xs text-gray-500">NIK: ${Utils.escapeHtml(t.nik || '-')}${t.nip ? ' | NIP: ' + Utils.escapeHtml(t.nip) : ''}</p>
+              </div>
+              <span class="text-xs text-gray-400">${Utils.escapeHtml(t.status_kepegawaian || '')}</span>
+            </div>`).join('');
+        } else {
+          wrap.classList.remove('hidden');
+          list.innerHTML = `
+            <div class="px-4 py-6 text-center text-sm text-gray-500">
+              Tidak ada guru ditemukan${tenantId === SDM_PUSAT_TENANT ? ' di tenant pusat' : ' di sekolah tersebut'}.<br>
+              <span class="text-xs text-gray-400">Guru harus sudah memiliki penempatan di sekolah ini.</span>
+            </div>`;
+        }
+      } catch (err) {
+        Utils.showToast(err.message || 'Gagal mencari guru', 'error');
+      }
+    },
+
+    selectTeacher(teacherId, nama) {
+      this.selectedTeacherId = teacherId;
+      const list = Utils.$('accessTeacherList');
+      list.querySelectorAll('div').forEach(d => d.classList.remove('bg-indigo-50', 'ring-1', 'ring-indigo-300'));
+      event?.currentTarget?.classList?.add('bg-indigo-50', 'ring-1', 'ring-indigo-300');
+      Utils.showToast(`Guru dipilih: ${nama}`, 'success');
+    },
+
+    async assignSdmAccess() {
+      const tenantId = Utils.$('accessTenantSelect')?.value;
+      if (!tenantId) {
+        Utils.showToast('Pilih sekolah terlebih dahulu', 'warning');
+        return;
+      }
+      if (!this.selectedTeacherId) {
+        Utils.showToast('Cari dan pilih guru terlebih dahulu', 'warning');
+        return;
+      }
+      if (!state.isSdmPusat) {
+        Utils.showToast('Hanya SDM Pusat yang boleh memberikan akses SDM', 'error');
+        return;
+      }
+
+      const jabatan = tenantId === SDM_PUSAT_TENANT ? 'SDM Pusat' : 'SDM';
+      const confirm = await Swal.fire({
+        title: 'Berikan akses SDM?',
+        html: `<p class="text-sm text-gray-600">Jabatan yang akan diberikan: <span class="font-semibold text-indigo-700">${jabatan}</span></p>
+               <p class="text-xs text-gray-500 mt-2">${jabatan === 'SDM Pusat' ? 'Akses ke semua sekolah.' : 'Akses hanya ke unit sekolah ini.'}</p>`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Ya, berikan',
+        cancelButtonText: 'Batal',
+        confirmButtonColor: '#4f46e5'
+      });
+      if (!confirm.isConfirmed) return;
+
+      try {
+        Swal.fire({ title: 'Memproses...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        const data = await Api.post('/sdm-dashboard/access', {
+          teacher_id: this.selectedTeacherId,
+          tenant_id: tenantId
+        });
+        if (data.success) {
+          Utils.showToast(data.message, 'success');
+          this.resetSelectedTeacher();
+          this.loadAccessList();
+        } else {
+          Utils.showToast(data.message || 'Tidak dapat memberikan akses', 'error');
+        }
+      } catch (err) {
+        Utils.showToast(err.message || 'Gagal memberikan akses SDM', 'error');
+      }
+    },
+
+    async loadAccessList() {
+      const tbody = Utils.$('sdmAccessTable');
+      if (!tbody) return;
+      tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-12 text-center text-gray-500"><i class="fas fa-spinner fa-spin text-xl mb-2"></i><p>Memuat data...</p></td></tr>';
+
+      try {
+        const data = await Api.get('/sdm-dashboard/access/list');
+        if (data.success && data.data?.length) {
+          tbody.innerHTML = data.data.map(a => {
+            const isPusat = a.tenant_id === SDM_PUSAT_TENANT;
+            const jabatanLabel = isPusat ? 'SDM Pusat' : 'SDM';
+            const levelBadge = isPusat
+              ? '<span class="px-2 py-1 text-xs font-medium bg-indigo-100 text-indigo-800 rounded-full">Pusat &middot; Semua sekolah</span>'
+              : '<span class="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-700 rounded-full">Sekolah &middot; Unit sendiri</span>';
+            const sekolah = isPusat
+              ? '<span class="font-semibold text-indigo-700">Pusat (YPWI Lutim)</span>'
+              : Utils.escapeHtml(a.nama_sekolah || a.tenant_id);
+            return `
+              <tr>
+                <td class="px-4 py-3 text-sm font-medium text-gray-900">${Utils.escapeHtml(a.nama)}</td>
+                <td class="px-4 py-3 text-sm text-gray-700">${Utils.escapeHtml(a.nik || '-')}</td>
+                <td class="px-4 py-3 text-sm text-gray-700">${sekolah}</td>
+                <td class="px-4 py-3 text-sm text-gray-700">${Utils.escapeHtml(a.jabatan_di_unit || jabatanLabel)}</td>
+                <td class="px-4 py-3">${levelBadge}</td>
+                <td class="px-4 py-3">
+                  ${state.isSdmPusat
+                    ? `<button onclick="SDMDashboard.Access.revokeAccess(${a.id}, '${Utils.escapeHtml(a.nama).replace(/'/g, "\\'")}', '${Utils.escapeHtml(a.nama_sekolah || a.tenant_id).replace(/'/g, "\\'")}')" class="text-red-600 hover:text-red-800 text-sm" title="Cabut akses"><i class="fas fa-user-minus"></i></button>`
+                    : '<span class="text-xs text-gray-400">Read-only</span>'}
+                </td>
+              </tr>`;
+          }).join('');
+        } else {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="6" class="px-4 py-12 text-center text-gray-500">
+                <i class="fas fa-user-shield text-3xl text-gray-300 mb-3"></i>
+                <p>Belum ada guru dengan jabatan SDM.</p>
+                <p class="text-xs text-gray-400 mt-1">Gunakan form di atas untuk memberikan akses.</p>
+              </td>
+            </tr>`;
+        }
+      } catch (err) {
+        tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-12 text-center text-red-500">Gagal memuat daftar akses SDM</td></tr>';
+      }
+    },
+
+    async revokeAccess(assignmentId, nama, sekolah) {
+      const confirm = await Swal.fire({
+        title: 'Cabut akses SDM?',
+        html: `<p class="text-sm text-gray-600"><span class="font-semibold">${nama}</span> akan kehilangan akses dashboard SDM${sekolah ? ` di ${sekolah}` : ''}.</p>
+               <p class="text-xs text-gray-500 mt-2">Penempatan/jabatan lain yang dimiliki guru tersebut tidak terpengaruh.</p>`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Ya, cabut',
+        cancelButtonText: 'Batal',
+        confirmButtonColor: '#dc2626'
+      });
+      if (!confirm.isConfirmed) return;
+
+      try {
+        const data = await Api.delete(`/sdm-dashboard/access/${assignmentId}`);
+        if (data.success) {
+          Utils.showToast(data.message, 'success');
+          this.loadAccessList();
+        } else {
+          Utils.showToast(data.message || 'Tidak dapat mencabut akses', 'error');
+        }
+      } catch (err) {
+        Utils.showToast(err.message || 'Gagal mencabut akses', 'error');
+      }
+    }
+  };
+
+  // ============================================================
+  // TEACHER MODULE
+  // ============================================================
+  const Teacher = {
+    async load() {
+      await this.loadTenantOptions();
+      await this.loadJabatanOptions();
+      await this.loadList(1);
+    },
+
+    async loadTenantOptions() {
+      try {
+        const data = await Api.get('/sdm-dashboard/tenants');
+        const sel = Utils.$('teacherTenantFilter');
+        const modalSel = Utils.$('teacherTenant');
+        const manualSel = Utils.$('manualModalTenant');
+        if (data.success && data.data) {
+          data.data.forEach(t => {
+            const opt = document.createElement('option');
+            opt.value = t.tenant_id;
+            opt.textContent = t.nama_sekolah;
+            if (sel) sel.appendChild(opt.cloneNode(true));
+            if (modalSel) modalSel.appendChild(opt.cloneNode(true));
+            if (manualSel) manualSel.appendChild(opt.cloneNode(true));
+          });
+        }
+      } catch (err) { /* silent */ }
+    },
+
+    async loadJabatanOptions() {
+      try {
+        const data = await Api.get('/sdm-dashboard/jabatan-options');
+        const sel = Utils.$('teacherJabatan');
+        if (data.success && data.data) {
+          data.data.forEach(j => {
+            const opt = document.createElement('option');
+            opt.value = j;
+            opt.textContent = j;
+            sel.appendChild(opt);
+          });
+        }
+      } catch (err) { /* silent */ }
+    },
+
+    async loadList(page = 1) {
+      state.teacherPage = page;
+      const tenant = Utils.$('teacherTenantFilter')?.value;
+      const jabatan = Utils.$('teacherJabatanFilter')?.value;
+      const status = Utils.$('teacherStatusFilter')?.value;
+      const active = Utils.$('teacherActiveFilter')?.value;
+
+      state.teacherFilters = { tenant, jabatan, status, active };
+
+      const params = new URLSearchParams({
+        page, limit: 15,
+        ...(tenant && { tenant_id: tenant }),
+        ...(jabatan && { jabatan }),
+        ...(status && { status_kepegawaian: status }),
+        ...(active && { status_aktif: active })
+      });
+
+      try {
+        const tbody = Utils.$('teacherTableBody');
+        tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-12 text-center text-gray-500"><i class="fas fa-spinner fa-spin text-xl mb-2"></i><p>Memuat data...</p></td></tr>';
+
+        const data = await Api.get(`/sdm-dashboard/teacher-list?${params}`);
+        if (data.success && data.data?.data?.length) {
+          tbody.innerHTML = data.data.data.map(t => `
+            <tr class="hover:bg-gray-50">
+              <td class="px-4 py-3">
+                ${t.link_foto ? `<img src="${Utils.escapeHtml(t.link_foto)}" class="w-10 h-10 rounded-full object-cover" alt="">` : '<div class="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center"><i class="fas fa-user text-gray-400"></i></div>'}
+              </td>
+              <td class="px-4 py-3 text-sm font-medium text-gray-900">${Utils.escapeHtml(t.nama)}</td>
+              <td class="px-4 py-3 text-sm text-gray-700">${Utils.escapeHtml(t.nik || '-')}</td>
+              <td class="px-4 py-3 text-sm text-gray-700">${Utils.escapeHtml(t.nip || '-')}</td>
+              <td class="px-4 py-3 text-sm text-gray-700">${Utils.escapeHtml(t.nama_sekolah || '-')}</td>
+              <td class="px-4 py-3 text-sm text-gray-700">${Utils.escapeHtml(t.jabatan || '-')}</td>
+              <td class="px-4 py-3 text-sm text-gray-700">${Utils.escapeHtml(t.status_kepegawaian || '-')}</td>
+              <td class="px-4 py-3">
+                <span class="px-2 py-1 text-xs font-medium rounded-full ${t.status_aktif == '1' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}">
+                  ${t.status_aktif == '1' ? 'Aktif' : 'Nonaktif'}
+                </span>
+              </td>
+              <td class="px-4 py-3">
+                <div class="flex items-center space-x-2">
+                  <button onclick="SDMDashboard.Teacher.showDetail(${t.id})" class="text-indigo-600 hover:text-indigo-800 text-sm" title="Detail"><i class="fas fa-eye"></i></button>
+                  <button onclick="SDMDashboard.Teacher.showModal(${t.id})" class="text-green-600 hover:text-green-800 text-sm" title="Edit"><i class="fas fa-edit"></i></button>
+                  <button onclick="SDMDashboard.Teacher.delete(${t.id}, '${Utils.escapeHtml(t.nama).replace(/'/g, "\\'")}')" class="text-red-600 hover:text-red-800 text-sm" title="Nonaktifkan"><i class="fas fa-user-slash"></i></button>
+                </div>
+              </td>
+            </tr>`).join('');
+          this.renderPagination(data.data.current_page, data.data.last_page);
+        } else {
+          tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-12 text-center text-gray-500">Tidak ada data guru</td></tr>';
+          Utils.$('teacherPagination').innerHTML = '';
+        }
+      } catch (err) {
+        console.error('Load teacher list error:', err);
+        Utils.$('teacherTableBody').innerHTML = '<tr><td colspan="9" class="px-4 py-12 text-center text-red-500">Gagal memuat data</td></tr>';
+      }
+    },
+
+    renderPagination(current, last) {
+      const container = Utils.$('teacherPagination');
+      if (last <= 1) { container.innerHTML = ''; return; }
+
+      let html = '';
+      if (current > 1) {
+        html += `<button class="pagination-btn" onclick="SDMDashboard.Teacher.loadList(${current - 1})"><i class="fas fa-chevron-left"></i></button>`;
+      }
+      const start = Math.max(1, current - 2);
+      const end = Math.min(last, current + 2);
+      for (let i = start; i <= end; i++) {
+        html += `<button class="pagination-btn ${i === current ? 'active' : ''}" onclick="SDMDashboard.Teacher.loadList(${i})">${i}</button>`;
+      }
+      if (current < last) {
+        html += `<button class="pagination-btn" onclick="SDMDashboard.Teacher.loadList(${current + 1})"><i class="fas fa-chevron-right"></i></button>`;
+      }
+      container.innerHTML = html;
+    },
+
+    showModal(id = null) {
+      Utils.$('teacherModalTitle').textContent = id ? 'Edit Guru' : 'Tambah Guru';
+      Utils.$('teacherId').value = id || '';
+      Utils.$('teacherForm').reset();
+      Utils.$('teacherStatusAktif').value = '1';
+
+      this.loadTenantOptions();
+      this.loadJabatanOptions();
+
+      if (id) this.loadData(id);
+
+      Utils.showModal('teacherModal');
+    },
+
+    hideModal() {
+      Utils.hideModal('teacherModal');
+      Utils.$('teacherForm').reset();
+      Utils.$('teacherId').value = '';
+    },
+
+    async loadData(id) {
+      try {
+        const data = await Api.get(`/sdm-dashboard/teacher-list?search=${id}&limit=1`);
+        if (data.success && data.data?.data?.length) {
+          this.fillForm(data.data.data[0]);
+        }
+      } catch (err) {
+        console.error('Failed to load teacher data:', err);
+      }
+    },
+
+    fillForm(t) {
+      Utils.$('teacherNama').value = t.nama || '';
+      Utils.$('teacherNik').value = t.nik || '';
+      Utils.$('teacherNip').value = t.nip || '';
+      Utils.$('teacherTempatLahir').value = t.tempat_lahir || '';
+      Utils.$('teacherTanggalLahir').value = t.tanggal_lahir || '';
+      Utils.$('teacherJenisKelamin').value = t.jenis_kelamin || '';
+      Utils.$('teacherAlamat').value = t.alamat || '';
+      Utils.$('teacherNoWa').value = t.no_wa || '';
+      Utils.$('teacherEmail').value = t.email || '';
+      Utils.$('teacherStatusKepegawaian').value = t.status_kepegawaian || '';
+      Utils.$('teacherTmt').value = t.tmt || '';
+      Utils.$('teacherStatusAktif').value = t.status_aktif || '1';
+      Utils.$('teacherLinkFoto').value = t.link_foto || '';
+      Utils.$('teacherLinkKtp').value = t.link_ktp || '';
+      Utils.$('teacherLinkKk').value = t.link_kk || '';
+      Utils.$('teacherLinkIjazah').value = t.link_ijazah || '';
+      Utils.$('teacherGajiPokok').value = t.gaji_pokok || 0;
+      Utils.$('teacherTunjKinerja').value = t.tunj_kinerja || 0;
+      Utils.$('teacherTunjUmum').value = t.tunj_umum || 0;
+      Utils.$('teacherTunjIstri').value = t.tunj_istri || 0;
+      Utils.$('teacherTunjAnak').value = t.tunj_anak || 0;
+      Utils.$('teacherTunjKepalaSekolah').value = t.tunj_kepala_sekolah || 0;
+      Utils.$('teacherTunjWaliKelas').value = t.tunj_wali_kelas || 0;
+      Utils.$('teacherHonorBendahara').value = t.honor_bendahara || 0;
+      Utils.$('teacherTunjKehadiran').value = t.tunj_kehadiran || 0;
+      Utils.$('teacherPotongan').value = t.potongan || 0;
+
+      if (t.tenant_id) {
+        Utils.$('teacherTenant').value = t.tenant_id;
+        this.onTenantChange();
+      }
+      if (t.jabatan) {
+        setTimeout(() => { Utils.$('teacherJabatan').value = t.jabatan; }, 100);
+      }
+    },
+
+    async onTenantChange() {
+      // Could filter jabatan based on tenant
+    },
+
+    checkNipRequirement() {
+      const tmt = Utils.$('teacherTmt').value;
+      const nipInput = Utils.$('teacherNip');
+      if (tmt) {
+        const tmtDate = new Date(tmt);
+        const twoYearsAgo = new Date();
+        twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+        if (tmtDate <= twoYearsAgo) {
+          nipInput.setAttribute('required', 'required');
+          nipInput.placeholder = 'Wajib diisi (TMT >= 2 tahun)';
+          nipInput.classList.add('border-red-300');
+        } else {
+          nipInput.removeAttribute('required');
+          nipInput.placeholder = 'Wajib jika TMT >= 2 tahun';
+          nipInput.classList.remove('border-red-300');
+        }
+      }
+    },
+
+    async saveTeacher(e) {
+      e.preventDefault();
+      const id = Utils.$('teacherId').value;
+      const isEdit = !!id;
+
+      const payload = {
+        nama: Utils.$('teacherNama').value,
+        nik: Utils.$('teacherNik').value,
+        nip: Utils.$('teacherNip').value || null,
+        tempat_lahir: Utils.$('teacherTempatLahir').value || null,
+        tanggal_lahir: Utils.$('teacherTanggalLahir').value || null,
+        jenis_kelamin: Utils.$('teacherJenisKelamin').value || null,
+        alamat: Utils.$('teacherAlamat').value || null,
+        no_wa: Utils.$('teacherNoWa').value || null,
+        email: Utils.$('teacherEmail').value || null,
+        tenant_id: Utils.$('teacherTenant').value,
+        jabatan: Utils.$('teacherJabatan').value || null,
+        status_kepegawaian: Utils.$('teacherStatusKepegawaian').value || null,
+        tmt: Utils.$('teacherTmt').value || null,
+        status_aktif: Utils.$('teacherStatusAktif').value,
+        link_foto: Utils.$('teacherLinkFoto').value || null,
+        link_ktp: Utils.$('teacherLinkKtp').value || null,
+        link_kk: Utils.$('teacherLinkKk').value || null,
+        link_ijazah: Utils.$('teacherLinkIjazah').value || null,
+        gaji_pokok: parseInt(Utils.$('teacherGajiPokok').value) || 0,
+        tunj_kinerja: parseInt(Utils.$('teacherTunjKinerja').value) || 0,
+        tunj_umum: parseInt(Utils.$('teacherTunjUmum').value) || 0,
+        tunj_istri: parseInt(Utils.$('teacherTunjIstri').value) || 0,
+        tunj_anak: parseInt(Utils.$('teacherTunjAnak').value) || 0,
+        tunj_kepala_sekolah: parseInt(Utils.$('teacherTunjKepalaSekolah').value) || 0,
+        tunj_wali_kelas: parseInt(Utils.$('teacherTunjWaliKelas').value) || 0,
+        honor_bendahara: parseInt(Utils.$('teacherHonorBendahara').value) || 0,
+        tunj_kehadiran: parseInt(Utils.$('teacherTunjKehadiran').value) || 0,
+        potongan: parseInt(Utils.$('teacherPotongan').value) || 0
+      };
+
+      if (!payload.nama || !payload.nik || !payload.tenant_id) {
+        Utils.showToast('Nama, NIK, dan Sekolah wajib diisi', 'warning');
+        return;
+      }
+
+      try {
+        Swal.fire({ title: 'Menyimpan...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        if (isEdit) {
+          await Api.put(`/sdm-dashboard/teachers/${id}`, payload);
+        } else {
+          await Api.post('/sdm-dashboard/teachers', payload);
+        }
+        Utils.showToast('Guru ' + (isEdit ? 'diperbarui' : 'ditambahkan'), 'success');
+        this.hideModal();
+        this.loadList(state.teacherPage);
+      } catch (err) {
+        Utils.showToast(err.message || 'Gagal menyimpan guru', 'error');
+      }
+    },
+
+    async showDetail(id) {
+      Utils.$('teacherDetailTitle').textContent = 'Detail Guru';
+      const content = Utils.$('teacherDetailContent');
+      content.innerHTML = '<p class="text-center py-8"><i class="fas fa-spinner fa-spin"></i> Memuat...</p>';
+      Utils.showModal('teacherDetailModal');
+
+      try {
+        const listData = await Api.get(`/sdm-dashboard/teacher-list?search=${id}&limit=1`);
+        if (!listData.success || !listData.data?.data?.length) {
+          content.innerHTML = '<p class="text-center py-8 text-red-500">Guru tidak ditemukan</p>';
+          return;
+        }
+
+        const t = listData.data.data[0];
+        let html = `
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            <div>
+              <h4 class="font-semibold text-gray-900 mb-3">Informasi Pribadi</h4>
+              <div class="space-y-2 text-sm">
+                <p><span class="font-medium text-gray-700">Nama:</span> ${Utils.escapeHtml(t.nama || '-')}</p>
+                <p><span class="font-medium text-gray-700">NIK:</span> ${Utils.escapeHtml(t.nik || '-')}</p>
+                <p><span class="font-medium text-gray-700">NIP:</span> ${Utils.escapeHtml(t.nip || '-')}</p>
+                <p><span class="font-medium text-gray-700">Tempat/Tgl Lahir:</span> ${Utils.escapeHtml(t.tempat_lahir || '-')}, ${t.tanggal_lahir ? Utils.formatDate(t.tanggal_lahir) : '-'}</p>
+                <p><span class="font-medium text-gray-700">Jenis Kelamin:</span> ${t.jenis_kelamin === 'L' ? 'Laki-laki' : t.jenis_kelamin === 'P' ? 'Perempuan' : '-'}</p>
+                <p><span class="font-medium text-gray-700">Alamat:</span> ${Utils.escapeHtml(t.alamat || '-')}</p>
+                <p><span class="font-medium text-gray-700">No. WhatsApp:</span> ${Utils.escapeHtml(t.no_wa || '-')}</p>
+                <p><span class="font-medium text-gray-700">Email:</span> ${Utils.escapeHtml(t.email || '-')}</p>
+              </div>
+            </div>
+            <div>
+              <h4 class="font-semibold text-gray-900 mb-3">Penempatan & Jabatan</h4>
+              <div class="space-y-2 text-sm">
+                <p><span class="font-medium text-gray-700">Sekolah:</span> ${Utils.escapeHtml(t.nama_sekolah || '-')}</p>
+                <p><span class="font-medium text-gray-700">Jabatan:</span> ${Utils.escapeHtml(t.jabatan || '-')}</p>
+                <p><span class="font-medium text-gray-700">Status Kepegawaian:</span> ${Utils.escapeHtml(t.status_kepegawaian || '-')}</p>
+                <p><span class="font-medium text-gray-700">TMT:</span> ${t.tmt ? Utils.formatDate(t.tmt) : '-'}</p>
+                <p><span class="font-medium text-gray-700">Status:</span> <span class="px-2 py-1 text-xs font-medium rounded-full ${t.status_aktif == '1' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}">${t.status_aktif == '1' ? 'Aktif' : 'Nonaktif'}</span></p>
+              </div>
+            </div>
+          </div>
+          <div class="border-t pt-4">
+            <h4 class="font-semibold text-gray-900 mb-3">Komponen Gaji</h4>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <p><span class="font-medium text-gray-700">Gaji Pokok:</span> ${Utils.formatRupiah(t.gaji_pokok)}</p>
+              <p><span class="font-medium text-gray-700">Tunj. Kinerja:</span> ${Utils.formatRupiah(t.tunj_kinerja)}</p>
+              <p><span class="font-medium text-gray-700">Tunj. Umum:</span> ${Utils.formatRupiah(t.tunj_umum)}</p>
+              <p><span class="font-medium text-gray-700">Tunj. Istri:</span> ${Utils.formatRupiah(t.tunj_istri)}</p>
+              <p><span class="font-medium text-gray-700">Tunj. Anak:</span> ${Utils.formatRupiah(t.tunj_anak)}</p>
+              <p><span class="font-medium text-gray-700">Tunj. Kepala Sekolah:</span> ${Utils.formatRupiah(t.tunj_kepala_sekolah)}</p>
+              <p><span class="font-medium text-gray-700">Tunj. Wali Kelas:</span> ${Utils.formatRupiah(t.tunj_wali_kelas)}</p>
+              <p><span class="font-medium text-gray-700">Honor Bendahara:</span> ${Utils.formatRupiah(t.honor_bendahara)}</p>
+              <p><span class="font-medium text-gray-700">Tunj. Kehadiran:</span> ${Utils.formatRupiah(t.tunj_kehadiran)}</p>
+              <p><span class="font-medium text-gray-700">Potongan:</span> ${Utils.formatRupiah(t.potongan)}</p>
+            </div>
+          </div>
+          <div class="border-t pt-4 mt-4">
+            <h4 class="font-semibold text-gray-900 mb-3">Dokumen</h4>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              ${t.link_foto ? `<a href="${Utils.escapeHtml(t.link_foto)}" target="_blank" class="text-indigo-600 hover:underline"><i class="fas fa-image mr-1"></i>Foto</a>` : '<span class="text-gray-400">Foto: -</span>'}
+              ${t.link_ktp ? `<a href="${Utils.escapeHtml(t.link_ktp)}" target="_blank" class="text-indigo-600 hover:underline"><i class="fas fa-id-card mr-1"></i>KTP</a>` : '<span class="text-gray-400">KTP: -</span>'}
+              ${t.link_kk ? `<a href="${Utils.escapeHtml(t.link_kk)}" target="_blank" class="text-indigo-600 hover:underline"><i class="fas fa-users mr-1"></i>KK</a>` : '<span class="text-gray-400">KK: -</span>'}
+              ${t.link_ijazah ? `<a href="${Utils.escapeHtml(t.link_ijazah)}" target="_blank" class="text-indigo-600 hover:underline"><i class="fas fa-graduation-cap mr-1"></i>Ijazah</a>` : '<span class="text-gray-400">Ijazah: -</span>'}
+            </div>
+          </div>
+        `;
+        content.innerHTML = html;
+      } catch (err) {
+        content.innerHTML = '<p class="text-center py-8 text-red-500">Gagal memuat detail guru</p>';
+      }
+    },
+
+    async delete(id, nama) {
+      const confirm = await Swal.fire({
+        title: 'Nonaktifkan Guru?',
+        html: `<p class="text-sm text-gray-600">Guru <strong>${Utils.escapeHtml(nama)}</strong> akan dinonaktifkan (status_aktif = 0).</p>
+               <p class="text-xs text-gray-500 mt-2">Data guru tetap tersimpan, hanya tidak muncul daftar aktif.</p>`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Ya, nonaktifkan',
+        cancelButtonText: 'Batal',
+        confirmButtonColor: '#dc2626'
+      });
+      if (!confirm.isConfirmed) return;
+
+      try {
+        Swal.fire({ title: 'Memproses...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        await Api.delete(`/sdm-dashboard/teachers/${id}`);
+        Utils.showToast('Guru dinonaktifkan', 'success');
+        this.loadList(state.teacherPage);
+      } catch (err) {
+        Utils.showToast(err.message || 'Gagal menonaktifkan guru', 'error');
+      }
+    }
+  };
+
+  // ============================================================
+  // KPI MODULE
+  // ============================================================
+  const Kpi = {
+    async load() {
+      await this.loadPeriods();
+      await this.loadTemplates();
+      await this.loadOverview();
+      this.applyAccessControl();
+    },
+
+    switchView(view) {
+      ['overview', 'template', 'period'].forEach(v => {
+        Utils.$(`kpi${v.charAt(0).toUpperCase() + v.slice(1)}Section`)?.classList.add('hidden');
+        Utils.$(`kpi${v.charAt(0).toUpperCase() + v.slice(1)}Btn`)?.classList.remove('bg-indigo-600', 'text-white');
+        Utils.$(`kpi${v.charAt(0).toUpperCase() + v.slice(1)}Btn`)?.classList.add('bg-gray-200', 'text-gray-700');
+      });
+      Utils.$(`kpi${view.charAt(0).toUpperCase() + view.slice(1)}Section`)?.classList.remove('hidden');
+      Utils.$(`kpi${view.charAt(0).toUpperCase() + view.slice(1)}Btn`)?.classList.add('bg-indigo-600', 'text-white');
+      Utils.$(`kpi${view.charAt(0).toUpperCase() + view.slice(1)}Btn`)?.classList.remove('bg-gray-200', 'text-gray-700');
+
+      if (view === 'template') this.loadTemplates();
+      if (view === 'period') this.loadPeriods();
+      if (view === 'overview') this.loadOverview();
+    },
+
+    async loadPeriods() {
+      try {
+        const [periodsData, teachersData] = await Promise.all([
+          Api.get('/sdm/kpi/periods'),
+          Api.get('/sdm-dashboard/teacher-list?limit=1000')
+        ]);
+
+        const sel = Utils.$('kpiPeriodSelect');
+        if (periodsData.success && periodsData.data?.length) {
+          sel.innerHTML = '<option value="">Pilih periode...</option>';
+          periodsData.data.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            opt.textContent = `${p.nama} (${p.status})`;
+            sel.appendChild(opt);
+          });
+          const active = periodsData.data.find(p => p.status === 'aktif');
+          if (active) sel.value = active.id;
+        } else {
+          sel.innerHTML = '<option value="">Belum ada periode</option>';
+        }
+
+        const tsel = Utils.$('kpiTeacherSelect');
+        tsel.innerHTML = '<option value="">Semua Guru</option>';
+        if (teachersData.success && teachersData.data?.data?.length) {
+          teachersData.data.data.forEach(t => {
+            const opt = document.createElement('option');
+            opt.value = t.id;
+            opt.textContent = `${t.nama} - ${t.nama_sekolah || ''}`;
+            tsel.appendChild(opt);
+          });
+        }
+
+        const tbody = Utils.$('kpiPeriodTable');
+        if (periodsData.success && periodsData.data?.length) {
+          tbody.innerHTML = periodsData.data.map(p => {
+            const statusBadge = p.status === 'aktif'
+              ? '<span class="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">Aktif</span>'
+              : '<span class="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-600 rounded-full">Draft</span>';
+            return `
+              <tr>
+                <td class="px-4 py-3 text-sm font-medium text-gray-900">${Utils.escapeHtml(p.nama)}</td>
+                <td class="px-4 py-3 text-sm text-gray-700 capitalize">${Utils.escapeHtml(p.jenis)}</td>
+                <td class="px-4 py-3 text-sm text-gray-700">${p.tahun || '-'}</td>
+                <td class="px-4 py-3 text-sm text-gray-700">${p.tanggal_mulai ? Utils.formatDate(p.tanggal_mulai) : '-'}</td>
+                <td class="px-4 py-3 text-sm text-gray-700">${p.tanggal_selesai ? Utils.formatDate(p.tanggal_selesai) : '-'}</td>
+                <td class="px-4 py-3">${statusBadge}</td>
+                <td class="px-4 py-3">
+                  ${state.isSdmPusat ? `<button onclick="SDMDashboard.Kpi.deletePeriod(${p.id})" class="text-red-600 hover:text-red-800 text-sm"><i class="fas fa-trash"></i></button>` : ''}
+                </td>
+              </tr>`;
+          }).join('');
+        } else {
+          tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">Belum ada periode</td></tr>';
+        }
+      } catch (err) {
+        Utils.showToast('Gagal memuat periode penilaian KPI', 'error');
+      }
+    },
+
+    async loadTemplates() {
+      try {
+        const kategori = Utils.$('kpiKategoriSelect')?.value || '';
+        const data = await Api.get(`/sdm/kpi/templates${kategori ? `?kategori=${kategori}` : ''}`);
+        const tbody = Utils.$('kpiTemplateTable');
+        if (data.success && data.data?.length) {
+          tbody.innerHTML = data.data.map(t => {
+            const sumberBadge = t.sumber === 'kehadiran'
+              ? '<span class="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">Auto: Kehadiran</span>'
+              : t.sumber === 'evaluasi'
+                ? '<span class="px-2 py-1 text-xs font-medium bg-purple-100 text-purple-800 rounded-full">Auto: Evaluasi</span>'
+                : '<span class="px-2 py-1 text-xs font-medium bg-gray-100 text-gray-600 rounded-full">Manual</span>';
+            return `
+              <tr>
+                <td class="px-4 py-3 text-sm font-medium text-gray-900">${Utils.escapeHtml(t.nama)}</td>
+                <td class="px-4 py-3 text-sm text-gray-700 capitalize">${Utils.escapeHtml(t.kategori)}</td>
+                <td class="px-4 py-3 text-sm text-gray-700">${t.bobot}%</td>
+                <td class="px-4 py-3 text-sm text-gray-700">${t.target_default}</td>
+                <td class="px-4 py-3">${sumberBadge}</td>
+                <td class="px-4 py-3">
+                  ${state.isSdmPusat ? `
+                  <button onclick="SDMDashboard.Kpi.showTemplateModal(${t.id})" class="text-indigo-600 hover:text-indigo-800 text-sm mr-2"><i class="fas fa-edit"></i></button>
+                  <button onclick="SDMDashboard.Kpi.deleteTemplate(${t.id})" class="text-red-600 hover:text-red-800 text-sm"><i class="fas fa-trash"></i></button>` : '<span class="text-xs text-gray-400">Read-only</span>'}
+                </td>
+              </tr>`;
+          }).join('');
+        } else {
+          tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-center text-gray-500">Belum ada template KPI</td></tr>';
+        }
+      } catch (err) {
+        Utils.showToast('Gagal memuat template KPI', 'error');
+      }
+    },
+
+    async loadOverview() {
+      const periodId = Utils.$('kpiPeriodSelect')?.value || '';
+      const kategori = Utils.$('kpiKategoriSelect')?.value || '';
+
+      try {
+        let tK2 = state.currentTenant;
+        if (!tK2 && state.user?.assignments?.length) {
+          const sa = state.user.assignments.find(a => (a.jabatan_di_unit || "").toLowerCase().includes("sdm"));
+          tK2 = sa?.tenant_id || state.user.assignments[0]?.tenant_id;
+        }
+        const data = await Api.get(`/sdm-dashboard/kpi-summary?period_id=${periodId}${kategori ? `&kategori=${kategori}` : ""}${tK2 ? `&tenant_id=${tK2}` : ""}`);
+        const tbody = Utils.$('kpiByJabatanTable');
+        if (data.success && data.data?.by_jabatan?.length) {
+          tbody.innerHTML = data.data.by_jabatan.map(j => {
+            const ach = j.avg_achievement || 0;
+            const barColor = ach >= 90 ? 'bg-green-500' : ach >= 75 ? 'bg-yellow-500' : 'bg-red-500';
+            return `
+              <tr>
+                <td class="px-4 py-3 text-sm font-medium text-gray-900">${Utils.escapeHtml(j.jabatan)}</td>
+                <td class="px-4 py-3 text-sm text-gray-700">${j.total_guru}</td>
+                <td class="px-4 py-3">
+                  <div class="flex items-center">
+                    <div class="w-24 bg-gray-200 rounded-full h-2 mr-2">
+                      <div class="${barColor} h-2 rounded-full kpi-progress-bar" style="width: ${ach}%"></div>
+                    </div>
+                    <span class="text-sm text-gray-700">${ach}%</span>
+                  </div>
+                </td>
+                <td class="px-4 py-3 text-sm font-semibold text-gray-900">${j.avg_score}</td>
+              </tr>`;
+          }).join('');
+        } else {
+          tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-8 text-center text-gray-500">Belum ada data KPI</td></tr>';
+        }
+      } catch (err) {
+        Utils.showToast('Gagal memuat ringkasan KPI', 'error');
+      }
+
+      const teacherId = Utils.$('kpiTeacherSelect')?.value || '';
+      if (teacherId && periodId) {
+        this.loadInputTable(teacherId, periodId);
+      } else {
+        Utils.$('kpiInputTable').innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">Pilih guru dan periode untuk mengisi nilai KPI</td></tr>';
+      }
+    },
+
+    async loadTeacherDetail() {
+      const teacherId = Utils.$('kpiTeacherSelect')?.value || '';
+      const periodId = Utils.$('kpiPeriodSelect')?.value || '';
+      const kategori = Utils.$('kpiKategoriSelect')?.value || '';
+
+      if (!periodId) {
+        Utils.showToast('Pilih periode penilaian terlebih dahulu', 'info');
+        return;
+      }
+
+      try {
+        const data = await Api.get(`/sdm-dashboard/kpi-summary?period_id=${periodId}${kategori ? `&kategori=${kategori}` : ''}`);
+        const tbody = Utils.$('kpiByJabatanTable');
+        if (data.success && data.data?.by_jabatan?.length) {
+          tbody.innerHTML = data.data.by_jabatan.map(j => {
+            const ach = j.avg_achievement || 0;
+            const barColor = ach >= 90 ? 'bg-green-500' : ach >= 75 ? 'bg-yellow-500' : 'bg-red-500';
+            return `
+              <tr>
+                <td class="px-4 py-3 text-sm font-medium text-gray-900">${Utils.escapeHtml(j.jabatan)}</td>
+                <td class="px-4 py-3 text-sm text-gray-700">${j.total_guru}</td>
+                <td class="px-4 py-3">
+                  <div class="flex items-center">
+                    <div class="w-24 bg-gray-200 rounded-full h-2 mr-2">
+                      <div class="${barColor} h-2 rounded-full kpi-progress-bar" style="width: ${ach}%"></div>
+                    </div>
+                    <span class="text-sm text-gray-700">${ach}%</span>
+                  </div>
+                </td>
+                <td class="px-4 py-3 text-sm font-semibold text-gray-900">${j.avg_score}</td>
+              </tr>`;
+          }).join('');
+        }
+      } catch (err) {
+        Utils.showToast('Gagal memuat detail KPI guru', 'error');
+      }
+
+      if (teacherId && periodId) this.loadInputTable(teacherId, periodId);
+    },
+
+    async loadInputTable(teacherId, periodId) {
+      try {
+        const [templatesRes, assessmentRes] = await Promise.all([
+          Api.get('/sdm/kpi/templates'),
+          Api.get(`/sdm/kpi/assessment-detail?teacher_id=${teacherId}&period_id=${periodId}`)
+        ]);
+
+        const templates = templatesRes.success ? templatesRes.data : [];
+        const scores = {};
+        if (assessmentRes.success && assessmentRes.data?.length) {
+          assessmentRes.data.forEach(a => { scores[a.indicator_id] = a; });
+        }
+
+        const tbody = Utils.$('kpiInputTable');
+        if (!templates.length) {
+          tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">Belum ada template KPI</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = templates.map(t => {
+          const existing = scores[t.id];
+          const nilai = existing?.nilai_aktual ?? '';
+          const target = existing?.target ?? t.target_default;
+          const penc = existing?.pencapaian ?? '';
+          const skor = existing?.skor ?? '';
+          const disabled = t.sumber !== 'manual' ? 'disabled' : '';
+          const hasScore = existing && existing.nilai_aktual !== null && existing.nilai_aktual !== '';
+          return `
+            <tr data-indicator-id="${t.id}">
+              <td class="px-4 py-3 text-sm font-medium text-gray-900">${Utils.escapeHtml(t.nama)}</td>
+              <td class="px-4 py-3 text-sm text-gray-700 capitalize">${Utils.escapeHtml(t.kategori)}</td>
+              <td class="px-4 py-3 text-sm text-gray-700">${t.bobot}%</td>
+              <td class="px-4 py-3"><input type="number" class="kpi-target w-24 px-2 py-1 border border-gray-300 rounded text-sm" value="${target}" ${disabled}></td>
+              <td class="px-4 py-3"><input type="number" class="kpi-nilai w-24 px-2 py-1 border border-gray-300 rounded text-sm" value="${nilai}" ${disabled}></td>
+              <td class="px-4 py-3"><input type="number" class="kpi-pencapaian w-24 px-2 py-1 border border-gray-300 rounded text-sm" value="${penc}" ${disabled}></td>
+              <td class="px-4 py-3"><input type="number" class="kpi-skor w-20 px-2 py-1 border border-gray-300 rounded text-sm" value="${skor}" ${disabled}></td>
+              <td class="px-4 py-3 text-center">
+                ${hasScore && !disabled ? `<button onclick="SDMDashboard.Kpi.clearScore(${t.id}, '${Utils.escapeHtml(t.nama).replace(/'/g, "\\'")}')" class="text-xs text-red-600 hover:text-red-800" title="Hapus nilai"><i class="fas fa-trash"></i></button>` : ''}
+              </td>
+            </tr>`;
+        }).join('');
+      } catch (err) {
+        Utils.showToast('Gagal memuat tabel input KPI', 'error');
+      }
+    },
+
+    async clearScore(indicatorId, indicatorName) {
+      const teacherId = Utils.$('kpiTeacherSelect')?.value;
+      const periodId = Utils.$('kpiPeriodSelect')?.value;
+      if (!teacherId || !periodId) return;
+
+      const confirm = await Swal.fire({
+        title: 'Hapus nilai KPI?',
+        html: `Nilai untuk indikator <strong>${Utils.escapeHtml(indicatorName)}</strong> akan dihapus.`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Ya, hapus',
+        confirmButtonColor: '#dc2626'
+      });
+      if (!confirm.isConfirmed) return;
+
+      try {
+        Swal.fire({ title: 'Menghapus...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        await Api.post('/sdm/kpi/assessments', {
+          teacher_id: parseInt(teacherId),
+          indicator_id: parseInt(indicatorId),
+          period_id: parseInt(periodId),
+          nilai_aktual: null,
+          target: null,
+          pencapaian: null,
+          skor: null
+        });
+        Utils.showToast('Nilai KPI dihapus', 'success');
+        this.loadInputTable(teacherId, periodId);
+        this.loadOverview();
+      } catch (err) {
+        Utils.showToast(err.message || 'Gagal menghapus nilai KPI', 'error');
+      }
+    },
+
+    async saveScores() {
+      const teacherId = Utils.$('kpiTeacherSelect')?.value;
+      const periodId = Utils.$('kpiPeriodSelect')?.value;
+      if (!teacherId || !periodId) {
+        Utils.showToast('Pilih guru dan periode terlebih dahulu', 'warning');
+        return;
+      }
+      if (!state.isSdmPusat) {
+        Utils.showToast('Hanya SDM Pusat yang boleh menginput nilai KPI', 'error');
+        return;
+      }
+
+      const rows = document.querySelectorAll('#kpiInputTable tr[data-indicator-id]');
+      const assessments = [];
+      rows.forEach(row => {
+        const indicatorId = row.dataset.indicatorId;
+        const nilai = row.querySelector('.kpi-nilai').value;
+        const target = row.querySelector('.kpi-target').value;
+        const penc = row.querySelector('.kpi-pencapaian').value;
+        const skor = row.querySelector('.kpi-skor').value;
+        if (nilai !== '') {
+          assessments.push({
+            teacher_id: parseInt(teacherId),
+            indicator_id: parseInt(indicatorId),
+            nilai_aktual: parseFloat(nilai),
+            target: parseFloat(target) || null,
+            pencapaian: penc ? parseFloat(penc) : null,
+            skor: skor ? parseFloat(skor) : null
+          });
+        }
+      });
+
+      if (!assessments.length) {
+        Utils.showToast('Belum ada nilai yang diisi', 'info');
+        return;
+      }
+
+      try {
+        Swal.fire({
+          title: 'Menyimpan...',
+          html: '<div style="text-align:left;margin-top:1rem;"><div class="swal2-progress-bar" style="width:100%;background:#eee;height:4px;border-radius:2px;"><div id="kpiSaveProgress" style="width:0%;background:#4f46e5;height:4px;border-radius:2px;transition:width 0.3s;"></div></div><div id="kpiSaveStatus" style="margin-top:0.5rem;font-size:0.8rem;color:#888;">Memproses 0 dari ' + assessments.length + ' indikator...</div></div>',
+          allowOutsideClick: false,
+          didOpen: () => Swal.showLoading()
+        });
+
+        const bulkPayload = assessments.map(a => ({ ...a, period_id: parseInt(periodId) }));
+
+        let result;
+        try {
+          result = await Api.post('/sdm/kpi/assessments/bulk', { assessments: bulkPayload });
+        } catch (bulkErr) {
+          let successCount = 0;
+          for (let i = 0; i < assessments.length; i++) {
+            const a = assessments[i];
+            const progress = ((i + 1) / assessments.length) * 100;
+            Utils.$('kpiSaveProgress').style.width = progress + '%';
+            Utils.$('kpiSaveStatus').textContent = `Memproses ${i + 1} dari ${assessments.length} indikator...`;
+            try {
+              await Api.post('/sdm/kpi/assessments', { ...a, period_id: parseInt(periodId) });
+              successCount++;
+            } catch (e) {
+              console.error(`Gagal menyimpan indikator ${a.indicator_id}:`, e);
+            }
+          }
+          result = { success: true, message: `${successCount} dari ${assessments.length} nilai KPI tersimpan` };
+        }
+
+        Utils.$('kpiSaveProgress').style.width = '100%';
+        Utils.$('kpiSaveStatus').textContent = 'Selesai!';
+
+        await new Promise(r => setTimeout(r, 500));
+
+        if (result.success) {
+          Utils.showToast(result.message || `${assessments.length} nilai KPI tersimpan`, 'success');
+          this.loadOverview();
+        } else {
+          Utils.showToast(result.message || 'Gagal menyimpan nilai KPI', 'error');
+        }
+      } catch (err) {
+        Utils.showToast(err.message || 'Gagal menyimpan nilai KPI', 'error');
+      }
+    },
+
+    applyAccessControl() {
+      if (state.isSdmPusat) return;
+
+      if (state.isSdmPusat) return;
+
+      const disabledEls = document.querySelectorAll('#kpiTemplateBtn, #kpiPeriodBtn, button[onclick*="saveKpi"], button[onclick*="showKpiTemplateModal"], button[onclick*="showKpiPeriodModal"]');
+      disabledEls.forEach(el => el.disabled = true);
+
+      const overviewSection = Utils.$('kpiOverviewSection');
+      if (overviewSection) {
+        const existingMsg = overviewSection.querySelector('.kpi-readonly-msg');
+        if (!existingMsg) {
+          const msg = document.createElement('div');
+          msg.className = 'kpi-readonly-msg';
+          msg.innerHTML = '<div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6"><div class="flex items-start"><i class="fas fa-info-circle text-blue-600 mt-0.5 mr-3"></i><div class="text-sm text-blue-800"><p class="font-semibold mb-1">Akses Read-Only</p><p>Anda bukan SDM Pusat. Hanya dapat melihat data KPI, tidak dapat mengedit atau menambah template/periode.</p></div></div></div>';
+          overviewSection.insertBefore(msg, overviewSection.firstChild);
+        }
+      }
+    },
+
+    saveKafalahEdit: () => {
+      Utils.showToast('Edit KAFALAH manual - implementasi backend diperlukan', 'info');
+      Utils.hideModal('kafalahEditModal');
+    }
+  };
+
+  // ============================================================
+  // RECAP ABSENSI MODULE
+  // ============================================================
+  const Recap = {
+    async load() {
+      const t = state.currentTenant;
+      try {
+        const data = await Api.get(`/sdm-dashboard/recap-absensi?tenant_id=${t}`);
+        const tbody = Utils.$('schoolRecapTable');
+        if (!data.success || !data.data?.length) {
+          tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-8 text-center text-gray-500">Tidak ada data</td></tr>';
+          return;
+        }
+        tbody.innerHTML = data.data.map(s => {
+          const rate = parseFloat(s.attendance_rate) || 0;
+          const statusBadge = rate >= 90
+            ? '<span class="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">Baik</span>'
+            : rate >= 75
+              ? '<span class="px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-800 rounded-full">Cukup</span>'
+              : '<span class="px-2 py-1 text-xs font-medium bg-red-100 text-red-800 rounded-full">Perhatian</span>';
+          return `
+            <tr class="cursor-pointer hover:bg-gray-50" onclick="SDMDashboard.showSchoolDetail('${s.tenant_id || ''}', '${Utils.escapeHtml(s.nama_sekolah)}')">
+              <td class="px-4 py-3 text-sm font-medium text-gray-900">${Utils.escapeHtml(s.nama_sekolah)} <button onclick="event.stopPropagation();SDMDashboard.showSchoolDetail('${s.tenant_id || ''}','${Utils.escapeHtml(s.nama_sekolah)}')" class="ml-2 text-xs text-indigo-600 hover:underline">Detail</button></td>
+              <td class="px-4 py-3 text-sm text-gray-700">${s.teachers || 0}</td>
+              <td class="px-4 py-3">
+                <div class="flex items-center">
+                  <div class="w-24 bg-gray-200 rounded-full h-2 mr-2">
+                    <div class="bg-indigo-600 h-2 rounded-full kpi-progress-bar" style="width: ${rate}%"></div>
+                  </div>
+                  <span class="text-sm text-gray-700">${rate}%</span>
+                </div>
+              </td>
+              <td class="px-4 py-3">${statusBadge}</td>
+            </tr>`;
+        }).join('');
+      } catch (err) {
+        console.error('Load recap error:', err);
+        Utils.$('schoolRecapTable').innerHTML = '<tr><td colspan="4" class="px-4 py-12 text-center text-red-500">Gagal memuat data</td></tr>';
+      }
+    }
+  };
+
+  // ============================================================
+  // ATTENDANCE MODULE
+  // ============================================================
+  const Attendance = {
+    async load() {
+      const t = state.currentTenant;
+      try {
+        const data = await Api.get(`/sdm-dashboard/attendance-logs?tenant_id=${t}&date=${Utils.$('attendanceDateFilter').value}`);
+        const tbody = Utils.$('sdmAttendanceTable');
+        if (!data.success || !data.data?.length) {
+          tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-12 text-center text-gray-500">Tidak ada data kehadiran</td></tr>';
+          return;
+        }
+        tbody.innerHTML = data.data.map(a => `
+          <tr class="hover:bg-gray-50">
+            <td class="px-4 py-3 text-sm font-medium text-gray-900">${Utils.escapeHtml(a.nama_guru || '')}</td>
+            <td class="px-4 py-3 text-sm text-gray-700">${Utils.escapeHtml(a.nama_sekolah || '')}</td>
+            <td class="px-4 py-3 text-sm text-gray-700 capitalize">${Utils.escapeHtml(a.jenis || '')}</td>
+            <td class="px-4 py-3 text-sm text-gray-700">${a.waktu_masuk ? Utils.formatDate(a.waktu_masuk) : '-'}</td>
+            <td class="px-4 py-3 text-sm text-gray-700">
+              <span class="px-2 py-1 text-xs font-medium rounded-full ${a.status === 'tepat_waktu' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800 rounded-full'}">
+                ${a.status}
+              </span>
+            </td>
+            <td class="px-4 py-3 text-sm text-gray-700">${a.metode || '-'}</td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        console.error('Load attendance error:', err);
+        Utils.$('sdmAttendanceTable').innerHTML = '<tr><td colspan="6" class="px-4 py-12 text-center text-red-500">Gagal memuat data</td></tr>';
+      }
+    }
+  };
+
+  // ============================================================
+  // SCHOOL DETAIL MODAL
+  // ============================================================
+  async function showSchoolDetail(tenantId, nama) {
+    if (!tenantId) return;
+    Utils.$('schoolDetailTitle').textContent = 'Detail Sekolah: ' + (nama || tenantId);
+    const content = Utils.$('schoolDetailContent');
+    content.innerHTML = '<p class="text-center py-8"><i class="fas fa-spinner fa-spin"></i> Memuat...</p>';
+    Utils.showModal('schoolDetailModal');
+    try {
+      const data = await Api.get(`/sdm-dashboard/school-detail?tenant_id=${tenantId}&days=7`);
+      if (!data.success) { content.innerHTML = '<p class="text-center py-8 text-red-500">Gagal memuat detail</p>'; return; }
+      const d = data.data;
+      let html = `<p class="text-sm text-gray-600 mb-4">${Utils.escapeHtml(d.tenant.nama_sekolah || tenantId)} — ${d.days} hari terakhir</p>`;
+      html += '<div class="overflow-x-auto"><table class="w-full text-sm"><thead class="bg-gray-50"><tr>';
+      html += '<th class="px-3 py-2 text-left">Nama</th><th class="px-3 py-2 text-left">NIK</th><th class="px-3 py-2 text-center">Hadir</th><th class="px-3 py-2 text-center">Terlambat</th><th class="px-3 py-2 text-center">Izin Pending</th></tr></thead><tbody>';
+      (d.teachers || []).forEach(t => {
+        html += `<tr class="border-t">
+          <td class="px-3 py-2">${Utils.escapeHtml(t.nama)}</td>
+          <td class="px-3 py-2">${Utils.escapeHtml(t.nik || '-')}</td>
+          <td class="px-3 py-2 text-center">${t.present_days}</td>
+          <td class="px-3 py-2 text-center">${t.late_count}</td>
+          <td class="px-3 py-2 text-center">${t.pending_leaves}</td>
+        </tr>`;
+      });
+      html += '</tbody></table></div>';
+      content.innerHTML = html;
+    } catch (err) {
+      content.innerHTML = '<p class="text-center py-8 text-red-500">Gagal memuat detail</p>';
+    }
+  }
+
+  // ============================================================
+  // MANUAL ATTENDANCE MODULE
+  // ============================================================
+  const ManualAttendance = {
+    async load() {
+      const t = state.currentTenant;
+      try {
+        const data = await Api.get(`/sdm-dashboard/manual-attendance?tenant_id=${t}`);
+        const tbody = Utils.$('manualAttendanceTable');
+        if (!data.success || !data.data?.length) {
+          tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-12 text-center text-gray-500">Tidak ada data absensi manual</td></tr>';
+          return;
+        }
+        tbody.innerHTML = data.data.map(a => `
+          <tr class="hover:bg-gray-50">
+            <td class="px-4 py-3 text-sm font-medium text-gray-900">${Utils.escapeHtml(a.nama_guru || '')}</td>
+            <td class="px-4 py-3 text-sm text-gray-700">${Utils.escapeHtml(a.nama_sekolah || '')}</td>
+            <td class="px-4 py-3 text-sm text-gray-700">${a.tanggal ? Utils.formatDate(a.tanggal) : '-'}</td>
+            <td class="px-4 py-3 text-sm text-gray-700">${a.hadir || 0}</td>
+            <td class="px-4 py-3 text-sm text-gray-700">${a.terlambat || 0}</td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        console.error('Load manual attendance error:', err);
+        Utils.$('manualAttendanceTable').innerHTML = '<tr><td colspan="5" class="px-4 py-12 text-center text-red-500">Gagal memuat data</td></tr>';
+      }
+    }
+  };
+
+  // ============================================================
+  // PUBLIC API - RETURN AT THE END
+  // ============================================================
+
+  // ============================================================
+  // KAFALAH MODULE
+  // ============================================================
+  const Kafalah = {
+    async load() {
+      try {
+        const data = await Api.get('/sdm-dashboard/kafalah');
+        const tbody = Utils.$('kafalahTable');
+        if (!data.success || !data.data?.length) {
+          tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-12 text-center text-gray-500">Tidak ada data KAFALAH</td></tr>';
+          return;
+        }
+        tbody.innerHTML = data.data.map(k => `
+          <tr class="hover:bg-gray-50">
+            <td class="px-4 py-3 text-sm font-medium text-gray-900">${Utils.escapeHtml(k.nama || '')}</td>
+            <td class="px-4 py-3 text-sm text-gray-700">${Utils.escapeHtml(k.nama_sekolah || '')}</td>
+            <td class="px-4 py-3 text-sm text-gray-700">${k.status}</td>
+            <td class="px-4 py-3 text-sm text-gray-700">${k.tanggal}</td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        console.error('Load Kafalah error:', err);
+        Utils.$('kafalahTable').innerHTML = '<tr><td colspan="4" class="px-4 py-12 text-center text-red-500">Gagal memuat data</td></tr>';
+      }
+    },
+
+    loadSettings: async () => {
+      try {
+        const data = await Api.get('/sdm-dashboard/kafalah-settings');
+        const sel = Utils.$('kafalahSettingsSelect');
+        if (!sel || !data.success) return;
+        sel.innerHTML = '';
+        data.data.forEach(s => {
+          const opt = document.createElement('option');
+          opt.value = s.id;
+          opt.textContent = s.nama;
+          sel.appendChild(opt);
+        });
+      } catch (err) {
+        console.error('Load Kafalah settings error:', err);
+      }
+    },
+
+    saveKafalahEdit: () => {
+      Utils.showToast('Edit KAFALAH manual - implementasi backend diperlukan', 'info');
+      Utils.hideModal('kafalahEditModal')
+    }
+  };
+
+
+
+  // ============================================================  // KAFALAH MODULE  // ============================================================  const Kafalah = {    async load() {      try {        const data = await Api.get('/sdm-dashboard/kafalah');        const tbody = Utils.$('kafalahTable');        if (!data.success || !data.data?.length) {          tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-12 text-center text-gray-500">Tidak ada data KAFALAH</td></tr>';          return;        }        tbody.innerHTML = data.data.map(k => `          <tr class="hover:bg-gray-50">            <td class="px-4 py-3 text-sm font-medium text-gray-900">${Utils.escapeHtml(k.nama || '')}</td>            <td class="px-4 py-3 text-sm text-gray-700">${Utils.escapeHtml(k.nama_sekolah || '')}</td>            <td class="px-4 py-3 text-sm text-gray-700">${k.status}</td>            <td class="px-4 py-3 text-sm text-gray-700">${k.tanggal}</td>          </tr>        `).join('');      } catch (err) {        console.error('Load Kafalah error:', err);        Utils.$('kafalahTable').innerHTML = '<tr><td colspan="4" class="px-4 py-12 text-center text-red-500">Gagal memuat data</td></tr>';      }    },    loadSettings: async () => {      try {        const data = await Api.get('/sdm-dashboard/kafalah-settings');        const sel = Utils.$('kafalahSettingsSelect');        if (!sel || !data.success) return;        sel.innerHTML = '';        data.data.forEach(s => {          const opt = document.createElement('option');          opt.value = s.id;          opt.textContent = s.nama;          sel.appendChild(opt);        });      } catch (err) {        console.error('Load Kafalah settings error:', err);      }    },    saveKafalahEdit: () => {      Utils.showToast('Edit KAFALAH manual - implementasi backend diperlukan', 'info');      Utils.hideModal('kafalahEditModal')    }  };  return {
+    init: Core.init,
+    showTab: Core.showTab,
+    onTenantChange: Core.onTenantChange,
+    switchChart: Core.switchChart,
+    logout: Core.logout,
+    hideModal: Utils.hideModal,
+    showToast: Utils.showToast,
+    showSchoolDetail,
+    Dashboard,
+    Access,
+    Teacher,
+    Kpi,
+    Attendance,
+    Recap,
+    ManualAttendance,
+    Payroll,
+    Kafalah,
+    Settings,
+    Utils,
+    Api
+  };
+
+  // ============================================================
+  // PAYROLL MODULE
+  // ============================================================
+  const Payroll = {
+    async load() {
+      const t = state.currentTenant;
+      try {
+        const data = await Api.get(`/sdm-dashboard/payroll?tenant_id=${t}`);
+        const tbody = Utils.$('payrollTable');
+        if (!data.success || !data.data?.length) {
+          tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-12 text-center text-gray-500">Tidak ada data penggajian</td></tr>';
+          return;
+        }
+        tbody.innerHTML = data.data.map(p => `
+          <tr class="hover:bg-gray-50">
+            <td class="px-4 py-3 text-sm font-medium text-gray-900">${Utils.escapeHtml(p.nama_guru || '')}</td>
+            <td class="px-4 py-3 text-sm text-gray-700">${Utils.escapeHtml(p.nama_sekolah || '')}</td>
+            <td class="px-4 py-3 text-sm text-gray-700">${Utils.formatRupiah(p.gaji_pokok)}</td>
+            <td class="px-4 py-3 text-sm text-gray-700">${Utils.formatRupiah(p.tunj_kehadiran)}</td>
+            <td class="px-4 py-3 text-sm text-gray-700">${Utils.formatRupiah(p.potongan)}</td>
+            <td class="px-4 py-3 text-sm text-gray-700">${Utils.formatRupiah(p.gaji_bersih)}</td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        console.error('Load payroll error:', err);
+        Utils.$('payrollTable').innerHTML = '<tr><td colspan="6" class="px-4 py-12 text-center text-red-500">Gagal memuat data</td></tr>';
+      }
+    }
+  };
+
+  // ============================================================
+  // PUBLIC API - RETURN AT THE END
+  // ============================================================
+  return {
+    init: Core.init,
+    showTab: Core.showTab,
+    onTenantChange: Core.onTenantChange,
+    switchChart: Core.switchChart,
+    logout: Core.logout,
+    hideModal: Utils.hideModal,
+    showToast: Utils.showToast,
+    showSchoolDetail,
+    Dashboard,
+    Access,
+    Teacher,
+    Kpi,
+    Attendance,
+    Recap,
+    ManualAttendance,
+    Payroll,
+    Kafalah,
+    Settings,
+    Utils,
+    Api
+  };
+})();
+
+// ============================================================
+// INITIALIZE
+// ============================================================
+document.addEventListener('DOMContentLoaded', () => {
+  SDMDashboard.init();
+});
+
+// Expose for inline onclick handlers
+window.SDMDashboard = SDMDashboard;

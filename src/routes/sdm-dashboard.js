@@ -3,10 +3,26 @@
 // ============================================================
 
 const express = require('express');
+const multer = require('multer');
+const XLSX = require('xlsx');
+const ExcelJS = require('exceljs');
+const fs = require('fs');
+const path = require('path');
 const db = require('../../db');
 const { authenticateOperator, verifyTenantAccess } = require('../middleware/auth');
 const { logToFile } = require('../middlewares/logger');
 const { getActiveTahunAjaran } = require('../utils/billing');
+
+const excelUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+  fileFilter: (req, file, cb) => {
+    const allowed = ['.xlsx', '.xls', '.csv'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowed.includes(ext)) cb(null, true);
+    else cb(new Error('Format file harus .xlsx, .xls, atau .csv'));
+  }
+});
 
 const router = express.Router();
 
@@ -17,11 +33,16 @@ async function getSdmAllowedTenants(req) {
     return allTenants.map(t => t.tenant_id);
   }
 
-  const sdmAssignments = (req.user.assignments || []).filter(a =>
+  const norm = (v) => (v || '').toLowerCase().replace(/[\s_]+/g, '');
+  const isLeader = (a) => ['kepalasekolah', 'pimpinan', 'ketua'].includes(norm(a.jabatan_di_unit));
+
+  const assignments = req.user.assignments || [];
+  const sdmAssignments = assignments.filter(a =>
     (a.jabatan_di_unit || '').toLowerCase().includes('sdm')
   );
+  const leaderAssignments = assignments.filter(isLeader);
 
-  if (sdmAssignments.length === 0) {
+  if (sdmAssignments.length === 0 && leaderAssignments.length === 0) {
     return [];
   }
 
@@ -31,7 +52,10 @@ async function getSdmAllowedTenants(req) {
     return allTenants.map(t => t.tenant_id);
   }
 
-  return sdmAssignments.map(a => a.tenant_id);
+  const tenants = new Set();
+  sdmAssignments.forEach(a => { if (a.tenant_id) tenants.add(a.tenant_id); });
+  leaderAssignments.forEach(a => { if (a.tenant_id) tenants.add(a.tenant_id); });
+  return [...tenants];
 }
 
 // Helper: Check if user is SDM Pusat
@@ -454,15 +478,16 @@ router.get('/sdm-dashboard/teacher-list', authenticateOperator, async (req, res)
         t.tmt, t.gaji_pokok, t.tunj_kinerja, t.tunj_kehadiran,
         GROUP_CONCAT(DISTINCT ta.tenant_id SEPARATOR ', ') as tenant_ids,
         GROUP_CONCAT(DISTINCT tn.nama_sekolah SEPARATOR ', ') as nama_sekolah,
-        (SELECT COUNT(*) FROM attendance_logs al WHERE al.teacher_id = t.id AND DATE(al.waktu_scan) = CURDATE() AND al.jenis = 'masuk') as today_present,
-        (SELECT COUNT(*) FROM attendance_logs al WHERE al.teacher_id = t.id AND DATE(al.waktu_scan) = CURDATE() AND al.jenis = 'masuk' AND al.status = 'terlambat') as today_late
+        (SELECT COUNT(*) FROM attendance_logs al WHERE al.teacher_id = t.id AND DATE(al.waktu_scan) = CURDATE() AND al.jenis = 'masuk' AND al.tenant_id IN (${tenantPlaceholders})) as today_present,
+        (SELECT COUNT(*) FROM attendance_logs al WHERE al.teacher_id = t.id AND DATE(al.waktu_scan) = CURDATE() AND al.jenis = 'masuk' AND al.status = 'terlambat' AND al.tenant_id IN (${tenantPlaceholders})) as today_late
       FROM teachers t
       JOIN teacher_assignments ta ON t.id = ta.teacher_id
       JOIN tenants tn ON ta.tenant_id = tn.tenant_id
       WHERE ta.tenant_id IN (${tenantPlaceholders}) AND t.status_aktif = 1
       GROUP BY t.id, t.nama, t.nik, t.nip, t.email, t.status_kepegawaian, t.status_aktif, t.no_wa, t.link_foto, ta.kpi_category, t.tmt, t.gaji_pokok, t.tunj_kinerja, t.tunj_kehadiran
     `;
-    let params = [...tenantFilter];
+    // 3 kelompok placeholder tenant: 2 subquery SELECT (today_present, today_late) + 1 WHERE
+    let params = [...tenantFilter, ...tenantFilter, ...tenantFilter];
 
     if (jabatan) {
       query += ' AND ta.jabatan_di_unit LIKE ?';
@@ -870,10 +895,11 @@ router.delete('/sdm-dashboard/access/:assignmentId', authenticateOperator, async
 router.post('/sdm-dashboard/teachers', authenticateOperator, async (req, res) => {
   try {
     const allowedTenants = await getSdmAllowedTenants(req);
-    const {
-      nama, nik, nip, tenant_id, jabatan_di_unit, status_kepegawaian,
-      tmt, no_wa, email, status_aktif = 1
-    } = req.body || {};
+    const b = req.body || {};
+    const { nama, nik, tenant_id } = b;
+    const jabatanFinal = b.jabatan_di_unit || b.jabatan || null;
+    const statusAktif = (b.status_aktif === undefined ? 1 : (Number(b.status_aktif) ? 1 : 0));
+    const nn = v => (v === undefined || v === null || v === '') ? null : v;
 
     if (!nama || !nik || !tenant_id) {
       return res.status(400).json({ success: false, message: 'nama, nik, dan tenant_id wajib diisi' });
@@ -882,27 +908,37 @@ router.post('/sdm-dashboard/teachers', authenticateOperator, async (req, res) =>
       return res.status(403).json({ success: false, message: 'Tenant tidak diizinkan' });
     }
 
-    // Validasi NIP jika TMT >= 2 tahun
-    if (tmt) {
-      const tmtDate = new Date(tmt);
+    if (b.tmt) {
+      const tmtDate = new Date(b.tmt);
       const twoYearsAgo = new Date();
       twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
-      if (tmtDate <= twoYearsAgo && (!nip || nip === '' || nip === '-')) {
+      if (tmtDate <= twoYearsAgo && (!b.nip || b.nip === '' || b.nip === '-')) {
         return res.status(400).json({ success: false, message: 'NIP wajib diisi jika TMT sudah 2 tahun atau lebih' });
       }
     }
 
     const result = await db.query(
-      `INSERT INTO teachers (nama, nik, nip, no_wa, email, status_kepegawaian, tmt, status_aktif)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [nama, nik, nip || null, no_wa || null, email || null, status_kepegawaian || null, tmt || null, status_aktif ? 1 : 0]
+      `INSERT INTO teachers
+        (nama, nik, nip, tempat_lahir, tanggal_lahir, jenis_kelamin, alamat, no_wa, email,
+         status_kepegawaian, tmt, status_aktif, link_foto, link_ktp, link_kk, link_ijazah,
+         gaji_pokok, tunj_kinerja, tunj_umum, tunj_istri, tunj_anak, tunj_kepala_sekolah,
+         tunj_wali_kelas, honor_bendahara, tunj_kehadiran, potongan)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [
+        nama, nik, nn(b.nip), nn(b.tempat_lahir), nn(b.tanggal_lahir), nn(b.jenis_kelamin),
+        nn(b.alamat), nn(b.no_wa), nn(b.email), nn(b.status_kepegawaian), nn(b.tmt), statusAktif,
+        nn(b.link_foto), nn(b.link_ktp), nn(b.link_kk), nn(b.link_ijazah),
+        nn(b.gaji_pokok) ?? 0, nn(b.tunj_kinerja) ?? 0, nn(b.tunj_umum) ?? 0, nn(b.tunj_istri) ?? 0,
+        nn(b.tunj_anak) ?? 0, nn(b.tunj_kepala_sekolah) ?? 0, nn(b.tunj_wali_kelas) ?? 0,
+        nn(b.honor_bendahara) ?? 0, nn(b.tunj_kehadiran) ?? 0, nn(b.potongan) ?? 0
+      ]
     );
     const teacherId = result.insertId;
 
     await db.query(
       `INSERT INTO teacher_assignments (teacher_id, tenant_id, jabatan_di_unit)
        VALUES (?, ?, ?)`,
-      [teacherId, tenant_id, jabatan_di_unit || null]
+      [teacherId, tenant_id, jabatanFinal]
     );
 
     res.json({ success: true, message: 'Guru berhasil ditambahkan', data: { id: teacherId } });
@@ -917,20 +953,26 @@ router.put('/sdm-dashboard/teachers/:id', authenticateOperator, async (req, res)
   try {
     const allowedTenants = await getSdmAllowedTenants(req);
     const teacherId = parseInt(req.params.id);
-    const {
-      nama, nik, nip, tenant_id, jabatan_di_unit, status_kepegawaian,
-      tmt, no_wa, email, status_aktif
-    } = req.body || {};
+    const b = req.body || {};
+    const tenant_id = b.tenant_id;
+    const jabatanFinal = b.jabatan_di_unit || b.jabatan || null;
+    const nn = v => (v === undefined || v === null || v === '') ? null : v;
 
     if (tenant_id && !allowedTenants.includes(tenant_id)) {
       return res.status(403).json({ success: false, message: 'Tenant tidak diizinkan' });
     }
 
-    if (tmt) {
-      const tmtDate = new Date(tmt);
+    // Pastikan guru berada dalam tenant yang diizinkan
+    const own = await db.query('SELECT tenant_id FROM teacher_assignments WHERE teacher_id = ? LIMIT 1', [teacherId]);
+    if (!own.length || !allowedTenants.includes(own[0].tenant_id)) {
+      return res.status(403).json({ success: false, message: 'Tenant tidak diizinkan' });
+    }
+
+    if (b.tmt) {
+      const tmtDate = new Date(b.tmt);
       const twoYearsAgo = new Date();
       twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
-      if (tmtDate <= twoYearsAgo && (!nip || nip === '' || nip === '-')) {
+      if (tmtDate <= twoYearsAgo && (!b.nip || b.nip === '' || b.nip === '-')) {
         return res.status(400).json({ success: false, message: 'NIP wajib diisi jika TMT sudah 2 tahun atau lebih' });
       }
     }
@@ -940,41 +982,67 @@ router.put('/sdm-dashboard/teachers/:id', authenticateOperator, async (req, res)
         nama = COALESCE(?, nama),
         nik = COALESCE(?, nik),
         nip = COALESCE(?, nip),
+        tempat_lahir = COALESCE(?, tempat_lahir),
+        tanggal_lahir = COALESCE(?, tanggal_lahir),
+        jenis_kelamin = COALESCE(?, jenis_kelamin),
+        alamat = COALESCE(?, alamat),
         no_wa = COALESCE(?, no_wa),
         email = COALESCE(?, email),
         status_kepegawaian = COALESCE(?, status_kepegawaian),
         tmt = COALESCE(?, tmt),
-        status_aktif = COALESCE(?, status_aktif)
+        status_aktif = COALESCE(?, status_aktif),
+        link_foto = COALESCE(?, link_foto),
+        link_ktp = COALESCE(?, link_ktp),
+        link_kk = COALESCE(?, link_kk),
+        link_ijazah = COALESCE(?, link_ijazah),
+        gaji_pokok = COALESCE(?, gaji_pokok),
+        tunj_kinerja = COALESCE(?, tunj_kinerja),
+        tunj_umum = COALESCE(?, tunj_umum),
+        tunj_istri = COALESCE(?, tunj_istri),
+        tunj_anak = COALESCE(?, tunj_anak),
+        tunj_kepala_sekolah = COALESCE(?, tunj_kepala_sekolah),
+        tunj_wali_kelas = COALESCE(?, tunj_wali_kelas),
+        honor_bendahara = COALESCE(?, honor_bendahara),
+        tunj_kehadiran = COALESCE(?, tunj_kehadiran),
+        potongan = COALESCE(?, potongan)
        WHERE id = ?`,
-      [nama || null, nik || null, nip || null, no_wa || null, email || null,
-       status_kepegawaian || null, tmt || null,
-       (status_aktif === undefined ? null : (status_aktif ? 1 : 0)), teacherId]
+      [
+        nn(b.nama), nn(b.nik), nn(b.nip),
+        nn(b.tempat_lahir), nn(b.tanggal_lahir), nn(b.jenis_kelamin),
+        nn(b.alamat), nn(b.no_wa), nn(b.email),
+        nn(b.status_kepegawaian), nn(b.tmt),
+        (b.status_aktif === undefined ? null : (Number(b.status_aktif) ? 1 : 0)),
+        nn(b.link_foto), nn(b.link_ktp), nn(b.link_kk), nn(b.link_ijazah),
+        nn(b.gaji_pokok), nn(b.tunj_kinerja), nn(b.tunj_umum),
+        nn(b.tunj_istri), nn(b.tunj_anak), nn(b.tunj_kepala_sekolah),
+        nn(b.tunj_wali_kelas), nn(b.honor_bendahara), nn(b.tunj_kehadiran),
+        nn(b.potongan),
+        teacherId
+      ]
     );
 
     if (tenant_id) {
-      // update assignment tenant/jabatan for allowed tenants
-      const placeholders = allowedTenants.map(() => '?').join(',');
+      // Update assignment HANYA pada tenant yang dituju (bukan assignment tenant lain).
       const assign = await db.query(
-        `SELECT id FROM teacher_assignments WHERE teacher_id = ? AND tenant_id IN (${placeholders})`,
-        [teacherId, ...allowedTenants]
+        `SELECT id FROM teacher_assignments WHERE teacher_id = ? AND tenant_id = ? LIMIT 1`,
+        [teacherId, tenant_id]
       );
-      // update first matching assignment
       if (assign.length) {
         await db.query(
-          'UPDATE teacher_assignments SET tenant_id = ?, jabatan_di_unit = COALESCE(?, jabatan_di_unit) WHERE id = ?',
-          [tenant_id, jabatan_di_unit || null, assign[0].id]
+          'UPDATE teacher_assignments SET jabatan_di_unit = COALESCE(?, jabatan_di_unit) WHERE id = ?',
+          [jabatanFinal, assign[0].id]
         );
       } else {
         await db.query(
           'INSERT INTO teacher_assignments (teacher_id, tenant_id, jabatan_di_unit) VALUES (?, ?, ?)',
-          [teacherId, tenant_id, jabatan_di_unit || null]
+          [teacherId, tenant_id, jabatanFinal]
         );
       }
-    } else if (jabatan_di_unit) {
+    } else if (jabatanFinal) {
       const placeholders2 = allowedTenants.map(() => '?').join(',');
       await db.query(
         `UPDATE teacher_assignments SET jabatan_di_unit = ? WHERE teacher_id = ? AND tenant_id IN (${placeholders2})`,
-        [jabatan_di_unit, teacherId, ...allowedTenants]
+        [jabatanFinal, teacherId, ...allowedTenants]
       );
     }
 
@@ -990,6 +1058,13 @@ router.delete('/sdm-dashboard/teachers/:id', authenticateOperator, async (req, r
   try {
     const allowedTenants = await getSdmAllowedTenants(req);
     const teacherId = parseInt(req.params.id);
+    const assign = await db.query(
+      'SELECT tenant_id FROM teacher_assignments WHERE teacher_id = ? LIMIT 1',
+      [teacherId]
+    );
+    if (!assign.length || !allowedTenants.includes(assign[0].tenant_id)) {
+      return res.status(403).json({ success: false, message: 'Tenant tidak diizinkan' });
+    }
     await db.query('UPDATE teachers SET status_aktif = 0 WHERE id = ?', [teacherId]);
     res.json({ success: true, message: 'Guru dinonaktifkan' });
   } catch (error) {
@@ -1059,9 +1134,8 @@ router.get('/sdm-dashboard/manual-attendance-monthly', authenticateOperator, asy
           const entries = [];
           const startDate = new Date(l.tanggal_mulai);
           const endDate = new Date(l.tanggal_selesai);
-          if (startDate.getMonth() === bulan - 1 && startDate.getFullYear() === tahun ||
-              endDate.getMonth() === bulan - 1 && endDate.getFullYear() === tahun ||
-              (startDate.getMonth() < bulan - 1 && endDate.getMonth() > bulan - 1)) {
+          // Cuti overlap bulan ini bila mulai <= akhir bulan DAN selesai >= awal bulan
+          if (startDate <= new Date(lastDayOfMonth) && endDate >= new Date(firstDayOfMonth)) {
             let current = new Date(startDate);
             while (current <= endDate) {
               if (current.getMonth() === bulan - 1 && current.getFullYear() === tahun) {
@@ -1095,7 +1169,12 @@ router.get('/sdm-dashboard/manual-attendance-monthly', authenticateOperator, asy
           dailyBest[day].leave = { id: l.leave_id, jenis: l.status, status: l.leave_status, keterangan: l.keterangan };
         }
         if (l.jenis === 'masuk') {
-          if (!dailyBest[day].masuk || (jam >= 240 && jam < dailyBest[day].masuk) || (dailyBest[day].masuk < 240 && jam >= 240)) {
+          // Pilih scan masuk: utamakan scan pagi normal (>=04:00) di atas scan dini hari,
+          // lalu ambil yang paling awal pada kelas yang sama.
+          const isEarly = jam >= 240;
+          const stored = dailyBest[day].masuk;
+          const storedIsEarly = stored !== null && stored < 240;
+          if (stored === null || (isEarly && !storedIsEarly) || (isEarly === storedIsEarly && jam < stored)) {
             dailyBest[day].masuk = jam;
             dailyBest[day].masukStatus = l.status;
           }
@@ -1291,6 +1370,513 @@ router.get('/sdm-dashboard/school-detail', authenticateOperator, async (req, res
   } catch (error) {
     console.error('SDM school detail error:', error);
     res.status(500).json({ success: false, message: 'Gagal memuat detail sekolah', error: error.message });
+  }
+});
+
+// ============================================================
+// PAYROLL - GET /api/sdm-dashboard/payroll
+// Sumber data: tabel payroll (jika ada), jika kosong dihitung dari data guru + absensi
+// ============================================================
+router.get('/sdm-dashboard/payroll', authenticateOperator, async (req, res) => {
+  try {
+    const allowedTenants = await getSdmAllowedTenants(req);
+    let tenantId = req.query.tenant_id;
+    if (!tenantId || !allowedTenants.includes(tenantId)) tenantId = allowedTenants[0];
+    if (!tenantId) return res.json({ success: true, data: [] });
+
+    const bulan = parseInt(req.query.bulan || new Date().getMonth() + 1);
+    const tahun = parseInt(req.query.tahun || new Date().getFullYear());
+    const periode = `${tahun}-${String(bulan).padStart(2, '0')}`;
+    const N = v => Number(v) || 0;
+
+    // 1) Utamakan tabel payroll
+    const saved = await db.query(
+      `SELECT p.teacher_id, t.nama as nama_guru, tn.nama_sekolah,
+              p.gaji_pokok, p.tunj_kinerja, p.tunj_umum, p.tunj_istri, p.tunj_anak,
+              p.tunj_kepala_sekolah, p.tunj_wali_kelas, p.honor_bendahara, p.tunj_kehadiran,
+              p.potongan, p.total_gaji, p.hadir
+       FROM payroll p
+       JOIN teachers t ON p.teacher_id = t.id
+       JOIN tenants tn ON p.tenant_id = tn.tenant_id
+       WHERE p.tenant_id = ? AND p.periode = ?
+       ORDER BY t.nama ASC`,
+      [tenantId, periode]
+    );
+
+    if (saved.length) {
+      const rows = saved.map(p => {
+        const tunjangan = N(p.tunj_kinerja) + N(p.tunj_umum) + N(p.tunj_istri) + N(p.tunj_anak) +
+          N(p.tunj_kepala_sekolah) + N(p.tunj_wali_kelas) + N(p.honor_bendahara) + N(p.tunj_kehadiran);
+        return {
+          teacher_id: p.teacher_id,
+          nama_guru: p.nama_guru,
+          nama_sekolah: p.nama_sekolah,
+          gaji_pokok: N(p.gaji_pokok),
+          tunjangan,
+          potongan: N(p.potongan),
+          total_gaji: N(p.total_gaji) || (N(p.gaji_pokok) + tunjangan - N(p.potongan)),
+          kehadiran: p.hadir || 0
+        };
+      });
+      return res.json({ success: true, data: rows });
+    }
+
+    // 2) Hitung dari data guru + absensi
+    const teachers = await db.query(
+      `SELECT DISTINCT t.id, t.nama,
+              t.gaji_pokok, t.tunj_kinerja, t.tunj_umum, t.tunj_istri, t.tunj_anak,
+              t.tunj_kepala_sekolah, t.tunj_wali_kelas, t.honor_bendahara, t.tunj_kehadiran, t.potongan
+       FROM teachers t
+       JOIN teacher_assignments ta ON t.id = ta.teacher_id
+       WHERE ta.tenant_id = ? AND t.status_aktif = 1
+       ORDER BY t.nama ASC`,
+      [tenantId]
+    );
+
+    const att = await db.query(
+      `SELECT teacher_id,
+              COUNT(DISTINCT CASE WHEN status = 'tepat_waktu' AND dinas_luar = 0 THEN DATE(waktu_scan) END) as hadir
+       FROM attendance_logs
+       WHERE tenant_id = ? AND jenis = 'masuk' AND MONTH(waktu_scan) = ? AND YEAR(waktu_scan) = ?
+       GROUP BY teacher_id`,
+      [tenantId, bulan, tahun]
+    );
+    const attMap = {};
+    att.forEach(a => { attMap[a.teacher_id] = a.hadir || 0; });
+
+    const rows = teachers.map(t => {
+      const tunjangan = N(t.tunj_kinerja) + N(t.tunj_umum) + N(t.tunj_istri) + N(t.tunj_anak) +
+        N(t.tunj_kepala_sekolah) + N(t.tunj_wali_kelas) + N(t.honor_bendahara) + N(t.tunj_kehadiran);
+      const gajiPokok = N(t.gaji_pokok);
+      const potongan = N(t.potongan);
+      return {
+        teacher_id: t.id,
+        nama_guru: t.nama,
+        nama_sekolah: tenantId,
+        gaji_pokok: gajiPokok,
+        tunjangan,
+        potongan,
+        total_gaji: gajiPokok + tunjangan - potongan,
+        kehadiran: attMap[t.id] || 0
+      };
+    });
+
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error('SDM payroll error:', error);
+    res.status(500).json({ success: false, message: 'Gagal memuat penggajian', error: error.message });
+  }
+});
+
+// ============================================================
+// KAFALAH (read) - GET /api/sdm-dashboard/kafalah
+// ============================================================
+router.get('/sdm-dashboard/kafalah', authenticateOperator, async (req, res) => {
+  try {
+    const allowedTenants = await getSdmAllowedTenants(req);
+    let tenantId = req.query.tenant_id;
+    if (!tenantId || !allowedTenants.includes(tenantId)) tenantId = allowedTenants[0];
+    if (!tenantId) return res.json({ success: true, data: [] });
+
+    const periode = req.query.periode; // YYYY-MM (opsional)
+    let where = 'WHERE tenant_id = ?';
+    const params = [tenantId];
+    if (periode) {
+      where += ' AND DATE_FORMAT(periode_mulai, "%Y-%m") = ?';
+      params.push(periode);
+    }
+    const rows = await db.query(`SELECT * FROM kafalah_payroll ${where} ORDER BY nama ASC`, params);
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error('SDM kafalah error:', error);
+    res.status(500).json({ success: false, message: 'Gagal memuat KAFALAH', error: error.message });
+  }
+});
+
+// ============================================================
+// KAFALAH SETTINGS - GET /api/sdm-dashboard/kafalah-settings
+// ============================================================
+router.get('/sdm-dashboard/kafalah-settings', authenticateOperator, async (req, res) => {
+  try {
+    const rows = await db.query('SELECT * FROM kafalah_settings ORDER BY id ASC');
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error('SDM kafalah settings error:', error);
+    res.status(500).json({ success: false, message: 'Gagal memuat pengaturan KAFALAH', error: error.message });
+  }
+});
+
+// ============================================================
+// TEACHER DETAIL (full) - GET /api/sdm-dashboard/teachers/:id
+// Dipakai modal edit & detail guru; mengembalikan seluruh kolom + penempatan
+// ============================================================
+router.get('/sdm-dashboard/teachers/:id', authenticateOperator, async (req, res) => {
+  try {
+    const allowedTenants = await getSdmAllowedTenants(req);
+    const teacherId = parseInt(req.params.id);
+    const rows = await db.query('SELECT * FROM teachers WHERE id = ?', [teacherId]);
+    if (!rows.length) {
+      return res.status(404).json({ success: false, message: 'Guru tidak ditemukan' });
+    }
+    const assigns = await db.query(
+      `SELECT ta.tenant_id, ta.jabatan_di_unit, tn.nama_sekolah
+       FROM teacher_assignments ta
+       JOIN tenants tn ON ta.tenant_id = tn.tenant_id
+       WHERE ta.teacher_id = ?`,
+      [teacherId]
+    );
+    const allowed = assigns.filter(a => allowedTenants.includes(a.tenant_id));
+    if (!allowed.length) {
+      return res.status(403).json({ success: false, message: 'Tenant tidak diizinkan' });
+    }
+    const requested = req.query.tenant_id;
+    const primary = (requested && allowed.find(a => a.tenant_id === requested)) || allowed[0];
+    res.json({
+      success: true,
+      data: {
+        ...rows[0],
+        tenant_id: primary.tenant_id,
+        jabatan: primary.jabatan_di_unit || '',
+        nama_sekolah: primary.nama_sekolah || ''
+      }
+    });
+  } catch (error) {
+    console.error('SDM teacher detail error:', error);
+    res.status(500).json({ success: false, message: 'Gagal memuat data guru', error: error.message });
+  }
+});
+
+// ============================================================
+// ABSENSI MANUAL - TEMPLATE & IMPORT (spreadsheet per bulan per sekolah)
+// ============================================================
+async function insertAttendanceLogIfAbsent(teacherId, tenantId, waktuScan, jenis, status) {
+  const date = waktuScan.slice(0, 10);
+  const existing = await db.query(
+    'SELECT id FROM attendance_logs WHERE teacher_id = ? AND tenant_id = ? AND jenis = ? AND DATE(waktu_scan) = ? LIMIT 1',
+    [teacherId, tenantId, jenis, date]
+  );
+  if (existing.length) return false; // sudah ada -> abaikan
+  await db.query(
+    'INSERT INTO attendance_logs (teacher_id, tenant_id, waktu_scan, jenis, metode, status, keterangan, waktu_absen) VALUES (?,?,?,?,?,?,?,?)',
+    [teacherId, tenantId, waktuScan, jenis, 'dashboard', status, 'import manual', waktuScan]
+  );
+  return true;
+}
+
+// GET /sdm-dashboard/manual-attendance/template?tenant_id=&bulan=&tahun=
+router.get('/sdm-dashboard/manual-attendance/template', authenticateOperator, async (req, res) => {
+  try {
+    const allowedTenants = await getSdmAllowedTenants(req);
+    let tenantId = req.query.tenant_id;
+    if (!tenantId || !allowedTenants.includes(tenantId)) tenantId = allowedTenants[0];
+    if (!tenantId) return res.status(400).json({ success: false, message: 'tenant_id wajib diisi' });
+
+    const bulan = parseInt(req.query.bulan || new Date().getMonth() + 1);
+    const tahun = parseInt(req.query.tahun || new Date().getFullYear());
+    const daysInMonth = new Date(tahun, bulan, 0).getDate();
+    const monthNames = ['', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+
+    const tenantRows = await db.query('SELECT nama_sekolah FROM tenants WHERE tenant_id = ? LIMIT 1', [tenantId]);
+    const tenantName = tenantRows[0]?.nama_sekolah || tenantId;
+
+    const teachers = await db.query(
+      `SELECT DISTINCT t.id, t.nama FROM teachers t
+       JOIN teacher_assignments ta ON t.id = ta.teacher_id
+       WHERE ta.tenant_id = ? AND t.status_aktif = 1
+       ORDER BY t.nama ASC`,
+      [tenantId]
+    );
+
+    // Data absensi yang sudah ada di DB -> di-prefill ke template
+    const attLogs = await db.query(
+      `SELECT teacher_id, DAY(waktu_scan) hari, jenis, TIME(waktu_scan) jam
+       FROM attendance_logs
+       WHERE tenant_id = ? AND MONTH(waktu_scan) = ? AND YEAR(waktu_scan) = ?
+       ORDER BY waktu_scan ASC`,
+      [tenantId, bulan, tahun]
+    );
+    const existingMap = {};
+    attLogs.forEach(l => {
+      const day = parseInt(l.hari);
+      const tid = l.teacher_id;
+      if (!existingMap[tid]) existingMap[tid] = {};
+      if (!existingMap[tid][day]) existingMap[tid][day] = {};
+      const jam = String(l.jam).slice(0, 5);
+      if (l.jenis === 'masuk') {
+        if (!existingMap[tid][day].masuk || jam < existingMap[tid][day].masuk) existingMap[tid][day].masuk = jam;
+      } else if (l.jenis === 'pulang') {
+        if (!existingMap[tid][day].pulang || jam > existingMap[tid][day].pulang) existingMap[tid][day].pulang = jam;
+      }
+    });
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'SDM Dashboard';
+    wb.created = new Date();
+
+    const ws = wb.addWorksheet(`Absensi ${monthNames[bulan]} ${tahun}`, {
+      views: [{ state: 'frozen', xSplit: 2, ySplit: 7 }],
+      pageSetup: {
+        orientation: 'landscape',
+        paperSize: 9, // A4
+        fitToPage: true,
+        fitToWidth: 1,
+        fitToHeight: 0,
+        horizontalCentered: true,
+        margins: { left: 0.25, right: 0.25, top: 0.3, bottom: 0.3, header: 0.1, footer: 0.1 }
+      }
+    });
+
+    const lastCol = 2 + daysInMonth * 2; // jumlah kolom (1-based)
+    const nameWidth = Math.min(42, Math.max(18, ...teachers.map(t => String(t.nama || '').length + 2), 18));
+
+    // Lebar kolom (auto-fit: No=5, Nama mengikuti teks terpanjang, hari=9)
+    ws.getColumn(1).width = 5;
+    ws.getColumn(2).width = nameWidth;
+    for (let d = 1; d <= daysInMonth; d++) {
+      ws.getColumn(2 + (d - 1) * 2 + 1).width = 9;
+      ws.getColumn(2 + (d - 1) * 2 + 2).width = 9;
+    }
+
+    const thin = { style: 'thin', color: { argb: 'FF9CA3AF' } };
+    const borderAll = { top: thin, left: thin, bottom: thin, right: thin };
+    const fillDate = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCE6F1' } };
+    const fillSub = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFB8CCE4' } };
+    const fillNo = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2EFDA' } };
+    const fillGreen = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC6EFCE' } }; // terisi
+    const fillGray = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE7E6E6' } };  // kosong
+    const fontGreen = { color: { argb: 'FF006100' } };
+
+    // Row 1: merge penuh hingga kolom terakhir; gambar kop kecil & rata tengah
+    const colPx = (w) => Math.round(w * 7 + 5);
+    const colWidthsPx = [colPx(5), colPx(nameWidth)];
+    for (let d = 0; d < daysInMonth * 2; d++) colWidthsPx.push(colPx(9));
+    const totalPx = colWidthsPx.reduce((a, b) => a + b, 0);
+    const imgW = 1134; // 30 cm (≈ 1134 px @96dpi)
+    const imgH = Math.max(24, Math.round(imgW * 219 / 3654));
+    ws.mergeCells(1, 1, 1, lastCol);
+    ws.getRow(1).height = Math.round(imgH * 0.75) + 6;
+    const imgPath = path.join(__dirname, '../../public/assets/images/header-yayasan-landscape.png');
+    if (fs.existsSync(imgPath)) {
+      const imgId = wb.addImage({ filename: imgPath, extension: 'png' });
+      // Posisi kiri = tengah tabel - setengah lebar gambar
+      const leftPx = Math.max(0, totalPx / 2 - imgW / 2);
+      let acc = 0, idx = 0, offPx = 0;
+      for (let i = 0; i < colWidthsPx.length; i++) {
+        if (acc + colWidthsPx[i] > leftPx) { idx = i; offPx = leftPx - acc; break; }
+        acc += colWidthsPx[i];
+      }
+      const tl = { nativeCol: idx, nativeColOff: Math.round(offPx * 9525), nativeRow: 0, nativeRowOff: 0 };
+      ws.addImage(imgId, { tl, ext: { width: imgW, height: imgH }, editAs: 'oneCell' });
+    }
+
+    const mergeRow = (r, text, font, height) => {
+      ws.mergeCells(r, 1, r, lastCol);
+      const c = ws.getCell(r, 1);
+      c.value = text;
+      c.font = font;
+      c.alignment = { horizontal: 'center', vertical: 'middle' };
+      ws.getRow(r).height = height;
+    };
+    mergeRow(2, 'INPUT ABSENSI MANUAL GURU', { bold: true, size: 15, color: { argb: 'FF1F3864' } }, 24);
+    mergeRow(3, `Sekolah: ${tenantName}`, { bold: true, size: 11, color: { argb: 'FF1F3864' } }, 19);
+    mergeRow(4, `Periode: ${monthNames[bulan]} ${tahun}   |   Jumlah Guru: ${teachers.length}   |   ${daysInMonth} hari`, { size: 10, color: { argb: 'FF555555' } }, 17);
+    ws.getRow(5).height = 6;
+
+    // Row 6-7: header tabel
+    ws.getRow(6).height = 18;
+    ws.getRow(7).height = 16;
+
+    // No & Nama Guru (merge 2 baris)
+    ws.mergeCells(6, 1, 7, 1);
+    const cNo = ws.getCell(6, 1); cNo.value = 'No'; cNo.font = { bold: true, size: 10 }; cNo.alignment = { horizontal: 'center', vertical: 'middle' }; cNo.fill = fillNo;
+    ws.mergeCells(6, 2, 7, 2);
+    const cNm = ws.getCell(6, 2); cNm.value = 'Nama Guru'; cNm.font = { bold: true, size: 10 }; cNm.alignment = { horizontal: 'center', vertical: 'middle' }; cNm.fill = fillNo;
+
+    // Header tanggal (merge 2 kolom) + Datang/Pulang
+    for (let d = 1; d <= daysInMonth; d++) {
+      const startCol = 3 + (d - 1) * 2;
+      ws.mergeCells(6, startCol, 6, startCol + 1);
+      const c = ws.getCell(6, startCol);
+      c.value = String(d); c.font = { bold: true, size: 10 }; c.alignment = { horizontal: 'center', vertical: 'middle' }; c.fill = fillDate;
+      const cIn = ws.getCell(7, startCol); cIn.value = 'Datang'; cIn.font = { bold: true, size: 8 }; cIn.alignment = { horizontal: 'center', vertical: 'middle' }; cIn.fill = fillSub;
+      const cOut = ws.getCell(7, startCol + 1); cOut.value = 'Pulang'; cOut.font = { bold: true, size: 8 }; cOut.alignment = { horizontal: 'center', vertical: 'middle' }; cOut.fill = fillSub;
+    }
+
+    // Baris data guru
+    teachers.forEach((t, i) => {
+      const r = 8 + i;
+      ws.getRow(r).height = 16;
+      const cNo = ws.getCell(r, 1); cNo.value = i + 1; cNo.alignment = { horizontal: 'center', vertical: 'middle' };
+      const cNm = ws.getCell(r, 2); cNm.value = t.nama; cNm.alignment = { horizontal: 'left', vertical: 'middle' };
+      for (let d = 1; d <= daysInMonth; d++) {
+        const startCol = 3 + (d - 1) * 2;
+        const rec = existingMap[t.id] && existingMap[t.id][d];
+        const masukVal = rec && rec.masuk ? rec.masuk : '';
+        const pulangVal = rec && rec.pulang ? rec.pulang : '';
+        const c1 = ws.getCell(r, startCol); c1.value = masukVal; c1.alignment = { horizontal: 'center', vertical: 'middle' };
+        const c2 = ws.getCell(r, startCol + 1); c2.value = pulangVal; c2.alignment = { horizontal: 'center', vertical: 'middle' };
+        c1.fill = masukVal ? fillGreen : fillGray;
+        c2.fill = pulangVal ? fillGreen : fillGray;
+        if (masukVal) c1.font = fontGreen;
+        if (pulangVal) c2.font = fontGreen;
+      }
+    });
+
+    // Border seluruh area tabel (header + data)
+    const lastRow = 7 + teachers.length;
+    for (let r = 6; r <= lastRow; r++) {
+      const row = ws.getRow(r);
+      for (let c = 1; c <= lastCol; c++) {
+        row.getCell(c).border = borderAll;
+      }
+    }
+
+    // Sheet Keterangan
+    const ws2 = wb.addWorksheet('Keterangan');
+    ws2.getColumn(1).width = 20;
+    ws2.getColumn(2).width = 85;
+    const ket = [
+      ['Item', 'Keterangan'],
+      ['Dokumen', 'Template Input Absensi Manual'],
+      ['Sekolah', tenantName],
+      ['Periode', `${monthNames[bulan]} ${tahun} (${daysInMonth} hari)`],
+      ['Cara Isi', 'Isi jam Datang & Pulang dengan format HH:MM (contoh: 07:00). Kosongkan bila tidak hadir.'],
+      ['Cara Upload', 'Setelah diisi, upload kembali melalui tombol "Import Excel" pada menu Absensi Manual.'],
+      ['Catatan', 'Jangan mengubah nama kolom/baris. Baris guru mengikuti daftar guru aktif pada sekolah ini.']
+    ];
+    ket.forEach((rowData, idx) => {
+      const row = ws2.getRow(idx + 1);
+      row.height = idx === 0 ? 18 : 20;
+      rowData.forEach((v, ci) => {
+        const c = row.getCell(ci + 1);
+        c.value = v;
+        c.alignment = { vertical: 'middle', wrapText: true, horizontal: 'left' };
+        c.border = borderAll;
+        if (idx === 0) { c.font = { bold: true, color: { argb: 'FF1F3864' } }; c.fill = fillDate; }
+      });
+    });
+
+    const buffer = await wb.xlsx.writeBuffer();
+    const buf = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
+    res.setHeader('Content-Disposition', `attachment; filename="template_absensi_${tenantId}_${tahun}-${String(bulan).padStart(2, '0')}.xlsx"`);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Length', buf.length);
+    res.end(buf);
+  } catch (error) {
+    console.error('SDM manual attendance template error:', error);
+    res.status(500).json({ success: false, message: 'Gagal membuat template', error: error.message });
+  }
+});
+
+// POST /sdm-dashboard/manual-attendance/import (multipart: file, tenant_id, bulan, tahun)
+router.post('/sdm-dashboard/manual-attendance/import', authenticateOperator, excelUpload.single('file'), async (req, res) => {
+  try {
+    const allowedTenants = await getSdmAllowedTenants(req);
+    let tenantId = req.body.tenant_id;
+    if (!tenantId || !allowedTenants.includes(tenantId)) tenantId = allowedTenants[0];
+    if (!tenantId) return res.status(400).json({ success: false, message: 'tenant_id wajib diisi' });
+    if (!req.file) return res.status(400).json({ success: false, message: 'File excel wajib diupload' });
+
+    const bulan = parseInt(req.body.bulan || new Date().getMonth() + 1);
+    const tahun = parseInt(req.body.tahun || new Date().getFullYear());
+    const daysInMonth = new Date(tahun, bulan, 0).getDate();
+
+    const teachers = await db.query(
+      `SELECT DISTINCT t.id, t.nama FROM teachers t
+       JOIN teacher_assignments ta ON t.id = ta.teacher_id
+       WHERE ta.tenant_id = ? AND t.status_aktif = 1`,
+      [tenantId]
+    );
+    const byName = {};
+    teachers.forEach(t => { byName[String(t.nama).trim().toLowerCase()] = t; });
+
+    // Aturan kehadiran per tenant (sama seperti scanner) untuk klasifikasi status
+    const rules = await db.query(
+      'SELECT tipe, jam_mulai, jam_selesai, status_log FROM attendance_rules WHERE tenant_id = ?',
+      [tenantId]
+    );
+    const jamToMin = (v) => { const m = String(v).match(/(\d{1,2}):(\d{2})/); return m ? (+m[1]) * 60 + (+m[2]) : -1; };
+    const statusFor = (jenis, hhmm) => {
+      const t = jamToMin(hhmm);
+      const tipe = jenis === 'masuk' ? 'Datang' : 'Pulang';
+      const cand = rules
+        .filter(r => r.tipe === tipe)
+        .map(r => ({ sm: jamToMin(r.jam_mulai), em: jamToMin(r.jam_selesai), s: r.status_log }))
+        .filter(r => t >= r.sm && t <= r.em)
+        .sort((a, b) => b.sm - a.sm);
+      const s = cand.length ? cand[0].s : null;
+      return (s === 'tepat_waktu' || s === 'terlambat') ? s : 'tepat_waktu';
+    };
+
+    const wb = XLSX.read(req.file.buffer, { type: 'buffer' });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const aoa = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
+    if (!aoa.length) return res.status(400).json({ success: false, message: 'File kosong' });
+
+    // Deteksi baris header (baris yang memuat "Nama Guru"); data 2 baris setelahnya.
+    // Mengakomodasi template lama (header di baris 1) maupun baru (ada judul di atas).
+    let headerRow = -1;
+    for (let i = 0; i < Math.min(aoa.length, 25); i++) {
+      const row = aoa[i] || [];
+      if (row.some(c => String(c).trim().toLowerCase() === 'nama guru')) { headerRow = i; break; }
+    }
+    const dataStart = headerRow >= 0 ? headerRow + 2 : 2;
+
+    const parseTime = (v) => {
+      if (v === '' || v === null || v === undefined) return '';
+      if (typeof v === 'number') {
+        const frac = v - Math.floor(v);
+        const totalMin = Math.round(frac * 24 * 60);
+        const hh = Math.floor(totalMin / 60) % 24;
+        const mm = totalMin % 60;
+        return String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
+      }
+      const s = String(v).trim().replace(/\./g, ':');
+      const m = s.match(/(\d{1,2})\s*:\s*(\d{1,2})/);
+      if (m) return String(Math.min(23, parseInt(m[1]))).padStart(2, '0') + ':' + String(Math.min(59, parseInt(m[2]))).padStart(2, '0');
+      return '';
+    };
+
+    let saved = 0, skipped = 0;
+    const errors = [];
+    for (let r = dataStart; r < aoa.length; r++) {
+      const row = aoa[r];
+      if (!row || !row.length) continue;
+      const nama = String(row[1] ?? '').trim();
+      if (!nama) continue;
+      const teacher = byName[nama.toLowerCase()];
+      if (!teacher) { errors.push(`Baris ${r + 1}: guru "${nama}" tidak ditemukan`); continue; }
+
+      for (let d = 1; d <= daysInMonth; d++) {
+        const baseCol = 2 + (d - 1) * 2;
+        const masukStr = parseTime(row[baseCol]);
+        const pulangStr = parseTime(row[baseCol + 1]);
+        if (!masukStr && !pulangStr) continue;
+        const dateStr = `${tahun}-${String(bulan).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        if (masukStr) {
+          const status = statusFor('masuk', masukStr);
+          const ok = await insertAttendanceLogIfAbsent(teacher.id, tenantId, `${dateStr} ${masukStr}:00`, 'masuk', status);
+          if (ok) saved++; else skipped++;
+        }
+        if (pulangStr) {
+          const status = statusFor('pulang', pulangStr);
+          const ok = await insertAttendanceLogIfAbsent(teacher.id, tenantId, `${dateStr} ${pulangStr}:00`, 'pulang', status);
+          if (ok) saved++; else skipped++;
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Import selesai: ${saved} catatan baru disimpan, ${skipped} sudah ada (dilewati)`,
+      saved,
+      skipped,
+      errorCount: errors.length,
+      errors: errors.slice(0, 50)
+    });
+  } catch (error) {
+    console.error('SDM manual attendance import error:', error);
+    res.status(500).json({ success: false, message: 'Gagal import absensi', error: error.message });
   }
 });
 

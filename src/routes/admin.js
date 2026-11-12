@@ -187,6 +187,19 @@ const berkasUpload = multer({
   }
 });
 
+// Bungkus middleware multer agar error validasi dikembalikan sebagai JSON,
+// bukan halaman HTML default Express (yang membuat frontend gagal JSON.parse).
+const berkasUploadSafe = (handler) => (req, res, next) => {
+  handler(req, res, (err) => {
+    if (!err) return next();
+    const tooLarge = err.code === 'LIMIT_FILE_SIZE';
+    const message = tooLarge
+      ? 'Ukuran file melebihi 5MB. Perkecil file atau gunakan format lain.'
+      : (err.message || 'File tidak dapat diproses.');
+    return res.status(tooLarge ? 413 : 400).json({ success: false, message });
+  });
+};
+
 const registrationStorage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, 'public/uploads/registrations/');
@@ -6267,7 +6280,7 @@ const docTypeMap = {
   kk: 'link_kk',
   ijazah: 'link_ijazah'
 };
-router.post('/public/teachers/:teacherId/upload-document', berkasUpload.single('file'), async (req, res) => {
+router.post('/public/teachers/:teacherId/upload-document', berkasUploadSafe(berkasUpload.single('file')), async (req, res) => {
   try {
     const teacherId = req.params.teacherId;
     const docType = req.body.doc_type;
@@ -6304,12 +6317,12 @@ router.post('/public/teachers/:teacherId/upload-document', berkasUpload.single('
 });
 
 // PUT /api/public/teachers/:teacherId - Update teacher profile (no auth required, for complete-profile.html)
-router.put('/public/teachers/:teacherId', berkasUpload.fields([
+router.put('/public/teachers/:teacherId', berkasUploadSafe(berkasUpload.fields([
   { name: 'foto', maxCount: 1 },
   { name: 'ktp', maxCount: 1 },
   { name: 'kk', maxCount: 1 },
   { name: 'ijazah', maxCount: 1 }
-]), async (req, res) => {
+])), async (req, res) => {
   try {
     const teacherId = req.params.teacherId;
     const { nama, nik, nip, email, tempat_lahir, tanggal_lahir, jenis_kelamin, alamat, no_wa, status_kepegawaian, status_aktif, tmt, pendidikan_terakhir, jurusan, nama_sekolah_pendidikan, tahun_angkatan, assignments_json, bank, nomor_rekening, status_perkawinan, jumlah_anak, data_keluarga, link_foto: bodyLinkFoto, link_ktp: bodyLinkKtp, link_kk: bodyLinkKk, link_ijazah: bodyLinkIjazah } = req.body;

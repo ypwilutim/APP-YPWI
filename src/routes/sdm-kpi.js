@@ -16,11 +16,16 @@ async function getSdmAllowedTenants(req) {
     return allTenants.map(t => t.tenant_id);
   }
 
-  const sdmAssignments = (req.user.assignments || []).filter(a =>
+  const norm = (v) => (v || '').toLowerCase().replace(/[\s_]+/g, '');
+  const isLeader = (a) => ['kepalasekolah', 'pimpinan', 'ketua'].includes(norm(a.jabatan_di_unit));
+
+  const assignments = req.user.assignments || [];
+  const sdmAssignments = assignments.filter(a =>
     (a.jabatan_di_unit || '').toLowerCase().includes('sdm')
   );
+  const leaderAssignments = assignments.filter(isLeader);
 
-  if (sdmAssignments.length === 0) {
+  if (sdmAssignments.length === 0 && leaderAssignments.length === 0) {
     return [];
   }
 
@@ -30,7 +35,10 @@ async function getSdmAllowedTenants(req) {
     return allTenants.map(t => t.tenant_id);
   }
 
-  return sdmAssignments.map(a => a.tenant_id);
+  const tenants = new Set();
+  sdmAssignments.forEach(a => { if (a.tenant_id) tenants.add(a.tenant_id); });
+  leaderAssignments.forEach(a => { if (a.tenant_id) tenants.add(a.tenant_id); });
+  return [...tenants];
 }
 
 // Helper: Check if user is SDM Pusat

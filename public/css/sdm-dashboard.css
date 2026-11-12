@@ -109,7 +109,7 @@ input[type="number"]::-webkit-outer-spin-button {
   display: none;
 }
 .modal.show {
-  display: flex;
+  display: flex !important;
 }
 
 /* Sticky header shadow on scroll */

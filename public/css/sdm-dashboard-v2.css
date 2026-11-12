@@ -1,0 +1,383 @@
+/* ============================================================
+   SDM DASHBOARD V2 CSS - Clean Structure
+   ============================================================ */
+
+/* Base */
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* Sidebar scrollbar */
+aside::-webkit-scrollbar {
+  width: 4px;
+}
+aside::-webkit-scrollbar-track {
+  background: transparent;
+}
+aside::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 2px;
+}
+aside::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Main scrollbar */
+main::-webkit-scrollbar {
+  width: 6px;
+}
+main::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+main::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+/* Tab content transitions */
+.tab-content {
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Cards hover */
+.shadow-sm {
+  transition: box-shadow 0.2s ease;
+}
+.shadow-sm:hover {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+/* KPI Progress bars */
+.kpi-progress-bar {
+  transition: width 0.6s ease-in-out;
+  border-radius: 9999px;
+}
+
+/* KPI badges */
+.kpi-badge-excellent {
+  background-color: #dcfce7;
+  color: #166534;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+.kpi-badge-good {
+  background-color: #dbeafe;
+  color: #1e40af;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+.kpi-badge-fair {
+  background-color: #fef3c7;
+  color: #92400e;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+.kpi-badge-poor {
+  background-color: #fee2e2;
+  color: #991b1b;
+  padding: 0.125rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+/* Table styles */
+table thead th {
+  white-space: nowrap;
+}
+
+table tbody tr:hover {
+  background-color: #f8fafc;
+}
+
+/* Input number spinners cleanup */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  opacity: 1;
+}
+
+/* Modal overlay */
+.modal {
+  display: none;
+}
+.modal.show {
+  display: flex !important;
+}
+
+/* Sticky header shadow on scroll */
+.bg-white.border-b {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+/* Nav divider */
+.border-t {
+  border-top-width: 1px;
+}
+
+/* Gradient banner */
+.bg-gradient-to-r {
+  background-image: linear-gradient(to right, var(--tw-gradient-stops));
+}
+
+/* Chart canvas sizing */
+canvas {
+  max-height: 16rem;
+}
+
+/* Select focus */
+select:focus, input:focus, textarea:focus {
+  outline: none;
+}
+
+/* Skeleton loader */
+.skeleton-loader {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: loading 1.5s infinite;
+}
+@keyframes loading {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.skeleton-text-lg { height: 2rem; width: 60%; }
+
+/* KPI progress bar transition */
+.kpi-progress-bar {
+  transition: width 0.5s ease-in-out;
+}
+
+/* Responsive sidebar */
+@media (max-width: 768px) {
+  aside {
+    position: fixed;
+    z-index: 50;
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+  }
+  aside.open {
+    transform: translateX(0);
+  }
+  
+  /* Mobile modal adjustments */
+  .modal .bg-white {
+    margin: 1rem;
+    max-height: calc(100vh - 2rem);
+  }
+}
+
+/* Table responsive */
+@media (max-width: 768px) {
+  .overflow-x-auto {
+    margin: 0 -1rem;
+    padding: 0 1rem;
+  }
+}
+
+/* Print styles for KAFALAH */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  .modal {
+    display: none !important;
+  }
+  aside, header {
+    display: none !important;
+  }
+  main {
+    overflow: visible !important;
+    height: auto !important;
+  }
+  .tab-content.hidden {
+    display: none !important;
+  }
+}
+
+/* Loading spinner */
+.fa-spin {
+  animation: fa-spin 1s infinite linear;
+}
+@keyframes fa-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Custom scrollbar for modal content */
+.modal .overflow-y-auto::-webkit-scrollbar {
+  width: 6px;
+}
+.modal .overflow-y-auto::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+.modal .overflow-y-auto::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+/* Focus visible for accessibility */
+:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+/* Disabled state */
+button:disabled,
+input:disabled,
+select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* SweetAlert2 customizations */
+.swal2-popup {
+  font-family: 'Inter', sans-serif !important;
+}
+.swal2-title {
+  font-size: 1.125rem !important;
+}
+.swal2-content {
+  font-size: 0.875rem !important;
+}
+
+/* Chart.js tooltip customization */
+.chartjs-tooltip {
+  background: rgba(0, 0, 0, 0.8) !important;
+  padding: 8px 12px !important;
+  border-radius: 6px !important;
+  font-family: 'Inter', sans-serif !important;
+  font-size: 12px !important;
+}
+
+/* Badge styles for status */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border-radius: 9999px;
+}
+.badge-green { background-color: #dcfce7; color: #166534; }
+.badge-yellow { background-color: #fef3c7; color: #92400e; }
+.badge-red { background-color: #fee2e2; color: #991b1b; }
+.badge-blue { background-color: #dbeafe; color: #1e40af; }
+.badge-indigo { background-color: #e0e7ff; color: #3730a3; }
+.badge-gray { background-color: #f3f4f6; color: #374151; }
+
+/* Button loading state */
+.btn-loading {
+  position: relative;
+  color: transparent !important;
+}
+.btn-loading::after {
+  content: "";
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  top: 50%;
+  left: 50%;
+  margin: -8px 0 0 -8px;
+  border: 2px solid #ffffff;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: btn-loading-spin 0.6s linear infinite;
+}
+@keyframes btn-loading-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Form validation styles */
+.input-error {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1) !important;
+}
+.input-success {
+  border-color: #22c55e !important;
+}
+
+/* Empty state */
+.empty-state {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: #9ca3af;
+}
+.empty-state i {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  opacity: 0.5;
+}
+.empty-state p {
+  font-size: 0.875rem;
+}
+
+/* KAFALAH table specific */
+#kafalahTable td {
+  vertical-align: middle;
+}
+#kafalahTable th {
+  font-size: 0.625rem;
+  padding: 0.5rem 0.25rem;
+}
+#kafalahTable td {
+  font-size: 0.6875rem;
+  padding: 0.375rem 0.25rem;
+}
+
+/* KAFALAH summary cards */
+#kafalahSummary > div {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+#kafalahSummary > div:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+/* Teacher table image */
+#teacherTableBody img {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+/* Pagination */
+.pagination-btn {
+  padding: 0.375rem 0.75rem;
+  border: 1px solid #d1d5db;
+  background: white;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  transition: all 0.15s ease;
+}
+.pagination-btn:hover:not(:disabled) {
+  background: #f3f4f6;
+  border-color: #9ca3af;
+}
+.pagination-btn.active {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  color: white;
+}
+.pagination-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Search highlight */
+.search-highlight {
+  background-color: #fef08a;
+  padding: 0 2px;
+  border-radius: 2px;
+}

@@ -309,6 +309,7 @@ app.use('/api/cs', require('./src/routes/whatsapp'));
 app.use('/api', sdmDashboardRoutes);
 app.use('/api', sdmKpiRoutes);
 app.use('/api', sdmRoutes);
+app.use('/api', payrollRoutes);
 
 const logFilePath = path.join(__dirname, 'logs', 'app.log');
 // Ensure logs directory exists
