@@ -15,53 +15,107 @@ const {
 const router = express.Router();
 
 
-// Progress tracking for bulk generate
-const bulkProgress = new Map();
-const MAX_PROGRESS_ENTRIES = 100;
-const PROGRESS_TTL_MS = 60 * 60 * 1000; // 1 hour
+// Progress tracking for bulk generate - PERSISTENT di database (tahan terhadap server restart)
+const PROGRESS_TTL_MS = 24 * 60 * 60 * 1000; // 24 jam
 
-function createProgressJob(total) {
+async function createProgressJob(total) {
   const jobId = 'sk-bulk-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
-  const progress = {
-    jobId,
-    total,
-    processed: 0,
-    percentage: 0,
-    current: '',
-    status: 'processing',
-    startedAt: Date.now(),
-    completedAt: null,
-    generated: [],
-    skipped: [],
-    errors: []
-  };
-  
-  // Cleanup old entries if over limit
-  if (bulkProgress.size >= MAX_PROGRESS_ENTRIES) {
-    const oldestKey = bulkProgress.keys().next().value;
-    bulkProgress.delete(oldestKey);
+  const now = Date.now();
+
+  try {
+    await db.query(
+      `INSERT INTO sk_bulk_progress (job_id, total, processed, percentage, current, status, started_at, created_at)
+       VALUES (?, 0, 0, 0, '', 'processing', ?, NOW())`,
+      [jobId, now]
+    );
+  } catch (e) {
+    console.error('[PROGRESS] createProgressJob DB error:', e.message);
+    // Fallback: create in-memory only
+    const progress = {
+      jobId, total, processed: 0, percentage: 0, current: '',
+      status: 'processing', startedAt: now, completedAt: null,
+      generated: [], skipped: [], errors: []
+    };
+    bulkProgressFallback.set(jobId, progress);
+    setTimeout(() => bulkProgressFallback.delete(jobId), PROGRESS_TTL_MS);
   }
-  
-  bulkProgress.set(jobId, progress);
-  
-  // Auto-cleanup after TTL
-  setTimeout(() => bulkProgress.delete(jobId), PROGRESS_TTL_MS);
-  
+
   return jobId;
 }
 
-function updateProgress(jobId, updates) {
-  const progress = bulkProgress.get(jobId);
-  if (!progress) return;
-  Object.assign(progress, updates);
-  if (progress.total > 0) {
-    progress.percentage = Math.round((progress.processed / progress.total) * 100);
+async function updateProgress(jobId, updates) {
+  // Try DB first
+  try {
+    const sets = [];
+    const params = [];
+    for (const [key, value] of Object.entries(updates)) {
+      if (value === undefined) continue;
+      const col = key.charAt(0).toLowerCase() + key.slice(1);
+      // Map camelCase to snake_case DB columns
+      const colMap = {
+        jobId: 'job_id', startedAt: 'started_at', completedAt: 'completed_at',
+        percentage: 'percentage', total: 'total', processed: 'processed',
+        current: 'current', status: 'status', generated: 'generated',
+        skipped: 'skipped', errors: 'errors'
+      };
+      const dbCol = colMap[key] || col;
+      // Serialize arrays to JSON
+      let val = value;
+      if (Array.isArray(value)) {
+        val = JSON.stringify(value);
+      }
+      sets.push(`${dbCol} = ?`);
+      params.push(val);
+    }
+    if (sets.length === 0) return;
+    params.push(jobId);
+    await db.query(
+      `UPDATE sk_bulk_progress SET ${sets.join(', ')}, updated_at = NOW() WHERE job_id = ?`,
+      params
+    );
+    return;
+  } catch (e) {
+    // Fallback to in-memory
+  }
+
+  const progress = bulkProgressFallback.get(jobId);
+  if (progress) {
+    Object.assign(progress, updates);
+    if (progress.total > 0) {
+      progress.percentage = Math.round((progress.processed / progress.total) * 100);
+    }
   }
 }
 
-function getProgress(jobId) {
-  return bulkProgress.get(jobId) || null;
+async function getProgress(jobId) {
+  // Try DB first
+  try {
+    const rows = await db.query('SELECT * FROM sk_bulk_progress WHERE job_id = ?', [jobId]);
+    if (rows && rows.length > 0) {
+      const p = rows[0];
+      return {
+        jobId: p.job_id,
+        total: p.total,
+        processed: p.processed,
+        percentage: p.percentage,
+        current: p.current,
+        status: p.status,
+        startedAt: p.started_at,
+        completedAt: p.completed_at,
+        generated: p.generated ? (typeof p.generated === 'string' ? JSON.parse(p.generated) : p.generated) : [],
+        skipped: p.skipped ? (typeof p.skipped === 'string' ? JSON.parse(p.skipped) : p.skipped) : [],
+        errors: p.errors ? (typeof p.errors === 'string' ? JSON.parse(p.errors) : p.errors) : []
+      };
+    }
+  } catch (e) {
+    // Fallback to in-memory
+  }
+
+  return bulkProgressFallback.get(jobId) || null;
 }
+
+// Fallback in-memory store (jika tabel DB tidak ada)
+const bulkProgressFallback = new Map();
 
 
 const hijriMonths = ['Muharam', 'Safar', 'Rabiul Awal', 'Rabiul Akhir', 'Jumadil Awal', 'Jumadil Akhir', 'Rajab', 'Syaban', 'Ramadhan', 'Syawal', 'Dzul Qaidah', 'Dzul Hijjah'];
@@ -1486,8 +1540,8 @@ router.post('/bulk-generate', authenticateOperator, async (req, res) => {
       return;
     } else {
       // Create progress job for async processing
-      const jobId = clientJobId || createProgressJob(validRows.length);
-      const progress = getProgress(jobId);
+      const jobId = clientJobId || (await createProgressJob(validRows.length));
+      const progress = await getProgress(jobId);
       
       // Return jobId immediately, process in background
       res.json({
@@ -1509,7 +1563,7 @@ router.post('/bulk-generate', authenticateOperator, async (req, res) => {
 
 // Background processing function
 async function processBulkGenerateBackground(jobId, validRows, hijriToday, req, generated, skipped, errors) {
-  const progress = getProgress(jobId);
+  const progress = await getProgress(jobId);
   if (!progress) return;
 
   try {
@@ -1556,13 +1610,15 @@ async function processBulkGenerateBackground(jobId, validRows, hijriToday, req, 
         let driveMeta = null;
         try {
           // Update progress before each PDF
-          progress.current = teacher?.nama || v.teacher?.nama || 'Processing...';
-          progress.processed = i + 1;
+          await updateProgress(jobId, {
+            current: teacher?.nama || v.teacher?.nama || 'Processing...',
+            processed: i + 1
+          });
           
           const htmlData = {
             noSurat: skData.noSurat,
             tentang: skData.tentang,
-            nama: teacher.nama,
+            nama: teacher?.nama,
             ttl: skData.ttl,
             tmtFormatted: skData.tmtFormatted,
             ptFormatted: skData.ptFormatted,
@@ -1600,12 +1656,14 @@ async function processBulkGenerateBackground(jobId, validRows, hijriToday, req, 
         });
       }
 
-      progress.status = 'completed';
-      progress.completedAt = Date.now();
-      progress.generated = generated;
-      progress.skipped = skipped;
-      progress.errors = errors;
-      progress.current = 'Selesai';
+      await updateProgress(jobId, {
+        status: 'completed',
+        completedAt: Date.now(),
+        generated: generated,
+        skipped: skipped,
+        errors: errors,
+        current: 'Selesai'
+      });
 
     } catch (err) {
       console.error('[SK BULK] batch error:', err);
@@ -1619,19 +1677,23 @@ async function processBulkGenerateBackground(jobId, validRows, hijriToday, req, 
           errors.push({ teacher_id: v.teacher_id, nama: v.teacher.nama, reason: err.message });
         }
       }
-      progress.status = 'failed';
-      progress.completedAt = Date.now();
-      progress.generated = generated;
-      progress.skipped = skipped;
-      progress.errors = errors;
+      await updateProgress(jobId, {
+        status: 'failed',
+        completedAt: Date.now(),
+        generated: generated,
+        skipped: skipped,
+        errors: errors
+      });
     }
   } catch (error) {
     console.error('[SK BULK] background error:', error);
-    const progress = getProgress(jobId);
+    const progress = await getProgress(jobId);
     if (progress) {
-      progress.status = 'failed';
-      progress.completedAt = Date.now();
-      progress.errors.push({ reason: error.message });
+      await updateProgress(jobId, {
+        status: 'failed',
+        completedAt: Date.now(),
+        errors: [...(progress.errors || []), { reason: error.message }]
+      });
     }
   }
 }
@@ -1640,7 +1702,7 @@ async function processBulkGenerateBackground(jobId, validRows, hijriToday, req, 
 router.get('/bulk-progress/:jobId', authenticateOperator, async (req, res) => {
   try {
     const { jobId } = req.params;
-    const progress = getProgress(jobId);
+    const progress = await getProgress(jobId);
     
     if (!progress) {
       return res.status(404).json({ success: false, message: 'Job tidak ditemukan atau sudah expired' });

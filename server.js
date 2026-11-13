@@ -2448,15 +2448,35 @@ await ensureColumn('sk_guru', 'drive_uploaded_at', 'DATETIME DEFAULT NULL AFTER 
   });
 
 app.listen(PORT, '0.0.0.0', () => {
-     console.log('🚀 Server YPWI Lutim berjalan di http://localhost:' + PORT);
-     console.log('🌐 Juga dapat diakses di http://0.0.0.0:' + PORT + ' atau IP lokal Anda');
-     console.log('🔐 Login endpoint: POST /api/auth/login');
-     console.log('📊 Dashboard endpoint: GET /api/dashboard (protected)');
-     console.log('📱 Scanner endpoints: POST /api/scanner/attendance, POST /api/scanner/register');
-     console.log('🔍 QR Generator: GET /api/scanner/qr/generate?scan_id=XXX');
-   });
-   require('./scheduler');
- }
+      console.log('🚀 Server YPWI Lutim berjalan di http://localhost:' + PORT);
+      console.log('🌐 Juga dapat diakses di http://0.0.0.0:' + PORT + ' atau IP lokal Anda');
+      console.log('🔐 Login endpoint: POST /api/auth/login');
+      console.log('📊 Dashboard endpoint: GET /api/dashboard (protected)');
+      console.log('📱 Scanner endpoints: POST /api/scanner/attendance, POST /api/scanner/register');
+      console.log('🔍 QR Generator: GET /api/scanner/qr/generate?scan_id=XXX');
+    });
+
+    // Cleanup old progress entries (> 24 jam) setiap 1 jam
+    const cleanupOldProgress = async () => {
+      try {
+        const cutoff = Date.now() - (24 * 60 * 60 * 1000);
+        const [result] = await db.query(
+          'DELETE FROM sk_bulk_progress WHERE completed_at IS NOT NULL AND completed_at < ?',
+          [cutoff]
+        );
+        if (result.affectedRows > 0) {
+          console.log('[CLEANUP] Deleted ' + result.affectedRows + ' old progress entries');
+        }
+      } catch (e) {
+        console.error('[CLEANUP] Progress cleanup error:', e.message);
+      }
+    };
+    // Jalankan sekali setelah 10 detik, lalu setiap 1 jam
+    setTimeout(cleanupOldProgress, 10000);
+    setInterval(cleanupOldProgress, 60 * 60 * 1000);
+
+    require('./scheduler');
+  }
 
 startServer().catch(err => {
   console.error('Server start failed:', err.message);

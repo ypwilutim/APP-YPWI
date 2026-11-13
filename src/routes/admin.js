@@ -6081,35 +6081,48 @@ ${catatan ? `• Catatan: ${catatan}\n\n` : ''}Pesan ini dikirim otomatis oleh s
 });
 
 // GET /api/teacher/info - Get current teacher info (nama, foto, assignments)
-router.get('/teacher/info', authenticateToken, async (req, res) => {
-  try {
-    const [teacher] = await db.query(
-      'SELECT t.id, t.nama, t.nik, t.nip, t.email, t.no_wa, t.scan_id, t.tempat_lahir, t.tanggal_lahir, t.jenis_kelamin, t.alamat, t.status_kepegawaian, t.status_aktif, t.tmt, t.pendidikan_terakhir, t.bank, t.nomor_rekening, t.link_foto, t.link_ktp, t.link_kk, t.link_ijazah FROM teachers t WHERE t.id = ?',
-      [req.user.guru_id]
-    );
+  router.get('/teacher/info', authenticateToken, async (req, res) => {
+    try {
+      const [teacher] = await db.query(
+        'SELECT t.id, t.nama, t.nik, t.nip, t.email, t.no_wa, t.scan_id, t.tempatlahir, t.tanggallahir, t.jenis_kelamin, t.alamat, t.status_kepegawaian, t.status_aktif, t.tmt, t.pendidikan_terakhir, t.bank, t.nomor_rekening, t.link_foto, t.link_ktp, t.link_kk, t.link_ijazah FROM teachers t WHERE t.id = ?',
+        [req.user.guru_id]
+      );
 
-    if (!teacher) {
-      return res.status(404).json({ success: false, message: 'Guru tidak ditemukan' });
-    }
+      if (!teacher) {
+        return res.status(404).json({ success: false, message: 'Guru tidak ditemukan' });
+      }
 
-    const assignments = await db.query(
-      'SELECT ta.tenant_id, ta.jabatan_di_unit, tn.nama_sekolah FROM teacher_assignments ta JOIN tenants tn ON ta.tenant_id = tn.tenant_id WHERE ta.teacher_id = ?',
-      [req.user.guru_id]
-    );
+      const assignments = await db.query(
+        'SELECT ta.tenant_id, ta.jabatan_di_unit, tn.nama_sekolah FROM teacher_assignments ta JOIN tenants tn ON ta.tenant_id = tn.tenant_id WHERE ta.teacher_id = ?',
+        [req.user.guru_id]
+      );
 
-    res.json({
-      success: true,
-      teacher: {
-        ...teacher,
+      // Ambil status kelengkapan profil dari users (sumber kebenaran is_profile_complete)
+      let isProfileComplete = 1;
+      try {
+        const [userRow] = await db.query(
+          'SELECT is_profile_complete FROM users WHERE id = ?',
+          [req.user.id]
+        );
+        if (userRow) isProfileComplete = userRow.is_profile_complete === 1 ? 1 : 0;
+      } catch (e) {
+        console.warn('[TEACHER/INFO] Gagal mengambil is_profile_complete:', e.message);
+      }
+
+      res.json({
+        success: true,
+        is_profile_complete: isProfileComplete,
+        teacher: {
+          ...teacher,
+          assignments: assignments || []
+        },
         assignments: assignments || []
-      },
-      assignments: assignments || []
-    });
-  } catch (error) {
-    console.error('Teacher info error:', error);
-    res.status(500).json({ success: false, message: 'Error fetching teacher info' });
-  }
-});
+      });
+    } catch (error) {
+      console.error('Teacher info error:', error);
+      res.status(500).json({ success: false, message: 'Error fetching teacher info' });
+    }
+  });
 
 // GET /api/admin/email-logs - Get email sending history
 router.get('/admin/email-logs', authenticateOperator, async (req, res) => {

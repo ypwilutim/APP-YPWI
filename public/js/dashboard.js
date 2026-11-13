@@ -200,6 +200,15 @@ async function setTeacherInfo() {
             const teacher = data.teacher;
             const assignments = data.assignments || [];
 
+            // Jika profil belum lengkap (is_profile_complete = 0), arahkan ke halaman pelengkapan profil
+            if (data.is_profile_complete === 0) {
+                const teacherId = teacher.id || (user && user.guru_id);
+                if (teacherId) {
+                    window.location.href = 'complete-profile.html?teacher_id=' + teacherId;
+                    return;
+                }
+            }
+
             if (teacherNameEl) teacherNameEl.textContent = teacher.nama || user.username || 'Guru';
 
             const seen = new Set();
