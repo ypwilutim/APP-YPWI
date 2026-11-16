@@ -1,4 +1,42 @@
 const cron = require('node-cron');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+
+// Lock file to prevent cron job overlap
+const LOCK_DIR = path.join(os.tmpdir(), 'ypwi-scheduler-locks');
+const ensureLockDir = () => {
+  if (!fs.existsSync(LOCK_DIR)) {
+    fs.mkdirSync(LOCK_DIR, { recursive: true });
+  }
+};
+
+function acquireLock(jobName) {
+  ensureLockDir();
+  const lockFile = path.join(LOCK_DIR, `${jobName}.lock`);
+  // If lock file exists and process is still running, another instance is running
+  if (fs.existsSync(lockFile)) {
+    try {
+      const pid = parseInt(fs.readFileSync(lockFile, 'utf8').trim(), 10);
+      process.kill(pid, 0); // Check if process exists
+      console.log(`[CRON] Lock exists for ${jobName}, PID ${pid} is running. Skipping.`);
+      return false;
+    } catch (e) {
+      // Stale lock file (process died), remove it
+      fs.unlinkSync(lockFile);
+    }
+  }
+  // Create lock file with current PID
+  fs.writeFileSync(lockFile, process.pid.toString());
+  return true;
+}
+
+function releaseLock(jobName) {
+  const lockFile = path.join(LOCK_DIR, `${jobName}.lock`);
+  if (fs.existsSync(lockFile)) {
+    fs.unlinkSync(lockFile);
+  }
+}
 const db = require('./db');
 const { sendBillTemplate, formatPhoneNumber } = require('./src/utils/whatsappTemplate');
 const { generateBilling, recalcTenant } = require('./src/utils/billing');
@@ -95,6 +133,10 @@ async function ensureBillingTables() {
 
 // Run at 00:00 - Generate billing only
 async function runAutoBillGeneration() {
+  if (!acquireLock('auto_bill_generation')) {
+    console.log('[BILL_GEN] Previous run still in progress, skipping.');
+    return;
+  }
   try {
     await ensureBillingTables();
 
@@ -134,11 +176,17 @@ async function runAutoBillGeneration() {
     console.log(`[BILL_GEN] Completed: ${successCount} tenants processed, ${failCount} failed`);
   } catch (err) {
     console.error('[BILL_GEN] Error:', err.message);
+  } finally {
+    releaseLock('auto_bill_generation');
   }
 }
 
 // Run at 07:00 - Send WhatsApp messages
 async function runAutoBillReminder() {
+  if (!acquireLock('auto_bill_reminder')) {
+    console.log('[BILL_REMINDER] Previous run still in progress, skipping.');
+    return;
+  }
   try {
     await ensureBillingTables();
 
@@ -303,6 +351,8 @@ async function runAutoBillReminder() {
     console.error('[BILL_REMINDER] Error:', err.message);
     // Send critical error notification
     await sendAutoBillingNotification(periode, 0, 0, 0, err.message);
+  } finally {
+    releaseLock('auto_bill_reminder');
   }
 }
 
@@ -343,6 +393,10 @@ async function sendAutoBillingNotification(periode, sentCount, failCount, noWaCo
 }
 
 async function runAutoMonthlyInvoiceGeneration() {
+  if (!acquireLock('auto_monthly_invoice')) {
+    console.log('[MONTHLY_INVOICE] Previous run still in progress, skipping.');
+    return;
+  }
   try {
     console.log('[MONTHLY_INVOICE] Starting auto invoice generation...');
     
@@ -492,6 +546,8 @@ Hubungi admin/bendahara jika ada kendala. Terima kasih.`;
     console.log(`[MONTHLY_INVOICE] Completed: ${totalGenerated} invoices generated`);
   } catch (err) {
     console.error('[MONTHLY_INVOICE] Error:', err);
+  } finally {
+    releaseLock('auto_monthly_invoice');
   }
 }
 
@@ -506,6 +562,10 @@ cron.schedule('0 7 * * *', runAutoBillReminder);
 
 module.exports = { runAutoSkGeneration, runAutoBillGeneration, runAutoBillReminder, runAutoMonthlyInvoiceGeneration };
 async function runAutoSkGeneration() {
+  if (!acquireLock('auto_sk_generation')) {
+    console.log('[SK_GEN] Previous run still in progress, skipping.');
+    return;
+  }
   try {
     const settings = await db.query('SELECT auto_generate_date, auto_generate_enabled, min_service_years FROM sk_automation_settings LIMIT 1');
     
@@ -673,6 +733,8 @@ async function runAutoSkGeneration() {
     }
   } catch (err) {
     console.error('Scheduler error:', err.message);
+  } finally {
+    releaseLock('auto_sk_generation');
   }
 }
 

@@ -11,9 +11,11 @@ const imageFiles = {
 };
 
 let cachedImages = null;
+let cachedAt = 0;
 
 function loadImagesBase64() {
-  if (cachedImages) return cachedImages;
+  const TTL = 24 * 60 * 60 * 1000; // 24 hours
+  if (cachedImages && Date.now() - cachedAt < TTL) return cachedImages;
   const result = {};
   for (const [key, filename] of Object.entries(imageFiles)) {
     const filepath = path.join(imagesDir, filename);
@@ -23,6 +25,7 @@ function loadImagesBase64() {
     result[key] = `data:image/${mimeType};base64,${buffer.toString('base64')}`;
   }
   cachedImages = result;
+  cachedAt = Date.now();
   return result;
 }
 

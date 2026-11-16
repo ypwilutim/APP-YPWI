@@ -55,6 +55,30 @@ async function sendEmail(to, subject, htmlContent, textContent = '') {
 // Also expose to global for compatibility
 global.sendEmail = sendEmail;
 
+// OTP storage with TTL to prevent memory leak
+// Format: { email: { code, expires, teacherId } }
+global.tempOtps = new Map();
+
+function cleanupExpiredOtps() {
+  const now = Date.now();
+  for (const [email, otp] of global.tempOtps) {
+    if (now > otp.expires) {
+      global.tempOtps.delete(email);
+    }
+  }
+}
+
+// Run cleanup before OTP operations
+function ensureOtpMapClean() {
+  cleanupExpiredOtps();
+  // Keep map size reasonable - max 1000 entries
+  if (global.tempOtps.size > 1000) {
+    // If too many, clear all and let new ones in (should not happen normally)
+    console.warn('[AUTH] OTP map too large, clearing...');
+    global.tempOtps.clear();
+  }
+}
+
 // ============================================================
 // LOGIN
 // ============================================================
@@ -277,6 +301,7 @@ router.put('/profile-complete/:teacherId/pendidikan-kode', async (req, res) => {
 // ============================================================
 
 router.post('/forgot-password/send-otp', async (req, res) => {
+  ensureOtpMapClean();
   try {
     const { email } = req.body;
 
@@ -426,6 +451,9 @@ router.post('/forgot-password/reset', async (req, res) => {
     }
 
     delete global.tempOtps[email];
+
+    // Also cleanup expired entries periodically
+    ensureOtpMapClean();
 
     res.json({
       success: true,

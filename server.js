@@ -132,8 +132,8 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// app.use(limiter);
-// app.use('/api/auth/login', authLimiter);
+app.use(limiter);
+app.use('/api/auth/login', authLimiter);
 
 // Input sanitization middleware
 const sanitizeInput = (req, res, next) => {
