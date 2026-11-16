@@ -7477,7 +7477,7 @@ function showBulkGenerateResult(progress) {
     loadSKList();
     // Clear selection
     document.querySelectorAll('.sk-list-row-checkbox:checked').forEach(cb => cb.checked = false);
-    updateSkBulkActions();
+    updateSkListBulkBar();
   });
 }
 async function loadSKList() {

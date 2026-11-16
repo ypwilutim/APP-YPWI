@@ -48,6 +48,10 @@ async function updateProgress(jobId, updates) {
   try {
     const sets = [];
     const params = [];
+    // Auto-derive percentage when both processed and total are provided
+    if (updates.processed !== undefined && updates.total !== undefined && updates.total > 0) {
+      updates.percentage = Math.round((updates.processed / updates.total) * 100);
+    }
     for (const [key, value] of Object.entries(updates)) {
       if (value === undefined) continue;
       const col = key.charAt(0).toLowerCase() + key.slice(1);
@@ -64,7 +68,8 @@ async function updateProgress(jobId, updates) {
       if (Array.isArray(value)) {
         val = JSON.stringify(value);
       }
-      sets.push(`${dbCol} = ?`);
+      // Backtick-quote every column: `generated`/`skipped`/`errors` are reserved words
+      sets.push('`' + dbCol + '` = ?');
       params.push(val);
     }
     if (sets.length === 0) return;
@@ -952,7 +957,7 @@ router.get('/list', authenticateOperator, async (req, res) => {
       countParams = [...queryParams];
     }
     const [countResult] = await db.query(countQuery, countParams);
-    const total = countResult[0]?.total || 0;
+    const total = countResult?.total || 0;
     const totalPages = Math.ceil(total / limit);
 
     // Get paginated data
@@ -980,7 +985,8 @@ router.get('/list', authenticateOperator, async (req, res) => {
     });
   } catch (error) {
     console.error('Get SK list error:', error);
-    res.status(500).json({ success: false, message: 'Error fetching SK list' });
+    console.error('Get SK list error details:', error.message, error.sql);
+    res.status(500).json({ success: false, message: 'Error fetching SK list', error: error.message });
   }
 });
 
@@ -1541,6 +1547,18 @@ router.post('/bulk-generate', authenticateOperator, async (req, res) => {
     } else {
       // Create progress job for async processing
       const jobId = clientJobId || (await createProgressJob(validRows.length));
+      // Pastikan progress entry selalu ada di DB, meski client mengirim jobId sendiri
+      const existing = await getProgress(jobId);
+      if (!existing) {
+        try {
+          await db.query(
+            'INSERT INTO sk_bulk_progress (job_id, total, processed, percentage, current, status, started_at, created_at) VALUES (?, ?, 0, 0, \'\', \'processing\', ?, NOW())',
+            [jobId, validRows.length, Date.now()]
+          );
+        } catch (e) {
+          console.error('[PROGRESS] ensure entry error:', e.message);
+        }
+      }
       const progress = await getProgress(jobId);
       
       // Return jobId immediately, process in background
@@ -1612,7 +1630,8 @@ async function processBulkGenerateBackground(jobId, validRows, hijriToday, req, 
           // Update progress before each PDF
           await updateProgress(jobId, {
             current: teacher?.nama || v.teacher?.nama || 'Processing...',
-            processed: i + 1
+            processed: i + 1,
+            total: validRows.length
           });
           
           const htmlData = {
@@ -1659,6 +1678,8 @@ async function processBulkGenerateBackground(jobId, validRows, hijriToday, req, 
       await updateProgress(jobId, {
         status: 'completed',
         completedAt: Date.now(),
+        processed: validRows.length,
+        percentage: 100,
         generated: generated,
         skipped: skipped,
         errors: errors,
@@ -1680,6 +1701,8 @@ async function processBulkGenerateBackground(jobId, validRows, hijriToday, req, 
       await updateProgress(jobId, {
         status: 'failed',
         completedAt: Date.now(),
+        processed: validRows.length,
+        percentage: 100,
         generated: generated,
         skipped: skipped,
         errors: errors

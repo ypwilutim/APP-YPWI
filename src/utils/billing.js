@@ -11,7 +11,7 @@ const MONTHS = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06
 
 // Helper to check if column exists (MySQL-compatible)
 async function columnExists(table, column) {
-  const [rows] = await db.query(
+  const rows = await db.query(
     `SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ? LIMIT 1`,
     [table, column]
   );
@@ -20,7 +20,7 @@ async function columnExists(table, column) {
 
 // Helper to check if index exists (MySQL-compatible)
 async function indexExists(table, indexName) {
-  const [rows] = await db.query(
+  const rows = await db.query(
     `SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ? LIMIT 1`,
     [table, indexName]
   );
@@ -28,16 +28,28 @@ async function indexExists(table, indexName) {
 }
 
 // Helper to safely add column if not exists
+// NOTE: columnExists can return false even when the column is already present
+// (information_schema caching / race conditions on freshly created tables),
+// so treat ER_DUP_FIELDNAME as a non-fatal no-op instead of throwing.
 async function ensureColumn(table, column, definition) {
-  if (!(await columnExists(table, column))) {
+  if (await columnExists(table, column)) return;
+  try {
     await db.query(`ALTER TABLE \`${table}\` ADD COLUMN \`${column}\` ${definition}`);
+  } catch (e) {
+    if (e.code !== 'ER_DUP_FIELDNAME' && !/duplicate column/i.test(e.message)) throw e;
   }
 }
 
 // Helper to safely add index if not exists
+// NOTE: indexExists can return false even when the index is already present
+// (information_schema caching / race conditions on freshly created tables),
+// so treat ER_DUP_KEYNAME as a non-fatal no-op instead of throwing.
 async function ensureIndex(table, indexName, columns) {
-  if (!(await indexExists(table, indexName))) {
+  if (await indexExists(table, indexName)) return;
+  try {
     await db.query(`ALTER TABLE \`${table}\` ADD INDEX \`${indexName}\` (${columns})`);
+  } catch (e) {
+    if (e.code !== 'ER_DUP_KEYNAME' && !/duplicate key name/i.test(e.message)) throw e;
   }
 }
 
