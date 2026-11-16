@@ -4899,7 +4899,8 @@ window.loadSkGuruList = async function () {
             tableBody.innerHTML = data.data.map(sk => {
                 const createdDate = sk.created_at ? new Date(sk.created_at).toLocaleDateString('id-ID') : '-';
                 const tmtDate = sk.tmt || '-';
-                let actions = '<button onclick="downloadSkGuru(' + sk.id + ')" class="text-blue-600 hover:text-blue-800 mr-2" title="Unduh"><i class="fas fa-download"></i></button>';
+                let actions = '<button onclick="viewSK(' + sk.id + ')" class="text-green-600 hover:text-green-800 mr-2" title="Lihat"><i class="fas fa-eye"></i></button>';
+                actions += '<button onclick="downloadSkGuru(' + sk.id + ')" class="text-blue-600 hover:text-blue-800 mr-2" title="Unduh"><i class="fas fa-download"></i></button>';
                 actions += '<button onclick="deleteSkGuru(' + sk.id + ', \'' + (sk.teacher_name || sk.nama || '').replace(/'/g, "\\'") + '\')" class="text-red-600 hover:text-red-800 mr-2" title="Hapus"><i class="fas fa-trash"></i></button>';
                 return '<tr>' +
                     '<td class="px-4 py-3 text-sm"><input type="checkbox" class="sk-list-row-checkbox w-4 h-4" value="' + sk.id + '" onchange="updateSkListBulkBar()"></td>' +
@@ -7632,7 +7633,41 @@ window.clearSKFilters = function() {
 };
 
 function viewSK(skId) {
-  window.open('/api/sk-guru/file/' + skId + '?view=1', '_blank');
+  // Auth is Bearer-token only (no cookies), so fetch the PDF with the token
+  // and open it in a new tab via a blob URL instead of a plain window.open.
+  const token = window.authToken || localStorage.getItem('token') || '';
+  if (!token) {
+    showToast('Session habagal, silakan login ulang', 'error');
+    return;
+  }
+  const url = '/api/sk-guru/file/' + skId + '?view=1';
+  fetch(url, { headers: { 'Authorization': 'Bearer ' + token } })
+    .then(res => {
+      if (!res.ok) {
+        return res.json().catch(() => ({})).then(d => {
+          throw new Error(d.message || ('Gagal membuka SK (HTTP ' + res.status + ')'));
+        });
+      }
+      return res.blob();
+    })
+    .then(blob => {
+      const blobUrl = window.URL.createObjectURL(blob);
+      const win = window.open(blobUrl, '_blank');
+      if (!win) {
+        // popup blocked — fall back to inline download
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = 'SK_Guru_' + skId + '.pdf';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }
+      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60000);
+    })
+    .catch(e => {
+      console.error('[VIEW SK]', e);
+      showToast(e.message || 'Gagal membuka SK', 'error');
+    });
 }
 
 function downloadSK(skId) {
