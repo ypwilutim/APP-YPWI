@@ -30,11 +30,11 @@ function loadImagesBase64() {
 const F4_WIDTH_PT = 609.45;
 const F4_HEIGHT_PT = 935.43;
 
-// Margin diperketat optimal (Atas 12pt, Bawah 12pt, Kiri/Kanan 35pt)
+// Margin diperketat optimal (Atas 12pt, Bawah 6pt, Kiri/Kanan 35pt)
 const MARGIN_LEFT = 35.0;
 const MARGIN_RIGHT = 35.0;
 const MARGIN_TOP = 12.0;
-const MARGIN_BOTTOM = 12.0;
+const MARGIN_BOTTOM = 6.0;
 
 const CONTENT_WIDTH = F4_WIDTH_PT - MARGIN_LEFT - MARGIN_RIGHT;
 
@@ -65,6 +65,15 @@ function replacePlaceholders(obj, data) {
 
 function buildDocDefinition(data) {
   const imagesBase64 = loadImagesBase64();
+
+  // Judul "TENTANG" sering panjang (hingga 76+ karakter di DB). Ukuran font disesuaikan
+  // agar tetap 1 lembar: judul pendek 9pt, judul menengah/panjang 7.5pt, sangat panjang 7pt.
+  const tentangLen = (data.tentang || '').length;
+  let titleFontSize;
+  if (tentangLen > 110) titleFontSize = 7;
+  else if (tentangLen > 40) titleFontSize = 7.5;
+  else titleFontSize = 9;
+  const titleLineHeight = 1.0;
 
   const placeholderData = {
     'NO SURAT': data.noSurat,
@@ -110,7 +119,7 @@ function buildDocDefinition(data) {
       style: 'c6'
     },
     { text: 'TENTANG', style: 'c8Center', margin: [0, 1, 0, 0] },
-    { text: '<<TENTANG>>', style: 'c26Center' },
+    { text: '<<TENTANG>>', style: 'c26Center', fontSize: titleFontSize, lineHeight: titleLineHeight },
 
     // 4. PREAMBUL
     {
@@ -250,10 +259,10 @@ function buildDocDefinition(data) {
           [{ text: 'Nama', style: 'normal' }, { text: ':', style: 'normal' }, { text: '<<NAMA>>', style: 'bold' }],
           [{ text: 'Tempat/tanggal lahir', style: 'normal' }, { text: ':', style: 'normal' }, { text: '<<TTL>>', style: 'normal' }],
           [{ text: 'Tahun Mulai Tugas', style: 'normal' }, { text: ':', style: 'normal' }, { text: '<<TMT>>', style: 'normal' }],
-          [{ text: 'Pendidikan Terakhir', style: 'normal' }, { text: ':', style: 'normal' }, { text: '<<PT>>', style: 'normal' }],
-          [{ text: 'Status Kepegawaian', style: 'normal' }, { text: ':', style: 'normal' }, { text: '<<STATUS>>', style: 'normal' }],
-          [{ text: 'NIY', style: 'normal' }, { text: ':', style: 'normal' }, { text: '<<NIY>>', style: 'normal' }],
-          [{ text: 'Unit Kerja', style: 'normal' }, { text: ':', style: 'normal' }, { text: '<<UNIT>>', style: 'normal' }]
+          [{ text: 'Pendidikan Terakhir', style: 'normal' }, { text: ':', style: 'normal' }, { text: '<<PT>>', style: 'normal', fontSize: 8 }],
+          [{ text: 'Status Kepegawaian', style: 'normal' }, { text: ':', style: 'normal' }, { text: '<<STATUS>>', style: 'normal', fontSize: 8 }],
+          [{ text: 'NIY', style: 'normal' }, { text: ':', style: 'normal' }, { text: '<<NIY>>', style: 'normal', fontSize: 8 }],
+          [{ text: 'Unit Kerja', style: 'normal' }, { text: ':', style: 'normal' }, { text: '<<UNIT>>', style: 'normal', fontSize: 8 }]
         ]
       },
       layout: {

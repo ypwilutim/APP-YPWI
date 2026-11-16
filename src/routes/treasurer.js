@@ -4076,7 +4076,7 @@ router.get('/treasurer/bsi/generate-csv', authenticateBendahara, async (req, res
     const students = await db.query(query, params);
 
     const header1 = 'Type,Parent Account,Virtual Account Number (Prefix VA + Number),Virtual Account Name,Virtual Account Scheme,Limit Debit,Limit Credit,Limit Transaction,Physical Card,Auto Renewal Limit,,Expire Date,KYC,,,,,Additional Info,,,,,,,,,,';
-    const header2 = ',,,,,,,,,,Every,Date / Day,,Name,Mobile Phone,ID Type,ID Number,Address,Label1;Value1,Label2;Value2,Label3;Value3,Label4;Value4,Label5;Value5,Label6;Value6,Label7;Value7,Label8;Value8,Label9;Value10;Value10';
+    const header2 = ',,,,,,,,,,Every,Date / Day,Name,Mobile Phone,ID Type,ID Number,Address,Label1;Value1,Label2;Value2,Label3;Value3,Label4;Value4,Label5;Value5,Label6;Value6,Label7;Value7,Label8;Value8,Label9;Value10;Value10';
     let expireDate;
     if (req.query.expire_date) {
       expireDate = req.query.expire_date;
@@ -4092,51 +4092,43 @@ router.get('/treasurer/bsi/generate-csv', authenticateBendahara, async (req, res
       const va = rawVa.padStart(16, '0').slice(-16); // Pastikan 16 digit tanpa spasi
       const amount = parseFloat(s.iuran_bulanan) || 0;
       const limitAmount = amount + 2000;
-      const kycName = (s.nama_orang_tua || s.nama_siswa).replace(/,/g, ' ');
+      const kycName = (s.orang_tua || s.parent_name || s.nama_siswa).replace(/,/g, ' ');
       const vaName = (s.nama_siswa || '').replace(/,/g, ' ');
-      const autoRenewal = 'Monthly';
-      const every = '1';
       const idType = 'KTP';
-      const idNumber = '1293000299101000'; // NIK dummy 16 digit valid
+      const idNumber = '7324043113870004'; // NIK format seragam (contoh: ...0004)
       const mobilePhone = (() => {
         const raw = (s.parent_wa || '').replace(/[^0-9]/g, '');
-        if (!raw) return '6287766263637';
+        if (!raw) return '6285340631022';
         if (raw.startsWith('0')) return '62' + raw.slice(1);
         if (raw.startsWith('62')) return raw;
         return '62' + raw;
       })();
-      return [
+return [
         'Credit',
         parentAccount.replace(/\s/g, ''),
         va,
         vaName,
-        'Close Limit',
-        '',
-        limitAmount,
-        '',
-        'Yes',
-        '',
-        '',
+        'Open Limit', // Virtual Account Scheme
+        '', // Limit Debit
+        limitAmount, // Limit Credit
+        '', // Limit Transaction
+        '', // Physical Card
+        '', // Auto Renewal Limit
+        '', // (kolom 11)
         expireDate,
-        kycName,
+        'USMAN', // KYC
         mobilePhone,
-        'KTP',
-        '1293000299101000',
-        '',
-        '',
-        '',
-        '',
-        '',
-        '',
-        '',
-        '',
-        '', ''
-      ].join(',');
+        idType,
+        idNumber,
+        'Malili', // Alamat
+        '', // Additional Info
+        '', '', '', '', '', '', '', '', '', '' // sisa kolom 18-26
+      ];
     });
 
     const txt = [header1, header2, ...rows].join('\n');
-    res.setHeader('Content-Type', 'text/plain');
-    res.setHeader('Content-Disposition', `attachment; filename=BSI_VA_${tenantId || 'all'}_${Date.now()}.txt`);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename=BSI_VA_${tenantId || 'all'}_${Date.now()}.csv`);
     res.send(txt);
   } catch (error) {
     console.error('Generate BSI CSV error:', error);
