@@ -893,13 +893,13 @@
                <button onclick="generateBsiCsv()" class="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium">
                  <i class="fas fa-file-alt mr-1"></i>Buat VA Semua (TXT)
                </button>
-               <button onclick="document.getElementById('bsiReportFile').click()" class="bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-medium">
-                 <i class="fas fa-file-import mr-1"></i>Import Laporan BSI
-               </button>
-               <button onclick="loadBsiTransactions()" class="bg-cyan-600 text-white px-4 py-2 rounded-lg text-sm font-medium">
-                 <i class="fas fa-list mr-1"></i>Lihat Transaksi BSI
-               </button>
-               <input type="file" id="bsiReportFile" accept=".csv,.json" class="hidden" onchange="importBsiReport(this)">
+<button onclick="openBsiTransactionsModal()" class="bg-cyan-600 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                  <i class="fas fa-list mr-1"></i>Lihat Transaksi BSI
+                </button>
+                <input type="file" id="bsiReportFile" accept=".csv,.json" class="hidden" onchange="importBsiReport(this)">
+                <button onclick="openBsiImportModal()" class="bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                  <i class="fas fa-file-import mr-1"></i>Import Laporan BSI
+                </button>
              </div>
            </div>
 
@@ -923,36 +923,8 @@
                  </td></tr>
                </tbody>
              </table>
-           </div>
-         </div>
-
-         <!-- BSI Transactions Section -->
-         <div id="bsiTransactionsSection" class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hidden">
-           <div class="flex justify-between items-center mb-4">
-<h3 class="text-lg font-semibold text-gray-900">Transaksi BSI (Siswa dengan VA)</h3>
-              <button onclick="document.getElementById('bsiTransactionsSection').classList.add('hidden')" class="text-gray-500 hover:text-gray-700 text-2xl leading-none">&times;</button>
-            </div>
-            <div class="overflow-x-auto">
-              <table class="w-full text-sm">
-                <thead class="bg-gray-50 border-b border-gray-100">
-                  <tr>
-                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Siswa</th>
-                    <th class="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Iuran</th>
-                    <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">VA Number</th>
-                    <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Status</th>
-                    <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Besaran Transfer</th>
-                  </tr>
-                </thead>
-                <tbody id="bsiTransactionTable" class="divide-y divide-gray-100">
-                  <tr>
-                    <td colspan="5" class="px-4 py-8 text-center text-gray-500">Memuat transaksi...</td>
-                  </tr>
-                 </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
+</div>
+        
         <!-- Customer Service Tab -->
         <div id="customerServiceTab" class="tab-content hidden w-full">
           <div class="bg-white rounded-xl shadow-sm border-2 border-blue-200 p-6 mb-4">
@@ -1394,6 +1366,71 @@
       </div>
       <div class="mt-4 flex justify-end">
         <button onclick="closeWaTemplateModal()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400">Batal</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- BSI Transactions Modal -->
+  <div id="bsiTransactionsModal" class="hidden fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+      <div class="flex justify-between items-center p-4 border-b sticky top-0 bg-white z-10">
+        <h4 class="font-semibold text-lg">Transaksi BSI (Siswa dengan VA)</h4>
+        <button onclick="closeBsiTransactionsModal()" class="text-gray-500 hover:text-gray-700 text-2xl leading-none">&times;</button>
+      </div>
+      <div class="p-4 border-b">
+        <div class="flex items-center gap-2">
+          <select id="bsiTransSchoolFilter" onchange="loadBsiTransactions()"
+            class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cyan-500 text-sm">
+            <option value="all">Semua Sekolah</option>
+          </select>
+        </div>
+      </div>
+      <div class="overflow-auto flex-1">
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 border-b border-gray-100 sticky top-0">
+              <tr>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Siswa</th>
+                <th class="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase">Iuran</th>
+                <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">VA Number</th>
+                <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Status</th>
+                <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Besaran Transfer</th>
+              </tr>
+            </thead>
+            <tbody id="bsiTransactionTable" class="divide-y divide-gray-100">
+              <tr>
+                <td colspan="5" class="px-4 py-8 text-center text-gray-500">Memuat transaksi...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="p-4 border-t flex justify-end sticky bottom-0 bg-white z-10">
+        <button onclick="closeBsiTransactionsModal()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400">Tutup</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- BSI Import Report Modal -->
+  <div id="bsiImportModal" class="hidden fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+      <div class="flex justify-between items-center mb-4">
+        <h4 class="font-semibold text-lg">Import Laporan BSI</h4>
+        <button onclick="closeBsiImportModal()" class="text-gray-500 hover:text-gray-700 text-2xl leading-none">&times;</button>
+      </div>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Pilih File (CSV atau JSON)</label>
+          <input type="file" id="bsiImportFile" accept=".csv,.json"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500">
+        </div>
+        <p class="text-xs text-gray-500">Format yang didukung: Export CSV dari BSI (25 kolom) atau JSON array</p>
+        <div class="flex justify-end gap-2 pt-4">
+          <button onclick="closeBsiImportModal()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400">Batal</button>
+          <button onclick="submitBsiImport()" class="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 font-medium">
+            <i class="fas fa-file-import mr-1"></i>Import
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -3587,6 +3624,74 @@ async function openBsiVaModal() {
       document.getElementById('bsiVaModal').classList.add('hidden');
     }
 
+    // BSI Transactions Modal
+    function openBsiTransactionsModal() {
+      // Populate school filter from main dropdown
+      const mainSelect = document.getElementById('bsiTenantSelect');
+      const modalSelect = document.getElementById('bsiTransSchoolFilter');
+      if (mainSelect && modalSelect && modalSelect.options.length <= 1) {
+        Array.from(mainSelect.options).forEach(opt => {
+          const newOpt = document.createElement('option');
+          newOpt.value = opt.value;
+          newOpt.textContent = opt.textContent;
+          modalSelect.appendChild(newOpt);
+        });
+      }
+      document.getElementById('bsiTransactionsModal').classList.remove('hidden');
+      loadBsiTransactions();
+    }
+
+    function closeBsiTransactionsModal() {
+      document.getElementById('bsiTransactionsModal').classList.add('hidden');
+    }
+
+    // BSI Import Modal
+    function openBsiImportModal() {
+      document.getElementById('bsiImportModal').classList.remove('hidden');
+      document.getElementById('bsiImportFile').value = '';
+    }
+
+    function closeBsiImportModal() {
+      document.getElementById('bsiImportModal').classList.add('hidden');
+    }
+
+    async function submitBsiImport() {
+      const input = document.getElementById('bsiImportFile');
+      const file = input.files[0];
+      if (!file) { showToast('Pilih file terlebih dahulu', 'error'); return; }
+      
+      try {
+        const text = await file.text();
+        let records = [];
+        if (file.name.toLowerCase().endsWith('.json')) {
+          records = JSON.parse(text);
+        } else {
+          records = parseBsiCsv(text);
+        }
+        if (records.length > 0 && records[0].hasOwnProperty('Transaction ID#')) {
+          records = mapBsiCsvToApp(records);
+        }
+        const res = await fetch('/api/bsi/import-report', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+          body: JSON.stringify({ records })
+        });
+        const d = await res.json();
+        if (d.success) {
+          showToast(d.message, 'success');
+          closeBsiImportModal();
+          loadBsiStudents();
+          if (document.getElementById('bsiTransactionsModal').classList.contains('hidden') === false) {
+            loadBsiTransactions();
+          }
+        } else {
+          showToast(d.message || 'Gagal import', 'error');
+        }
+      } catch (e) {
+        showToast('Gagal memproses file: ' + e.message, 'error');
+      }
+    }
+
     async function createBsiVaSelected() {
       const tenantId = document.getElementById('bsiTenantSelect').value;
       const ids = Array.from(document.querySelectorAll('.bsi-checkbox:checked')).map(c => parseInt(c.value));
@@ -3796,52 +3901,57 @@ async function importBsiReport(input) {
         const totalAmount = row['Total Amount'] || '0';
         const status = row['Status'] || 'pending';
         
-        // Extract nama_siswa from Source Account or Beneficiary Additional Info
-        let namaSiswa = '';
-        // Format: "9063777410 (IDR) / USMAN" or "8322318699752896 (IDR) / YPWI SMP IT WAHDAH O2 MALILI"
-        const accountMatch = sourceAccount.match(/[\d\s]+\s*\(\w+\)\s*\/\s*(.+)/);
-        if (accountMatch) namaSiswa = accountMatch[1].trim();
-        if (!namaSiswa) {
-            const beneMatch = row['Beneficiary Additional Info(1)'] || '';
-            namaSiswa = beneMatch.replace(/[^a-zA-Z\s]/g, '').trim() || '';
+        // 1. Pecah "Source Account" -> Nomor Rekening & Nama Pengirim
+        let sourceAccountNo = '';
+        let namaPengirim = '';
+        if (rawSource = row['Source Account']) {
+          const parts = rawSource.split('/');
+          const numMatch = parts[0].match(/\d+/);
+          sourceAccountNo = numMatch ? numMatch[0] : '';
+          namaPengirim = parts.slice(1).join('/').trim();
         }
         
-        // Extract va_number from Beneficiary Account (832231... number)
+        // 2. Pecah "Beneficiary Account" -> Nomor VA & Nama VA/Siswa
         let vaNumber = '';
-        const beneAcctMatch = beneficiaryAccount.match(/(\d{16}|\d{15})/);
-        if (beneAcctMatch) vaNumber = beneAcctMatch[0];
-        if (!vaNumber) {
-            // Try from Beneficiary Additional Info
-            for (let i = 1; i <= 9; i++) {
-                const info = row['Beneficiary Additional Info(' + i + ')'] || '';
-                const numMatch = info.match(/\d{16}|\d{15}/);
-                if (numMatch) {
-                    vaNumber = numMatch[0];
-                    break;
-                }
-            }
+        let namaVaSiswa = '';
+        if (rawBeneficiary = row['Beneficiary Account']) {
+          const parts = rawBeneficiary.split('/');
+          const numMatch = parts[0].match(/\d+/);
+          vaNumber = numMatch ? numMatch[0] : '';
+          namaVaSiswa = parts.slice(1).join('/').trim();
         }
         
-        // Extract iuran_bulanan from Total Amount (remove "IDR " and ".,")
-        let iuranBulanan = 0;
-        const amountMatch = totalAmount.match(/[\d.,]+/);
-        if (amountMatch) {
-            iuranBulanan = parseFloat(amountMatch[0].replace(/[.,]/g, '').replace('IDR', '') || '0');
+        // Penanganan khusus jika nama VA adalah layanan bulk
+        if (namaVaSiswa.includes('CA Bulk Multi Service')) {
+          namaVaSiswa = 'Bulk Service / Yayasan';
         }
         
-        // Map status
+        // 3. Bersihkan Nominal Total Amount (Contoh: "IDR 10.000,00" -> 10000)
+        let nominal = 0;
+        const rawAmount = row['Total Amount'] || '0';
+        const cleanAmount = rawAmount.replace(/IDR/gi, '').replace(/\./g, '').replace(/,\d+$/, '').trim();
+        const parsed = parseInt(cleanAmount, 10);
+        if (!isNaN(parsed)) nominal = parsed;
+        
+        // 4. Map status
         let statusMapped = 'pending';
-        const statusLower = (status || '').toLowerCase();
+        const statusLower = (row['Status'] || '').toLowerCase();
         if (statusLower.includes('success')) statusMapped = 'lunas';
         else if (statusLower.includes('suspect')) statusMapped = 'pending';
         else if (statusLower.includes('pb')) statusMapped = 'pending';
         
         return {
-          nama_siswa: namaSiswa || row['Nama'] || '',
-          nisn: '', // NISN not directly in this format, will be empty
+          transaction_id: row['Transaction ID#'] || '',
+          tanggal_transaksi: row['Transaction Date-Time'] || '',
+          source_account_no: sourceAccountNo,
+          nama_pengirim: namaPengirim || '-',
           va_number: vaNumber || '',
-          iuran_bulanan: iuranBulanan || 0,
-          status: statusMapped
+          nama_va_siswa: namaVaSiswa || '-',
+          nominal: nominal,
+          channel: row['Channel'] || '',
+          status_bank: row['Status'] || '',
+          remarks: row['Remarks'] || '',
+          is_matched: 0
         };
       });
     }
@@ -3849,10 +3959,8 @@ async function importBsiReport(input) {
     async function loadBsiTransactions() {
       const tenantId = document.getElementById('bsiTenantSelect').value;
       if (!tenantId) { showToast('Pilih sekolah terlebih dahulu', 'error'); return; }
-      const section = document.getElementById('bsiTransactionsSection');
       const tbody = document.getElementById('bsiTransactionTable');
 
-      section.classList.remove('hidden');
       tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-center text-gray-500"><i class="fas fa-spinner fa-spin"></i> Memuat transaksi...</td></tr>';
 
       try {

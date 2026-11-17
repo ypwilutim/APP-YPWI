@@ -21,7 +21,6 @@ const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 const axios = require('axios');
 const PDFKit = require('pdfkit');
@@ -114,29 +113,6 @@ app.use((req, res, next) => {
 });
 
 // Preflight requests are handled by the CORS middleware above
-
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  message: 'Too many requests from this IP, please try again later.',
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // limit each IP to 5 login attempts per windowMs
-  message: 'Too many login attempts, please try again later.',
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-// Terapkan general limiter HANYA untuk rute /api/ saja (tidak memblokir file HTML/statis)
-app.use('/api/', limiter);
-
-// Limiter khusus untuk login
-app.use('/api/auth/login', authLimiter);
 
 // Input sanitization middleware
 const sanitizeInput = (req, res, next) => {

@@ -1,822 +1,215 @@
-// Billing & Saldo engine for manual BSI VA payments
-// - incoming_payments : raw BSI mutation report (as-is)
-// - billing_payment   : tagihan per siswa per bulan (snapshot iuran)
-// - saldo_siswa       : saldo berjalan (- tunggakan, + kelebihan)
-// Periode diambil dari Transaction Date-Time (bukan remarks).
-// Kelebihan bulan ini mengurangi kewajiban bulan berikutnya (carry-over).
-
 const db = require('../../db');
 
-const MONTHS = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12' };
-
-// Helper to check if column exists (MySQL-compatible)
-async function columnExists(table, column) {
-  const rows = await db.query(
-    `SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ? LIMIT 1`,
-    [table, column]
-  );
-  return rows.length > 0;
-}
-
-// Helper to check if index exists (MySQL-compatible)
-async function indexExists(table, indexName) {
-  const rows = await db.query(
-    `SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ? LIMIT 1`,
-    [table, indexName]
-  );
-  return rows.length > 0;
-}
-
-// Helper to safely add column if not exists
-// NOTE: columnExists can return false even when the column is already present
-// (information_schema caching / race conditions on freshly created tables),
-// so treat ER_DUP_FIELDNAME as a non-fatal no-op instead of throwing.
-async function ensureColumn(table, column, definition) {
-  if (await columnExists(table, column)) return;
-  try {
-    await db.query(`ALTER TABLE \`${table}\` ADD COLUMN \`${column}\` ${definition}`);
-  } catch (e) {
-    if (e.code !== 'ER_DUP_FIELDNAME' && !/duplicate column/i.test(e.message)) throw e;
-  }
-}
-
-// Helper to safely add index if not exists
-// NOTE: indexExists can return false even when the index is already present
-// (information_schema caching / race conditions on freshly created tables),
-// so treat ER_DUP_KEYNAME as a non-fatal no-op instead of throwing.
-async function ensureIndex(table, indexName, columns) {
-  if (await indexExists(table, indexName)) return;
-  try {
-    await db.query(`ALTER TABLE \`${table}\` ADD INDEX \`${indexName}\` (${columns})`);
-  } catch (e) {
-    if (e.code !== 'ER_DUP_KEYNAME' && !/duplicate key name/i.test(e.message)) throw e;
-  }
-}
-
-function parseDateBSI(dateStr) {
-  const parts = (dateStr || '').split(' ');
-  if (parts.length < 3) return null;
-  const day = parts[0];
-  const month = MONTHS[parts[1]] || '01';
-  const year = parts[2];
-  const time = parts[3] || '00:00';
-  return `${year}-${month}-${day} ${time}:00`;
-}
-
-function parsePeriode(dateStr) {
-  const parts = (dateStr || '').split(' ');
-  if (parts.length < 3) return null;
-  const month = MONTHS[parts[1]] || '01';
-  const year = parts[2];
-  return `${year}-${month}`;
-}
-
-function monthList(start, end) {
-  // start/end format YYYY-MM
-  const out = [];
-  let [y, m] = start.split('-').map(Number);
-  const [ey, em] = end.split('-').map(Number);
-  while (y < ey || (y === ey && m <= em)) {
-    out.push(`${y}-${String(m).padStart(2, '0')}`);
-    m++;
-    if (m > 12) { m = 1; y++; }
-  }
-  return out;
-}
-
-function currentMonth() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
-
-async function getActiveTahunAjaran(tenantId = null) {
-  const query = `
-    SELECT * FROM tahun_ajaran 
-    WHERE (tenant_id IS NULL OR tenant_id = ?) 
-    AND is_active = 1 
-    ORDER BY tenant_id DESC LIMIT 1
-  `;
-  const [rows] = await db.query(query, [tenantId]);
-  return rows;
-}
-
-async function getTahunAjaranById(id) {
-  const [rows] = await db.query('SELECT * FROM tahun_ajaran WHERE id = ?', [id]);
-  return rows;
-}
-
-async function getSemesterByTahunAjaran(tahunAjaranId) {
-  const [rows] = await db.query('SELECT * FROM semester WHERE tahun_ajaran_id = ? ORDER BY tanggal_mulai', [tahunAjaranId]);
-  return rows;
-}
-
-function getMonthsInRange(startDate, endDate) {
-  const out = [];
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  let y = start.getFullYear();
-  let m = start.getMonth() + 1;
-  while (y < end.getFullYear() || (y === end.getFullYear() && m <= end.getMonth() + 1)) {
-    out.push(`${y}-${String(m).padStart(2, '0')}`);
-    m++;
-    if (m > 12) { m = 1; y++; }
-  }
-  return out;
-}
-
-function stripDigits(v) {
-  return (v || '').replace(/[^0-9]/g, '');
-}
-
-function extractVA(beneficiaryRaw) {
-  const match = (beneficiaryRaw || '').match(/(\d{10,16})/);
-  if (match) {
-    const va = match[1];
-    // BSI VA biasanya diawali 832231 (atau 172 untuk sandbox)
-    // Terima semua VA dengan format 10-16 digit
-    if (/^\d{10,16}$/.test(va)) return va;
-  }
-  return null;
-}
-
 async function ensureBillingTables() {
+  await db.query(`DROP TABLE IF EXISTS payment_bsi_transactions`);
   await db.query(`
-    CREATE TABLE IF NOT EXISTS incoming_payments (
-      id BIGINT(20) NOT NULL AUTO_INCREMENT PRIMARY KEY,
-      transaction_id VARCHAR(100) DEFAULT NULL,
-      source_account VARCHAR(150) DEFAULT NULL,
-      beneficiary_account VARCHAR(150) DEFAULT NULL,
-      billing_number VARCHAR(100) DEFAULT NULL,
-      source_additional_1 VARCHAR(255) DEFAULT NULL,
-      source_additional_2 VARCHAR(255) DEFAULT NULL,
-      source_additional_3 VARCHAR(255) DEFAULT NULL,
-      source_additional_4 VARCHAR(255) DEFAULT NULL,
-      source_additional_5 VARCHAR(255) DEFAULT NULL,
-      source_additional_6 VARCHAR(255) DEFAULT NULL,
-      source_additional_7 VARCHAR(255) DEFAULT NULL,
-      source_additional_8 VARCHAR(255) DEFAULT NULL,
-      source_additional_9 VARCHAR(255) DEFAULT NULL,
-      beneficiary_additional_1 VARCHAR(255) DEFAULT NULL,
-      beneficiary_additional_2 VARCHAR(255) DEFAULT NULL,
-      beneficiary_additional_3 VARCHAR(255) DEFAULT NULL,
-      beneficiary_additional_4 VARCHAR(255) DEFAULT NULL,
-      beneficiary_additional_5 VARCHAR(255) DEFAULT NULL,
-      beneficiary_additional_6 VARCHAR(255) DEFAULT NULL,
-      beneficiary_additional_7 VARCHAR(255) DEFAULT NULL,
-      beneficiary_additional_8 VARCHAR(255) DEFAULT NULL,
-      beneficiary_additional_9 VARCHAR(255) DEFAULT NULL,
+    CREATE TABLE payment_bsi_transactions (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      tenant_id INT DEFAULT NULL,
+      transaction_id VARCHAR(100) UNIQUE NOT NULL,
+      
+      -- Hasil pemecahan Source Account (Nomor & Nama Pengirim)
+      source_account VARCHAR(50),
+      sender_name VARCHAR(150),
+      
+      -- Hasil pemecahan Beneficiary Account (Nomor VA & Nama Pemilik VA)
+      beneficiary_va VARCHAR(50),
+      va_name VARCHAR(150),
+      
+      -- Detail Transaksi & BSI
+      billing_number VARCHAR(50),
+      additional_info TEXT,
       remarks TEXT,
-      transaction_date_time VARCHAR(50) DEFAULT NULL,
-      transaction_datetime DATETIME DEFAULT NULL,
-      total_amount DECIMAL(12,2) DEFAULT 0,
-      channel VARCHAR(50) DEFAULT NULL,
-      transfer_type VARCHAR(20) DEFAULT NULL,
-      status VARCHAR(20) DEFAULT NULL,
-      matched_student_id INT(11) DEFAULT NULL,
-      periode VARCHAR(7) DEFAULT NULL,
-      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      KEY idx_benef (beneficiary_account),
-      KEY idx_matched (matched_student_id),
-      KEY idx_periode (periode)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      transaction_date VARCHAR(50),
+      periode VARCHAR(20),
+      amount DECIMAL(15,2) DEFAULT 0,
+      channel VARCHAR(100),
+      transfer_type VARCHAR(50),
+      status VARCHAR(30),
+      
+      -- Relasi & Status Sistem
+      matched_student_id INT DEFAULT NULL,
+      is_matched TINYINT(1) DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      
+      INDEX idx_tenant (tenant_id),
+      INDEX idx_transaction (transaction_id),
+      INDEX idx_beneficiary_va (beneficiary_va),
+      INDEX idx_matched_student (matched_student_id)
+    )
   `);
 
+  await db.query(`DROP TABLE IF EXISTS incoming_payments`);
   await db.query(`
-    CREATE TABLE IF NOT EXISTS billing_payment (
-      id BIGINT(20) NOT NULL AUTO_INCREMENT PRIMARY KEY,
-      tenant_id VARCHAR(20) DEFAULT NULL,
-      student_id INT(11) NOT NULL,
-      spp_bulanan DECIMAL(12,2) DEFAULT 0,
-      ransportasi DECIMAL(12,2) DEFAULT 0,
-      subsidi DECIMAL(12,2) DEFAULT 0,
-      bulan VARCHAR(7) NOT NULL,
-      transaksi DECIMAL(12,2) DEFAULT 0,
-      keterangan_spp DECIMAL(12,2) DEFAULT 0,
-      status ENUM('lunas','belum') DEFAULT 'belum',
-      catatan TEXT DEFAULT NULL,
-      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      UNIQUE KEY uniq_student_bulan (student_id, bulan),
-      KEY idx_tenant (tenant_id),
-      KEY idx_bulan (bulan)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    CREATE TABLE incoming_payments (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      transaction_id VARCHAR(100) UNIQUE,
+      beneficiary_va VARCHAR(50),
+      matched_student_id INT,
+      periode VARCHAR(20),
+      total_amount DECIMAL(12,2),
+      channel VARCHAR(100),
+      status VARCHAR(20),
+      remarks TEXT,
+      source_account VARCHAR(50),
+      sender_name VARCHAR(100),
+      va_name VARCHAR(100),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_matched_student (matched_student_id),
+      INDEX idx_transaction (transaction_id),
+      INDEX idx_beneficiary_va (beneficiary_va)
+    )
   `);
-
-  // Add missing columns if not exists (for existing tables)
-  await ensureColumn('billing_payment', 'ransportasi', 'DECIMAL(12,2) DEFAULT 0');
-  await ensureColumn('billing_payment', 'subsidi', 'DECIMAL(12,2) DEFAULT 0');
-  await ensureColumn('billing_payment', 'catatan', 'TEXT DEFAULT NULL');
-  await ensureColumn('billing_payment', 'updated_at', 'TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP');
-  await ensureIndex('billing_payment', 'idx_bulan', 'bulan');
-  await ensureColumn('billing_payment', 'metode_pembayaran', "ENUM('tunai','transfer_pusat','gateway','belum_bayar') DEFAULT NULL");
-  await ensureColumn('billing_payment', 'tanggal_bayar', 'DATE DEFAULT NULL');
-  await ensureColumn('billing_payment', 'dibayar_oleh', 'VARCHAR(100) DEFAULT NULL');
-  await ensureColumn('billing_payment', 'catatan_pelunasan', 'TEXT DEFAULT NULL');
-  await ensureColumn('billing_payment', 'biaya_admin_va', 'DECIMAL(12,2) DEFAULT 0');
-  await ensureColumn('billing_payment', 'tahun_ajaran_id', 'INT(11) DEFAULT NULL');
-  await ensureColumn('billing_payment', 'semester_id', 'INT(11) DEFAULT NULL');
-  await ensureIndex('billing_payment', 'idx_ta', 'tahun_ajaran_id');
-  await ensureIndex('billing_payment', 'idx_semester', 'semester_id');
-
-  // Payment admin settings table (per siswa/guru - biaya admin VA BSI)
-  // Tabel ini berbeda dari payment_settings (auto-billing config)
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS payment_admin_settings (
-      id INT(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
-      subject_type VARCHAR(20) NOT NULL,
-      subject_id INT(11) NOT NULL,
-      tenant_id VARCHAR(20) DEFAULT NULL,
-      biaya_admin_va DECIMAL(12,2) NOT NULL DEFAULT 2000.00,
-      keterangan TEXT DEFAULT NULL,
-      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      UNIQUE KEY uniq_subject (subject_type, subject_id),
-      KEY idx_tenant (tenant_id),
-      KEY idx_subject (subject_type, subject_id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  `);
-
-  // Backfill default payment admin settings untuk siswa
-  try {
-    await db.query(`
-      INSERT IGNORE INTO payment_admin_settings (subject_type, subject_id, tenant_id, biaya_admin_va, keterangan)
-      SELECT 'student', s.id, s.tenant_id, 2000.00, 'Default biaya admin VA BSI'
-      FROM students s
-      WHERE NOT EXISTS (
-        SELECT 1 FROM payment_admin_settings ps
-        WHERE ps.subject_type = 'student' AND ps.subject_id = s.id
-      )
-    `);
-  } catch (e) {
-    // Tabel belum ada, skip
-  }
-
-  // Backfill default payment admin settings untuk guru
-  try {
-    await db.query(`
-      INSERT IGNORE INTO payment_admin_settings (subject_type, subject_id, tenant_id, biaya_admin_va, keterangan)
-      SELECT 'teacher', t.id, NULL, 2000.00, 'Default biaya admin VA BSI'
-      FROM teachers t
-      WHERE NOT EXISTS (
-        SELECT 1 FROM payment_admin_settings ps
-        WHERE ps.subject_type = 'teacher' AND ps.subject_id = t.id
-      )
-    `);
-  } catch (e) {
-    // Tabel belum ada, skip
-  }
 
   await db.query(`
     CREATE TABLE IF NOT EXISTS saldo_siswa (
-      id INT(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
-      student_id INT(11) NOT NULL,
-      tenant_id VARCHAR(20) DEFAULT NULL,
-      saldo DECIMAL(12,2) NOT NULL DEFAULT 0.00 COMMENT '- = tunggakan, + = kelebihan',
-      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      UNIQUE KEY uniq_student (student_id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      student_id INT PRIMARY KEY,
+      saldo DECIMAL(12,2) DEFAULT 0,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )
   `);
-
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS billing_payment_allocations (
-      id BIGINT(20) NOT NULL AUTO_INCREMENT PRIMARY KEY,
-      billing_id BIGINT(20) NOT NULL,
-      incoming_payment_id BIGINT(20) NOT NULL,
-      amount DECIMAL(12,2) NOT NULL,
-      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      KEY idx_billing (billing_id),
-      KEY idx_incoming (incoming_payment_id),
-      CONSTRAINT fk_alloc_billing FOREIGN KEY (billing_id) REFERENCES billing_payment(id) ON DELETE CASCADE,
-      CONSTRAINT fk_alloc_incoming FOREIGN KEY (incoming_payment_id) REFERENCES incoming_payments(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  `   );
-
-  // Financial transactions (jurnal umum / buku besar)
-   await db.query(`
-     CREATE TABLE IF NOT EXISTS financial_transactions (
-       id BIGINT(20) NOT NULL AUTO_INCREMENT PRIMARY KEY,
-       tenant_id VARCHAR(20) NOT NULL,
-       tanggal DATE NOT NULL,
-       jenis ENUM('beli', 'bayar', 'pemasukan', 'pengeluaran') NOT NULL,
-       kategori VARCHAR(100) NOT NULL,
-       akun VARCHAR(100) DEFAULT NULL,
-       keterangan TEXT DEFAULT NULL,
-       nominal DECIMAL(15,2) NOT NULL DEFAULT 0,
-       no_bukti VARCHAR(50) DEFAULT NULL,
-       foto_struk VARCHAR(255) DEFAULT NULL,
-       foto_barang VARCHAR(255) DEFAULT NULL,
-       status ENUM('approved', 'pending') NOT NULL DEFAULT 'approved',
-       created_by VARCHAR(100) DEFAULT NULL,
-       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-       KEY idx_tenant_tanggal (tenant_id, tanggal),
-       KEY idx_tenant_jenis (tenant_id, jenis),
-       KEY idx_tenant_kategori (tenant_id, kategori),
-       KEY idx_tenant_status (tenant_id, status)
-     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-   `);
-
-   // Migration: add new columns jika belum ada (untuk hosting yang sudah ada tabelnya)
-   try {
-     await ensureColumn('financial_transactions', 'foto_struk', 'VARCHAR(255) DEFAULT NULL');
-    await ensureColumn('financial_transactions', 'foto_barang', 'VARCHAR(255) DEFAULT NULL');
-    try { await db.query(`ALTER TABLE financial_transactions MODIFY COLUMN status VARCHAR(20) NOT NULL DEFAULT 'approved'`); } catch(e2) { await ensureColumn('financial_transactions', 'status', "VARCHAR(20) NOT NULL DEFAULT 'approved'"); }
-    await ensureIndex('financial_transactions', 'idx_tenant_status', 'tenant_id, status');
-
-   // Transaction items table (untuk itemized receipt)
-   await db.query(`
-     CREATE TABLE IF NOT EXISTS financial_transaction_items (
-       id BIGINT(20) NOT NULL AUTO_INCREMENT PRIMARY KEY,
-       transaction_id BIGINT(20) NOT NULL,
-       no_urut INT(11) NOT NULL DEFAULT 1,
-       nama_barang VARCHAR(255) NOT NULL,
-       qty DECIMAL(12,2) NOT NULL DEFAULT 1,
-       harga DECIMAL(12,2) NOT NULL DEFAULT 0,
-       total DECIMAL(15,2) NOT NULL DEFAULT 0,
-       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-       KEY idx_transaksi (transaction_id),
-       KEY idx_transaksi_urut (transaction_id, no_urut),
-       CONSTRAINT fk_ti_transaksi FOREIGN KEY (transaction_id) REFERENCES financial_transactions(id) ON DELETE CASCADE
-     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-   `);
-
-  // Financial categories per tenant
-  await db.query(`
-    CREATE TABLE IF NOT EXISTS financial_categories (
-      id INT(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
-      tenant_id VARCHAR(20) DEFAULT NULL,
-      jenis ENUM('beli', 'bayar', 'pemasukan', 'pengeluaran') NOT NULL DEFAULT 'pengeluaran',
-      nama VARCHAR(100) NOT NULL,
-      nomor_akun VARCHAR(20) DEFAULT NULL COMMENT 'Nomor akun COA (mis. 1101, 1201, 4001)',
-      urutan INT DEFAULT 0,
-      kelompok_akun ENUM('aset','aset_tetap','liabilitas','aset_net_terbatas','aset_net_tanpa_batas','pendapatan','beban','modal') DEFAULT NULL,
-      UNIQUE KEY uniq_tenant_jenis_nama (tenant_id, jenis, nama),
-      KEY idx_tenant (tenant_id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  `);
-
-  await ensureColumn('financial_categories', 'kelompok_akun', "ENUM('aset','aset_tetap','liabilitas','aset_net_terbatas','aset_net_tanpa_batas','pendapatan','beban','modal') DEFAULT NULL");
-  await ensureColumn('financial_categories', 'nomor_akun', 'VARCHAR(20) DEFAULT NULL');
-  await ensureIndex('financial_categories', 'uniq_tenant_jenis_nama', 'tenant_id, jenis, nama');
-  } catch (uniqErr) {
-    try {
-      await db.query(`DELETE c1 FROM financial_categories c1 INNER JOIN financial_categories c2 WHERE c1.id > c2.id AND COALESCE(c1.tenant_id,'') = COALESCE(c2.tenant_id,'') AND c1.nama = c2.nama AND c1.jenis = c2.jenis`);
-      await ensureIndex('financial_categories', 'uniq_tenant_jenis_nama', 'tenant_id, jenis, nama');
-    } catch (e3) { /* ignore — not critical */ }
-  }
-
-  // Seed default categories for yayasan/tenant_id NULL (global defaults)
-  try {
-    const defaultCategories = [
-      { jenis: 'beli', nama: 'Perlengkapan Sekolah', kelompok: 'aset', akun: '1401' },
-      { jenis: 'beli', nama: 'Buku dan Materi', kelompok: 'aset', akun: '1402' },
-      { jenis: 'beli', nama: 'Peralatan Elektronik', kelompok: 'aset_tetap', akun: '1501' },
-      { jenis: 'beli', nama: 'Perlengkapan Kantin', kelompok: 'aset', akun: '1403' },
-      { jenis: 'beli', nama: 'Perlengkapan Taman/Kebun', kelompok: 'aset', akun: '1404' },
-      { jenis: 'beli', nama: 'Kendaraan', kelompok: 'aset_tetap', akun: '1502' },
-      { jenis: 'bayar', nama: 'Gaji Honor / Servis', kelompok: 'beban', akun: '5101' },
-      { jenis: 'bayar', nama: 'Listrik, Air, Telepon', kelompok: 'beban', akun: '5201' },
-      { jenis: 'bayar', nama: 'Internet / Langganan', kelompok: 'beban', akun: '5202' },
-      { jenis: 'bayar', nama: 'Pajak dan Retribusi', kelompok: 'beban', akun: '5301' },
-      { jenis: 'bayar', nama: 'Sewa Tempat', kelompok: 'beban', akun: '5401' },
-      { jenis: 'bayar', nama: 'ATK / Kantor', kelompok: 'beban', akun: '5102' },
-      { jenis: 'bayar', nama: 'Konsumsi / Catering', kelompok: 'beban', akun: '5203' },
-      { jenis: 'bayar', nama: 'Transportasi / Bensin', kelompok: 'beban', akun: '5204' },
-      { jenis: 'bayar', nama: 'Lain-lain', kelompok: 'beban', akun: '5501' }
-    ];
-    for (const cat of defaultCategories) {
-      await db.query(
-        `INSERT IGNORE INTO financial_categories (tenant_id, jenis, nama, urutan, kelompok_akun, nomor_akun) VALUES (?, ?, ?, ?, ?, ?)`,
-        [null, cat.jenis, cat.nama, 0, cat.kelompok, cat.akun]
-      );
-    }
-  } catch (e) {
-    // Ignore seeding errors
-  }
-
-  // Tambah kolom tahun_masuk di students (4 digit tahun, format YYYY)
-  try {
-    await db.query(`ALTER TABLE students ADD COLUMN tahun_masuk VARCHAR(10) DEFAULT NULL`);
-  } catch (e) {
-    // 1060 = duplicate column -> aman diabaikan
-    if (e.code !== 'ER_DUP_FIELDNAME' && !/duplicate column/i.test(e.message)) throw e;
-  }
 }
 
-// Insert satu baris incoming_payments dari record BSI (object key = header)
+function extractVA(str) {
+  if (!str) return null;
+  const digits = String(str).replace(/[^0-9]/g, '');
+  return digits.length > 0 ? digits : null;
+}
+
 async function insertIncoming(rec) {
-  const beneficiaryRaw = rec['Beneficiary Account'] || '';
-  const beneficiaryDigits = extractVA(beneficiaryRaw);
-  const tdt = rec['Transaction Date-Time'] || '';
-  const transaction_datetime = parseDateBSI(tdt) || new Date().toISOString().slice(0, 19).replace('T', ' ');
-  const periode = parsePeriode(tdt);
-
-  let amount = 0;
-  const amt = rec['Total Amount'] || '0';
-  const amtClean = (typeof amt === 'string' ? amt : String(amt)).replace(/[^\d,]/g, '').replace(',', '.');
-  amount = parseFloat(amtClean) || 0;
-
-  // Cegah duplikat berdasarkan Transaction ID#
-  const transactionId = rec['Transaction ID#'] || '';
-  if (transactionId) {
-    const [existing] = await db.query('SELECT id, matched_student_id FROM incoming_payments WHERE transaction_id = ? LIMIT 1', [transactionId]);
-    if (existing) return { id: existing.id, matchedStudentId: existing.matched_student_id, periode, duplicate: true };
+  const transactionId = rec['Transaction ID#'] || rec.transaction_id || '';
+  const beneficiaryAccount = rec['Beneficiary Account'] || rec.beneficiary_account || rec['Beneficiary Account'] || '';
+  const va = extractVA(beneficiaryAccount);
+  
+  if (!va) {
+    return { duplicate: false, matchedStudentId: null };
   }
 
-  // Normalize status - BSI reports often use "Success", "SUCCESS", or other variations
-  let rawStatus = (rec['Status'] || '').trim();
-  const statusMap = {
-    'Success': 'Success',
-    'SUCCESS': 'Success',
-    'success': 'Success',
-    'Sukses': 'Success',
-    'sukses': 'Success',
-    'Settlement': 'Success',
-    'SETTLEMENT': 'Success',
-    'Paid': 'Success',
-    'PAID': 'Success',
-    'Referral': 'Success',
-    'REFERRAL': 'Success'
-  };
-  const status = statusMap[rawStatus] || rawStatus;
-
-  // Match siswa by VA (strict: exact match only, or exact match after BSI prefix strip)
-  // Avoid loose suffix matching which can attribute payments to wrong students
   let matchedStudentId = null;
-  if (beneficiaryDigits) {
-    // Pattern 1: Exact match (with/without spaces)
-    let [st] = await db.query('SELECT id FROM students WHERE REPLACE(va_number, " ", "") = ? OR va_number = ? LIMIT 1', [beneficiaryDigits, beneficiaryDigits]);
+  const studentResult = await db.query(
+    'SELECT id FROM students WHERE REPLACE(REPLACE(REPLACE(va_number, "BSI ", ""), " ", ""), "-", "") = ? LIMIT 1',
+    [va]
+  );
+  if (studentResult.length > 0) {
+    matchedStudentId = studentResult[0].id;
+  }
 
-    // Pattern 2: Exact match after removing BSI common prefixes (832231, 172, 196, 14)
-    if (!st) {
-      const withoutPrefix = beneficiaryDigits.replace(/^832231/, '').replace(/^172/, '').replace(/^196/, '').replace(/^14/, '');
-      if (withoutPrefix.length >= 10) {
-        [st] = await db.query('SELECT id FROM students WHERE REPLACE(va_number, " ", "") = ? OR va_number = ? LIMIT 1', [withoutPrefix, withoutPrefix]);
-      }
-    }
-
-    // Pattern 3: Exact match of the last N digits ONLY when there's exactly one match
-    // (avoids cross-student attribution)
-    if (!st && beneficiaryDigits.length > 10) {
-      for (let len = 12; len >= 10; len--) {
-        const suffix = beneficiaryDigits.slice(-len);
-        const rows = await db.query(
-          'SELECT id FROM students WHERE REPLACE(va_number, " ", "") LIKE ? AND CHAR_LENGTH(REPLACE(va_number, " ", "")) = ?',
-          ['%' + suffix, len]
-        );
-        if (rows.length === 1) {
-          st = rows[0];
-          break;
-        }
-      }
-    }
-
-    matchedStudentId = st ? st.id : null;
-    if (!matchedStudentId) {
-      console.log(`[VA_MATCH] Tidak ditemukan siswa untuk VA ${beneficiaryDigits}`);
+  const periode = rec['Transaction Date-Time'] || rec.tanggal_transaksi || '';
+  let periodeFormatted = '';
+  if (periode) {
+    const match = periode.match(/(\d{2})\s+(\w{3})\s+(\d{4})/);
+    if (match) {
+      const monthMap = { 'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04', 'Mei': '05', 'Jun': '06', 
+                        'Jul': '07', 'Agu': '08', 'Sep': '09', 'Okt': '10', 'Nov': '11', 'Des': '12' };
+      periodeFormatted = `${match[3]}-${monthMap[match[2]] || '01'}`;
+    } else {
+      const match2 = periode.match(/(\d{4})-(\d{2})/);
+      if (match2) periodeFormatted = `${match2[1]}-${match2[2]}`;
     }
   }
 
-  const columns = [
-    'transaction_id', 'source_account', 'beneficiary_account', 'billing_number',
-    'source_additional_1', 'source_additional_2', 'source_additional_3', 'source_additional_4', 'source_additional_5',
-    'source_additional_6', 'source_additional_7', 'source_additional_8', 'source_additional_9',
-    'beneficiary_additional_1', 'beneficiary_additional_2', 'beneficiary_additional_3', 'beneficiary_additional_4', 'beneficiary_additional_5',
-    'beneficiary_additional_6', 'beneficiary_additional_7', 'beneficiary_additional_8', 'beneficiary_additional_9',
-    'remarks', 'transaction_date_time', 'transaction_datetime', 'total_amount', 'channel', 'transfer_type', 'status', 'matched_student_id', 'periode'
-  ];
+  const totalAmount = parseFloat(rec['Total Amount'] || rec.nominal || 0);
+  const channel = rec['Channel'] || rec.channel || '';
+  const status = rec['Status'] || rec.status_bank || '';
+  const remarks = rec['Remarks'] || rec.remarks || '';
+  const sourceAccount = rec['Source Account'] || rec.source_account_no || '';
+  const senderName = rec['Nama Pengirim'] || rec.nama_pengirim || '';
+  const vaName = rec['Nama VA Siswa'] || rec.nama_va_siswa || '';
+  const billingNumber = rec['Billing Number'] || rec.billing_number || '';
+  const additionalInfo = [
+    rec['Source Additional Info(1)'] || '',
+    rec['Source Additional Info(2)'] || '',
+    rec['Source Additional Info(3)'] || '',
+    rec['Source Additional Info(4)'] || '',
+    rec['Source Additional Info(5)'] || '',
+    rec['Source Additional Info(6)'] || '',
+    rec['Source Additional Info(7)'] || '',
+    rec['Source Additional Info(8)'] || '',
+    rec['Source Additional Info(9)'] || '',
+    rec['Beneficiary Additional Info(1)'] || '',
+    rec['Beneficiary Additional Info(2)'] || '',
+    rec['Beneficiary Additional Info(3)'] || '',
+    rec['Beneficiary Additional Info(4)'] || '',
+    rec['Beneficiary Additional Info(5)'] || '',
+    rec['Beneficiary Additional Info(6)'] || '',
+    rec['Beneficiary Additional Info(7)'] || '',
+    rec['Beneficiary Additional Info(8)'] || '',
+    rec['Beneficiary Additional Info(9)'] || ''
+  ].filter(x => x).join(' | ');
+  const transferType = rec['Transfer Type'] || rec.transfer_type || '';
 
-  const values = [
-    transactionId,
-    rec['Source Account'] || '',
-    beneficiaryRaw,
-    rec['Billing Number'] || '',
-    rec['Source Additional Info(1)'] || '',  rec['Source Additional Info(2)'] || '', rec['Source Additional Info(3)'] || '', rec['Source Additional Info(4)'] || '', rec['Source Additional Info(5)'] || '',
-    rec['Source Additional Info(6)'] || '', rec['Source Additional Info(7)'] || '', rec['Source Additional Info(8)'] || '', rec['Source Additional Info(9)'] || '',
-    rec['Beneficiary Additional Info(1)'] || '', rec['Beneficiary Additional Info(2)'] || '', rec['Beneficiary Additional Info(3)'] || '', rec['Beneficiary Additional Info(4)'] || '', rec['Beneficiary Additional Info(5)'] || '',
-    rec['Beneficiary Additional Info(6)'] || '', rec['Beneficiary Additional Info(7)'] || '', rec['Beneficiary Additional Info(8)'] || '', rec['Beneficiary Additional Info(9)'] || '',
-    rec['Remarks'] || '',
-    tdt,
-    transaction_datetime,
-    amount,
-    rec['Channel'] || '',
-    rec['Transfer Type'] || '',
-    status,
-    matchedStudentId,
-    periode
-  ];
+  // Insert raw transaction to payment_bsi_transactions (always saved)
+  await db.query(
+    `INSERT INTO payment_bsi_transactions 
+     (tenant_id, transaction_id, source_account, sender_name, beneficiary_va, va_name,
+      billing_number, additional_info, remarks, transaction_date, periode, amount,
+      channel, transfer_type, status, matched_student_id, is_matched)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON DUPLICATE KEY UPDATE 
+       tenant_id=VALUES(tenant_id), source_account=VALUES(source_account), sender_name=VALUES(sender_name),
+       beneficiary_va=VALUES(beneficiary_va), va_name=VALUES(va_name),
+       billing_number=VALUES(billing_number), additional_info=VALUES(additional_info), remarks=VALUES(remarks),
+       transaction_date=VALUES(transaction_date), periode=VALUES(periode), amount=VALUES(amount),
+       channel=VALUES(channel), transfer_type=VALUES(transfer_type), status=VALUES(status),
+       matched_student_id=VALUES(matched_student_id), is_matched=VALUES(is_matched)`,
+    [null, transactionId, sourceAccount, senderName, va, vaName,
+     billingNumber, additionalInfo, remarks, periode, periodeFormatted, totalAmount,
+     channel, transferType, status, matchedStudentId, matchedStudentId ? 1 : 0]
+  );
 
-  const placeholders = values.map(() => '?').join(',');
+  // Check duplicate for incoming_payments (only insert if matched student)
+  const existing = await db.query(
+    'SELECT id FROM incoming_payments WHERE transaction_id = ? LIMIT 1',
+    [transactionId]
+  );
+  if (existing.length > 0) {
+    return { duplicate: true, matchedStudentId };
+  }
 
-  const res = await db.query(`
-    INSERT INTO incoming_payments (${columns.join(',')})
-    VALUES (${placeholders})
-  `, values);
+  if (matchedStudentId) {
+    await db.query(
+      `INSERT INTO incoming_payments 
+       (transaction_id, beneficiary_va, matched_student_id, periode, total_amount, channel, status, remarks, source_account, sender_name, va_name)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [transactionId, va, matchedStudentId, periodeFormatted, totalAmount, channel, status, remarks, sourceAccount, senderName, vaName]
+    );
+  }
 
-  return { id: res.insertId, matchedStudentId, periode };
+  return { duplicate: false, matchedStudentId };
 }
 
-// Generate billing_payment untuk satu tenant, per siswa dari tahun_masuk -> now
-async function generateBilling(tenantId, fallbackStart) {
-  const end = currentMonth();
-  const students = await db.query(
-    `SELECT s.id, s.tenant_id, s.iuran_bulanan, s.ransportasi, s.tahun_masuk, s.subsidi, s.va_number, s.status, s.tahun_ajaran_id
-     FROM students s
-     WHERE s.tenant_id = ? 
-       AND (s.status = 'active' OR s.status = 'aktif' OR s.status IS NULL)
-       AND s.status != 'alumni'
-       AND COALESCE(s.iuran_bulanan, 0) > 0`,
-    [tenantId]
-  );
-
-  // Get global biaya admin VA setting (single row)
-  const psResult = await db.query(
-    `SELECT biaya_admin_va FROM payment_admin_settings WHERE subject_type = 'global' AND subject_id = 0 LIMIT 1`
-  );
-  const ps = Array.isArray(psResult) ? psResult[0] : psResult;
-  const globalBiayaAdmin = ps ? (parseFloat(ps.biaya_admin_va) || 0) : 2000;
-
-  let created = 0, skipped = 0;
-  for (const s of students) {
-    // Check for existing bills to determine the real start
-    const existingBills = await db.query('SELECT MIN(bulan) as min_bulan FROM billing_payment WHERE student_id = ? LIMIT 1', [s.id]);
-    const billsArr = Array.isArray(existingBills) ? existingBills : [existingBills];
-    const minBulan = billsArr[0]?.min_bulan;
-
-    // Start from earliest existing bill, tahun_masuk (YYYY), or fallbackStart
-    let start = minBulan;
-    if (!start && s.tahun_masuk && /^\d{4}$/.test(s.tahun_masuk)) {
-      start = s.tahun_masuk + '-01'; // Start from Januari tahun masuk
-    }
-    if (!start) {
-      start = fallbackStart || end;
-    }
-
-    const months = monthList(start, end);
-    const spp = parseFloat(s.iuran_bulanan) || 0;
-    const transport = parseFloat(s.ransportasi) || 0;
-    const subsidi = parseFloat(s.subsidi) || 0;
-    // Biaya admin hanya untuk siswa yang punya VA
-    const biayaAdmin = s.va_number ? globalBiayaAdmin : 0;
-    // Total tagihan: SPP + Transport - Subsidi + Biaya Admin
-    const totalTagihan = Math.max(0, spp + transport - subsidi + biayaAdmin);
-
-    for (const m of months) {
-      const existingResult = await db.query('SELECT id, bulan, status FROM billing_payment WHERE student_id = ? AND bulan = ?', [s.id, m]);
-      const existing = Array.isArray(existingResult) ? existingResult[0] : existingResult;
-      if (existing) {
-        const isLunas = existing.status === 'lunas';
-        if (isLunas) {
-          skipped++;
-          continue;
-        }
-        await db.query(
-          'UPDATE billing_payment SET spp_bulanan = ?, ransportasi = ?, subsidi = ?, biaya_admin_va = ?, transaksi = 0, keterangan_spp = ?, status = "belum" WHERE id = ?',
-          [spp, transport, subsidi, biayaAdmin, totalTagihan, existing.id]
-        );
-        created++;
-      } else {
-        await db.query(
-          'INSERT INTO billing_payment (tenant_id, student_id, spp_bulanan, ransportasi, subsidi, biaya_admin_va, bulan, transaksi, keterangan_spp, status) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, "belum")',
-          [s.tenant_id, s.id, spp, transport, subsidi, biayaAdmin, m, totalTagihan]
-        );
-        created++;
-      }
-    }
-
-    // Recalculate saldo after billing changes — prevents saldo_siswa from
-    // showing stale 0 (Lunas) when billing_payment was reset to "belum"
-    await recalcStudent(s.id);
-  }
-  return { created, skipped, end };
-}
-
-// Generate billing by Tahun Ajaran (NEW)
-async function generateBillingByTahunAjaran(tenantId, tahunAjaranId) {
-  const ta = await getTahunAjaranById(tahunAjaranId);
-  if (!ta) {
-    throw new Error('Tahun Ajaran tidak ditemukan');
-  }
-
-  // Only process students belonging to this TA
-  const students = await db.query(
-    `SELECT s.id, s.tenant_id, s.iuran_bulanan, s.ransportasi, s.tahun_masuk, s.subsidi, s.va_number, s.status
-     FROM students s
-     WHERE s.tenant_id = ? 
-       AND s.tahun_ajaran_id = ?
-       AND (s.status = 'active' OR s.status = 'aktif' OR s.status IS NULL)
-       AND s.status != 'alumni'
-       AND COALESCE(s.iuran_bulanan, 0) > 0`,
-    [tenantId, tahunAjaranId]
-  );
-
-  const psResult = await db.query(
-    `SELECT biaya_admin_va FROM payment_admin_settings WHERE subject_type = 'global' AND subject_id = 0 LIMIT 1`
-  );
-  const ps = Array.isArray(psResult) ? psResult[0] : psResult;
-  const globalBiayaAdmin = ps ? (parseFloat(ps.biaya_admin_va) || 0) : 2000;
-
-  const months = getMonthsInRange(ta.tanggal_mulai, ta.tanggal_selesai);
-  
-  let created = 0, skipped = 0;
-  for (const s of students) {
-    const spp = parseFloat(s.iuran_bulanan) || 0;
-    const transport = parseFloat(s.ransportasi) || 0;
-    const subsidi = parseFloat(s.subsidi) || 0;
-    const biayaAdmin = s.va_number ? globalBiayaAdmin : 0;
-    const totalTagihan = Math.max(0, spp + transport - subsidi + biayaAdmin);
-
-    for (const m of months) {
-      const existingResult = await db.query('SELECT id, status FROM billing_payment WHERE student_id = ? AND bulan = ?', [s.id, m]);
-      const existing = Array.isArray(existingResult) ? existingResult[0] : existingResult;
-      
-      if (existing) {
-        if (existing.status === 'lunas') {
-          skipped++;
-          continue;
-        }
-        await db.query(
-          'UPDATE billing_payment SET spp_bulanan = ?, ransportasi = ?, subsidi = ?, biaya_admin_va = ?, keterangan_spp = ?, status = "belum" WHERE id = ?',
-          [spp, transport, subsidi, biayaAdmin, totalTagihan, existing.id]
-        );
-        created++;
-      } else {
-        await db.query(
-          'INSERT INTO billing_payment (tenant_id, student_id, spp_bulanan, ransportasi, subsidi, biaya_admin_va, bulan, transaksi, keterangan_spp, status, tahun_ajaran_id) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, "belum", ?)',
-          [s.tenant_id, s.id, spp, transport, subsidi, biayaAdmin, m, totalTagihan, tahunAjaranId]
-        );
-        created++;
-      }
-    }
-
-    await recalcStudent(s.id);
-  }
-  return { created, skipped, tahun_ajaran: ta.nama, months: months.length };
-}
-
-// Generate billing for specific semester
-async function generateBillingBySemester(tenantId, semesterId) {
-  const [semester] = await db.query(`
-    SELECT s.*, ta.nama as ta_nama 
-    FROM semester s
-    JOIN tahun_ajaran ta ON s.tahun_ajaran_id = ta.id
-    WHERE s.id = ?
-  `, [semesterId]);
-  
-  if (!semester) {
-    throw new Error('Semester tidak ditemukan');
-  }
-
-  const students = await db.query(
-    `SELECT s.id, s.tenant_id, s.iuran_bulanan, s.ransportasi, s.tahun_masuk, s.subsidi, s.va_number, s.status
-     FROM students s
-     WHERE s.tenant_id = ? 
-       AND s.tahun_ajaran_id = ?
-       AND (s.status = 'active' OR s.status = 'aktif' OR s.status IS NULL)
-       AND s.status != 'alumni'
-       AND COALESCE(s.iuran_bulanan, 0) > 0`,
-    [tenantId, semester.tahun_ajaran_id]
-  );
-
-  const psResult = await db.query(
-    `SELECT biaya_admin_va FROM payment_admin_settings WHERE subject_type = 'global' AND subject_id = 0 LIMIT 1`
-  );
-  const ps = Array.isArray(psResult) ? psResult[0] : psResult;
-  const globalBiayaAdmin = ps ? (parseFloat(ps.biaya_admin_va) || 0) : 2000;
-
-  const months = getMonthsInRange(semester.tanggal_mulai, semester.tanggal_selesai);
-  
-  let created = 0, skipped = 0;
-  for (const s of students) {
-    const spp = parseFloat(s.iuran_bulanan) || 0;
-    const transport = parseFloat(s.ransportasi) || 0;
-    const subsidi = parseFloat(s.subsidi) || 0;
-    const biayaAdmin = s.va_number ? globalBiayaAdmin : 0;
-    const totalTagihan = Math.max(0, spp + transport - subsidi + biayaAdmin);
-
-    for (const m of months) {
-      const existingResult = await db.query('SELECT id, status FROM billing_payment WHERE student_id = ? AND bulan = ?', [s.id, m]);
-      const existing = Array.isArray(existingResult) ? existingResult[0] : existingResult;
-      
-      if (existing) {
-        if (existing.status === 'lunas') {
-          skipped++;
-          continue;
-        }
-        await db.query(
-          'UPDATE billing_payment SET spp_bulanan = ?, ransportasi = ?, subsidi = ?, biaya_admin_va = ?, keterangan_spp = ?, status = "belum" WHERE id = ?',
-          [spp, transport, subsidi, biayaAdmin, totalTagihan, existing.id]
-        );
-        created++;
-      } else {
-        await db.query(
-          'INSERT INTO billing_payment (tenant_id, student_id, spp_bulanan, ransportasi, subsidi, biaya_admin_va, bulan, transaksi, keterangan_spp, status, tahun_ajaran_id, semester_id) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, "belum", ?, ?)',
-          [s.tenant_id, s.id, spp, transport, subsidi, biayaAdmin, m, totalTagihan, semester.tahun_ajaran_id, semesterId]
-        );
-        created++;
-      }
-    }
-
-    await recalcStudent(s.id);
-  }
-  return { created, skipped, semester: semester.nama, months: months.length };
-}
-
-// Hitung ulang keterangan_spp + saldo untuk 1 siswa
-// Model: semua pembayaran dikumpulkan, lalu dialokasikan ke billing tertua dulu sampai lunas, sisanya jadi saldo positif
 async function recalcStudent(studentId) {
-  const [student] = await db.query('SELECT id, tenant_id FROM students WHERE id = ?', [studentId]);
-  if (!student) return null;
-
-  const bills = await db.query('SELECT * FROM billing_payment WHERE student_id = ? ORDER BY bulan ASC', [studentId]);
-  const inc = await db.query(
-    "SELECT id, periode, SUM(total_amount) as total FROM incoming_payments WHERE matched_student_id = ? AND status IN ('Success', 'SUCCESS', 'success', 'Sukses', 'Settlement', 'Paid', 'PAID', 'Referral') GROUP BY periode, id",
+  const billingPayments = await db.query(
+    `SELECT 
+       COALESCE(SUM(CASE WHEN status = 'lunas' THEN transaksi ELSE 0 END), 0) as total_lunas,
+       COALESCE(SUM(CASE WHEN status = 'belum' THEN keterangan_spp ELSE 0 END), 0) as total_belum
+     FROM billing_payment 
+     WHERE student_id = ?`,
     [studentId]
   );
 
-  const incByPeriode = {};
-  inc.forEach(r => {
-    if (!incByPeriode[r.periode]) incByPeriode[r.periode] = [];
-    incByPeriode[r.periode].push({ id: r.id, total: parseFloat(r.total) || 0 });
-  });
-
-  await db.query('DELETE FROM billing_payment_allocations WHERE billing_id IN (SELECT id FROM billing_payment WHERE student_id = ?)', [studentId]);
-
-  let pool = 0;
-  let remainingKeterangan = 0;
-
-  for (const key of Object.keys(incByPeriode)) {
-    pool += incByPeriode[key].reduce((s, r) => s + r.total, 0);
-  }
-
-  for (const b of bills) {
-    const spp = parseFloat(b.spp_bulanan) || 0;
-    const transport = parseFloat(b.ransportasi) || 0;
-    const subsidi = parseFloat(b.subsidi) || 0;
-    const adminVa = parseFloat(b.biaya_admin_va) || 0;
-    const totalTagihan = spp + transport - subsidi + adminVa;
-
-    let keterangan, status;
-    if (pool >= totalTagihan) {
-      pool -= totalTagihan;
-      keterangan = 0;
-      status = 'lunas';
-      // FIX: do NOT reset remainingKeterangan here — that would erase
-      // accumulated unpaid amounts from prior months (e.g. when a zero-iuran
-      // or already-paid bill sits between unpaid bills). remainingKeterangan
-      // must only accumulate, never reset, so saldo reflects all outstanding bills.
-    } else {
-      keterangan = totalTagihan - pool;
-      status = 'belum';
-      remainingKeterangan += keterangan;
-      pool = 0;
-    }
-
-    const bulanTotal = incByPeriode[b.bulan] ? incByPeriode[b.bulan].reduce((s, r) => s + r.total, 0) : 0;
-    await db.query(
-      'UPDATE billing_payment SET transaksi = ?, keterangan_spp = ?, status = ? WHERE id = ?',
-      [bulanTotal, keterangan, status, b.id]
-    );
-
-    if (status === 'lunas' && incByPeriode[b.bulan]) {
-      let allocated = totalTagihan;
-      for (const r of incByPeriode[b.bulan]) {
-        if (allocated <= 0) break;
-        const use = Math.min(r.total, allocated);
-        await db.query(
-          'INSERT INTO billing_payment_allocations (billing_id, incoming_payment_id, amount) VALUES (?, ?, ?)',
-          [b.id, r.id, use]
-        );
-        r.total -= use;
-        allocated -= use;
-      }
-    }
-  }
-
-  const saldo = pool - remainingKeterangan;
-  await db.query(
-    `INSERT INTO saldo_siswa (student_id, tenant_id, saldo) VALUES (?, ?, ?)
-     ON DUPLICATE KEY UPDATE saldo = VALUES(saldo), tenant_id = VALUES(tenant_id)`,
-    [studentId, student.tenant_id, saldo]
+  const incomingPayments = await db.query(
+    `SELECT COALESCE(SUM(total_amount), 0) as total_incoming
+     FROM incoming_payments 
+     WHERE matched_student_id = ?`,
+    [studentId]
   );
-  return { studentId, saldo, pool, remainingKeterangan };
-}
 
-async function recalcTenant(tenantId) {
-  const students = await db.query('SELECT id FROM students WHERE tenant_id = ?', [tenantId]);
-  let updated = 0;
-  for (const s of students) {
-    await recalcStudent(s.id);
-    updated++;
-  }
-  return { updated };
+  const bp = billingPayments[0] || { total_lunas: 0, total_belum: 0 };
+  const ip = incomingPayments[0] || { total_incoming: 0 };
+
+  const saldo = parseFloat(bp.total_lunas) + parseFloat(ip.total_incoming) - parseFloat(bp.total_belum);
+
+  await db.query(
+    `INSERT INTO saldo_siswa (student_id, saldo) VALUES (?, ?)
+     ON DUPLICATE KEY UPDATE saldo = VALUES(saldo)`,
+    [studentId, saldo]
+  );
 }
 
 module.exports = {
-  MONTHS, parseDateBSI, parsePeriode, monthList, currentMonth,
-  ensureBillingTables, stripDigits, extractVA, insertIncoming,
-  generateBilling, recalcStudent, recalcTenant,
-  getActiveTahunAjaran, getTahunAjaranById, getSemesterByTahunAjaran,
-  generateBillingByTahunAjaran, generateBillingBySemester,
-  getMonthsInRange
+  ensureBillingTables,
+  extractVA,
+  insertIncoming,
+  recalcStudent
 };

@@ -58,12 +58,26 @@ router.post('/bsi/import-report', async (req, res) => {
       const matchedStudents = new Set();
 
       for (const rec of records) {
-        // Skip jika tidak ada VA number (Beneficiary Account kosong/tanpa digit)
-        const va = billing.extractVA(rec['Beneficiary Account'] || '');
+        // Normalize field names: support both CSV headers and JSON API fields
+        const normalizedRec = {
+          'Transaction ID#': rec['Transaction ID#'] || rec.transaction_id || '',
+          'Beneficiary Account': rec['Beneficiary Account'] || rec.va_number || rec.beneficiary_account || '',
+          'Source Account': rec['Source Account'] || rec.source_account_no || '',
+          'Nama Pengirim': rec['Nama Pengirim'] || rec.nama_pengirim || '',
+          'Total Amount': rec['Total Amount'] || rec.nominal || 0,
+          'Channel': rec['Channel'] || rec.channel || '',
+          'Status': rec['Status'] || rec.status_bank || '',
+          'Remarks': rec['Remarks'] || rec.remarks || '',
+          'Transaction Date-Time': rec['Transaction Date-Time'] || rec.tanggal_transaksi || '',
+          'Nama VA Siswa': rec['Nama VA Siswa'] || rec.nama_va_siswa || ''
+        };
+
+        // Skip jika tidak ada VA number
+        const va = billing.extractVA(normalizedRec['Beneficiary Account'] || '');
         if (!va) continue;
 
         try {
-          const r = await billing.insertIncoming(rec);
+          const r = await billing.insertIncoming(normalizedRec);
           if (r.duplicate) {
             duplicated++;
           } else {
