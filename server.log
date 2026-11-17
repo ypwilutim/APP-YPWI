@@ -1,0 +1,88 @@
+◇ injected env (55) from .env // tip: ◈ encrypted .env [www.dotenvx.com]
+Loading environment variables...
+EMAIL_HOST: LOADED
+◇ injected env (0) from .env // tip: ◈ secrets for agents [www.dotenvx.com]
+🔧 Environment Configuration:
+   JWT_SECRET: ✅ LOADED
+   DB_HOST: ✅ LOADED
+   PORT: 2000
+
+Initializing database connection...
+Pool created, getting connection...
+Font found: normal /run/media/akbar-irwansya/Home/APP-YPWI/APP-YPWI/src/fonts/NotoSerif-Regular.ttf
+Font found: bold /run/media/akbar-irwansya/Home/APP-YPWI/APP-YPWI/src/fonts/NotoSerif-Bold.ttf
+Font found: italics /run/media/akbar-irwansya/Home/APP-YPWI/APP-YPWI/src/fonts/NotoSerif-Italic.ttf
+Font found: bolditalics /run/media/akbar-irwansya/Home/APP-YPWI/APP-YPWI/src/fonts/NotoSerif-BoldItalic.ttf
+[WAHA] WhatsApp initialization skipped (disabled for stability)
+[PAYMENTS_MODULE] payments.js module loaded at 2026-11-17T11:58:42.874Z
+Starting server...
+Initializing database connection...
+Pool created, getting connection...
+Database terhubung: ypwh2917_ypwi_absensi
+Connection released, database initialized
+Database terhubung: ypwh2917_ypwi_absensi
+Connection released, database initialized
+Database initialized, starting server
+[MIGRATION] Executing: 000_full_structure.sql
+[MIGRATION] Failed: 000_full_structure.sql You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near 'CREATE TABLE IF NOT EXISTS `arrears` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `te' at line 3
+[MIGRATION] Skipping already executed: 20240615_add_nomor_rekening_to_tenants.sql
+[MIGRATION] Skipping already executed: 20240615_add_virtual_account_to_students.sql
+[MIGRATION] Skipping already executed: 20240616_add_bank_to_teachers.sql
+[MIGRATION] Skipping already executed: 20261109_sk_approval_queue.sql
+[MIGRATION] Skipping already executed: 20261112_teacher_penugasan.sql
+[MIGRATION] Skipping already executed: 20261113_sk_bulk_progress.sql
+[MIGRATION] Executing: 20261113_sk_guru_missing_columns.sql
+[MIGRATION] Failed: 20261113_sk_guru_missing_columns.sql You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near 'IF NOT EXISTS `jabatan` VARCHAR(100) DEFAULT NULL AFTER `bm`;
+ALTER TABLE `sk_gu' at line 4
+[MIGRATION] Skipping already executed: 2026_add_midtrans.sql
+[MIGRATION] Skipping already executed: 2026_add_missing_columns.sql
+[MIGRATION] Skipping already executed: 2026_alter_whatsapp_messages.sql
+[MIGRATION] Skipping already executed: 2026_kafalah_redesign.sql
+[MIGRATION] Skipping already executed: 2026_kafalah_settings_items.sql
+[MIGRATION] Skipping already executed: 2026_pakta_integritas.sql
+[MIGRATION] Skipping already executed: 2026_payment_gateways.sql
+[MIGRATION] Skipping already executed: 2026_salary_settings_spmb.sql
+[MIGRATION] Skipping already executed: 2026_sdm_tables.sql
+[MIGRATION] Skipping already executed: 2026_spmb_tables.sql
+[MIGRATION] Skipping already executed: 2026_whatsapp_inbound.sql
+[MIGRATION] Skipping already executed: add_tahun_ajaran.sql
+[MIGRATION] Executing: add_unique_sk_guru_no_surat.sql
+[MIGRATION] Failed: add_unique_sk_guru_no_surat.sql Duplicate key name 'uk_tenant_no_surat'
+[MIGRATION] Skipping already executed: create_arrears_table.sql
+[MIGRATION] Skipping already executed: create_bsi_transactions_table.sql
+[MIGRATION] Skipping already executed: migration_sk_guru_drive.sql
+Profile access requests table migration note: You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near 'IF NOT EXISTS ktp_golongan_darah VARCHAR(5) AFTER ktp_jenis_kelamin' at line 1
+[MIDTRANS] schema ensured
+[MIGRATION] Ensured table: payment_admin_settings
+[MIGRATION] Seeded payment_admin_settings global
+[MIGRATION] Ensured table: spmb_settings
+[MIGRATION] Ensured table: spmb_programs
+[MIGRATION] Ensured table: spmb_waves
+[MIGRATION] Ensured table: spmb_faqs
+[MIGRATION] Ensured table: spmb_stats
+[MIGRATION] Ensured table: spmb_registrations
+[MIGRATION] Ensured table: spmb_committees
+[MIGRATION] Ensured table: spmb_student_applications
+[MIGRATION] Ensured table: kafalah_settings
+[MIGRATION] Ensured table: kafalah_gaji_matrix
+[MIGRATION] Ensured table: kafalah_jabatan_tunjangan
+[MIGRATION] Seeded kafalah_jabatan_tunjangan
+[MIGRATION] Ensured table: kafalah_kenaikan_config
+[MIGRATION] Ensured table: kafalah_pendidikan_ref
+[MIGRATION] Seeded kafalah_pendidikan_ref
+[MIGRATION] Ensured table: kafalah_teacher_overrides
+[MIGRATION] Ensured table: sk_approval_queue
+[MIGRATION] Ensured table: kafalah_payroll
+[MIGRATION] Seeded kafalah_settings
+[MIGRATION] Ensured table: tahun_ajaran
+[MIGRATION] Ensured table: semester
+[MIGRATION] tahun_ajaran seed: Cannot read properties of undefined (reading 'c')
+🚀 Server YPWI Lutim berjalan di http://localhost:2000
+🌐 Juga dapat diakses di http://0.0.0.0:2000 atau IP lokal Anda
+🔐 Login endpoint: POST /api/auth/login
+📊 Dashboard endpoint: GET /api/dashboard (protected)
+📱 Scanner endpoints: POST /api/scanner/attendance, POST /api/scanner/register
+🔍 QR Generator: GET /api/scanner/qr/generate?scan_id=XXX
+[CLEANUP] Progress cleanup error: (intermediate value) is not iterable

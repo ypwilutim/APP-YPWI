@@ -2439,12 +2439,13 @@ app.listen(PORT, '0.0.0.0', () => {
     const cleanupOldProgress = async () => {
       try {
         const cutoff = Date.now() - (24 * 60 * 60 * 1000);
-        const [result] = await db.query(
+        const result = await db.query(
           'DELETE FROM sk_bulk_progress WHERE completed_at IS NOT NULL AND completed_at < ?',
           [cutoff]
         );
-        if (result.affectedRows > 0) {
-          console.log('[CLEANUP] Deleted ' + result.affectedRows + ' old progress entries');
+        const affectedRows = Array.isArray(result) ? result[0]?.affectedRows : result?.affectedRows;
+        if (affectedRows > 0) {
+          console.log('[CLEANUP] Deleted ' + affectedRows + ' old progress entries');
         }
       } catch (e) {
         console.error('[CLEANUP] Progress cleanup error:', e.message);

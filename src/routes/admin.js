@@ -6083,10 +6083,21 @@ ${catatan ? `• Catatan: ${catatan}\n\n` : ''}Pesan ini dikirim otomatis oleh s
 // GET /api/teacher/info - Get current teacher info (nama, foto, assignments)
   router.get('/teacher/info', authenticateToken, async (req, res) => {
     try {
+      const fs = require('fs');
+      fs.appendFileSync('/tmp/debug.log', '[TEACHER/INFO] req.user: ' + JSON.stringify(req.user) + '\n');
+      console.log('[TEACHER/INFO] req.user:', req.user);
+      const guruId = req.user.guru_id;
+      if (!guruId) {
+        return res.status(400).json({ success: false, message: 'User tidak memiliki data guru (guru_id tidak ada)' });
+      }
+      fs.appendFileSync('/tmp/debug.log', '[TEACHER/INFO] guruId: ' + guruId + '\n');
+      console.log('[TEACHER/INFO] guruId:', guruId);
       const [teacher] = await db.query(
-        'SELECT t.id, t.nama, t.nik, t.nip, t.email, t.no_wa, t.scan_id, t.tempatlahir, t.tanggallahir, t.jenis_kelamin, t.alamat, t.status_kepegawaian, t.status_aktif, t.tmt, t.pendidikan_terakhir, t.bank, t.nomor_rekening, t.link_foto, t.link_ktp, t.link_kk, t.link_ijazah FROM teachers t WHERE t.id = ?',
-        [req.user.guru_id]
+        'SELECT t.id, t.nama, t.nik, t.nip, t.email, t.no_wa, t.scan_id, t.tempat_lahir, t.tanggal_lahir, t.jenis_kelamin, t.alamat, t.status_kepegawaian, t.status_aktif, t.tmt, t.pendidikan_terakhir, t.bank, t.nomor_rekening, t.link_foto, t.link_ktp, t.link_kk, t.link_ijazah FROM teachers t WHERE t.id = ?',
+        [guruId]
       );
+      fs.appendFileSync('/tmp/debug.log', '[TEACHER/INFO] teacher: ' + JSON.stringify(teacher) + '\n');
+      console.log('[TEACHER/INFO] teacher:', teacher);
 
       if (!teacher) {
         return res.status(404).json({ success: false, message: 'Guru tidak ditemukan' });

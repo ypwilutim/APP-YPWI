@@ -30,6 +30,7 @@ const authenticateToken = (req, res, next) => {
         message: 'Akses ditolak. Token tidak valid.'
       });
     }
+    console.log('[AUTH_DEBUG] JWT verified, user:', { id: user.id, role: user.role, guru_id: user.guru_id });
     req.user = user;
 
     // Use assignments from JWT if present (backward compatible), otherwise load from database
@@ -255,11 +256,11 @@ const authenticateBendahara = (req, res, next) => {
       return next();
     }
 
-    // 2. Guru dengan jabatan bendahara/admin di manapun tenant
+    // 2. Guru dengan jabatan bendahara/admin/SDM di manapun tenant
     if (user.role === 'guru' && user.assignments) {
-      const bendaharaRoles = ['bendahara', 'admin'];
+      const bendaharaRoles = ['bendahara', 'admin', 'sdm', 'sumberdayamanusia'];
       const hasBendaharaAccess = user.assignments.some(a =>
-        bendaharaRoles.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''))
+        bendaharaRoles.some(r => (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '').includes(r))
       );
        if (hasBendaharaAccess) {
         return next();

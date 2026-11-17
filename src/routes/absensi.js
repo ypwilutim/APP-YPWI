@@ -249,6 +249,7 @@ router.get('/attendance-rules', authenticateToken, async (req, res) => {
     }
 
     // Cek apakah tenant menggunakan aturan pusat
+    let userTipeUnit = null;
     if (targetTenantId) {
       const [tenantInfo] = await db.query(
         'SELECT use_central_rules, tipe_unit FROM tenants WHERE tenant_id = ?',
@@ -257,7 +258,7 @@ router.get('/attendance-rules', authenticateToken, async (req, res) => {
 
       if (tenantInfo && tenantInfo.use_central_rules === 1) {
         // Ambil tipe_unit tenant untuk resolve aturan pusat
-        const userTipeUnit = tenantInfo.tipe_unit;
+        userTipeUnit = tenantInfo.tipe_unit;
         useCentral = true;
       }
     }
