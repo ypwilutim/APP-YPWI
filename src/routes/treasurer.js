@@ -3939,6 +3939,72 @@ router.post('/treasurer/bsi/reset-va', authenticateBendahara, async (req, res) =
   }
 });
 
+// POST /api/bsi/import-report - Import laporan BSI dari CSV/JSON
+// body: { records: [...] } -> array of objects dengan field: nama_siswa, nisn, va_number, iuran_bulanan, status, dll
+router.post('/api/bsi/import-report', async (req, res) => {
+  try {
+    const records = req.body.records || [];
+    let updated = 0, not_found = 0, error = 0;
+    
+    for (const record of records) {
+      try {
+        const { va_number, nama_siswa, nisn, iuran_bulanan, status } = record;
+        
+        if (!va_number) {
+          error++;
+          continue;
+        }
+        
+        // Update student record with VA data
+        const updateQuery = `
+          UPDATE students 
+          SET va_number = ?, va_name = ?, iuran_bulanan = ?, status = ?
+          WHERE va_number = ? OR nisn = ?
+        `;
+        const [result] = await db.query(updateQuery, [
+          va_number, nama_siswa || '', iuran_bulanan || 0, status || 'pending', 
+          va_number, nisn || ''
+        ]);
+        
+        if (result.affectedRows > 0) {
+          updated++;
+        } else {
+          // Check if student exists by name or other fields
+          const checkQuery = `
+            SELECT id, nama_siswa, nisn FROM students WHERE nama_siswa = ? OR nisn = ?
+          `;
+          const [checkResult] = await db.query(checkQuery, [nama_siswa || '', nisn || '']);
+          if (checkResult.length > 0) {
+            not_found++;
+          } else {
+            // Create new student record (basic insert)
+            const insertQuery = `
+              INSERT INTO students (nama_siswa, nisn, tenant_id, iuran_bulanan, va_number, va_name, status)
+              VALUES (?, ?, '0000000000', ?, ?, ?, 'pending')
+            `;
+            await db.query(insertQuery, [nama_siswa || '', nisn || '', iuran_bulanan || 0, va_number, nama_siswa || '', 'pending']);
+            updated++;
+          }
+        }
+      } catch (e) {
+        error++;
+        console.error('Error importing record:', e.message);
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: `Import selesai: ${updated} diterupdate, ${not_found} tidak ditemukan, ${error} error`,
+      updated,
+      not_found,
+      error
+    });
+  } catch (error) {
+    console.error('BSI Import Report error:', error);
+    res.status(500).json({ success: false, message: 'Error import laporan BSI' });
+  }
+});
+
 // POST /api/treasurer/bsi/create-all - buat VA BSI untuk semua siswa aktif (semua sekolah)
 // body: { only_without_va: true/false } -> hanya buat untuk siswa yang belum punya VA
 router.post('/treasurer/bsi/create-all', authenticateBendahara, async (req, res) => {

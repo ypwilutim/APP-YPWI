@@ -132,7 +132,10 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-app.use(limiter);
+// Terapkan general limiter HANYA untuk rute /api/ saja (tidak memblokir file HTML/statis)
+app.use('/api/', limiter);
+
+// Limiter khusus untuk login
 app.use('/api/auth/login', authLimiter);
 
 // Input sanitization middleware
