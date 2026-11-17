@@ -1904,6 +1904,20 @@ router.get('/treasurer/bendahara/saldo', authenticateBendahara, async (req, res)
     const queryParams = [...params, Number(limit), Number(offset)];
     const data = await db.query(query, queryParams);
 
+    // Auto-recalc students with missing saldo_siswa
+    for (const d of data) {
+      if (d.saldo === 0 && (d.iuran_bulanan > 0 || d.ransportasi > 0 || d.subsidi > 0 || d.biaya_admin_va > 0)) {
+        try {
+          await billing.recalcStudent(d.id);
+          // Re-fetch saldo
+          const [newSaldo] = await db.query('SELECT saldo FROM saldo_siswa WHERE student_id = ?', [d.id]);
+          if (newSaldo) d.saldo = newSaldo.saldo;
+        } catch (e) {
+          console.error('Auto recalc error for student', d.id, e.message);
+        }
+      }
+    }
+
     // Ringkasan global (dari saldo_siswa) - dengan filter yang sama
     const summaryWhere = search ? ' AND (s.nama_siswa LIKE ? OR s.nisn LIKE ?)' : '';
     const summaryParams = effectiveTenantId ? [effectiveTenantId] : [];
@@ -3551,14 +3565,8 @@ router.post('/treasurer/bendahara/billing/pembayaran-manual', authenticateBendah
     const adminVa = parseFloat(currentBilling.biaya_admin_va) || 0;
     const totalTagihan = spp + transport - subsidi + adminVa;
 
-    // Hitung existing pembayaran (carry over)
-    const existingResult = await db.query(
-      `SELECT COALESCE(SUM(total_amount), 0) as total FROM incoming_payments 
-       WHERE matched_student_id = ? AND periode = ? AND status IN ('Success', 'SUCCESS', 'success', 'Sukses', 'Settlement', 'Paid', 'PAID', 'Referral')`,
-      [student_id, bulan]
-    );
-    const existingArr = Array.isArray(existingResult) ? existingResult[0] : existingResult;
-    const existingBayar = parseFloat(existingArr?.total) || 0;
+    // Existing payment is already in billing_payment.transaksi (includes BSI allocations)
+    const existingBayar = parseFloat(currentBilling.transaksi) || 0;
 
     const totalBayarSetelah = existingBayar + nominalNum;
     const newTransaksi = Math.min(totalBayarSetelah, totalTagihan);
@@ -3659,11 +3667,21 @@ router.get('/treasurer/bendahara/student-billing/:student_id', authenticateBenda
         FROM billing_payment WHERE student_id = ? ORDER BY bulan DESC`,
        [studentId]
      );
-     const [saldoRow] = await db.query('SELECT saldo FROM saldo_siswa WHERE student_id = ?', [studentId]);
+const [saldoRow] = await db.query('SELECT saldo FROM saldo_siswa WHERE student_id = ?', [studentId]);
 
-     const billIds = bills.map(b => b.id);
-     const allocationsMap = {};
-     if (billIds.length > 0) {
+    // Fetch payment history from incoming_payments (BSI imports + manual)
+    const paymentHistory = await db.query(
+      `SELECT transaction_id, beneficiary_va, total_amount, channel, status, remarks, 
+              source_account, sender_name, va_name, created_at, periode
+       FROM incoming_payments 
+       WHERE matched_student_id = ? 
+       ORDER BY created_at DESC`,
+      [studentId]
+    );
+
+    const billIds = bills.map(b => b.id);
+    const allocationsMap = {};
+    if (billIds.length > 0) {
        const placeholders = billIds.map(() => '?').join(',');
        const allocs = await db.query(
          `SELECT a.billing_id, a.amount, a.incoming_payment_id, ip.periode, ip.total_amount, ip.channel, ip.remarks, ip.created_at
@@ -3728,7 +3746,19 @@ router.get('/treasurer/bendahara/student-billing/:student_id', authenticateBenda
           total_terbayar: totalTerbayar,
           total_keterangan: totalKeterangan
         },
-        saldo: parseFloat(saldoRow?.saldo) || 0
+        saldo: parseFloat(saldoRow?.saldo) || 0,
+        payment_history: paymentHistory.map(p => ({
+          transaction_id: p.transaction_id,
+          periode: p.periode,
+          total_amount: parseFloat(p.total_amount) || 0,
+          channel: p.channel,
+          status: p.status,
+          remarks: p.remarks,
+          source_account: p.source_account,
+          sender_name: p.sender_name,
+          va_name: p.va_name,
+          created_at: p.created_at
+        }))
       }
     });
   } catch (error) {

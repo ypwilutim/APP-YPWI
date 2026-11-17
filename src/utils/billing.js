@@ -1,9 +1,8 @@
 const db = require('../../db');
 
 async function ensureBillingTables() {
-  await db.query(`DROP TABLE IF EXISTS payment_bsi_transactions`);
   await db.query(`
-    CREATE TABLE payment_bsi_transactions (
+    CREATE TABLE IF NOT EXISTS payment_bsi_transactions (
       id INT AUTO_INCREMENT PRIMARY KEY,
       tenant_id INT DEFAULT NULL,
       transaction_id VARCHAR(100) UNIQUE NOT NULL,
@@ -39,9 +38,8 @@ async function ensureBillingTables() {
     )
   `);
 
-  await db.query(`DROP TABLE IF EXISTS incoming_payments`);
   await db.query(`
-    CREATE TABLE incoming_payments (
+    CREATE TABLE IF NOT EXISTS incoming_payments (
       id INT AUTO_INCREMENT PRIMARY KEY,
       transaction_id VARCHAR(100) UNIQUE,
       beneficiary_va VARCHAR(50),
@@ -78,7 +76,7 @@ function extractVA(str) {
 
 async function insertIncoming(rec) {
   const transactionId = rec['Transaction ID#'] || rec.transaction_id || '';
-  const beneficiaryAccount = rec['Beneficiary Account'] || rec.beneficiary_account || rec['Beneficiary Account'] || '';
+  const beneficiaryAccount = rec['Beneficiary Account'] || rec.beneficiary_account || rec.va_number || '';
   const va = extractVA(beneficiaryAccount);
   
   if (!va) {
@@ -173,32 +171,75 @@ async function insertIncoming(rec) {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [transactionId, va, matchedStudentId, periodeFormatted, totalAmount, channel, status, remarks, sourceAccount, senderName, vaName]
     );
+
+    // Auto-allocate payment to oldest unpaid billing periods (FIFO)
+    await allocatePaymentToBilling(matchedStudentId, totalAmount, transactionId, channel, status, remarks);
   }
 
   return { duplicate: false, matchedStudentId };
 }
 
+async function allocatePaymentToBilling(studentId, amount, transactionId, channel, status, remarks) {
+  let remainingAmount = parseFloat(amount);
+
+  // Get oldest unpaid billing periods
+  const unpaidBills = await db.query(
+    `SELECT id, bulan, keterangan_spp, transaksi 
+     FROM billing_payment 
+     WHERE student_id = ? AND status = 'belum' 
+     ORDER BY bulan ASC`,
+    [studentId]
+  );
+
+  for (const bill of unpaidBills) {
+    if (remainingAmount <= 0) break;
+
+    const billAmount = parseFloat(bill.keterangan_spp || 0);
+    if (billAmount <= 0) continue;
+
+    if (remainingAmount >= billAmount) {
+      // Full payment for this period
+      await db.query(
+        `UPDATE billing_payment 
+         SET status = 'lunas', 
+             keterangan_spp = 0,
+             transaksi = ?, 
+             metode_pembayaran = 'gateway', 
+             tanggal_bayar = NOW(), 
+             dibayar_oleh = 'BSI Import', 
+             catatan_pelunasan = ?
+         WHERE id = ?`,
+        [billAmount, `${remarks} (BSI: ${transactionId})`, bill.id]
+      );
+      remainingAmount -= billAmount;
+    } else {
+      // Partial payment - update transaksi but keep status as 'belum' with reduced keterangan_spp
+      // Actually, for partial we could create a new record or just reduce
+      await db.query(
+        `UPDATE billing_payment 
+         SET keterangan_spp = keterangan_spp - ?, 
+             transaksi = transaksi + ? 
+         WHERE id = ?`,
+        [remainingAmount, remainingAmount, bill.id]
+      );
+      remainingAmount = 0;
+    }
+  }
+}
+
 async function recalcStudent(studentId) {
   const billingPayments = await db.query(
     `SELECT 
-       COALESCE(SUM(CASE WHEN status = 'lunas' THEN transaksi ELSE 0 END), 0) as total_lunas,
-       COALESCE(SUM(CASE WHEN status = 'belum' THEN keterangan_spp ELSE 0 END), 0) as total_belum
+       COALESCE(SUM(transaksi), 0) as total_paid,
+       COALESCE(SUM(keterangan_spp + transaksi), 0) as total_billed
      FROM billing_payment 
      WHERE student_id = ?`,
     [studentId]
   );
 
-  const incomingPayments = await db.query(
-    `SELECT COALESCE(SUM(total_amount), 0) as total_incoming
-     FROM incoming_payments 
-     WHERE matched_student_id = ?`,
-    [studentId]
-  );
+  const bp = billingPayments[0] || { total_paid: 0, total_billed: 0 };
 
-  const bp = billingPayments[0] || { total_lunas: 0, total_belum: 0 };
-  const ip = incomingPayments[0] || { total_incoming: 0 };
-
-  const saldo = parseFloat(bp.total_lunas) + parseFloat(ip.total_incoming) - parseFloat(bp.total_belum);
+  const saldo = parseFloat(bp.total_paid) - parseFloat(bp.total_billed);
 
   await db.query(
     `INSERT INTO saldo_siswa (student_id, saldo) VALUES (?, ?)
