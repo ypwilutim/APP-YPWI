@@ -4074,11 +4074,27 @@ router.post('/api/bsi/import-report', async (req, res) => {
             not_found++;
           } else {
             // Create new student record (basic insert)
+            // Determine tenant_id from authenticated user or VA prefix
+            let tenantId = req.user?.tenant_id || null;
+            if (!tenantId && va_number) {
+              const bsiPrefix = process.env.BSI_VA_PREFIX || '832231';
+              if (va_number.startsWith(bsiPrefix)) {
+                const [tenant] = await db.query(
+                  'SELECT tenant_id FROM tenants WHERE nomor_rekening LIKE ? LIMIT 1',
+                  [`%${bsiPrefix}%`]
+                );
+                if (tenant) tenantId = tenant.tenant_id;
+              }
+            }
+            if (!tenantId) {
+              const [defaultTenant] = await db.query('SELECT tenant_id FROM tenants LIMIT 1');
+              tenantId = defaultTenant?.tenant_id || 'UNKNOWN';
+            }
             const insertQuery = `
               INSERT INTO students (nama_siswa, nisn, tenant_id, iuran_bulanan, va_number, va_name, status)
-              VALUES (?, ?, '0000000000', ?, ?, ?, 'pending')
+              VALUES (?, ?, ?, ?, ?, ?, 'pending')
             `;
-            await db.query(insertQuery, [nama_siswa || '', nisn || '', iuran_bulanan || 0, va_number, nama_siswa || '', 'pending']);
+            await db.query(insertQuery, [nama_siswa || '', nisn || '', tenantId, iuran_bulanan || 0, va_number, nama_siswa || '', 'pending']);
             updated++;
           }
         }
