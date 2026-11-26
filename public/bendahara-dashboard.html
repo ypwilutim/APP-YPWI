@@ -896,6 +896,12 @@
 <button onclick="openBsiTransactionsModal()" class="bg-cyan-600 text-white px-4 py-2 rounded-lg text-sm font-medium">
                   <i class="fas fa-list mr-1"></i>Lihat Transaksi BSI
                 </button>
+                <button onclick="openBsiExportHistoryModal()" class="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                  <i class="fas fa-history mr-1"></i>Riwayat Export
+                </button>
+                <button onclick="openBsiResetExportHistoryModal()" class="bg-orange-600 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                  <i class="fas fa-undo mr-1"></i>Reset Riwayat Export
+                </button>
                 <input type="file" id="bsiReportFile" accept=".csv,.json" class="hidden" onchange="importBsiReport(this)">
                 <button onclick="openBsiImportModal()" class="bg-amber-600 text-white px-4 py-2 rounded-lg text-sm font-medium">
                   <i class="fas fa-file-import mr-1"></i>Import Laporan BSI
@@ -1333,9 +1339,78 @@
         <label class="block text-sm font-medium text-gray-700 mb-1">Expire Date</label>
         <input type="date" id="bsiExpireDateInput" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
       </div>
+      <div class="mb-4">
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" id="bsiForceExportCheckbox" class="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+          <span class="text-sm text-gray-700">Paksa export ulang (abaikan riwayat export)</span>
+        </label>
+      </div>
       <div class="flex justify-end gap-2">
         <button onclick="closeBsiExpireDateModal()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400">Batal</button>
         <button onclick="downloadBsiCsvWithExpire()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium">Download TXT</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- BSI Export History Modal -->
+  <div id="bsiExportHistoryModal" class="hidden fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+      <div class="flex justify-between items-center p-4 border-b sticky top-0 bg-white z-10">
+        <h4 class="font-semibold text-lg">Riwayat Export BSI</h4>
+        <button onclick="closeBsiExportHistoryModal()" class="text-gray-500 hover:text-gray-700 text-2xl leading-none">&times;</button>
+      </div>
+      <div class="p-4 border-b">
+        <div class="flex items-center gap-2">
+          <select id="bsiHistorySchoolFilter" onchange="loadBsiExportHistory()"
+            class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-sm">
+            <option value="all">Semua Sekolah</option>
+          </select>
+        </div>
+      </div>
+      <div class="flex-1 overflow-auto p-4">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 border-b border-gray-100 sticky top-4 z-10">
+            <tr>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Nama Siswa</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">NISN</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase">Sekolah</th>
+              <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">VA Number</th>
+              <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Export Batch</th>
+              <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Tanggal Export</th>
+              <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase">Exported By</th>
+            </tr>
+          </thead>
+          <tbody id="bsiExportHistoryTable" class="divide-y divide-gray-100">
+            <tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">Pilih sekolah untuk melihat riwayat</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- BSI Reset Export History Modal -->
+  <div id="bsiResetExportHistoryModal" class="hidden fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+      <h4 class="font-semibold text-lg mb-1">Reset Riwayat Export BSI</h4>
+      <p class="text-sm text-gray-600 mb-4">Pilih sekolah dan (opsional) siswa untuk mereset riwayat export. Siswa yang direset bisa diexport ulang.</p>
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Pilih Sekolah</label>
+        <select id="bsiResetSchoolSelect" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent" onchange="loadBsiResetStudents()">
+          <option value="">-- Pilih Sekolah --</option>
+        </select>
+      </div>
+      <div class="mb-4">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Pilih Siswa (Opsional - kosongkan untuk reset semua)</label>
+        <select id="bsiResetStudentSelect" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent">
+          <option value="">-- Semua Siswa --</option>
+        </select>
+      </div>
+      <div class="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+        <p class="text-sm text-yellow-800"><i class="fas fa-exclamation-triangle mr-1"></i> Peringatan: Reset riwayat export akan memungkinkan siswa diexport ulang ke BSI. Pastikan tidak terjadi duplikasi VA di sistem BSI.</p>
+      </div>
+      <div class="flex justify-end gap-2">
+        <button onclick="closeBsiResetExportHistoryModal()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400">Batal</button>
+        <button onclick="confirmResetBsiExportHistory()" class="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-medium">Reset Riwayat</button>
       </div>
     </div>
   </div>
@@ -3694,6 +3769,129 @@ async function openBsiVaModal() {
       document.getElementById('bsiImportModal').classList.add('hidden');
     }
 
+    // BSI Export History Modal
+    function openBsiExportHistoryModal() {
+      const mainSelect = document.getElementById('bsiTenantSelect');
+      const modalSelect = document.getElementById('bsiHistorySchoolFilter');
+      if (mainSelect && modalSelect && modalSelect.options.length <= 1) {
+        Array.from(mainSelect.options).forEach(opt => {
+          const newOpt = document.createElement('option');
+          newOpt.value = opt.value;
+          newOpt.textContent = opt.textContent;
+          modalSelect.appendChild(newOpt);
+        });
+      }
+      document.getElementById('bsiExportHistoryModal').classList.remove('hidden');
+      loadBsiExportHistory();
+    }
+
+    function closeBsiExportHistoryModal() {
+      document.getElementById('bsiExportHistoryModal').classList.add('hidden');
+    }
+
+    async function loadBsiExportHistory() {
+      const tenantId = document.getElementById('bsiHistorySchoolFilter').value;
+      if (!tenantId || tenantId === 'all') {
+        document.getElementById('bsiExportHistoryTable').innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">Pilih sekolah untuk melihat riwayat</td></tr>';
+        return;
+      }
+      try {
+        const res = await fetch('/api/treasurer/bsi/export-history?tenant_id=' + encodeURIComponent(tenantId), {
+          headers: getAuthHeader()
+        });
+        const d = await res.json();
+        if (!d.success) { showToast(d.message || 'Gagal load riwayat', 'error'); return; }
+        
+        const tbody = document.getElementById('bsiExportHistoryTable');
+        if (!d.data || d.data.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-gray-500">Belum ada riwayat export</td></tr>';
+          return;
+        }
+        tbody.innerHTML = d.data.map(h => `
+          <tr>
+            <td class="px-4 py-3">${h.nama_siswa || '-'}</td>
+            <td class="px-4 py-3">${h.nisn || '-'}</td>
+            <td class="px-4 py-3">${h.nama_sekolah || '-'}</td>
+            <td class="px-4 py-3 text-center font-mono text-xs">${h.va_number || '-'}</td>
+            <td class="px-4 py-3 text-center">${h.export_batch || '-'}</td>
+            <td class="px-4 py-3 text-center">${h.exported_at ? new Date(h.exported_at).toLocaleString('id-ID') : '-'}</td>
+            <td class="px-4 py-3 text-center">${h.exported_by || '-'}</td>
+          </tr>
+        `).join('');
+      } catch (e) {
+        showToast('Gagal load riwayat: ' + e.message, 'error');
+      }
+    }
+
+    // BSI Reset Export History Modal
+    function openBsiResetExportHistoryModal() {
+      const mainSelect = document.getElementById('bsiTenantSelect');
+      const modalSelect = document.getElementById('bsiResetSchoolSelect');
+      if (mainSelect && modalSelect && modalSelect.options.length <= 1) {
+        Array.from(mainSelect.options).forEach(opt => {
+          if (opt.value && opt.value !== 'all') {
+            const newOpt = document.createElement('option');
+            newOpt.value = opt.value;
+            newOpt.textContent = opt.textContent;
+            modalSelect.appendChild(newOpt);
+          }
+        });
+      }
+      document.getElementById('bsiResetExportHistoryModal').classList.remove('hidden');
+      document.getElementById('bsiResetStudentSelect').innerHTML = '<option value="">-- Semua Siswa --</option>';
+    }
+
+    function closeBsiResetExportHistoryModal() {
+      document.getElementById('bsiResetExportHistoryModal').classList.add('hidden');
+    }
+
+    async function loadBsiResetStudents() {
+      const tenantId = document.getElementById('bsiResetSchoolSelect').value;
+      const studentSelect = document.getElementById('bsiResetStudentSelect');
+      studentSelect.innerHTML = '<option value="">-- Semua Siswa --</option>';
+      if (!tenantId) return;
+      try {
+        const res = await fetch('/api/treasurer/bsi/students-with-va?tenant_id=' + encodeURIComponent(tenantId), {
+          headers: getAuthHeader()
+        });
+        const d = await res.json();
+        if (!d.success) return;
+        (d.data || []).forEach(s => {
+          const opt = document.createElement('option');
+          opt.value = s.id;
+          opt.textContent = `${s.nama_siswa} (${s.nisn || '-'}) - VA: ${s.va_number || '-'}`;
+          studentSelect.appendChild(opt);
+        });
+      } catch (e) {
+        console.error('Load reset students error:', e);
+      }
+    }
+
+    async function confirmResetBsiExportHistory() {
+      const tenantId = document.getElementById('bsiResetSchoolSelect').value;
+      const studentId = document.getElementById('bsiResetStudentSelect').value;
+      if (!tenantId) { showToast('Pilih sekolah terlebih dahulu', 'error'); return; }
+      
+      if (!confirm(studentId ? 'Yakin ingin reset riwayat export untuk siswa ini?' : 'Yakin ingin reset riwayat export untuk SEMUA siswa di sekolah ini?')) return;
+      
+      try {
+        const res = await fetch('/api/treasurer/bsi/reset-export-history', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+          body: JSON.stringify({ tenant_id: tenantId, student_id: studentId || null })
+        });
+        const d = await res.json();
+        if (d.success) {
+          showToast(d.message, 'success');
+          closeBsiResetExportHistoryModal();
+        } else {
+          showToast(d.message || 'Gagal reset riwayat', 'error');
+        }
+      } catch (e) {
+        showToast('Gagal reset riwayat: ' + e.message, 'error');
+      }
+    }
+
     async function submitBsiImport() {
       const input = document.getElementById('bsiImportFile');
       const file = input.files[0];
@@ -3829,12 +4027,15 @@ async function openBsiVaModal() {
     async function downloadBsiCsvWithExpire() {
       const tenantId = document.getElementById('bsiTenantSelect').value;
       const dateVal = document.getElementById('bsiExpireDateInput').value;
+      const forceExport = document.getElementById('bsiForceExportCheckbox')?.checked;
       if (!dateVal) { showToast('Pilih expire date terlebih dahulu', 'error'); return; }
       const [yyyy, mm, dd] = dateVal.split('-');
       const expireDate = `${dd}/${mm}/${yyyy}`;
       closeBsiExpireDateModal();
       try {
-        const res = await fetch('/api/treasurer/bsi/generate-csv?tenant_id=' + encodeURIComponent(tenantId) + '&expire_date=' + encodeURIComponent(expireDate), {
+        let url = '/api/treasurer/bsi/generate-csv?tenant_id=' + encodeURIComponent(tenantId) + '&expire_date=' + encodeURIComponent(expireDate);
+        if (forceExport) url += '&force_export=1';
+        const res = await fetch(url, {
           headers: getAuthHeader()
         });
         if (!res.ok) {
@@ -3843,14 +4044,14 @@ async function openBsiVaModal() {
           return;
         }
         const blob = await res.blob();
-        const url = window.URL.createObjectURL(blob);
+        const urlObj = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url;
+        a.href = urlObj;
         a.download = 'BSI_VA_' + tenantId + '.txt';
         document.body.appendChild(a);
         a.click();
         a.remove();
-        window.URL.revokeObjectURL(url);
+        window.URL.revokeObjectURL(urlObj);
         showToast('CSV berhasil didownload', 'success');
       } catch (e) {
         showToast('Gagal generate CSV', 'error');

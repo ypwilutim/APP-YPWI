@@ -1258,6 +1258,22 @@ await ensureColumn('sk_guru', 'drive_uploaded_at', 'DATETIME DEFAULT NULL AFTER 
       console.log('[MIGRATION] payment_admin_settings seed:', e.message);
     }
 
+    // --- bsi_export_history (track exported students to avoid duplicate exports) ---
+    await ensureTable(`
+      CREATE TABLE IF NOT EXISTS bsi_export_history (
+        id INT(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        student_id INT(11) NOT NULL,
+        tenant_id VARCHAR(50) NOT NULL,
+        va_number VARCHAR(50) NOT NULL,
+        exported_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        exported_by INT(11) DEFAULT NULL COMMENT 'User ID who exported',
+        export_batch VARCHAR(100) DEFAULT NULL COMMENT 'Batch identifier for grouped exports',
+        UNIQUE KEY uniq_student_va (student_id, va_number),
+        KEY idx_tenant (tenant_id),
+        KEY idx_exported_at (exported_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `, 'bsi_export_history');
+
     // --- SPMB tables ---
     await ensureTable(`
       CREATE TABLE IF NOT EXISTS spmb_settings (

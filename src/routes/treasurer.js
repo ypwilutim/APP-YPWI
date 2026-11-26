@@ -3931,6 +3931,14 @@ router.post('/treasurer/bsi/reset-va', authenticateBendahara, async (req, res) =
       [newVa, student.nama_siswa, student_id]
     );
 
+    // Clear export history for this student so they can be exported again with new VA
+    if (oldVa) {
+      await db.query(
+        'DELETE FROM bsi_export_history WHERE student_id = ? AND va_number = ?',
+        [student_id, oldVa]
+      );
+    }
+
     // Create new pending transaction record
     const finalAmount = parseFloat(student.iuran_bulanan) || 0;
     if (finalAmount > 0) {
@@ -3966,6 +3974,64 @@ router.post('/treasurer/bsi/reset-va', authenticateBendahara, async (req, res) =
   } catch (error) {
     console.error('Reset BSI VA error:', error);
     res.status(500).json({ success: false, message: 'Gagal reset VA BSI' });
+  }
+});
+  
+// POST /api/treasurer/bsi/reset-export-history - Reset riwayat export BSI untuk siswa/tenant
+// body: { tenant_id, student_id? } - jika student_id dikosongkan, reset semua siswa di tenant
+router.post('/treasurer/bsi/reset-export-history', authenticateBendahara, async (req, res) => {
+  try {
+    const { tenant_id, student_id } = req.body;
+    if (!tenant_id) {
+      return res.status(400).json({ success: false, message: 'tenant_id wajib' });
+    }
+    if (!verifyTenantAccess(req, tenant_id)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+
+    let query = 'DELETE FROM bsi_export_history WHERE tenant_id = ?';
+    const params = [tenant_id];
+    if (student_id) {
+      query += ' AND student_id = ?';
+      params.push(student_id);
+    }
+
+    const result = await db.query(query, params);
+    
+    res.json({
+      success: true,
+      message: student_id ? 'Riwayat export siswa direset' : 'Riwayat export semua siswa direset',
+      data: { deleted_count: result.affectedRows }
+    });
+  } catch (error) {
+    console.error('Reset BSI export history error:', error);
+    res.status(500).json({ success: false, message: 'Gagal reset riwayat export BSI' });
+  }
+});
+  
+// GET /api/treasurer/bsi/export-history - Lihat riwayat export BSI
+router.get('/treasurer/bsi/export-history', authenticateBendahara, async (req, res) => {
+  try {
+    const tenantId = req.query.tenant_id;
+    if (!tenantId || !verifyTenantAccess(req, tenantId)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+
+    const query = `
+      SELECT beh.id, beh.student_id, beh.va_number, beh.exported_at, beh.exported_by, beh.export_batch,
+        s.nama_siswa, s.nisn, tn.nama_sekolah
+      FROM bsi_export_history beh
+      JOIN students s ON beh.student_id = s.id
+      JOIN tenants tn ON beh.tenant_id = tn.tenant_id
+      WHERE beh.tenant_id = ?
+      ORDER BY beh.exported_at DESC
+    `;
+    const history = await db.query(query, [tenantId]);
+    
+    res.json({ success: true, data: history });
+  } catch (error) {
+    console.error('Get BSI export history error:', error);
+    res.status(500).json({ success: false, message: 'Gagal mengambil riwayat export BSI' });
   }
 });
 
@@ -4142,17 +4208,19 @@ router.post('/treasurer/bsi/create-all', authenticateBendahara, async (req, res)
   }
 });
 
-// GET /api/treasurer/bsi/generate-csv?tenant_id=XXX - download CSV sesuai format BSI CUZ
+// GET /api/treasurer/bsi/generate-csv?tenant_id=XXX&force_export=1 - download CSV sesuai format BSI CUZ
 // Header: Type,Parent Account,Virtual Account Number,Virtual Account Name,Amount,Remark,Transaction Date
 router.get('/treasurer/bsi/generate-csv', authenticateBendahara, async (req, res) => {
   try {
     const tenantId = req.query.tenant_id;
+    const forceExport = req.query.force_export === '1' || req.query.force_export === 'true';
     if (tenantId && !verifyTenantAccess(req, tenantId)) {
       return res.status(403).json({ success: false, message: 'Akses ditolak' });
     }
 
     const vaPrefix = process.env.BSI_VA_PREFIX || '832231';
     const parentAccount = await getBsiParentAccount(tenantId);
+    const userId = req.user?.id || req.user?.user_id || null;
 
     let query = `
       SELECT s.id, s.nama_siswa, s.tenant_id, tn.nama_sekolah, s.iuran_bulanan, s.va_number, p.nama_orang_tua, p.no_wa as parent_wa
@@ -4163,6 +4231,14 @@ router.get('/treasurer/bsi/generate-csv', authenticateBendahara, async (req, res
         AND s.va_number IS NOT NULL AND s.va_number != ''
     `;
     const params = [];
+    if (!forceExport) {
+      query += `
+        AND NOT EXISTS (
+          SELECT 1 FROM bsi_export_history beh 
+          WHERE beh.student_id = s.id AND beh.va_number = s.va_number
+        )
+      `;
+    }
     if (tenantId) {
       query += ' AND s.tenant_id = ?';
       params.push(tenantId);
@@ -4171,8 +4247,12 @@ router.get('/treasurer/bsi/generate-csv', authenticateBendahara, async (req, res
 
     const students = await db.query(query, params);
 
+    if (!students || students.length === 0) {
+      return res.status(400).json({ success: false, message: 'Tidak ada siswa untuk diexport' + (forceExport ? '' : ' (semua sudah diexport sebelumnya, gunakan force_export=1 untuk memaksa)') });
+    }
+
     const header1 = 'Type,Parent Account,Virtual Account Number (Prefix VA + Number),Virtual Account Name,Virtual Account Scheme,Limit Debit,Limit Credit,Limit Transaction,Physical Card,Auto Renewal Limit,,Expire Date,KYC,,,,,Additional Info,,,,,,,,';
-    const header2 = ',,,,,,,,,,Every,Date / Day,15/06/2024,Name,Mobile Phone,ID Type,ID Number,Address,Label1;Value1,Label2;Value2,Label3;Value3,Label4;Value4,Label5;Value5,Label6;Value6,Label7;Value7,Label8;Value8,Label9;Value9';
+    const header2 = ',,,,,,,,,Every,Date / Day,15/06/2024,Name,Mobile Phone,ID Type,ID Number,Address,Label1;Value1,Label2;Value2,Label3;Value3,Label4;Value4,Label5;Value5,Label6;Value6,Label7;Value7,Label8;Value8,Label9;Value9';
     let expireDate;
     if (req.query.expire_date) {
       expireDate = req.query.expire_date;
@@ -4183,13 +4263,14 @@ router.get('/treasurer/bsi/generate-csv', authenticateBendahara, async (req, res
       const lastDay = new Date(year, month + 1, 0).getDate();
       expireDate = `${String(lastDay).padStart(2, '0')}/${String(month + 1).padStart(2, '0')}/${year}`;
     }
+    const exportBatch = `EXP_${Date.now()}_${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
     const rows = (students || []).map(s => {
       const rawVa = (s.va_number || `${vaPrefix}${String(s.id).padStart(10, '0')}`).replace(/[^0-9]/g, '');
       const va = rawVa.padStart(16, '0').slice(-16); // Pastikan 16 digit tanpa spasi
       const amount = parseFloat(s.iuran_bulanan) || 0;
-      const limitAmount = amount + 2000;
-      const kycName = (s.orang_tua || s.parent_name || s.nama_siswa).replace(/,/g, ' ');
-      const vaName = (s.nama_siswa || '').replace(/,/g, ' ');
+      const limitAmount = '9999999999999'; // Fixed limit credit sesuai format BSI
+      const kycName = 'USMAN'.replace(/[.,]/g, '');
+      const vaName = (s.nama_siswa || '').replace(/[.,]/g, '').replace(/,/g, ' ');
       const idType = 'KTP';
       const idNumber = '7324043113870004'; // NIK format seragam (contoh: ...0004)
       const mobilePhone = (() => {
@@ -4199,28 +4280,35 @@ router.get('/treasurer/bsi/generate-csv', authenticateBendahara, async (req, res
         if (raw.startsWith('62')) return raw;
         return '62' + raw;
       })();
-return [
-        'Credit',
-        parentAccount.replace(/\s/g, ''),
-        va,
-        vaName,
-        'Open Limit', // Virtual Account Scheme
-        '', // Limit Debit
-        limitAmount, // Limit Credit
-        '', // Limit Transaction
-        '', // Physical Card
-        '', // Auto Renewal Limit
-        '', // (kolom 11)
-        expireDate,
-        'USMAN', // KYC
-        mobilePhone,
-        idType,
-        idNumber,
-        'Malili', // Alamat
-        '', // Additional Info
-        '', '', '', '', '', '', '', '', '', '' // sisa kolom 18-26
+    return [
+        'Credit',                              // 0: Type
+        parentAccount.replace(/\s/g, ''),      // 1: Parent Account
+        va,                                     // 2: Virtual Account Number (Prefix VA + Number)
+        vaName,                                 // 3: Virtual Account Name
+        'Open Limit',                           // 4: Virtual Account Scheme
+        '',                                     // 5: Limit Debit
+        limitAmount,                            // 6: Limit Credit (fixed 9999999999999)
+        '',                                     // 7: Limit Transaction
+        '',                                     // 8: Physical Card
+        '',                                     // 9: Auto Renewal Limit
+        '',                                     // 10: (empty column)
+        expireDate,                             // 11: Expire Date
+        kycName,                                // 12: KYC
+        mobilePhone,                            // 13: Mobile Phone
+        idType,                                 // 14: ID Type
+        idNumber,                               // 15: ID Number
+        'Malili',                               // 16: Address
+        '', '', '', '', '', '', '', '', '', '', ''  // 17-27: Additional Info (11 empty)
       ];
     });
+
+    // Record export history
+    const historyValues = students.map(s => 
+      `(${s.id}, '${s.tenant_id}', '${s.va_number}', NOW(), ${userId || 'NULL'}, '${exportBatch}')`
+    ).join(',');
+    await db.query(
+      `INSERT INTO bsi_export_history (student_id, tenant_id, va_number, exported_at, exported_by, export_batch) VALUES ${historyValues}`
+    );
 
     const txt = [header1, header2, ...rows].join('\n');
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
