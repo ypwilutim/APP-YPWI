@@ -4269,8 +4269,8 @@ router.get('/treasurer/bsi/generate-csv', authenticateBendahara, async (req, res
       const va = rawVa.padStart(16, '0').slice(-16); // Pastikan 16 digit tanpa spasi
       const amount = parseFloat(s.iuran_bulanan) || 0;
       const limitAmount = '9999999999999'; // Fixed limit credit sesuai format BSI
-      const kycName = 'USMAN'.replace(/[.,]/g, '');
-      const vaName = (s.nama_siswa || '').replace(/[.,]/g, '').replace(/,/g, ' ');
+      const kycName = 'USMAN'.replace(/[^a-zA-Z0-9\s]/g, '');
+      const vaName = (s.nama_siswa || '').replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
       const idType = 'KTP';
       const idNumber = '7324043113870004'; // NIK format seragam (contoh: ...0004)
       const mobilePhone = (() => {
@@ -4280,6 +4280,7 @@ router.get('/treasurer/bsi/generate-csv', authenticateBendahara, async (req, res
         if (raw.startsWith('62')) return raw;
         return '62' + raw;
       })();
+    const address = 'Malili'.replace(/[^a-zA-Z0-9\s]/g, '');
     return [
         'Credit',                              // 0: Type
         parentAccount.replace(/\s/g, ''),      // 1: Parent Account
@@ -4297,8 +4298,8 @@ router.get('/treasurer/bsi/generate-csv', authenticateBendahara, async (req, res
         mobilePhone,                            // 13: Mobile Phone
         idType,                                 // 14: ID Type
         idNumber,                               // 15: ID Number
-        'Malili',                               // 16: Address
-        '', '', '', '', '', '', '', '', '', '', ''  // 17-27: Additional Info (11 empty)
+        address,                                // 16: Address
+        '', '', '', '', '', '', '', '', ''  // 17-27: Additional Info (11 empty)
       ];
     });
 
