@@ -4171,8 +4171,8 @@ router.get('/treasurer/bsi/generate-csv', authenticateBendahara, async (req, res
 
     const students = await db.query(query, params);
 
-    const header1 = 'Type,Parent Account,Virtual Account Number (Prefix VA + Number),Virtual Account Name,Virtual Account Scheme,Limit Debit,Limit Credit,Limit Transaction,Physical Card,Auto Renewal Limit,,Expire Date,KYC,,,,,Additional Info,,,,,,,,,,';
-    const header2 = ',,,,,,,,,,Every,Date / Day,Name,Mobile Phone,ID Type,ID Number,Address,Label1;Value1,Label2;Value2,Label3;Value3,Label4;Value4,Label5;Value5,Label6;Value6,Label7;Value7,Label8;Value8,Label9;Value10;Value10';
+    const header1 = 'Type,Parent Account,Virtual Account Number (Prefix VA + Number),Virtual Account Name,Virtual Account Scheme,Limit Debit,Limit Credit,Limit Transaction,Physical Card,Auto Renewal Limit,,Expire Date,KYC,,,,,Additional Info,,,,,,,,';
+    const header2 = ',,,,,,,,,,Every,Date / Day,15/06/2024,Name,Mobile Phone,ID Type,ID Number,Address,Label1;Value1,Label2;Value2,Label3;Value3,Label4;Value4,Label5;Value5,Label6;Value6,Label7;Value7,Label8;Value8,Label9;Value9';
     let expireDate;
     if (req.query.expire_date) {
       expireDate = req.query.expire_date;

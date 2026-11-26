@@ -631,12 +631,15 @@
           <div class="bg-white rounded-xl shadow-sm border-2 border-yellow-200 p-6 mb-4">
             <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
               <div>
-                <h3 class="text-lg font-semibold text-gray-900"><i class="fas fa-coins mr-2 text-yellow-600"></i>Penggajian KAFALAH</h3>
+                <h3 class="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <i class="fas fa-coins mr-2 text-yellow-600"></i>Penggajian KAFALAH
+                  <span id="kafalahModeBadge" class="badge bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-sm"></span>
+                </h3>
                 <p class="text-sm text-gray-500">Mengikuti struktur KAFALAH YPWI Luwu Timur (Pokok + Tunjangan + Pemotongan)</p>
               </div>
               <div class="flex flex-wrap items-end gap-2">
                 <div><label class="block text-xs font-medium text-gray-600 mb-1">Sekolah</label>
-                  <select id="kafalahTenantSelect" onchange="kafalahOnSettingsContextChange(this.value)" class="px-3 py-2 border border-gray-300 rounded-md text-sm">
+                  <select id="kafalahTenantSelect" onchange="loadKafalahSettingsContext(this.value)" class="px-3 py-2 border border-gray-300 rounded-md text-sm">
                     <option value="">Pilih sekolah</option>
                   </select>
                 </div>
@@ -647,10 +650,8 @@
                     class="fas fa-calculator mr-1"></i>Hitung & Simpan</button>
                 <button onclick="regenerateKafalah()" class="bg-red-600 text-white px-4 py-2 rounded-lg text-sm"><i
                     class="fas fa-redo mr-1"></i>Hitung Ulang</button>
-                <button onclick="sendKafalahWhatsApp('pusat')" class="bg-green-700 text-white px-4 py-2 rounded-lg text-sm"><i
-                    class="fab fa-whatsapp mr-1"></i>Kirim WA (Pusat)</button>
-                <button onclick="sendKafalahWhatsApp('sekolah')" class="bg-teal-600 text-white px-4 py-2 rounded-lg text-sm"><i
-                    class="fab fa-whatsapp mr-1"></i>Kirim WA (Sekolah)</button>
+                <button onclick="sendKafalahWhatsApp()" class="bg-green-700 text-white px-4 py-2 rounded-lg text-sm"><i
+                    class="fab fa-whatsapp mr-1"></i>Kirim WA</button>
                 <button onclick="exportKafalahExcel()" class="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm"><i
                     class="fas fa-file-excel mr-1"></i>Excel</button>
                 <button onclick="loadKafalahHistory()" class="bg-gray-600 text-white px-4 py-2 rounded-lg text-sm"><i
@@ -797,17 +798,26 @@
             <!-- KAFALAH Settings Section -->
             <div class="mt-8 pt-8 border-t border-gray-200">
               <h4 class="text-lg font-semibold text-gray-900 mb-3"><i class="fas fa-coins mr-2 text-yellow-600"></i>Pengaturan KAFALAH (Komponen Tunjangan & Potongan)</h4>
-              <div class="flex items-center gap-3 mb-4">
-                <label class="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" id="kafalahBaseToggle" class="sr-only peer" onchange="kafalahOnSettingsContextChange()">
-                  <div class="w-12 h-6 rounded-full border-2 border-gray-300 peer-checked:bg-indigo-600 peer-checked:border-indigo-600 relative after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-5 after:h-5 after:bg-white after:rounded-full after:transition-all peer-checked:after:translate-x-full peer-focus:ring-2 peer-focus:ring-indigo-500 peer-focus:outline-none"></div>
-                  <span class="text-sm font-medium text-gray-700">
-                    <span class="peer-checked:hidden">Mode Pusat (Global)</span>
-                    <span class="hidden peer-checked:inline">Mode Sekolah</span>
-                  </span>
+              
+              <!-- Global Toggle (SDM Pusat only) -->
+              <div id="kafalahGlobalToggleContainer" class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <label class="flex items-center gap-3 cursor-pointer">
+                  <input type="checkbox" id="kafalahUseGlobalToggle" onchange="saveKafalahUseGlobal()" 
+                         class="w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+                  <span class="text-sm font-medium text-gray-700">Gunakan Pengaturan Global (Standar Yayasan)</span>
                 </label>
+                <p id="kafalahGlobalNotice" class="hidden text-xs text-amber-600 mt-2 ml-6">
+                  <i class="fas fa-info-circle mr-1"></i> Menggunakan Standar Pengaturan Kafalah Pusat. 
+                  Pengaturan lokal sekolah tetap tersimpan dan akan dipakai saat toggle dimatikan.
+                </p>
+                <p id="kafalahGlobalLockNotice" class="hidden text-xs text-red-600 mt-2 ml-6">
+                  <i class="fas fa-lock mr-1"></i> Hanya SDM Pusat yang dapat mengubah toggle ini.
+                </p>
+              </div>
+              
+              <div class="flex items-center gap-3 mb-4">
                 <div class="ml-4">
-                  <select id="kafalahSettingsTenantSelect" onchange="kafalahOnSettingsContextChange(this.value)" class="px-3 py-1.5 border border-gray-300 rounded-md text-sm">
+                  <select id="kafalahSettingsTenantSelect" onchange="loadKafalahSettingsContext(this.value)" class="px-3 py-1.5 border border-gray-300 rounded-md text-sm">
                     <option value="">Pilih sekolah</option>
                   </select>
                 </div>
@@ -886,10 +896,52 @@
                   <label class="block text-xs font-medium text-gray-700 mb-1">Pot. Piutang</label>
                   <input type="number" id="ksPotPiutang" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500" step="1000" min="0">
                 </div>
-<div class="flex justify-end">
+                <div class="flex justify-end">
                   <button type="submit" class="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700"><i class="fas fa-save mr-1"></i>Simpan Pengaturan KAFALAH</button>
                 </div>
               </form>
+              
+              <!-- Guru Khusus / Individual Override Management -->
+              <div class="mt-8 pt-8 border-t border-gray-200">
+                <h4 class="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <i class="fas fa-user-cog text-emerald-600"></i> Guru Khusus (Custom Override)
+                </h4>
+                <p class="text-xs text-gray-500 mb-4">
+                  Set komponen KAFALAH custom untuk guru tertentu (guru tamu, pakar, ustadz senior).
+                  Komponen yang tidak diisi akan menggunakan standar sekolah/pusat.
+                </p>
+                
+                <div class="mb-4">
+                  <label class="block text-sm font-medium text-gray-700 mb-1">Pilih Guru:</label>
+                  <select id="overrideTeacherSelect" onchange="loadTeacherOverride()" class="w-full md:w-1/2 px-3 py-2 border border-gray-300 rounded-lg">
+                    <option value="">-- Pilih Guru --</option>
+                  </select>
+                </div>
+                
+                <div id="overrideFormContainer" class="hidden">
+                  <div class="bg-gray-50 p-4 rounded-lg mb-3">
+                    <div class="flex items-center justify-between mb-3">
+                      <span id="overrideTeacherName" class="font-medium"></span>
+                      <label class="flex items-center gap-2 text-sm">
+                        <input type="checkbox" id="overrideIsActive" onchange="toggleOverrideForm()">
+                        <span>Aktifkan Override Custom (Guru Khusus)</span>
+                      </label>
+                    </div>
+                    
+                    <div id="overrideFields" class="grid grid-cols-1 md:grid-cols-2 gap-3" style="display: none;">
+                      <!-- Generated dynamically from OVERRIDE_FIELDS -->
+                    </div>
+                  </div>
+                  <button onclick="saveTeacherOverride()" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
+                    <i class="fas fa-save mr-1"></i> Simpan Override
+                  </button>
+                </div>
+                
+                <div class="mt-4">
+                  <h5 class="font-medium text-gray-700 mb-2">Daftar Guru Khusus Aktif:</h5>
+                  <div id="activeOverridesList" class="space-y-2"></div>
+                </div>
+              </div>
             </div>
           </div>
         </div>

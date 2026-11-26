@@ -118,15 +118,26 @@ const SDMDashboard = (() => {
 
     async fillTenants(id, selected) {
       const sel = Utils.$(id);
-      if (!sel) return;
+      console.log(`fillTenants called for ${id}`, { element: !!sel, selected });
+      if (!sel) {
+        console.error(`Element with id "${id}" not found!`);
+        return;
+      }
       try {
         const data = await Api.get('/sdm-dashboard/tenants');
+        console.log(`API response for ${id}:`, data);
         if (data.success && Array.isArray(data.data)) {
-          sel.innerHTML = data.data.map(t =>
+          const html = data.data.map(t =>
             `<option value="${t.tenant_id}" ${t.tenant_id === selected ? 'selected' : ''}>${Utils.escapeHtml(t.nama_sekolah)}</option>`
           ).join('');
+          console.log(`Setting innerHTML for ${id}, options:`, data.data.length);
+          sel.innerHTML = html;
+        } else {
+          console.error(`Unexpected API response structure for ${id}:`, data);
         }
-      } catch (e) { /* silent */ }
+      } catch (e) {
+        console.error(`fillTenants error for ${id}:`, e);
+      }
     },
 
     fillYears(id, selected) {
@@ -306,6 +317,12 @@ state.user = {
 
       Utils.$('chartWeeklyBtn')?.addEventListener('click', () => Core.switchChart('weekly'));
       Utils.$('chartMonthlyBtn')?.addEventListener('click', () => Core.switchChart('monthly'));
+
+      // Kafalah toggle - attach after DOM ready to avoid browser restore triggering onchange
+      const kafalahToggle = Utils.$('kafalahBaseToggle');
+      if (kafalahToggle) {
+        kafalahToggle.addEventListener('change', () => Kafalah.kafalahOnSettingsContextChange(null, true));
+      }
     },
 
     showTab: async (tabName) => {
@@ -365,7 +382,11 @@ state.user = {
           case 'absensi': Core.showAbsensiSub('log'); break;
           case 'payroll': await Payroll.load(); break;
           case 'kafalah': await Kafalah.load(); break;
-          case 'settings': await Settings.load(); break;
+          case 'settings': 
+            await Settings.load(); 
+            await Kafalah.ensureDropdowns();
+            await Kafalah.loadSettings(); 
+            break;
         }
       } catch (err) {
         console.error(`Error loading tab ${tabName}:`, err);
@@ -2675,16 +2696,28 @@ state.user = {
   // KAFALAH MODULE
   // ============================================================
   const Kafalah = {
+    _loading: false,
+    _settingsLoading: false,
+    
     async load() {
-      await Utils.fillTenants('kafalahTenantSelect', Utils.$('kafalahTenantSelect')?.value || state.currentTenant);
-      await Utils.fillTenants('kafalahSettingsTenantSelect', Utils.$('kafalahSettingsTenantSelect')?.value || '');
+      if (this._loading) return;
+      this._loading = true;
+      console.log('=== Kafalah.load() START ===');
+      const tenantSel = Utils.$('kafalahTenantSelect');
+      const settingsSel = Utils.$('kafalahSettingsTenantSelect');
+      console.log('Elements found:', { tenantSel: !!tenantSel, settingsSel: !!settingsSel });
+      
+      // ensureDropdowns() is called from tab handler, don't call again
+      
+      console.log('Dropdown population done, tenantSel options:', tenantSel?.options.length);
+      
       if (!Utils.$('kafalahBulan')?.value) {
         Utils.$('kafalahBulan').value = new Date().toISOString().slice(0, 7);
       }
       const t = Utils.$('kafalahTenantSelect')?.value || state.currentTenant;
       const periode = Utils.$('kafalahBulan')?.value || '';
       const tbody = Utils.$('kafalahTable');
-      if (!tbody) return;
+      if (!tbody) { this._loading = false; return; }
       tbody.innerHTML = '<tr><td colspan="27" class="px-4 py-8 text-center text-gray-500"><i class="fas fa-spinner fa-spin"></i> Memuat...</td></tr>';
       try {
         const data = await Api.get(`/sdm-dashboard/kafalah?tenant_id=${encodeURIComponent(t)}${periode ? `&periode=${periode}` : ''}`);
@@ -2693,7 +2726,22 @@ state.user = {
       } catch (err) {
         console.error('Load Kafalah error:', err);
         tbody.innerHTML = '<tr><td colspan="27" class="px-4 py-8 text-center text-red-500">Gagal memuat data</td></tr>';
+      } finally {
+        this._loading = false;
       }
+      console.log('=== Kafalah.load() END ===');
+    },
+
+    async ensureDropdowns() {
+      console.log('ensureDropdowns called');
+      const tenantSel = Utils.$('kafalahTenantSelect');
+      const settingsSel = Utils.$('kafalahSettingsTenantSelect');
+      console.log('Before fill - tenant options:', tenantSel?.options.length, 'settings options:', settingsSel?.options.length);
+      
+      await Utils.fillTenants('kafalahTenantSelect', Utils.$('kafalahTenantSelect')?.value || state.currentTenant);
+      await Utils.fillTenants('kafalahSettingsTenantSelect', Utils.$('kafalahSettingsTenantSelect')?.value || '');
+      
+      console.log('After fill - tenant options:', tenantSel?.options.length, 'settings options:', settingsSel?.options.length);
     },
 
     _render(rows) {
@@ -2738,8 +2786,31 @@ state.user = {
     },
 
     async loadSettings() {
+      if (this._settingsLoading) return;
+      this._settingsLoading = true;
+      console.log('loadSettings called');
+      // ensureDropdowns() is called from tab handler, don't call again
       const tenantId = Utils.$('kafalahSettingsTenantSelect')?.value || '';
+      if (!tenantId) { this._settingsLoading = false; return; }
       try {
+        // Fetch level info from dedicated endpoint (per-tenant)
+        const levelRes = await Api.get(`/kafalah/settings/level?tenant_id=${encodeURIComponent(tenantId)}`);
+        if (levelRes.success && levelRes.data) {
+          const { level, settings, can_manage } = levelRes.data;
+          
+          // Set toggle based on level: 'school' = checked (Mode Sekolah), 'global' = unchecked (Mode Pusat)
+          const toggle = Utils.$('kafalahBaseToggle');
+          if (toggle) {
+            toggle.checked = (level === 'school');
+            // Do NOT dispatch change event - it would trigger kafalahOnSettingsContextChange and cause infinite loop
+          }
+          
+          // Show/hide tenant selector based on can_manage (SDM Pusat only)
+          const tenantSelWrap = Utils.$('kafalahSettingsTenantSelect')?.closest('.flex');
+          // Keep selector visible but show info
+        }
+        
+        // Fetch actual settings values
         const data = await Api.get('/sdm-dashboard/kafalah-settings');
         const rows = data.success ? (data.data || []) : [];
         if (!rows.length) return;
@@ -2760,19 +2831,45 @@ state.user = {
         if (info) info.textContent = `Sumber: ${row.tenant_id || 'Global'} (${row.level || '-'})`;
       } catch (err) {
         console.error('Load Kafalah settings error:', err);
+      } finally {
+        this._settingsLoading = false;
       }
     },
 
-    async kafalahOnSettingsContextChange(tenantId) {
+    async kafalahOnSettingsContextChange(tenantId, fromToggle = false) {
+      if (this._settingsLoading) return;
+      this._settingsLoading = true;
       const t = tenantId || Utils.$('kafalahTenantSelect')?.value || '';
+      const currentTenant = t || Utils.$('kafalahSettingsTenantSelect')?.value || '';
+      if (!currentTenant) { this._settingsLoading = false; return; }
+      
+      // If called from toggle change, save the level
+      if (fromToggle) {
+        const toggle = Utils.$('kafalahBaseToggle');
+        const level = toggle?.checked ? 'school' : 'global';
+        await Kafalah.saveKafalahLevel(currentTenant, level);
+      }
+      
       if (tenantId) {
         const selTenant = Utils.$('kafalahTenantSelect');
         const selSet = Utils.$('kafalahSettingsTenantSelect');
-        if (selTenant) selTenant.value = tenantId;
-        if (selSet && tenantId) selSet.value = tenantId;
+        // Prevent onchange loop by temporarily removing handler
+        if (selTenant) {
+          const handler = selTenant.onchange;
+          selTenant.onchange = null;
+          selTenant.value = tenantId;
+          selTenant.onchange = handler;
+        }
+        if (selSet) {
+          const handler = selSet.onchange;
+          selSet.onchange = null;
+          selSet.value = tenantId;
+          selSet.onchange = handler;
+        }
       }
       await Kafalah.loadSettings();
       await Kafalah.load();
+      this._settingsLoading = false;
     },
 
     _periodDates() {
@@ -2873,6 +2970,24 @@ state.user = {
         else Utils.showToast(res.message || 'Gagal menyimpan pengaturan', 'error');
       } catch (err) {
         Utils.showToast('Gagal menyimpan pengaturan (akses ditolak?)', 'error');
+      }
+    },
+
+    async saveKafalahLevel(tenantId, level) {
+      try {
+        const res = await Api.put('/kafalah/settings/level', { tenant_id: tenantId, level });
+        if (res.success) {
+          Utils.showToast(res.message, 'success');
+        } else {
+          Utils.showToast(res.message || 'Gagal mengubah mode', 'error');
+          // Revert toggle on failure
+          const toggle = Utils.$('kafalahBaseToggle');
+          if (toggle) toggle.checked = (level === 'global');
+        }
+      } catch (err) {
+        Utils.showToast('Gagal mengubah mode (akses ditolak?)', 'error');
+        const toggle = Utils.$('kafalahBaseToggle');
+        if (toggle) toggle.checked = (level === 'global');
       }
     },
 

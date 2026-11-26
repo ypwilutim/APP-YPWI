@@ -41,8 +41,12 @@ async function getSdmAllowedTenants(req) {
     (a.jabatan_di_unit || '').toLowerCase().includes('sdm')
   );
   const leaderAssignments = assignments.filter(isLeader);
+  // Include bendahara assignments for KAFALAH access
+  const bendaharaAssignments = assignments.filter(a =>
+    (a.jabatan_di_unit || '').toLowerCase().includes('bendahara')
+  );
 
-  if (sdmAssignments.length === 0 && leaderAssignments.length === 0) {
+  if (sdmAssignments.length === 0 && leaderAssignments.length === 0 && bendaharaAssignments.length === 0) {
     return [];
   }
 
@@ -55,6 +59,8 @@ async function getSdmAllowedTenants(req) {
   const tenants = new Set();
   sdmAssignments.forEach(a => { if (a.tenant_id) tenants.add(a.tenant_id); });
   leaderAssignments.forEach(a => { if (a.tenant_id) tenants.add(a.tenant_id); });
+  // Add bendahara tenants
+  bendaharaAssignments.forEach(a => { if (a.tenant_id) tenants.add(a.tenant_id); });
   return [...tenants];
 }
 

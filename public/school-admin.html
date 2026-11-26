@@ -1021,15 +1021,30 @@
       <div id="kafalahTab" class="tab-content hidden">
         <div class="main-card p-6">
           <div class="flex justify-between items-center mb-6">
-            <h3 class="text-lg font-semibold text-gray-900 flex items-center"><i
-                class="fas fa-coins text-yellow-600 mr-2"></i>Pengaturan KAFALAH Sekolah</h3>
+            <h3 class="text-lg font-semibold text-gray-900 flex items-center gap-2">
+              <i class="fas fa-coins text-yellow-600 mr-2"></i>Pengaturan KAFALAH Sekolah
+              <span id="kafalahModeBadge" class="badge bg-gray-100 text-gray-700 px-3 py-1 rounded-full text-sm"></span>
+            </h3>
           </div>
           <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
             <p class="text-sm text-yellow-800"><i class="fas fa-info-circle mr-1"></i>
               Pengaturan ini berlaku untuk <b id="kafalahSchoolName">sekolah ini</b>. 
-              Pengaturan individual override per guru dapat diatur oleh Bendahara Pusat.
+              <span id="kafalahGlobalNotice" class="hidden ml-2"><i class="fas fa-info-circle mr-1"></i> Menggunakan Standar Pengaturan Kafalah Pusat. Pengaturan lokal tetap tersimpan.</span>
             </p>
           </div>
+          
+          <!-- Global Toggle (SDM Pusat only - hidden for school admin) -->
+          <div id="kafalahGlobalToggleContainer" class="hidden mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <label class="flex items-center gap-3 cursor-pointer">
+              <input type="checkbox" id="kafalahUseGlobalToggle" onchange="saveKafalahUseGlobal()" 
+                     class="w-5 h-5 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500" disabled>
+              <span class="text-sm font-medium text-gray-700">Gunakan Pengaturan Global (Standar Yayasan)</span>
+            </label>
+            <p id="kafalahGlobalLockNotice" class="hidden text-xs text-red-600 mt-2 ml-6">
+              <i class="fas fa-lock mr-1"></i> Hanya SDM Pusat yang dapat mengubah toggle ini.
+            </p>
+          </div>
+          
           <form id="schoolKafalahSettingsForm" onsubmit="saveSchoolKafalahSettings(event)" class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Tunj. Struktural (flat)</label>
@@ -1110,6 +1125,48 @@
               <span id="skSavedInfo" class="text-sm text-gray-500"></span>
             </div>
           </form>
+          
+          <!-- Guru Khusus / Individual Override Management -->
+          <div class="mt-8 pt-8 border-t border-gray-200">
+            <h4 class="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <i class="fas fa-user-cog text-emerald-600"></i> Guru Khusus (Custom Override)
+            </h4>
+            <p class="text-xs text-gray-500 mb-4">
+              Set komponen KAFALAH custom untuk guru tertentu (guru tamu, pakar, ustadz senior).
+              Komponen yang tidak diisi akan menggunakan standar sekolah/pusat.
+            </p>
+            
+            <div class="mb-4">
+              <label class="block text-sm font-medium text-gray-700 mb-1">Pilih Guru:</label>
+              <select id="overrideTeacherSelect" onchange="loadTeacherOverride()" class="w-full md:w-1/2 px-3 py-2 border border-gray-300 rounded-lg">
+                <option value="">-- Pilih Guru --</option>
+              </select>
+            </div>
+            
+            <div id="overrideFormContainer" class="hidden">
+              <div class="bg-gray-50 p-4 rounded-lg mb-3">
+                <div class="flex items-center justify-between mb-3">
+                  <span id="overrideTeacherName" class="font-medium"></span>
+                  <label class="flex items-center gap-2 text-sm">
+                    <input type="checkbox" id="overrideIsActive" onchange="toggleOverrideForm()">
+                    <span>Aktifkan Override Custom (Guru Khusus)</span>
+                  </label>
+                </div>
+                
+                <div id="overrideFields" class="grid grid-cols-1 md:grid-cols-2 gap-3" style="display: none;">
+                  <!-- Generated dynamically from OVERRIDE_FIELDS -->
+                </div>
+              </div>
+              <button onclick="saveTeacherOverride()" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">
+                <i class="fas fa-save mr-1"></i> Simpan Override
+              </button>
+            </div>
+            
+            <div class="mt-4">
+              <h5 class="font-medium text-gray-700 mb-2">Daftar Guru Khusus Aktif:</h5>
+              <div id="activeOverridesList" class="space-y-2"></div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -6255,7 +6312,30 @@ console.log('[ATTENDANCE] Fetching:', url);
             });
             const json = await res.json();
             if (!json.success) return;
-            const s = json.data || {};
+            const { use_global, source, can_manage_global, settings } = json.data;
+            
+            // Update badge
+            const badge = document.getElementById('kafalahModeBadge');
+            if (badge) {
+              badge.textContent = use_global ? 'Global (Standar Pusat)' : 'Lokal (Pengaturan Sekolah)';
+              badge.className = use_global ? 'badge bg-blue-100 text-blue-800' : 'badge bg-emerald-100 text-emerald-800';
+            }
+            
+            // Update toggle (disabled for school admin)
+            const toggle = document.getElementById('kafalahUseGlobalToggle');
+            if (toggle) {
+              toggle.checked = use_global;
+              toggle.disabled = true; // School admin cannot change
+            }
+            
+            // Show/hide notices
+            const notice = document.getElementById('kafalahGlobalNotice');
+            const lockNotice = document.getElementById('kafalahGlobalLockNotice');
+            if (notice) notice.style.display = use_global ? 'block' : 'none';
+            if (lockNotice) lockNotice.style.display = use_global ? 'block' : 'none';
+            
+            // Load settings values
+            const s = settings || {};
             setSchoolKafalahVal('skTunjStruktural', s.tunj_struktural);
             setSchoolKafalahVal('skTunjFungsional', s.tunj_fungsional);
             setSchoolKafalahVal('skTunjTransport', s.tunj_transport);

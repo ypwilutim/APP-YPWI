@@ -153,6 +153,7 @@ async function showTab(tabName) {
   if (tabName === 'recapAbsensi') { loadAttendanceRecap(); initMonthlyRecapSelectors(); }
   if (tabName === 'manualAttendance') { loadManualAttendanceSelectors(); loadManualAttendance(); }
   if (tabName === 'payroll') { loadPayrollYears(); initPayrollSelectors(); initMonthlyRecapSelectors(); }
+  if (tabName === 'kafalah') { await ensureKafalahDropdowns(); }
 }
 
 async function onTenantChange() {
@@ -204,12 +205,22 @@ async function loadTenantOptions() {
   try {
     const data = await api('/sdm-dashboard/tenants');
     const sel = document.getElementById('tenantSelect');
+    const kafalahSel = document.getElementById('kafalahTenantSelect');
+    const settingsSel = document.getElementById('kafalahSettingsTenantSelect');
     if (data.success && data.data) {
       data.data.forEach(t => {
         const opt = document.createElement('option');
         opt.value = t.tenant_id;
         opt.textContent = t.nama_sekolah;
         sel.appendChild(opt);
+        if (kafalahSel) {
+          const opt2 = opt.cloneNode(true);
+          kafalahSel.appendChild(opt2);
+        }
+        if (settingsSel) {
+          const opt3 = opt.cloneNode(true);
+          settingsSel.appendChild(opt3);
+        }
       });
       // Prefer SDM assignments over other assignments
       if (currentTenant && !data.data.some(d=>d.tenant_id===currentTenant)) {
@@ -220,22 +231,66 @@ async function loadTenantOptions() {
         if (sdmAssign) {
           currentTenant = sdmAssign.tenant_id;
           sel.value = currentTenant;
+          if (kafalahSel) kafalahSel.value = currentTenant;
+          if (settingsSel) settingsSel.value = currentTenant;
           const at = document.querySelector('.nav-item.nav-active')?.dataset.tab;
           if (at==='attendance') loadAttendanceLogs();
         } else if (data.data.length > 0) {
           currentTenant = data.data[0].tenant_id;
           sel.value = currentTenant;
+          if (kafalahSel) kafalahSel.value = currentTenant;
+          if (settingsSel) settingsSel.value = currentTenant;
           const at = document.querySelector('.nav-item.nav-active')?.dataset.tab;
           if (at==='attendance') loadAttendanceLogs();
         }
       } else if (data.data.length > 0 && !currentTenant) {
         currentTenant = data.data[0].tenant_id;
         sel.value = currentTenant;
+        if (kafalahSel) kafalahSel.value = currentTenant;
+        if (settingsSel) settingsSel.value = currentTenant;
         const at = document.querySelector('.nav-item.nav-active')?.dataset.tab;
         if (at==='attendance') loadAttendanceLogs();
       }
     }
-  } catch (err) { /* silent */ }
+  } catch (err) { console.error('loadTenantOptions error:', err); }
+}
+
+// Ensure KAFALAH dropdowns are populated (fallback for tab switch)
+async function ensureKafalahDropdowns() {
+  const kafalahSel = document.getElementById('kafalahTenantSelect');
+  const settingsSel = document.getElementById('kafalahSettingsTenantSelect');
+  console.log('ensureKafalahDropdowns called', { kafalahSel: !!kafalahSel, settingsSel: !!settingsSel });
+  if (!kafalahSel || !settingsSel) return;
+  
+  // If already populated, skip
+  if (kafalahSel.options.length > 1) {
+    console.log('Dropdowns already populated, skipping');
+    return;
+  }
+  
+  try {
+    const data = await api('/sdm-dashboard/tenants');
+    console.log('Tenants API response:', data);
+    if (data.success && data.data) {
+      data.data.forEach(t => {
+        const opt1 = document.createElement('option');
+        opt1.value = t.tenant_id;
+        opt1.textContent = t.nama_sekolah;
+        kafalahSel.appendChild(opt1);
+        
+        const opt2 = opt1.cloneNode(true);
+        settingsSel.appendChild(opt2);
+      });
+      
+      // Set current tenant if available
+      if (currentTenant) {
+        kafalahSel.value = currentTenant;
+        settingsSel.value = currentTenant;
+      }
+    }
+  } catch (err) {
+    console.error('ensureKafalahDropdowns error:', err);
+  }
 }
 
 async function loadDashboardStats() {

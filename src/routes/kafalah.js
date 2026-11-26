@@ -16,7 +16,7 @@ const router = express.Router();
 // ------- Helpers -------
 function num(v) { return parseFloat(v || 0) || 0; }
 
-// Map tenant_id → jenjang (TK | SD | SMP | SMA | PONPES)
+// Map tenant_id -> jenjang (TK | SD | SMP | SMA | PONPES)
 function jenjangFromTenant(nama, tenantId) {
   const n = (nama || '').toLowerCase();
   const t = (tenantId || '').toLowerCase();
@@ -91,9 +91,9 @@ function masaKerjaTahun(tglMasuk) {
   return Math.max(0, Math.floor(years));
 }
 
-// Map status_kepegawaian → PT/PK
-// PTY (Pegawai Tetap Yayasan), GTY/PTY → PT
-// PKY (Pegawai Kontrak Yayasan), Honor → PK
+// Map status_kepegawaian -> PT/PK
+// PTY (Pegawai Tetap Yayasan), GTY/PTY -> PT
+// PKY (Pegawai Kontrak Yayasan), Honor -> PK
 function statusFromText(s) {
   const v = (s || '').toUpperCase();
   if (v.includes('HONOR') || v.includes('PKY') || v === 'PK') return 'PK';
@@ -101,9 +101,7 @@ function statusFromText(s) {
   return 'PT';
 }
 
-// Hitung gaji pokok dari config kenaikan
-// formula: gaji = gaji_awal + ceil((tahun - 2) / interval_tahun) * kenaikan_per_tahun
-// capped at masa_kerja_max
+// Hitung gaji pokok dari config kenaikan (OLD TABLE: kafalah_kenaikan_config)
 async function lookupGajiPokok(statusPegawai, jenjang, pendidikan, tahun) {
   let rows = await db.query(
     `SELECT * FROM kafalah_kenaikan_config
@@ -132,36 +130,94 @@ function computeGajiFromConfig(cfg, tahun) {
   if (t <= start) return num(cfg.gaji_awal);
   const interval = Math.max(1, num(cfg.interval_tahun));
   const periods = Math.floor((t - start - 1) / interval) + 1;
-  // contoh: interval=2, t=3 → (3-2-1)/2 + 1 = 0+1 = 1 periode → +50rb
-  // contoh: interval=2, t=5 → (5-2-1)/2 + 1 = 1+1 = 2 periode → +100rb
   return num(cfg.gaji_awal) + (periods * num(cfg.kenaikan_per_tahun));
 }
 
-// Ensure tenant_id column in kafalah_settings
+// ============================================================
+// NEW: Tenant-Level Resolution using use_global flag
+// ============================================================
+
+// Ensure tenant_id and use_global columns exist
 async function ensureKafalahSettingsTable() {
   try {
     await db.query(`ALTER TABLE kafalah_settings ADD COLUMN tenant_id VARCHAR(20) DEFAULT NULL`);
     await db.query(`CREATE UNIQUE INDEX idx_tenant ON kafalah_settings (tenant_id)`);
-  } catch (e) {
-    // Column might already exist
-  }
+  } catch (e) {}
+  try {
+    await db.query(`ALTER TABLE kafalah_settings ADD COLUMN use_global TINYINT(1) NOT NULL DEFAULT 0`);
+  } catch (e) {}
 }
 
-// Ambil settings - global atau per tenant
+// Resolve KAFALAH settings based on tenant's use_global flag
+// Returns { useGlobal: boolean, settings: {...}, source: 'central'|'local' }
+async function resolveKafalahSettings(tenantId) {
+  await ensureKafalahSettingsTable();
+  
+  // Get tenant's settings row
+  let tenantRows = await db.query(
+    'SELECT * FROM kafalah_settings WHERE tenant_id = ? LIMIT 1',
+    [tenantId]
+  );
+  
+  // Get global settings (tenant_id IS NULL)
+  const globalRows = await db.query(
+    'SELECT * FROM kafalah_settings WHERE tenant_id IS NULL AND id = 1 LIMIT 1'
+  );
+  const globalSettings = globalRows[0] || {};
+  
+  if (!tenantRows.length) {
+    // Tenant row doesn't exist - create it with defaults from global
+    const defaultSettings = { ...globalSettings };
+    delete defaultSettings.id;
+    defaultSettings.tenant_id = tenantId;
+    defaultSettings.use_global = 0;
+    
+    const cols = Object.keys(defaultSettings);
+    const ph = cols.map(() => '?').join(',');
+    await db.query(
+      `INSERT INTO kafalah_settings (${cols.join(',')}) VALUES (${ph})`,
+      Object.values(defaultSettings)
+    );
+    
+    return { useGlobal: false, settings: defaultSettings, source: 'local' };
+  }
+  
+  const tenantSettings = tenantRows[0];
+  const useGlobal = Boolean(tenantSettings.use_global);
+  
+  return {
+    useGlobal,
+    settings: useGlobal ? globalSettings : tenantSettings,
+    source: useGlobal ? 'central' : 'local'
+  };
+}
+
+// Get tenant's own settings row (for editing)
 async function getKafalahSettings(tenantId = null) {
   await ensureKafalahSettingsTable();
-  let rows;
-  if (tenantId) {
-    rows = await db.query('SELECT * FROM kafalah_settings WHERE tenant_id = ? LIMIT 1', [tenantId]);
-    if (rows.length) return rows[0];
+  
+  if (!tenantId) {
+    const rows = await db.query('SELECT * FROM kafalah_settings WHERE tenant_id IS NULL AND id = 1');
+    return rows[0] || {};
   }
-  // Fallback ke global (tenant_id IS NULL)
-  rows = await db.query('SELECT * FROM kafalah_settings WHERE tenant_id IS NULL AND id = 1');
-  if (!rows.length) {
-    await db.query('INSERT IGNORE INTO kafalah_settings (id, tenant_id) VALUES (1, NULL)');
-    rows = await db.query('SELECT * FROM kafalah_settings WHERE tenant_id IS NULL AND id = 1');
-  }
-  return rows[0] || {};
+  
+  let rows = await db.query('SELECT * FROM kafalah_settings WHERE tenant_id = ? LIMIT 1', [tenantId]);
+  if (rows.length) return rows[0];
+  
+  // Create if not exists
+  const globalSettings = await getKafalahSettings(null);
+  const defaultSettings = { ...globalSettings };
+  delete defaultSettings.id;
+  defaultSettings.tenant_id = tenantId;
+  defaultSettings.use_global = 0;
+  
+  const cols = Object.keys(defaultSettings);
+  const ph = cols.map(() => '?').join(',');
+  await db.query(
+    `INSERT INTO kafalah_settings (${cols.join(',')}) VALUES (${ph})`,
+    Object.values(defaultSettings)
+  );
+  return defaultSettings;
 }
 
 // Ambil override per-teacher
@@ -174,70 +230,7 @@ async function getOverrides(tenantId) {
   return m;
 }
 
-// ============================================================
-// NEW HELPERS: Base Mode & Settings Resolution
-// ============================================================
-
-// Ambil preferensi base mode user (global/school)
-// Priority: explicit param > DB preference > default
-async function getBaseMode(req, explicitTenantId = null) {
-  const userId = req.user?.id;
-  if (!userId) return { baseMode: 'global', tenantId: null };
-  
-  const tenantId = explicitTenantId || req.query.tenant_id || req.body.tenant_id || null;
-  
-  // If explicit base_mode in query/body, use it
-  const explicitBaseMode = req.query.base_mode || req.body.base_mode;
-  if (explicitBaseMode && ['global', 'school'].includes(explicitBaseMode)) {
-    return { baseMode: explicitBaseMode, tenantId };
-  }
-  
-  // Load from DB
-  try {
-    const rows = await db.query(
-      'SELECT base_mode FROM kafalah_base_mode WHERE user_id = ? AND (tenant_id = ? OR tenant_id IS NULL) ORDER BY tenant_id DESC LIMIT 1',
-      [req.user.id, tenantId]
-    );
-    if (rows.length) {
-      return { baseMode: rows[0].base_mode, tenantId };
-    }
-  } catch (e) {
-    console.error('getBaseMode error:', e);
-  }
-  
-  // Default: global for central, school for school bendahara
-  const isCentral = req.user?.assignments?.some(a => a.tenant_id === 'YPWILUTIM');
-  return { baseMode: isCentral ? 'global' : 'school', tenantId };
-}
-
-// Resolve settings berdasarkan base mode
-async function resolveSettings(tenantId, baseMode) {
-  if (baseMode === 'global') {
-    return await getKafalahSettings(null);
-  }
-  // school mode: try school settings, fallback to global
-  if (tenantId) {
-    const schoolSettings = await getKafalahSettings(tenantId);
-    const hasSettings = schoolSettings && Object.keys(schoolSettings).length > 1; // more than just id
-    if (hasSettings) return schoolSettings;
-  }
-  // Fallback to global
-  return await getKafalahSettings(null);
-}
-
-// Resolve gaji pokok config berdasarkan base mode
-async function resolveGajiPokokConfig(tenantId, baseMode) {
-  if (baseMode === 'global') {
-    return await getGajiPokokConfig(null);
-  }
-  if (tenantId) {
-    const config = await getGajiPokokConfig(tenantId);
-    if (config && config.length) return config;
-  }
-  return await getGajiPokokConfig(null);
-}
-
-// Get gaji pokok config (NEW TABLE: kafalah_gaji_pokok_config)
+// Resolve gaji pokok config (NEW TABLE: kafalah_gaji_pokok_config)
 async function getGajiPokokConfig(tenantId = null) {
   if (tenantId) {
     const rows = await db.query(
@@ -294,6 +287,76 @@ function getOverrideValue(override, baseValue, field) {
   if (!override.is_active) return num(baseValue);
   const val = override[field];
   return (val !== null && val !== undefined) ? num(val) : num(baseValue);
+}
+
+// Check if user can manage KAFALAH global toggle for a tenant
+// SDM Pusat / Admin Pusat: can manage any school
+// School bendahara: can ONLY view, cannot change global toggle
+async function canManageKafalahGlobal(req, tenantId) {
+  // Admin can manage all
+  if (req.user.role === 'admin') return true;
+  
+  // Check if user has SDM assignment at YPWILUTIM (yayasan level)
+  const assignments = req.user.assignments || [];
+  const isSDMPusat = assignments.some(a => 
+    a.tenant_id === 'YPWILUTIM' && 
+    ['sdm', 'direktur', 'ketua', 'sdmpusat', 'pusat', 'sdm_pusat'].includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''))
+  );
+  
+  return isSDMPusat;
+}
+
+// Check if user can manage teacher overrides for a tenant
+// SDM Pusat / Admin Pusat: can manage any school
+// School bendahara: can manage own school only
+async function canManageTeacherOverrides(req, tenantId) {
+  // Admin can manage all
+  if (req.user.role === 'admin') return true;
+  
+  // Check if user has SDM assignment at YPWILUTIM
+  const assignments = req.user.assignments || [];
+  const isSDMPusat = assignments.some(a => 
+    a.tenant_id === 'YPWILUTIM' && 
+    ['sdm', 'direktur', 'ketua', 'sdmpusat', 'pusat', 'sdm_pusat'].includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, ''))
+  );
+  
+  if (isSDMPusat) return true;
+  
+  // School bendahara: can manage own school only
+  const userTenantId = req.user.tenant_id || 
+    (req.user.assignments?.find(a => a.is_paid)?.tenant_id);
+  return userTenantId === tenantId;
+}
+
+// Verify tenant access for operators
+function verifyTenantAccess(req, requestedTenantId) {
+  if (!requestedTenantId) return true; // Admin pusat: akses semua
+  const userRole = req.user?.role;
+  const assignments = req.user?.assignments || [];
+
+  // Super admin boleh semua
+  if (userRole === 'admin') return true;
+
+  // Guru dengan assignment admin/TU/operator/ta/bendahara: cek apakah tenant_id ada di assignment-nya
+  if (userRole === 'guru' && assignments.length > 0) {
+    const adminRoles = ['tu', 'tatausaha', 'operator', 'ta', 'tata_usaha', 'admin', 'bendahara'];
+    const allowedTenants = assignments
+      .filter(a => adminRoles.includes((a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '')))
+      .map(a => a.tenant_id);
+
+    if (allowedTenants.includes(requestedTenantId)) return true;
+  }
+
+  // SDM Pusat (SDM di YPWILUTIM) boleh akses semua tenant
+  if (userRole === 'guru' && assignments.length > 0) {
+    const isSdmPusat = assignments.some(a => 
+      a.tenant_id === 'YPWILUTIM' && 
+      (a.jabatan_di_unit || '').toLowerCase().replace(/\s/g, '').includes('sdm')
+    );
+    if (isSdmPusat) return true;
+  }
+
+  return false;
 }
 
 // Hitung absensi detail per hari untuk KAFALAH
@@ -355,9 +418,6 @@ async function getAttendanceDaily(tenantId, startDate, endDate) {
   
   const p = [start, end, start, end];
   if (tenantId) {
-    // Filter by tenant_id on check-in (masuk) only.
-    // Using LEFT JOIN, check-out (pulang) may be NULL if teacher hasn't checked out.
-    // Filter by tenant_id_masuk to include all check-ins for this tenant.
     q += ` WHERE m.tenant_id_masuk = ?`;
     p.push(tenantId);
   }
@@ -383,7 +443,6 @@ async function getAttendanceSummary(tenantId, startDate, endDate) {
         sakit: 0,
         dinas_luar: 0,
         kjm: 0,
-        // New: daily detail for per-day calculation
         dailyDetails: []
       };
     }
@@ -412,7 +471,22 @@ async function getAttendanceSummary(tenantId, startDate, endDate) {
   return Object.values(summary);
 }
 
-// ------- Endpoints -------
+// Ambil default struktural dari jabatan (lookup berurutan)
+async function lookupStrukturalByJabatan(jabatan, jabatanMap) {
+  if (!jabatan) return 0;
+  const norm = jabatan.toLowerCase().replace(/[^a-z]/g, '');
+  // exact key
+  if (jabatanMap[jabatan.toLowerCase().replace(/\s/g,'')]) return jabatanMap[jabatan.toLowerCase().replace(/\s/g,'')];
+  // contains match
+  for (const k of Object.keys(jabatanMap)) {
+    if (norm.includes(k)) return jabatanMap[k];
+  }
+  return 0;
+}
+
+// ============================================================
+// Endpoints
+// ============================================================
 
 // GET settings (global)
 router.get('/kafalah/settings', authenticateBendahara, async (req, res) => {
@@ -425,13 +499,28 @@ router.get('/kafalah/settings', authenticateBendahara, async (req, res) => {
   }
 });
 
-// GET settings (tenant-specific)
+// GET settings (tenant-specific) - includes use_global and source
 router.get('/kafalah/settings/tenant', authenticateBendahara, async (req, res) => {
   try {
     const tenantId = req.query.tenant_id;
     if (!tenantId) return res.status(400).json({ success: false, message: 'tenant_id required' });
-    const s = await getKafalahSettings(tenantId);
-    res.json({ success: true, data: s });
+    
+    if (!verifyTenantAccess(req, tenantId)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak: Anda tidak berwenang mengakses data sekolah ini' });
+    }
+    
+    const { useGlobal, settings, source } = await resolveKafalahSettings(tenantId);
+    const canManageGlobal = await canManageKafalahGlobal(req, tenantId);
+    
+    res.json({ 
+      success: true, 
+      data: { 
+        use_global: useGlobal, 
+        source, 
+        can_manage_global: canManageGlobal,
+        settings 
+      } 
+    });
   } catch (e) {
     console.error(e);
     res.status(500).json({ success: false, message: e.message });
@@ -453,13 +542,20 @@ router.put('/kafalah/settings', authenticateBendahara, async (req, res) => {
   }
 });
 
-// PUT settings (tenant-specific)
+// PUT settings (tenant-specific) - ALWAYS allowed, saves to tenant's own row
+// The use_global flag determines which is EFFECTIVE, not which can be EDITED
 router.put('/kafalah/settings/tenant', authenticateBendahara, async (req, res) => {
   try {
     const tenantId = req.body.tenant_id || req.query.tenant_id;
     if (!tenantId) return res.status(400).json({ success: false, message: 'tenant_id required' });
+    
+    if (!verifyTenantAccess(req, tenantId)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak: Anda tidak berwenang mengubah pengaturan sekolah ini' });
+    }
+    
+    // ALWAYS allow editing tenant's own settings row
+    // The effective settings depend on use_global flag
     const allFields = ['tunj_struktural','tunj_fungsional','tunj_transport','tunj_tepat_waktu','tunj_tidak_cepat_pulang','tunj_prestasi_kinerja','nominal_kjm','tunj_pembina','tunj_anak','tunj_istri','tunj_uang_makan','tunj_apresiasi','tunj_jam_mengajar','pot_luar_tanggungan','pot_durasi_simt','pot_taawun','pot_piutang'];
-    // Only include fields that are actually provided
     const fields = allFields.filter(f => req.body[f] !== undefined);
     if (fields.length === 0) return res.status(400).json({ success: false, message: 'Tidak ada field' });
     
@@ -477,13 +573,56 @@ router.put('/kafalah/settings/tenant', authenticateBendahara, async (req, res) =
   }
 });
 
-// DELETE settings (tenant-specific) - revert to global
+// PUT use_global toggle (SDM Pusat only)
+router.put('/kafalah/settings/use-global', authenticateBendahara, async (req, res) => {
+  try {
+    const tenantId = req.body.tenant_id;
+    const useGlobal = req.body.use_global === true || req.body.use_global === 1 || req.body.use_global === '1';
+    
+    if (!tenantId) return res.status(400).json({ success: false, message: 'tenant_id required' });
+    
+    const canManage = await canManageKafalahGlobal(req, tenantId);
+    if (!canManage) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Hanya SDM Pusat/Admin Pusat yang dapat mengubah mode global KAFALAH' 
+      });
+    }
+    
+    // Ensure tenant row exists, then update use_global
+    await db.query(
+      `INSERT INTO kafalah_settings (tenant_id, use_global) VALUES (?, ?)
+       ON DUPLICATE KEY UPDATE use_global = VALUES(use_global)`,
+      [tenantId, useGlobal ? 1 : 0]
+    );
+    
+    res.json({ 
+      success: true, 
+      message: `Mode KAFALAH diubah ke ${useGlobal ? 'Global (Standar Pusat)' : 'Lokal (Pengaturan Sekolah)'}`,
+      data: { use_global: useGlobal }
+    });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+// DELETE settings (tenant-specific) - set use_global=true instead of deleting
 router.delete('/kafalah/settings/tenant', authenticateBendahara, async (req, res) => {
   try {
     const tenantId = req.body.tenant_id || req.query.tenant_id;
     if (!tenantId) return res.status(400).json({ success: false, message: 'tenant_id required' });
-    await db.query('DELETE FROM kafalah_settings WHERE tenant_id = ?', [tenantId]);
-    res.json({ success: true, message: 'Pengaturan sekolah dihapus, menggunakan global' });
+    
+    if (!verifyTenantAccess(req, tenantId)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+    
+    // Instead of deleting, set use_global=true to revert to global settings
+    // This preserves local settings for when toggle is turned off
+    await db.query(
+      `UPDATE kafalah_settings SET use_global = 1 WHERE tenant_id = ?`,
+      [tenantId]
+    );
+    res.json({ success: true, message: 'Pengaturan sekolah dikembalikan ke global (pengaturan lokal tersimpan)' });
   } catch (e) {
     res.status(500).json({ success: false, message: e.message });
   }
@@ -554,7 +693,6 @@ router.post('/kafalah/sync-pendidikan', authenticateBendahara, async (req, res) 
 });
 
 // POST backfill pendidikan_kode di teachers dari regex nama
-// Untuk guru yang belum pernah isi complete-profile.html
 router.post('/kafalah/backfill-pendidikan-kode', authenticateBendahara, async (req, res) => {
   try {
     const teachers = await db.query(
@@ -563,11 +701,9 @@ router.post('/kafalah/backfill-pendidikan-kode', authenticateBendahara, async (r
     let updated = 0;
     for (const t of teachers) {
       const kode = t.pendidikan_kode;
-      if (kode) continue; // sudah ada
-      // deteksi dari regex nama → simpan sebagai SMA/D3/S1/S2/S3
+      if (kode) continue;
       const kat = pendidikanFromText(t.nama, t.pendidikan_terakhir, null);
       if (kat === 'SMA') {
-        // default ke SMA (kode 'SMA') — bisa diedit nanti oleh guru
         await db.query('UPDATE teachers SET pendidikan_kode=? WHERE id=?', ['SMA', t.id]);
         updated++;
       } else if (['D3','S1','S2','S3'].includes(kat)) {
@@ -615,19 +751,6 @@ router.put('/kafalah/jabatan-tunjangan/:id', authenticateBendahara, async (req, 
   }
 });
 
-// Ambil default struktural dari jabatan (lookup berurutan)
-async function lookupStrukturalByJabatan(jabatan, jabatanMap) {
-  if (!jabatan) return 0;
-  const norm = jabatan.toLowerCase().replace(/[^a-z]/g, '');
-  // exact key
-  if (jabatanMap[jabatan.toLowerCase().replace(/\s/g,'')]) return jabatanMap[jabatan.toLowerCase().replace(/\s/g,'')];
-  // contains match
-  for (const k of Object.keys(jabatanMap)) {
-    if (norm.includes(k)) return jabatanMap[k];
-  }
-  return 0;
-}
-
 // PUT matrix (replace all untuk satu kombinasi)
 router.put('/kafalah/matrix/:id', authenticateBendahara, async (req, res) => {
   try {
@@ -644,6 +767,11 @@ router.get('/kafalah/overrides', authenticateBendahara, async (req, res) => {
   try {
     const tenantId = req.query.tenant_id;
     if (!tenantId) return res.status(400).json({ success: false, message: 'tenant_id required' });
+    
+    if (!verifyTenantAccess(req, tenantId)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak: Anda tidak berwenang mengakses data guru sekolah ini' });
+    }
+    
     const rows = await db.query(
       `SELECT ko.*, t.nama FROM kafalah_teacher_overrides ko
        JOIN teachers t ON ko.teacher_id = t.id
@@ -663,6 +791,11 @@ router.get('/kafalah/teachers', authenticateBendahara, async (req, res) => {
   try {
     const tenantId = req.query.tenant_id;
     if (!tenantId) return res.status(400).json({ success: false, message: 'tenant_id required' });
+    
+    if (!verifyTenantAccess(req, tenantId)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+    
     const rows = await db.query(
       `SELECT t.id, t.nama FROM teachers t
        JOIN teacher_assignments ta ON t.id = ta.teacher_id
@@ -675,11 +808,20 @@ router.get('/kafalah/teachers', authenticateBendahara, async (req, res) => {
   }
 });
 
-// PUT override per teacher
+// PUT override per teacher - with permission check
 router.put('/kafalah/overrides/:teacherId', authenticateBendahara, async (req, res) => {
   try {
     const tenantId = req.body.tenant_id;
     if (!tenantId) return res.status(400).json({ success: false, message: 'tenant_id required' });
+    
+    const canManage = await canManageTeacherOverrides(req, tenantId);
+    if (!canManage) {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'Anda tidak berwenang mengubah override guru di sekolah ini' 
+      });
+    }
+    
     const fields = [...OVERRIDE_FIELDS, 'is_active'];
     const vals = { teacher_id: req.params.teacherId, tenant_id: tenantId };
     fields.forEach(f => { if (req.body[f] !== undefined) vals[f] = (f === 'is_active') ? (req.body[f] ? 1 : 0) : num(req.body[f]); });
@@ -697,31 +839,41 @@ router.put('/kafalah/overrides/:teacherId', authenticateBendahara, async (req, r
   }
 });
 
-// POST compute preview (tidak menyimpan)
+// POST compute preview (tidak menyimpan) - uses auto-resolved use_global
 router.post('/kafalah/preview', authenticateBendahara, async (req, res) => {
   try {
-    const { tenant_id, periode_mulai, periode_selesai, label_periode, base_mode } = req.body;
+    const { tenant_id, periode_mulai, periode_selesai, label_periode } = req.body;
     if (!tenant_id || !periode_mulai || !periode_selesai) {
       return res.status(400).json({ success: false, message: 'tenant_id, periode_mulai, periode_selesai wajib' });
     }
-    const baseMode = base_mode && ['global', 'school'].includes(base_mode) ? base_mode : 'school';
-    const rows = await computeKafalah(tenant_id, periode_mulai, periode_selesai, label_periode, baseMode);
-    res.json({ success: true, data: rows, base_mode: baseMode });
+    
+    if (!verifyTenantAccess(req, tenant_id)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+    
+    const { settings, source } = await resolveKafalahSettings(tenant_id);
+    const rows = await computeKafalah(tenant_id, periode_mulai, periode_selesai, label_periode, settings);
+    res.json({ success: true, data: rows, source });
   } catch (e) {
     console.error('preview error:', e);
     res.status(500).json({ success: false, message: e.message });
   }
 });
 
-// POST generate (simpan ke kafalah_payroll)
+// POST generate (simpan ke kafalah_payroll) - uses auto-resolved use_global
 router.post('/kafalah/generate', authenticateBendahara, async (req, res) => {
   try {
-    const { tenant_id, periode_mulai, periode_selesai, label_periode, base_mode } = req.body;
+    const { tenant_id, periode_mulai, periode_selesai, label_periode } = req.body;
     if (!tenant_id || !periode_mulai || !periode_selesai) {
       return res.status(400).json({ success: false, message: 'tenant_id, periode_mulai, periode_selesai wajib' });
     }
-    const baseMode = base_mode && ['global', 'school'].includes(base_mode) ? base_mode : 'school';
-    const rows = await computeKafalah(tenant_id, periode_mulai, periode_selesai, label_periode, baseMode);
+    
+    if (!verifyTenantAccess(req, tenant_id)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+    
+    const { settings, source } = await resolveKafalahSettings(tenant_id);
+    const rows = await computeKafalah(tenant_id, periode_mulai, periode_selesai, label_periode, settings);
     let saved = 0;
     for (const r of rows) {
       const sql = `INSERT INTO kafalah_payroll
@@ -732,27 +884,27 @@ router.post('/kafalah/generate', authenticateBendahara, async (req, res) => {
          tunj_struktural, tunj_pengabdian, tunj_fungsional, tunj_pembina, tunj_pondok,
          tunj_transport, tunj_tepat_waktu, tunj_tidak_cepat_pulang, tunj_kjm, tunj_prestasi_kinerja, tunj_apresiasi, total_b,
          potong_taawun, potong_simt, potong_pinjaman, potong_cuti_luar_tanggungan, potong_persen_cuti, total_c,
-         total_pendapatan, base_mode_used, is_manual_edit, created_by)
-       VALUES (?,?,?,?,?, ?,?,?,?,?,?,?,?,?, ?,?,?,?,?,?,?,?,?, ?,?,?,?, ?,?,?,?,?, ?,?,?,?,?,?,?, ?,?,?,?,?,?, ?,?)
-       ON DUPLICATE KEY UPDATE
-         nama=VALUES(nama), nik=VALUES(nik), jabatan=VALUES(jabatan), status_pegawai=VALUES(status_pegawai),
-         jenjang=VALUES(jenjang), pendidikan=VALUES(pendidikan), masa_kerja_tahun=VALUES(masa_kerja_tahun),
-         jumlah_anak=VALUES(jumlah_anak), predikat_kinerja=VALUES(predikat_kinerja),
-         hari_efektif=VALUES(hari_efektif), hadir=VALUES(hadir), tidak_hadir=VALUES(tidak_hadir),
-         tepat_waktu=VALUES(tepat_waktu), terlambat=VALUES(terlambat), tidak_absen_masuk=VALUES(tidak_absen_masuk),
-         cepat_pulang=VALUES(cepat_pulang), tidak_absen_pulang=VALUES(tidak_absen_pulang), kjm=VALUES(kjm),
-         kafalah_pokok=VALUES(kafalah_pokok), tunj_keluarga_istri=VALUES(tunj_keluarga_istri),
-         tunj_keluarga_anak=VALUES(tunj_keluarga_anak), total_a=VALUES(total_a),
-         tunj_struktural=VALUES(tunj_struktural), tunj_pengabdian=VALUES(tunj_pengabdian),
-         tunj_fungsional=VALUES(tunj_fungsional), tunj_pembina=VALUES(tunj_pembina),
-         tunj_pondok=VALUES(tunj_pondok), tunj_transport=VALUES(tunj_transport),
-         tunj_tepat_waktu=VALUES(tunj_tepat_waktu), tunj_tidak_cepat_pulang=VALUES(tunj_tidak_cepat_pulang),
-         tunj_kjm=VALUES(tunj_kjm), tunj_prestasi_kinerja=VALUES(tunj_prestasi_kinerja),
-         tunj_apresiasi=VALUES(tunj_apresiasi), total_b=VALUES(total_b),
-         potong_taawun=VALUES(potong_taawun), potong_simt=VALUES(potong_simt),
-         potong_pinjaman=VALUES(potong_pinjaman), potong_cuti_luar_tanggungan=VALUES(potong_cuti_luar_tanggungan),
-         potong_persen_cuti=VALUES(potong_persen_cuti), total_c=VALUES(total_c),
-         total_pendapatan=VALUES(total_pendapatan), base_mode_used=VALUES(base_mode_used), is_manual_edit=VALUES(is_manual_edit), updated_at=NOW()`;
+         total_pendapatan, base_mode_used, is_manual_edit, override_note, created_by)
+      VALUES (?,?,?,?,?, ?,?,?,?,?,?,?,?,?, ?,?,?,?,?,?,?,?,?, ?,?,?,?, ?,?,?,?,?, ?,?,?,?,?,?,?, ?,?,?,?,?,?, ?,?,?)
+      ON DUPLICATE KEY UPDATE
+        nama=VALUES(nama), nik=VALUES(nik), jabatan=VALUES(jabatan), status_pegawai=VALUES(status_pegawai),
+        jenjang=VALUES(jenjang), pendidikan=VALUES(pendidikan), masa_kerja_tahun=VALUES(masa_kerja_tahun),
+        jumlah_anak=VALUES(jumlah_anak), predikat_kinerja=VALUES(predikat_kinerja),
+        hari_efektif=VALUES(hari_efektif), hadir=VALUES(hadir), tidak_hadir=VALUES(tidak_hadir),
+        tepat_waktu=VALUES(tepat_waktu), terlambat=VALUES(terlambat), tidak_absen_masuk=VALUES(tidak_absen_masuk),
+        cepat_pulang=VALUES(cepat_pulang), tidak_absen_pulang=VALUES(tidak_absen_pulang), kjm=VALUES(kjm),
+        kafalah_pokok=VALUES(kafalah_pokok), tunj_keluarga_istri=VALUES(tunj_keluarga_istri),
+        tunj_keluarga_anak=VALUES(tunj_keluarga_anak), total_a=VALUES(total_a),
+        tunj_struktural=VALUES(tunj_struktural), tunj_pengabdian=VALUES(tunj_pengabdian),
+        tunj_fungsional=VALUES(tunj_fungsional), tunj_pembina=VALUES(tunj_pembina),
+        tunj_pondok=VALUES(tunj_pondok), tunj_transport=VALUES(tunj_transport),
+        tunj_tepat_waktu=VALUES(tunj_tepat_waktu), tunj_tidak_cepat_pulang=VALUES(tunj_tidak_cepat_pulang),
+        tunj_kjm=VALUES(tunj_kjm), tunj_prestasi_kinerja=VALUES(tunj_prestasi_kinerja),
+        tunj_apresiasi=VALUES(tunj_apresiasi), total_b=VALUES(total_b),
+        potong_taawun=VALUES(potong_taawun), potong_simt=VALUES(potong_simt),
+        potong_pinjaman=VALUES(potong_pinjaman), potong_cuti_luar_tanggungan=VALUES(potong_cuti_luar_tanggungan),
+        potong_persen_cuti=VALUES(potong_persen_cuti), total_c=VALUES(total_c),
+        total_pendapatan=VALUES(total_pendapatan), base_mode_used=VALUES(base_mode_used), is_manual_edit=VALUES(is_manual_edit), override_note=VALUES(override_note), updated_at=NOW()`;
       const p = [
         r.teacher_id, tenant_id, periode_mulai, periode_selesai, label_periode || null,
         r.nama, r.nik || null, r.jabatan || null, r.status_pegawai || null, r.jenjang || null,
@@ -763,61 +915,31 @@ router.post('/kafalah/generate', authenticateBendahara, async (req, res) => {
         r.tunj_struktural, r.tunj_pengabdian, r.tunj_fungsional, r.tunj_pembina, r.tunj_pondok,
         r.tunj_transport, r.tunj_tepat_waktu, r.tunj_tidak_cepat_pulang, r.tunj_kjm, r.tunj_prestasi_kinerja, r.tunj_apresiasi, r.total_b,
         r.potong_taawun, r.potong_simt, r.potong_pinjaman, r.potong_cuti_luar_tanggungan, r.potong_persen_cuti, r.total_c,
-        r.total_pendapatan, baseMode, 0, req.user.id
+        r.total_pendapatan, source, 0, r.override_note || null, req.user.id
       ];
       await db.query(sql, p);
       saved++;
     }
-    res.json({ success: true, message: `${saved} slip KAFALAH tersimpan`, data: rows, base_mode: baseMode });
+    res.json({ success: true, message: `${saved} slip KAFALAH tersimpan`, data: rows, source });
   } catch (e) {
     console.error('generate error:', e);
     res.status(500).json({ success: false, message: e.message });
   }
 });
 
-// ============================================================
-// NEW ENDPOINTS: Base Mode, Regenerate, Save Manual
-// ============================================================
-
-// GET base mode preference
-router.get('/kafalah/base-mode', authenticateBendahara, async (req, res) => {
-  try {
-    const { baseMode, tenantId } = await getBaseMode(req);
-    res.json({ success: true, data: { base_mode: baseMode, tenant_id: tenantId } });
-  } catch (e) {
-    res.status(500).json({ success: false, message: e.message });
-  }
-});
-
-// PUT base mode preference
-router.put('/kafalah/base-mode', authenticateBendahara, async (req, res) => {
-  try {
-    const { base_mode, tenant_id } = req.body;
-    if (!base_mode || !['global', 'school'].includes(base_mode)) {
-      return res.status(400).json({ success: false, message: 'base_mode harus global atau school' });
-    }
-    const userId = req.user.id;
-    const tenantId = tenant_id || null;
-    await db.query(
-      `INSERT INTO kafalah_base_mode (user_id, tenant_id, base_mode)
-       VALUES (?, ?, ?)
-       ON DUPLICATE KEY UPDATE base_mode = VALUES(base_mode)`,
-      [userId, tenantId, base_mode]
-    );
-    res.json({ success: true, message: 'Base mode tersimpan', data: { base_mode, tenant_id } });
-  } catch (e) {
-    res.status(500).json({ success: false, message: e.message });
-  }
-});
-
-// POST regenerate (force recalculate & overwrite)
+// POST regenerate (force recalculate & overwrite) - uses auto-resolved use_global
 router.post('/kafalah/regenerate', authenticateBendahara, async (req, res) => {
   try {
-    const { teacher_ids, tenant_id, periode_mulai, periode_selesai, label_periode, base_mode } = req.body;
+    const { teacher_ids, tenant_id, periode_mulai, periode_selesai, label_periode } = req.body;
     if (!tenant_id || !periode_mulai || !periode_selesai || !teacher_ids || !Array.isArray(teacher_ids)) {
       return res.status(400).json({ success: false, message: 'tenant_id, periode_mulai, periode_selesai, teacher_ids[] wajib' });
     }
-    const baseMode = base_mode && ['global', 'school'].includes(base_mode) ? base_mode : 'school';
+    
+    if (!verifyTenantAccess(req, tenant_id)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
+    }
+    
+    const { settings, source } = await resolveKafalahSettings(tenant_id);
 
     // 1. Delete existing
     const placeholders = teacher_ids.map(() => '?').join(',');
@@ -827,7 +949,7 @@ router.post('/kafalah/regenerate', authenticateBendahara, async (req, res) => {
     );
 
     // 2. Recompute fresh
-    const rows = await computeKafalah(tenant_id, periode_mulai, periode_selesai, label_periode, baseMode);
+    const rows = await computeKafalah(tenant_id, periode_mulai, periode_selesai, label_periode, settings);
     const filtered = rows.filter(r => teacher_ids.includes(r.teacher_id));
 
     // 3. Insert fresh
@@ -841,27 +963,27 @@ router.post('/kafalah/regenerate', authenticateBendahara, async (req, res) => {
          tunj_struktural, tunj_pengabdian, tunj_fungsional, tunj_pembina, tunj_pondok,
          tunj_transport, tunj_tepat_waktu, tunj_tidak_cepat_pulang, tunj_kjm, tunj_prestasi_kinerja, tunj_apresiasi, total_b,
          potong_taawun, potong_simt, potong_pinjaman, potong_cuti_luar_tanggungan, potong_persen_cuti, total_c,
-         total_pendapatan, base_mode_used, is_manual_edit, created_by)
-       VALUES (?,?,?,?,?, ?,?,?,?,?,?,?,?,?, ?,?,?,?,?,?,?,?,?, ?,?,?,?, ?,?,?,?,?, ?,?,?,?,?,?,?, ?,?,?,?,?,?, ?,?)
-       ON DUPLICATE KEY UPDATE
-         nama=VALUES(nama), nik=VALUES(nik), jabatan=VALUES(jabatan), status_pegawai=VALUES(status_pegawai),
-         jenjang=VALUES(jenjang), pendidikan=VALUES(pendidikan), masa_kerja_tahun=VALUES(masa_kerja_tahun),
-         jumlah_anak=VALUES(jumlah_anak), predikat_kinerja=VALUES(predikat_kinerja),
-         hari_efektif=VALUES(hari_efektif), hadir=VALUES(hadir), tidak_hadir=VALUES(tidak_hadir),
-         tepat_waktu=VALUES(tepat_waktu), terlambat=VALUES(terlambat), tidak_absen_masuk=VALUES(tidak_absen_masuk),
-         cepat_pulang=VALUES(cepat_pulang), tidak_absen_pulang=VALUES(tidak_absen_pulang), kjm=VALUES(kjm),
-         kafalah_pokok=VALUES(kafalah_pokok), tunj_keluarga_istri=VALUES(tunj_keluarga_istri),
-         tunj_keluarga_anak=VALUES(tunj_keluarga_anak), total_a=VALUES(total_a),
-         tunj_struktural=VALUES(tunj_struktural), tunj_pengabdian=VALUES(tunj_pengabdian),
-         tunj_fungsional=VALUES(tunj_fungsional), tunj_pembina=VALUES(tunj_pembina),
-         tunj_pondok=VALUES(tunj_pondok), tunj_transport=VALUES(tunj_transport),
-         tunj_tepat_waktu=VALUES(tunj_tepat_waktu), tunj_tidak_cepat_pulang=VALUES(tunj_tidak_cepat_pulang),
-         tunj_kjm=VALUES(tunj_kjm), tunj_prestasi_kinerja=VALUES(tunj_prestasi_kinerja),
-         tunj_apresiasi=VALUES(tunj_apresiasi), total_b=VALUES(total_b),
-         potong_taawun=VALUES(potong_taawun), potong_simt=VALUES(potong_simt),
-         potong_pinjaman=VALUES(potong_pinjaman), potong_cuti_luar_tanggungan=VALUES(potong_cuti_luar_tanggungan),
-         potong_persen_cuti=VALUES(potong_persen_cuti), total_c=VALUES(total_c),
-         total_pendapatan=VALUES(total_pendapatan), base_mode_used=VALUES(base_mode_used), is_manual_edit=VALUES(is_manual_edit), updated_at=NOW()`;
+         total_pendapatan, base_mode_used, is_manual_edit, override_note, created_by)
+      VALUES (?,?,?,?,?, ?,?,?,?,?,?,?,?,?, ?,?,?,?,?,?,?,?,?, ?,?,?,?, ?,?,?,?,?, ?,?,?,?,?,?,?, ?,?,?,?,?,?, ?,?,?)
+      ON DUPLICATE KEY UPDATE
+        nama=VALUES(nama), nik=VALUES(nik), jabatan=VALUES(jabatan), status_pegawai=VALUES(status_pegawai),
+        jenjang=VALUES(jenjang), pendidikan=VALUES(pendidikan), masa_kerja_tahun=VALUES(masa_kerja_tahun),
+        jumlah_anak=VALUES(jumlah_anak), predikat_kinerja=VALUES(predikat_kinerja),
+        hari_efektif=VALUES(hari_efektif), hadir=VALUES(hadir), tidak_hadir=VALUES(tidak_hadir),
+        tepat_waktu=VALUES(tepat_waktu), terlambat=VALUES(terlambat), tidak_absen_masuk=VALUES(tidak_absen_masuk),
+        cepat_pulang=VALUES(cepat_pulang), tidak_absen_pulang=VALUES(tidak_absen_pulang), kjm=VALUES(kjm),
+        kafalah_pokok=VALUES(kafalah_pokok), tunj_keluarga_istri=VALUES(tunj_keluarga_istri),
+        tunj_keluarga_anak=VALUES(tunj_keluarga_anak), total_a=VALUES(total_a),
+        tunj_struktural=VALUES(tunj_struktural), tunj_pengabdian=VALUES(tunj_pengabdian),
+        tunj_fungsional=VALUES(tunj_fungsional), tunj_pembina=VALUES(tunj_pembina),
+        tunj_pondok=VALUES(tunj_pondok), tunj_transport=VALUES(tunj_transport),
+        tunj_tepat_waktu=VALUES(tunj_tepat_waktu), tunj_tidak_cepat_pulang=VALUES(tunj_tidak_cepat_pulang),
+        tunj_kjm=VALUES(tunj_kjm), tunj_prestasi_kinerja=VALUES(tunj_prestasi_kinerja),
+        tunj_apresiasi=VALUES(tunj_apresiasi), total_b=VALUES(total_b),
+        potong_taawun=VALUES(potong_taawun), potong_simt=VALUES(potong_simt),
+        potong_pinjaman=VALUES(potong_pinjaman), potong_cuti_luar_tanggungan=VALUES(potong_cuti_luar_tanggungan),
+        potong_persen_cuti=VALUES(potong_persen_cuti), total_c=VALUES(total_c),
+        total_pendapatan=VALUES(total_pendapatan), base_mode_used=VALUES(base_mode_used), is_manual_edit=VALUES(is_manual_edit), override_note=VALUES(override_note), updated_at=NOW()`;
       const p = [
         r.teacher_id, tenant_id, periode_mulai, periode_selesai, label_periode || null,
         r.nama, r.nik || null, r.jabatan || null, r.status_pegawai || null, r.jenjang || null,
@@ -872,12 +994,12 @@ router.post('/kafalah/regenerate', authenticateBendahara, async (req, res) => {
         r.tunj_struktural, r.tunj_pengabdian, r.tunj_fungsional, r.tunj_pembina, r.tunj_pondok,
         r.tunj_transport, r.tunj_tepat_waktu, r.tunj_tidak_cepat_pulang, r.tunj_kjm, r.tunj_prestasi_kinerja, r.tunj_apresiasi, r.total_b,
         r.potong_taawun, r.potong_simt, r.potong_pinjaman, r.potong_cuti_luar_tanggungan, r.potong_persen_cuti, r.total_c,
-        r.total_pendapatan, baseMode, 0, req.user.id
+        r.total_pendapatan, source, 0, r.override_note || null, req.user.id
       ];
       await db.query(sql, p);
       saved++;
     }
-    res.json({ success: true, message: `${saved} slip diregenerasi`, data: filtered, base_mode: baseMode });
+    res.json({ success: true, message: `${saved} slip diregenerasi`, data: filtered, source });
   } catch (e) {
     console.error('regenerate error:', e);
     res.status(500).json({ success: false, message: e.message });
@@ -997,26 +1119,28 @@ router.put('/kafalah/payroll/:id', authenticateBendahara, async (req, res) => {
   }
 });
 
-// POST send slip gaji via WhatsApp
+// POST send slip gaji via WhatsApp - uses auto-resolved use_global
 router.post('/kafalah/send-slip-whatsapp', authenticateBendahara, async (req, res) => {
   try {
-    const { teacher_ids, tenant_id, periode_mulai, periode_selesai, mode } = req.body;
+    const { teacher_ids, tenant_id, periode_mulai, periode_selesai } = req.body;
     if (!tenant_id || !periode_mulai || !periode_selesai) {
       return res.status(400).json({ success: false, message: 'tenant_id, periode_mulai, periode_selesai wajib' });
     }
     if (!teacher_ids || !Array.isArray(teacher_ids) || teacher_ids.length === 0) {
       return res.status(400).json({ success: false, message: 'teacher_ids wajib diisi' });
     }
-    if (!mode || !['pusat', 'sekolah'].includes(mode)) {
-      return res.status(400).json({ success: false, message: 'mode harus "pusat" atau "sekolah"' });
+    
+    if (!verifyTenantAccess(req, tenant_id)) {
+      return res.status(403).json({ success: false, message: 'Akses ditolak' });
     }
+
+    const { settings, source } = await resolveKafalahSettings(tenant_id);
 
     // Get tenant info
     const tenants = await db.query('SELECT nama_sekolah FROM tenants WHERE tenant_id=?', [tenant_id]);
     const namaSekolah = tenants.length ? tenants[0].nama_sekolah : '';
 
-    // Get settings
-    const settings = await getKafalahSettings(tenant_id);
+    // Get overrides
     const overrides = await getOverrides(tenant_id);
     const jabatanRows = await db.query('SELECT jabatan_key, nominal FROM kafalah_jabatan_tunjangan');
     const jabatanMap = {};
@@ -1030,8 +1154,8 @@ router.post('/kafalah/send-slip-whatsapp', authenticateBendahara, async (req, re
                WHERE ta.teacher_id = t.id AND ta.tenant_id = ? AND ta.is_paid = 1
                ORDER BY FIELD(LOWER(REPLACE(ta.jabatan_di_unit,' ','')), 'kepalasekolah','kepsek','bendahara','walikelas','guru') ASC
                LIMIT 1) AS jabatan
-       FROM teachers t
-       WHERE t.id IN (${placeholders}) AND t.status_aktif = 1`, [tenant_id, ...teacher_ids]
+         FROM teachers t
+         WHERE t.id IN (${placeholders}) AND t.status_aktif = 1`, [tenant_id, ...teacher_ids]
     );
 
     // Get attendance for these teachers
@@ -1052,13 +1176,9 @@ router.post('/kafalah/send-slip-whatsapp', authenticateBendahara, async (req, re
       const mk = masaKerjaTahun(t.tmt);
       const pendidikan = pendidikanFromText(t.nama, t.pendidikan_terakhir, t.pendidikan_kode);
       const status = statusFromText(t.status_kepegawaian);
-      const gajiPokok = await lookupGajiPokok(status, jenjang, pendidikan, mk);
+      const gajiPokok = await lookupGajiPokokNew(status, jenjang, pendidikan, mk, await getGajiPokokConfig(null));
 
       // Calculate per-day attendance-based allowances
-      // Rule: Transportasi = semua hadir (tepat_waktu + terlambat), ignore pulang
-      // Rule: Tepat Waktu = tepat_waktu count
-      // Rule: Tidak Cepat Pulang = hadir - cepat_pulang
-      // Rule: Uang Makan = hadir (tepat_waktu + terlambat)
       let transportDays = 0;
       let uangMakanDays = 0;
       let tepatWaktuDays = 0;
@@ -1070,10 +1190,10 @@ router.post('/kafalah/send-slip-whatsapp', authenticateBendahara, async (req, re
           const isTepatWaktu = d.status_masuk === 'tepat_waktu';
           const isCepatPulang = d.status_pulang === 'pulang_cepat';
           
-          if (isHadir) transportDays++;          // Semua hadir (tepat + terlambat), ignore pulang
-          if (isHadir) uangMakanDays++;          // Semua hadir
-          if (isTepatWaktu) tepatWaktuDays++;    // Hanya tepat waktu
-          if (isHadir && !isCepatPulang) tidakCepatPulangDays++; // Hadir - cepat pulang
+          if (isHadir) transportDays++;
+          if (isHadir) uangMakanDays++;
+          if (isTepatWaktu) tepatWaktuDays++;
+          if (isHadir && !isCepatPulang) tidakCepatPulangDays++;
         }
       }
 
@@ -1092,53 +1212,35 @@ router.post('/kafalah/send-slip-whatsapp', authenticateBendahara, async (req, re
         }
       } catch (e) { /* ignore */ }
 
-      // Mode-specific calculations
-      // 'pusat' = Global base + Individual override
-      // 'sekolah' = Tenant base + Individual override
-      // Individual override is ALWAYS applied on top (if is_active=1)
-      let baseSettings = settings;
-      if (mode === 'pusat') {
-        // Force global settings - query global if needed
-        baseSettings = await getKafalahSettings(null);
-      } else if (mode === 'sekolah') {
-        // Use tenant settings (already loaded as 'settings')
-        baseSettings = settings;
-      }
-
       const isMenikah = (t.status_perkawinan === 'Menikah');
-      const tunjKeluargaIstri = (isMenikah && status === 'PT' && !pasanganBekerjaDiYpwi) ? getOverrideValue(ov, baseSettings.tunj_istri, 'tunj_istri') : 0;
-      const tunjKeluargaAnak = (isMenikah && !pasanganBekerjaDiYpwi) ? (getOverrideValue(ov, baseSettings.tunj_anak, 'tunj_anak') * jml_anak) : 0;
+      const tunjKeluargaIstri = (isMenikah && status === 'PT' && !pasanganBekerjaDiYpwi) ? getOverrideValue(ov, settings.tunj_istri, 'tunj_istri') : 0;
+      const tunjKeluargaAnak = (isMenikah && !pasanganBekerjaDiYpwi) ? (getOverrideValue(ov, settings.tunj_anak, 'tunj_anak') * jml_anak) : 0;
       const totalA = gajiPokok + tunjKeluargaIstri + tunjKeluargaAnak;
 
-      const tunjPengabdian = getOverrideValue(ov, baseSettings.tunj_pengabdian, 'tunj_pengabdian');
-      const tunjFungsional = getOverrideValue(ov, baseSettings.tunj_fungsional, 'tunj_fungsional');
-      const tunjPrestasiKinerja = getOverrideValue(ov, baseSettings.tunj_prestasi_kinerja, 'tunj_prestasi_kinerja');
-      const tunjJamMengajar = getOverrideValue(ov, baseSettings.tunj_jam_mengajar, 'tunj_jam_mengajar');
-      const tunjUangMakanRate = getOverrideValue(ov, baseSettings.tunj_uang_makan, 'tunj_uang_makan');
-      const tunjTransportRate = getOverrideValue(ov, baseSettings.tunj_transport, 'tunj_transport');
-      const tunjTepatWaktuRate = getOverrideValue(ov, baseSettings.tunj_tepat_waktu, 'tunj_tepat_waktu');
-      const tunjTidakCepatPulangRate = getOverrideValue(ov, baseSettings.tunj_tidak_cepat_pulang, 'tunj_tidak_cepat_pulang');
-      const tunjPembina = getOverrideValue(ov, baseSettings.tunj_pembina, 'tunj_pembina');
-      const tunjPondok = getOverrideValue(ov, baseSettings.tunj_pondok, 'tunj_pondok');
+      const tunjPengabdian = getOverrideValue(ov, settings.tunj_pengabdian, 'tunj_pengabdian');
+      const tunjFungsional = getOverrideValue(ov, settings.tunj_fungsional, 'tunj_fungsional');
+      const tunjPrestasiKinerja = getOverrideValue(ov, settings.tunj_prestasi_kinerja, 'tunj_prestasi_kinerja');
+      const tunjJamMengajar = getOverrideValue(ov, settings.tunj_jam_mengajar, 'tunj_jam_mengajar');
+      
+      const tunjTransport = getOverrideValue(ov, settings.tunj_transport, 'tunj_transport') * transportDays;
+      const tunjUangMakan = getOverrideValue(ov, settings.tunj_uang_makan, 'tunj_uang_makan') * uangMakanDays;
+      const tunjTepatWaktu = getOverrideValue(ov, settings.tunj_tepat_waktu, 'tunj_tepat_waktu') * tepatWaktuDays;
+      const tunjTidakCepatPulang = getOverrideValue(ov, settings.tunj_tidak_cepat_pulang, 'tunj_tidak_cepat_pulang') * tidakCepatPulangDays;
+      
+      const tunjKjm = (getOverrideValue(ov, settings.nominal_kjm, 'nominal_kjm')) * (num(a.kjm) || 0);
+      const tunjPembina = getOverrideValue(ov, settings.tunj_pembina, 'tunj_pembina');
+      const tunjPondok = getOverrideValue(ov, settings.tunj_pondok, 'tunj_pondok');
       const tunjStruktural = getOverrideValue(ov, await lookupStrukturalByJabatan(t.jabatan, jabatanMap), 'tunj_struktural');
       const tunjApresiasi = getOverrideValue(ov, 0, 'tunj_apresiasi');
-      const nominalKjm = getOverrideValue(ov, baseSettings.nominal_kjm, 'nominal_kjm');
-
-      // Calculate components
-      const tunjTransport = tunjTransportRate * transportDays;
-      const tunjUangMakan = tunjUangMakanRate * uangMakanDays;
-      const tunjTepatWaktu = tunjTepatWaktuRate * tepatWaktuDays;
-      const tunjTidakCepatPulang = tunjTidakCepatPulangRate * tidakCepatPulangDays;
-      const tunjKjm = nominalKjm * (num(a.kjm) || 0);
 
       const totalB = tunjStruktural + tunjPengabdian + tunjFungsional + tunjPembina + tunjPondok
         + tunjTransport + tunjTepatWaktu + tunjTidakCepatPulang + tunjKjm + tunjPrestasiKinerja + tunjApresiasi
         + tunjUangMakan + tunjJamMengajar;
 
-      const potLuarTanggungan = getOverrideValue(ov, baseSettings.pot_luar_tanggungan, 'pot_luar_tanggungan');
-      const potDurasiSimt = getOverrideValue(ov, baseSettings.pot_durasi_simt, 'pot_durasi_simt');
-      const potTaawun = getOverrideValue(ov, baseSettings.pot_taawun, 'pot_taawun');
-      const potPiutang = getOverrideValue(ov, baseSettings.pot_piutang, 'pot_piutang');
+      const potLuarTanggungan = getOverrideValue(ov, settings.pot_luar_tanggungan, 'pot_luar_tanggungan');
+      const potDurasiSimt = getOverrideValue(ov, settings.pot_durasi_simt, 'pot_durasi_simt');
+      const potTaawun = getOverrideValue(ov, settings.pot_taawun, 'pot_taawun');
+      const potPiutang = getOverrideValue(ov, settings.pot_piutang, 'pot_piutang');
       const totalC = potLuarTanggungan + potDurasiSimt + potTaawun + potPiutang;
       const totalPendapatan = totalA + totalB - totalC;
 
@@ -1176,7 +1278,7 @@ router.post('/kafalah/send-slip-whatsapp', authenticateBendahara, async (req, re
         tunjPrestasiKinerja,
         tunjApresiasi,
         tunjJamMengajar,
-        nominalKjm,
+        nominalKjm: getOverrideValue(ov, settings.nominal_kjm, 'nominal_kjm'),
         transportDays,
         uangMakanDays,
         tepatWaktuDays,
@@ -1366,18 +1468,17 @@ function defaultGajiUntukPendidikan(status, jenjang, kode) {
   return Math.round(base * (mult[kode] || 1));
 }
 
-async function computeKafalah(tenantId, startDate, endDate, labelPeriode, baseMode = 'school') {
+async function computeKafalah(tenantId, startDate, endDate, labelPeriode, settings) {
   // Auto-sync matrix dengan pendidikan dari data guru
   await autoSyncPendidikan();
 
-  const settings = await resolveSettings(tenantId, baseMode);
   const overrides = await getOverrides(tenantId);
-  const gajiConfig = await resolveGajiPokokConfig(tenantId, baseMode);
+  const gajiConfig = await getGajiPokokConfig(null); // Use global config for gaji pokok
   const att = await getAttendanceSummary(tenantId, startDate, endDate);
   const attMap = {};
   att.forEach(a => { attMap[a.teacher_id] = a; });
 
-  // Map jabatan → tunjangan struktural default
+  // Map jabatan -> tunjangan struktural default
   const jabatanRows = await db.query('SELECT jabatan_key, nominal FROM kafalah_jabatan_tunjangan');
   const jabatanMap = {};
   jabatanRows.forEach(j => { jabatanMap[j.jabatan_key.toLowerCase()] = num(j.nominal); });
@@ -1498,6 +1599,20 @@ async function computeKafalah(tenantId, startDate, endDate, labelPeriode, baseMo
     const totalC = potLuarTanggungan + potDurasiSimt + potTaawun + potPiutang;
     const totalPendapatan = totalA + totalB - totalC;
 
+    // Build override audit note
+    let overrideComponents = [];
+    if (ov.is_active) {
+      OVERRIDE_FIELDS.forEach(f => {
+        if (ov[f] !== null && ov[f] !== undefined) {
+          overrideComponents.push(f);
+        }
+      });
+    }
+    const override_note = overrideComponents.length > 0 
+      ? `Override components: ${overrideComponents.join(', ')}` 
+      : null;
+    const is_custom_scheme = overrideComponents.length > 0 ? 1 : 0;
+
     rows.push({
       teacher_id: t.id,
       nama: t.nama,
@@ -1540,7 +1655,9 @@ async function computeKafalah(tenantId, startDate, endDate, labelPeriode, baseMo
       potong_cuti_luar_tanggungan: potLuarTanggungan,
       potong_persen_cuti: 0,
       total_c: totalC,
-      total_pendapatan: totalPendapatan
+      total_pendapatan: totalPendapatan,
+      override_note,
+      is_custom_scheme
     });
   }
   return rows;
