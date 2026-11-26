@@ -6093,7 +6093,7 @@ ${catatan ? `• Catatan: ${catatan}\n\n` : ''}Pesan ini dikirim otomatis oleh s
       fs.appendFileSync('/tmp/debug.log', '[TEACHER/INFO] guruId: ' + guruId + '\n');
       console.log('[TEACHER/INFO] guruId:', guruId);
       const [teacher] = await db.query(
-        'SELECT t.id, t.nama, t.nik, t.nip, t.email, t.no_wa, t.scan_id, t.tempat_lahir, t.tanggal_lahir, t.jenis_kelamin, t.alamat, t.status_kepegawaian, t.status_aktif, t.tmt, t.pendidikan_terakhir, t.bank, t.nomor_rekening, t.link_foto, t.link_ktp, t.link_kk, t.link_ijazah FROM teachers t WHERE t.id = ?',
+        'SELECT t.id, t.nama, t.nik, t.nip, t.email, t.no_wa, t.scan_id, t.tempat_lahir, NULLIF(t.tanggal_lahir, \'0000-00-00\') as tanggal_lahir, t.jenis_kelamin, t.alamat, t.status_kepegawaian, t.status_aktif, NULLIF(t.tmt, \'0000-00-00\') as tmt, t.pendidikan_terakhir, t.bank, t.nomor_rekening, t.link_foto, t.link_ktp, t.link_kk, t.link_ijazah FROM teachers t WHERE t.id = ?',
         [guruId]
       );
       fs.appendFileSync('/tmp/debug.log', '[TEACHER/INFO] teacher: ' + JSON.stringify(teacher) + '\n');

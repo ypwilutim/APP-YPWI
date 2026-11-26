@@ -14,7 +14,17 @@ const dbConfig = {
   timezone: 'Z',
   dateStrings: true,
   connectTimeout: 30000,
-  charset: 'utf8mb4'
+  charset: 'utf8mb4',
+  typeCast: function (field, next) {
+    if (field.type === 'DATE' || field.type === 'DATETIME' || field.type === 'TIMESTAMP' || field.type === 'TIME') {
+      const val = field.string();
+      if (val === '0000-00-00' || val === '0000-00-00 00:00:00' || val === '00:00:00') {
+        return null;
+      }
+      return val;
+    }
+    return next();
+  }
 };
 
 let pool;
