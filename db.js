@@ -15,6 +15,7 @@ const dbConfig = {
   dateStrings: true,
   connectTimeout: 30000,
   charset: 'utf8mb4',
+  multipleStatements: true,
   typeCast: function (field, next) {
     if (field.type === 'DATE' || field.type === 'DATETIME' || field.type === 'TIMESTAMP' || field.type === 'TIME') {
       const val = field.string();
