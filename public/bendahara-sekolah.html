@@ -2228,6 +2228,7 @@
 
     // ==================== LUNASKAN MASSAL ====================
     let lmStudents = [];
+    let lunasiMassalSelected = new Set(); // Track selected student IDs
 
     function showLunasiMassalModal() {
       const now = new Date();
@@ -2239,6 +2240,7 @@
       document.querySelector('input[name="lunasiMassalTarget"][value="all"]').checked = true;
       toggleLunasiMassalTarget();
       document.getElementById('lunasiMassalPreview').classList.add('hidden');
+      lunasiMassalSelected.clear(); // Reset selection
       document.getElementById('lunasiMassalStudentList').innerHTML = '<p class="text-sm text-gray-500 text-center py-2">Memuat siswa...</p>';
       loadLunasiMassalStudents();
       document.getElementById('lunasiMassalModal').classList.remove('hidden');
@@ -2246,6 +2248,7 @@
 
     function closeLunasiMassalModal() {
       document.getElementById('lunasiMassalModal').classList.add('hidden');
+      lunasiMassalSelected.clear(); // Reset selection on close
     }
 
     function toggleLunasiMassalTarget() {
@@ -2277,9 +2280,10 @@
       if (lmStudents.length === 0) { listEl.innerHTML = '<p class="text-sm text-gray-500 text-center py-2">Tidak ada siswa</p>'; return; }
       listEl.innerHTML = lmStudents.map(s => `
         <label class="flex items-center gap-2 p-1 hover:bg-white rounded cursor-pointer">
-          <input type="checkbox" class="lunasi-massal-student-check" value="${s.id}" onchange="document.getElementById('lunasiMassalSelectedCount').textContent = document.querySelectorAll('.lunasi-massal-student-check:checked').length">
+          <input type="checkbox" class="lunasi-massal-student-check" value="${s.id}" ${lunasiMassalSelected.has(s.id) ? 'checked' : ''} onchange="toggleLunasiMassalSelect(this)">
           <span class="text-sm">${s.nama_siswa || '-'} <span class="text-gray-400 text-xs">${s.nisn || ''}</span></span>
         </label>`).join('');
+      updateLunasiMassalSelectedCount();
     }
 
     function filterLunasiMassalStudents() {
@@ -2289,9 +2293,24 @@
       if (filtered.length === 0) { listEl.innerHTML = '<p class="text-sm text-gray-500 text-center py-2">Tidak ada hasil</p>'; return; }
       listEl.innerHTML = filtered.map(s => `
         <label class="flex items-center gap-2 p-1 hover:bg-white rounded cursor-pointer">
-          <input type="checkbox" class="lunasi-massal-student-check" value="${s.id}" onchange="document.getElementById('lunasiMassalSelectedCount').textContent = document.querySelectorAll('.lunasi-massal-student-check:checked').length">
+          <input type="checkbox" class="lunasi-massal-student-check" value="${s.id}" ${lunasiMassalSelected.has(s.id) ? 'checked' : ''} onchange="toggleLunasiMassalSelect(this)">
           <span class="text-sm">${s.nama_siswa || '-'} <span class="text-gray-400 text-xs">${s.nisn || ''}</span></span>
         </label>`).join('');
+      updateLunasiMassalSelectedCount();
+    }
+
+    function toggleLunasiMassalSelect(checkbox) {
+      const id = parseInt(checkbox.value);
+      if (checkbox.checked) {
+        lunasiMassalSelected.add(id);
+      } else {
+        lunasiMassalSelected.delete(id);
+      }
+      updateLunasiMassalSelectedCount();
+    }
+
+    function updateLunasiMassalSelectedCount() {
+      document.getElementById('lunasiMassalSelectedCount').textContent = lunasiMassalSelected.size;
     }
 
     async function previewLunasiMassal() {
@@ -2302,7 +2321,7 @@
       if (bulanFrom > bulanTo) { showToast('bulan_from harus <= bulan_to', 'error'); return; }
       let studentIds = [];
       if (target === 'specific') {
-        studentIds = Array.from(document.querySelectorAll('.lunasi-massal-student-check:checked')).map(cb => parseInt(cb.value));
+        studentIds = Array.from(lunasiMassalSelected);
         if (studentIds.length === 0) { showToast('Pilih siswa terlebih dahulu', 'error'); return; }
       }
       try {
@@ -2340,7 +2359,7 @@
 
       let studentIds = [];
       if (target === 'specific') {
-        studentIds = Array.from(document.querySelectorAll('.lunasi-massal-student-check:checked')).map(cb => parseInt(cb.value));
+        studentIds = Array.from(lunasiMassalSelected);
         if (studentIds.length === 0) { showToast('Pilih siswa terlebih dahulu', 'error'); return; }
       }
       const [yFrom, mFrom] = bulanFrom.split('-').map(Number);
