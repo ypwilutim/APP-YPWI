@@ -2195,6 +2195,7 @@
       if (!tanggal) { showToast('Pilih tanggal', 'error'); return; }
       if (!pmCurrentStudent?.student_id) { showToast('Student ID tidak ada', 'error'); return; }
       if (!confirm(`Konfirmasi pembayaran ${fmtRp(nominal)}?`)) return;
+      const studentId = pmCurrentStudent.student_id;
       closePembayaranManualModal();
       showProgress('Memproses pembayaran manual...');
       updateProgress(0, 1, `Mengirim pembayaran ${fmtRp(nominal)}...`);
@@ -2203,7 +2204,7 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
           body: JSON.stringify({
-            student_id: pmCurrentStudent.student_id, bulan, nominal,
+            student_id: studentId, bulan, nominal,
             metode_pembayaran: metode, tanggal_bayar: tanggal,
             dibayar_oleh: dibayarOleh || null, catatan: catatan || null
           })

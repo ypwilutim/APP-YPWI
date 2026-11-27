@@ -3671,7 +3671,7 @@ const [saldoRow] = await db.query('SELECT saldo FROM saldo_siswa WHERE student_i
 
     // Fetch payment history from incoming_payments (BSI imports + manual)
     const paymentHistory = await db.query(
-      `SELECT transaction_id, beneficiary_account as beneficiary_va, total_amount, channel, status, remarks, 
+      `SELECT id, transaction_id, total_amount, channel, status, remarks, 
               source_account, '' as sender_name, '' as va_name, created_at, periode
        FROM incoming_payments 
        WHERE matched_student_id = ? 
