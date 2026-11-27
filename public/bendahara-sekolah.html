@@ -513,7 +513,19 @@
           </div>
 
           <div class="mb-3 hidden" id="lunasiMassalStudentListWrap">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Cari & Pilih Siswa</label>
+            <div class="flex items-center justify-between mb-1">
+              <label class="block text-sm font-medium text-gray-700">Cari & Pilih Siswa</label>
+              <div class="flex items-center gap-3">
+                <label class="flex items-center gap-1 text-sm text-gray-600 cursor-pointer">
+                  <input type="checkbox" id="lunasiMassalSelectAll" onchange="toggleLunasiMassalSelectAll(this)">
+                  <span>Pilih semua</span>
+                </label>
+                <label class="flex items-center gap-1 text-sm text-gray-600 cursor-pointer">
+                  <input type="checkbox" id="lunasiMassalFilterTunggakan" onchange="loadLunasiMassalStudents()" checked>
+                  <span>Hanya yang tunggakan</span>
+                </label>
+              </div>
+            </div>
             <input type="text" id="lunasiMassalStudentSearch" placeholder="Cari nama/NISN..." onkeyup="filterLunasiMassalStudents()" class="w-full px-3 py-2 border border-gray-300 rounded-lg mb-2 focus:ring-2 focus:ring-emerald-500">
             <div id="lunasiMassalStudentList" class="border rounded-lg max-h-48 overflow-y-auto p-2 space-y-1 bg-gray-50">
               <p class="text-sm text-gray-500 text-center py-2">Memuat siswa...</p>
@@ -2241,6 +2253,7 @@
       toggleLunasiMassalTarget();
       document.getElementById('lunasiMassalPreview').classList.add('hidden');
       lunasiMassalSelected.clear(); // Reset selection
+      document.getElementById('lunasiMassalFilterTunggakan').checked = true; // Default: filter tunggakan
       document.getElementById('lunasiMassalStudentList').innerHTML = '<p class="text-sm text-gray-500 text-center py-2">Memuat siswa...</p>';
       loadLunasiMassalStudents();
       document.getElementById('lunasiMassalModal').classList.remove('hidden');
@@ -2261,7 +2274,8 @@
 
     async function loadLunasiMassalStudents() {
       try {
-        const res = await fetch('/api/treasurer/public/students-by-tenant?tenant_id=' + (currentTenantId || ''), { headers: getAuthHeader() });
+        const filterTunggakan = document.getElementById('lunasiMassalFilterTunggakan')?.checked ? '1' : '0';
+        const res = await fetch('/api/treasurer/public/students-by-tenant?tenant_id=' + (currentTenantId || '') + '&with_tunggakan=' + filterTunggakan, { headers: getAuthHeader() });
         const data = await res.json();
         if (data.success && data.data && data.data.length > 0) {
           lmStudents = data.data;
@@ -2278,11 +2292,16 @@
       const listEl = document.getElementById('lunasiMassalStudentList');
       if (!listEl) return;
       if (lmStudents.length === 0) { listEl.innerHTML = '<p class="text-sm text-gray-500 text-center py-2">Tidak ada siswa</p>'; return; }
-      listEl.innerHTML = lmStudents.map(s => `
-        <label class="flex items-center gap-2 p-1 hover:bg-white rounded cursor-pointer">
-          <input type="checkbox" class="lunasi-massal-student-check" value="${s.id}" ${lunasiMassalSelected.has(s.id) ? 'checked' : ''} onchange="toggleLunasiMassalSelect(this)">
-          <span class="text-sm">${s.nama_siswa || '-'} <span class="text-gray-400 text-xs">${s.nisn || ''}</span></span>
-        </label>`).join('');
+      listEl.innerHTML = lmStudents.map(s => {
+        const saldo = parseFloat(s.saldo) || 0;
+        const hasTunggakan = saldo < 0;
+        const isDisabled = !hasTunggakan;
+        return `
+          <label class="flex items-center gap-2 p-1 hover:bg-white rounded cursor-pointer ${isDisabled ? 'opacity-40' : ''}">
+            <input type="checkbox" class="lunasi-massal-student-check" value="${s.id}" ${lunasiMassalSelected.has(s.id) ? 'checked' : ''} ${isDisabled ? 'disabled' : ''} onchange="toggleLunasiMassalSelect(this)">
+            <span class="text-sm ${isDisabled ? 'text-gray-400' : ''}">${s.nama_siswa || '-'} <span class="text-gray-400 text-xs">${s.nisn || ''}${isDisabled ? ' (Lunas)' : ' - Tunggakan: Rp ' + Math.abs(saldo).toLocaleString('id-ID')}</span></span>
+          </label>`;
+      }).join('');
       updateLunasiMassalSelectedCount();
     }
 
@@ -2291,11 +2310,16 @@
       const filtered = lmStudents.filter(s => (s.nama_siswa || '').toLowerCase().includes(search) || (s.nisn || '').toLowerCase().includes(search));
       const listEl = document.getElementById('lunasiMassalStudentList');
       if (filtered.length === 0) { listEl.innerHTML = '<p class="text-sm text-gray-500 text-center py-2">Tidak ada hasil</p>'; return; }
-      listEl.innerHTML = filtered.map(s => `
-        <label class="flex items-center gap-2 p-1 hover:bg-white rounded cursor-pointer">
-          <input type="checkbox" class="lunasi-massal-student-check" value="${s.id}" ${lunasiMassalSelected.has(s.id) ? 'checked' : ''} onchange="toggleLunasiMassalSelect(this)">
-          <span class="text-sm">${s.nama_siswa || '-'} <span class="text-gray-400 text-xs">${s.nisn || ''}</span></span>
-        </label>`).join('');
+      listEl.innerHTML = filtered.map(s => {
+        const saldo = parseFloat(s.saldo) || 0;
+        const hasTunggakan = saldo < 0;
+        const isDisabled = !hasTunggakan;
+        return `
+          <label class="flex items-center gap-2 p-1 hover:bg-white rounded cursor-pointer ${isDisabled ? 'opacity-40' : ''}">
+            <input type="checkbox" class="lunasi-massal-student-check" value="${s.id}" ${lunasiMassalSelected.has(s.id) ? 'checked' : ''} ${isDisabled ? 'disabled' : ''} onchange="toggleLunasiMassalSelect(this)">
+            <span class="text-sm ${isDisabled ? 'text-gray-400' : ''}">${s.nama_siswa || '-'} <span class="text-gray-400 text-xs">${s.nisn || ''}${isDisabled ? ' (Lunas)' : ' - Tunggakan: Rp ' + Math.abs(saldo).toLocaleString('id-ID')}</span></span>
+          </label>`;
+      }).join('');
       updateLunasiMassalSelectedCount();
     }
 
@@ -2311,6 +2335,45 @@
 
     function updateLunasiMassalSelectedCount() {
       document.getElementById('lunasiMassalSelectedCount').textContent = lunasiMassalSelected.size;
+      updateLunasiMassalSelectAllCheckbox();
+    }
+
+    function updateLunasiMassalSelectAllCheckbox() {
+      const selectAll = document.getElementById('lunasiMassalSelectAll');
+      const search = (document.getElementById('lunasiMassalStudentSearch')?.value || '').toLowerCase();
+      const visibleStudents = search 
+        ? lmStudents.filter(s => (s.nama_siswa || '').toLowerCase().includes(search) || (s.nisn || '').toLowerCase().includes(search))
+        : lmStudents;
+      if (visibleStudents.length === 0) {
+        selectAll.checked = false;
+        selectAll.indeterminate = false;
+        return;
+      }
+      const selectedVisible = visibleStudents.filter(s => lunasiMassalSelected.has(s.id)).length;
+      selectAll.checked = selectedVisible === visibleStudents.length;
+      selectAll.indeterminate = selectedVisible > 0 && selectedVisible < visibleStudents.length;
+    }
+
+    function toggleLunasiMassalSelectAll(selectAllCheckbox) {
+      const search = (document.getElementById('lunasiMassalStudentSearch')?.value || '').toLowerCase();
+      const visibleStudents = search 
+        ? lmStudents.filter(s => (s.nama_siswa || '').toLowerCase().includes(search) || (s.nisn || '').toLowerCase().includes(search))
+        : lmStudents;
+      
+      if (selectAllCheckbox.checked) {
+        // Select all visible students
+        visibleStudents.forEach(s => lunasiMassalSelected.add(s.id));
+      } else {
+        // Deselect all visible students
+        visibleStudents.forEach(s => lunasiMassalSelected.delete(s.id));
+      }
+      // Re-render to update checkboxes
+      if (search) {
+        filterLunasiMassalStudents();
+      } else {
+        renderLunasiMassalStudents();
+      }
+    }
     }
 
     async function previewLunasiMassal() {

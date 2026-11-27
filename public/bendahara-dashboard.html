@@ -2429,6 +2429,239 @@
       }
     }
 
+    // ==================== LUNASKAN MASSAL ====================
+    let lmStudents = [];
+    let lunasiMassalSelected = new Set(); // Track selected student IDs
+
+    function showLunasiMassalModal() {
+      const now = new Date();
+      const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      document.getElementById('lunasiMassalFrom').value = currentMonth;
+      document.getElementById('lunasiMassalTo').value = currentMonth;
+      document.getElementById('lunasiMassalTanggal').value = now.toISOString().slice(0, 10);
+      document.getElementById('lunasiMassalMetode').value = 'tunai';
+      document.querySelector('input[name="lunasiMassalTarget"][value="all"]').checked = true;
+      toggleLunasiMassalTarget();
+      document.getElementById('lunasiMassalPreview').classList.add('hidden');
+      lunasiMassalSelected.clear(); // Reset selection
+      document.getElementById('lunasiMassalFilterTunggakan').checked = true; // Default: filter tunggakan
+      document.getElementById('lunasiMassalStudentList').innerHTML = '<p class="text-sm text-gray-500 text-center py-2">Memuat siswa...</p>';
+      loadLunasiMassalStudents();
+      document.getElementById('lunasiMassalModal').classList.remove('hidden');
+    }
+
+    function closeLunasiMassalModal() {
+      document.getElementById('lunasiMassalModal').classList.add('hidden');
+      lunasiMassalSelected.clear(); // Reset selection on close
+    }
+
+    function toggleLunasiMassalTarget() {
+      const target = document.querySelector('input[name="lunasiMassalTarget"]:checked')?.value;
+      const wrap = document.getElementById('lunasiMassalStudentListWrap');
+      if (target === 'specific') wrap.classList.remove('hidden');
+      else wrap.classList.add('hidden');
+      document.getElementById('lunasiMassalPreview').classList.add('hidden');
+    }
+
+    async function loadLunasiMassalStudents() {
+      try {
+        const filterTunggakan = document.getElementById('lunasiMassalFilterTunggakan')?.checked ? '1' : '0';
+        const tenantId = document.getElementById('paymentsTenantFilter')?.value || '';
+        const res = await fetch('/api/treasurer/public/students-by-tenant?tenant_id=' + tenantId + '&with_tunggakan=' + filterTunggakan, { headers: getAuthHeader() });
+        const data = await res.json();
+        if (data.success && data.data && data.data.length > 0) {
+          lmStudents = data.data;
+          renderLunasiMassalStudents();
+        } else {
+          document.getElementById('lunasiMassalStudentList').innerHTML = '<p class="text-sm text-gray-500 text-center py-2">Tidak ada siswa</p>';
+        }
+      } catch (e) {
+        document.getElementById('lunasiMassalStudentList').innerHTML = '<p class="text-sm text-red-500 text-center py-2">Gagal</p>';
+      }
+    }
+
+    function renderLunasiMassalStudents() {
+      const listEl = document.getElementById('lunasiMassalStudentList');
+      if (!listEl) return;
+      if (lmStudents.length === 0) { listEl.innerHTML = '<p class="text-sm text-gray-500 text-center py-2">Tidak ada siswa</p>'; return; }
+      listEl.innerHTML = lmStudents.map(s => {
+        const saldo = parseFloat(s.saldo) || 0;
+        const hasTunggakan = saldo < 0;
+        const isDisabled = !hasTunggakan;
+        return `
+          <label class="flex items-center gap-2 p-1 hover:bg-white rounded cursor-pointer ${isDisabled ? 'opacity-40' : ''}">
+            <input type="checkbox" class="lunasi-massal-student-check" value="${s.id}" ${lunasiMassalSelected.has(s.id) ? 'checked' : ''} ${isDisabled ? 'disabled' : ''} onchange="toggleLunasiMassalSelect(this)">
+            <span class="text-sm ${isDisabled ? 'text-gray-400' : ''}">${s.nama_siswa || '-'} <span class="text-gray-400 text-xs">${s.nisn || ''}${isDisabled ? ' (Lunas)' : ' - Tunggakan: Rp ' + Math.abs(saldo).toLocaleString('id-ID')}</span></span>
+          </label>`;
+      }).join('');
+      updateLunasiMassalSelectedCount();
+    }
+
+    function filterLunasiMassalStudents() {
+      const search = (document.getElementById('lunasiMassalStudentSearch')?.value || '').toLowerCase();
+      const filtered = lmStudents.filter(s => (s.nama_siswa || '').toLowerCase().includes(search) || (s.nisn || '').toLowerCase().includes(search));
+      const listEl = document.getElementById('lunasiMassalStudentList');
+      if (filtered.length === 0) { listEl.innerHTML = '<p class="text-sm text-gray-500 text-center py-2">Tidak ada hasil</p>'; return; }
+      listEl.innerHTML = filtered.map(s => {
+        const saldo = parseFloat(s.saldo) || 0;
+        const hasTunggakan = saldo < 0;
+        const isDisabled = !hasTunggakan;
+        return `
+          <label class="flex items-center gap-2 p-1 hover:bg-white rounded cursor-pointer ${isDisabled ? 'opacity-40' : ''}">
+            <input type="checkbox" class="lunasi-massal-student-check" value="${s.id}" ${lunasiMassalSelected.has(s.id) ? 'checked' : ''} ${isDisabled ? 'disabled' : ''} onchange="toggleLunasiMassalSelect(this)">
+            <span class="text-sm ${isDisabled ? 'text-gray-400' : ''}">${s.nama_siswa || '-'} <span class="text-gray-400 text-xs">${s.nisn || ''}${isDisabled ? ' (Lunas)' : ' - Tunggakan: Rp ' + Math.abs(saldo).toLocaleString('id-ID')}</span></span>
+          </label>`;
+      }).join('');
+      updateLunasiMassalSelectedCount();
+    }
+
+    function toggleLunasiMassalSelect(checkbox) {
+      const id = parseInt(checkbox.value);
+      if (checkbox.checked) {
+        lunasiMassalSelected.add(id);
+      } else {
+        lunasiMassalSelected.delete(id);
+      }
+      updateLunasiMassalSelectedCount();
+    }
+
+    function updateLunasiMassalSelectedCount() {
+      document.getElementById('lunasiMassalSelectedCount').textContent = lunasiMassalSelected.size;
+      updateLunasiMassalSelectAllCheckbox();
+    }
+
+    function updateLunasiMassalSelectAllCheckbox() {
+      const selectAll = document.getElementById('lunasiMassalSelectAll');
+      const search = (document.getElementById('lunasiMassalStudentSearch')?.value || '').toLowerCase();
+      const visibleStudents = search 
+        ? lmStudents.filter(s => (s.nama_siswa || '').toLowerCase().includes(search) || (s.nisn || '').toLowerCase().includes(search))
+        : lmStudents;
+      if (visibleStudents.length === 0) {
+        selectAll.checked = false;
+        selectAll.indeterminate = false;
+        return;
+      }
+      const selectedVisible = visibleStudents.filter(s => lunasiMassalSelected.has(s.id)).length;
+      selectAll.checked = selectedVisible === visibleStudents.length;
+      selectAll.indeterminate = selectedVisible > 0 && selectedVisible < visibleStudents.length;
+    }
+
+    function toggleLunasiMassalSelectAll(selectAllCheckbox) {
+      const search = (document.getElementById('lunasiMassalStudentSearch')?.value || '').toLowerCase();
+      const visibleStudents = search 
+        ? lmStudents.filter(s => (s.nama_siswa || '').toLowerCase().includes(search) || (s.nisn || '').toLowerCase().includes(search))
+        : lmStudents;
+      
+      if (selectAllCheckbox.checked) {
+        // Select all visible students
+        visibleStudents.forEach(s => lunasiMassalSelected.add(s.id));
+      } else {
+        // Deselect all visible students
+        visibleStudents.forEach(s => lunasiMassalSelected.delete(s.id));
+      }
+      // Re-render to update checkboxes
+      if (search) {
+        filterLunasiMassalStudents();
+      } else {
+        renderLunasiMassalStudents();
+      }
+    }
+
+    async function previewLunasiMassal() {
+      const bulanFrom = document.getElementById('lunasiMassalFrom')?.value;
+      const bulanTo = document.getElementById('lunasiMassalTo')?.value;
+      const target = document.querySelector('input[name="lunasiMassalTarget"]:checked')?.value;
+      if (!bulanFrom || !bulanTo) { showToast('Pilih rentang bulan', 'error'); return; }
+      if (bulanFrom > bulanTo) { showToast('bulan_from harus <= bulan_to', 'error'); return; }
+      let studentIds = [];
+      if (target === 'specific') {
+        studentIds = Array.from(lunasiMassalSelected);
+        if (studentIds.length === 0) { showToast('Pilih siswa terlebih dahulu', 'error'); return; }
+      }
+      try {
+        const res = await fetch('/api/treasurer/bendahara/billing/preview-lunasi-bulk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+          body: JSON.stringify({
+            tenant_id: document.getElementById('paymentsTenantFilter')?.value || undefined,
+            bulan_from: bulanFrom, bulan_to: bulanTo,
+            student_ids: studentIds, all_students: target === 'all'
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          const t = data.data;
+          const text = `Akan melunasi <strong>${t.unpaid_count}</strong> billing dari <strong>${t.student_count}</strong> siswa untuk <strong>${t.month_count}</strong> bulan. Total: <strong>Rp ${t.total_amount.toLocaleString('id-ID')}</strong>.${t.skipped_count > 0 ? '<br><span class="text-yellow-700">' + t.skipped_count + ' billing sudah lunas (akan dilewati).</span>' : ''}`;
+          document.getElementById('lunasiMassalPreviewText').innerHTML = text;
+          document.getElementById('lunasiMassalPreview').classList.remove('hidden');
+        } else { showToast(data.message || 'Gagal preview', 'error'); }
+      } catch (e) { showToast('Gagal: ' + e.message, 'error'); }
+    }
+
+    async function submitLunasiMassal() {
+      const bulanFrom = document.getElementById('lunasiMassalFrom')?.value;
+      const bulanTo = document.getElementById('lunasiMassalTo')?.value;
+      const target = document.querySelector('input[name="lunasiMassalTarget"]:checked')?.value;
+      const metode = document.getElementById('lunasiMassalMetode')?.value;
+      const tanggal = document.getElementById('lunasiMassalTanggal')?.value;
+      const dibayarOleh = document.getElementById('lunasiMassalDibayarOleh')?.value.trim();
+      const catatan = document.getElementById('lunasiMassalCatatan')?.value.trim();
+      if (!bulanFrom || !bulanTo) { showToast('Pilih rentang bulan', 'error'); return; }
+      if (bulanFrom > bulanTo) { showToast('bulan_from harus <= bulan_to', 'error'); return; }
+      if (!metode) { showToast('Pilih metode', 'error'); return; }
+      if (!tanggal) { showToast('Pilih tanggal', 'error'); return; }
+
+      let studentIds = [];
+      if (target === 'specific') {
+        studentIds = Array.from(lunasiMassalSelected);
+        if (studentIds.length === 0) { showToast('Pilih siswa terlebih dahulu', 'error'); return; }
+      }
+      const [yFrom, mFrom] = bulanFrom.split('-').map(Number);
+      const [yTo, mTo] = bulanTo.split('-').map(Number);
+      const bulanList = [];
+      let y = yFrom, m = mFrom;
+      while (y < yTo || (y === yTo && m <= mTo)) {
+        bulanList.push(`${y}-${String(m).padStart(2, '0')}`);
+        m++;
+        if (m > 12) { m = 1; y++; }
+      }
+      const targetLabel = target === 'all' ? 'SEMUA siswa aktif' : studentIds.length + ' siswa';
+      if (!confirm(`Yakin ingin melunasi billing untuk ${targetLabel} dari ${bulanFrom} sampai ${bulanTo} (${bulanList.length} bulan)?`)) return;
+
+      showProgress('Melunaskan billing...');
+      updateProgress(0, bulanList.length, `Mulai proses ${bulanList.length} bulan...`);
+      let totalLunas = 0, totalDilewati = 0;
+      try {
+        for (let i = 0; i < bulanList.length; i++) {
+          const bulan = bulanList[i];
+          updateProgress(i, bulanList.length, `Memproses bulan ${bulan}...`);
+          const res = await fetch('/api/treasurer/bendahara/billing/lunasi-bulk', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
+            body: JSON.stringify({
+              tenant_id: document.getElementById('paymentsTenantFilter')?.value || undefined,
+              bulan_from: bulan, bulan_to: bulan,
+              student_ids: studentIds, all_students: target === 'all',
+              metode_pembayaran: metode, tanggal_bayar: tanggal,
+              dibayar_oleh: dibayarOleh || null, catatan: catatan || null
+            })
+          });
+          const data = await res.json();
+          if (data.success) {
+            totalLunas += data.lunas || 0;
+            totalDilewati += data.dilewati || 0;
+          }
+        }
+        updateProgress(bulanList.length, bulanList.length, 'Selesai');
+        finishProgress(`Berhasil melunasi ${totalLunas} billing, ${totalDilewati} dilewati`);
+        showToast(`Selesai! ${totalLunas} lunas, ${totalDilewati} dilewati`, 'success');
+        closeLunasiMassalModal();
+      } catch (e) {
+        errorProgress(e.message);
+        showToast('Gagal: ' + e.message, 'error');
+      }
+    }
+
     // ==================== BATAL LUNAS MASSAL ====================
     let blmStudents = [];
 
@@ -6034,6 +6267,105 @@ async function importBsiReport(input) {
         <button onclick="closeBatalLunasModal()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400">Batal</button>
         <button onclick="submitBatalLunas()" class="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 font-medium">
           <i class="fas fa-undo mr-1"></i>Ya, Batalkan
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Lunaskan Massal -->
+  <div id="lunasiMassalModal" class="hidden fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-semibold text-gray-800">
+          <i class="fas fa-check-double text-emerald-600 mr-2"></i>Lunaskan Massal (Banyak Siswa & Bulan)
+        </h3>
+        <button onclick="closeLunasiMassalModal()" class="text-gray-400 hover:text-gray-600">
+          <i class="fas fa-times text-xl"></i>
+        </button>
+      </div>
+      <p class="text-sm text-gray-600 mb-4">Fitur untuk melunasi billing banyak siswa sekaligus dalam rentang bulan. Hanya billing berstatus <strong>belum</strong> yang akan diproses.</p>
+
+      <div class="grid grid-cols-2 gap-3 mb-3">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Dari Bulan <span class="text-red-500">*</span></label>
+          <input type="month" id="lunasiMassalFrom" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Sampai Bulan <span class="text-red-500">*</span></label>
+          <input type="month" id="lunasiMassalTo" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500">
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Target Siswa</label>
+        <div class="space-y-2">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="lunasiMassalTarget" value="all" checked onchange="toggleLunasiMassalTarget()">
+            <span>Semua siswa aktif di sekolah ini</span>
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="radio" name="lunasiMassalTarget" value="specific" onchange="toggleLunasiMassalTarget()">
+            <span>Siswa tertentu saja</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="mb-3 hidden" id="lunasiMassalStudentListWrap">
+        <div class="flex items-center justify-between mb-1">
+          <label class="block text-sm font-medium text-gray-700">Cari & Pilih Siswa</label>
+          <div class="flex items-center gap-3">
+            <label class="flex items-center gap-1 text-sm text-gray-600 cursor-pointer">
+              <input type="checkbox" id="lunasiMassalSelectAll" onchange="toggleLunasiMassalSelectAll(this)">
+              <span>Pilih semua</span>
+            </label>
+            <label class="flex items-center gap-1 text-sm text-gray-600 cursor-pointer">
+              <input type="checkbox" id="lunasiMassalFilterTunggakan" onchange="loadLunasiMassalStudents()" checked>
+              <span>Hanya yang tunggakan</span>
+            </label>
+          </div>
+        </div>
+        <input type="text" id="lunasiMassalStudentSearch" placeholder="Cari nama/NISN..." onkeyup="filterLunasiMassalStudents()" class="w-full px-3 py-2 border border-gray-300 rounded-lg mb-2 focus:ring-2 focus:ring-emerald-500">
+        <div id="lunasiMassalStudentList" class="border rounded-lg max-h-48 overflow-y-auto p-2 space-y-1 bg-gray-50">
+          <p class="text-sm text-gray-500 text-center py-2">Memuat siswa...</p>
+        </div>
+        <p class="text-xs text-gray-500 mt-1">Dipilih: <strong id="lunasiMassalSelectedCount">0</strong> siswa</p>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3 mb-3">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Metode Pembayaran <span class="text-red-500">*</span></label>
+          <select id="lunasiMassalMetode" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500">
+            <option value="tunai">Tunai</option>
+            <option value="transfer_pusat">Transfer ke Rekening Pusat</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Tanggal Pembayaran <span class="text-red-500">*</span></label>
+          <input type="date" id="lunasiMassalTanggal" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500">
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Dibayar Oleh (Opsional)</label>
+        <input type="text" id="lunasiMassalDibayarOleh" placeholder="Contoh: Bpk. Ahmad (Ayah)" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500">
+      </div>
+
+      <div class="mb-3">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Catatan (Opsional)</label>
+        <textarea id="lunasiMassalCatatan" rows="2" placeholder="Keterangan pelunasan..." class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500"></textarea>
+      </div>
+
+      <div id="lunasiMassalPreview" class="hidden bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3 text-sm text-blue-800">
+        <i class="fas fa-info-circle mr-1"></i>
+        <span id="lunasiMassalPreviewText">-</span>
+      </div>
+
+      <div class="flex justify-end gap-2">
+        <button onclick="previewLunasiMassal()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+          <i class="fas fa-eye mr-1"></i>Preview
+        </button>
+        <button onclick="submitLunasiMassal()" class="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium">
+          <i class="fas fa-check-double mr-1"></i>Lunaskan Sekarang
         </button>
       </div>
     </div>

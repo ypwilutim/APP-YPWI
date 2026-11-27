@@ -3235,10 +3235,11 @@ router.post('/treasurer/bendahara/billing/preview-lunasi-bulk', authenticateBend
 // GET /api/treasurer/public/students-by-tenant - List siswa aktif by tenant (untuk bulk lunas selection)
 router.get('/treasurer/public/students-by-tenant', async (req, res) => {
   try {
-    const { tenant_id } = req.query;
+    const { tenant_id, with_tunggakan } = req.query;
     let query = `
-      SELECT s.id, s.nama_siswa, s.nisn, s.tenant_id
+      SELECT s.id, s.nama_siswa, s.nisn, s.tenant_id, COALESCE(ss.saldo, 0) as saldo
       FROM students s
+      LEFT JOIN saldo_siswa ss ON ss.student_id = s.id
       WHERE (s.status = 'active' OR s.status = 'aktif' OR s.status IS NULL)
         AND s.status != 'alumni'
         AND COALESCE(s.iuran_bulanan, 0) > 0
@@ -3250,7 +3251,13 @@ router.get('/treasurer/public/students-by-tenant', async (req, res) => {
     }
     query += ' ORDER BY s.nama_siswa ASC LIMIT 1000';
     const rows = await db.query(query, params);
-    res.json({ success: true, data: Array.isArray(rows) ? rows : [] });
+    
+    // If with_tunggakan=1, only return students with saldo < 0 (has tunggakan)
+    let data = Array.isArray(rows) ? rows : [];
+    if (with_tunggakan === '1') {
+      data = data.filter(s => (parseFloat(s.saldo) || 0) < 0);
+    }
+    res.json({ success: true, data });
   } catch (error) {
     console.error('Students by tenant error:', error);
     res.status(500).json({ success: false, message: 'Gagal mengambil siswa' });
